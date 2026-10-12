@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import re
+import runpy
 import shutil
 import subprocess
 import sys
@@ -43,12 +43,10 @@ class GovernanceTests(unittest.TestCase):
         cls.addClassCleanup(cls.shared.cleanup)
         cls.seed = Path(cls.shared.name) / "seed"
         cls.seed.mkdir()
-        manifest = json.loads((ROOT / "scripts/bootstrap-manifest.json").read_text("utf-8"))
-        paths = [entry["path"] for entry in manifest["files"]]
-        paths.extend(
-            str(path.relative_to(ROOT))
-            for path in (ROOT / "docs/agent-experience").glob("*.md")
-        )
+        checker = runpy.run_path(str(ROOT / "scripts/check_governance.py"))
+        paths = [*checker["REQUIRED_FILES"], *checker["WORKFLOW_FILES"]]
+        cls.source = checker["SOURCE"]
+        cls.source_sha256 = checker["SOURCE_SHA256"]
         for name in paths:
             target = cls.seed / name
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -218,17 +216,33 @@ class GovernanceTests(unittest.TestCase):
         (self.repo / "docs/agent-experience/task-planner-reviewer.md").unlink()
         self.assert_guard(False, "Required workflow file missing")
 
-    def test_original_proposal_is_immutable(self) -> None:
-        manifest = json.loads((self.repo / "scripts/bootstrap-manifest.json").read_text("utf-8"))
-        source_entry = next(
-            entry for entry in manifest["files"] if "V3.0.md" in entry["path"]
-        )
-        source = source_entry["path"]
-        digest = hashlib.sha256((self.repo / source).read_bytes()).hexdigest()
-        self.assertEqual(digest, source_entry["sha256"])
-        with (self.repo / source).open("a", encoding="utf-8") as document:
+    def test_current_proposal_is_immutable(self) -> None:
+        digest = hashlib.sha256((self.repo / self.source).read_bytes()).hexdigest()
+        self.assertEqual(digest, self.source_sha256)
+        with (self.repo / self.source).open("a", encoding="utf-8") as document:
             document.write("\nUnauthorized edit.\n")
-        self.assert_guard(False, "original V3.0 proposal was changed")
+        self.assert_guard(False, "current V4.2 proposal was changed")
+
+    def test_legacy_proposal_is_not_required(self) -> None:
+        self.assertFalse(
+            (self.repo / "Jellyfin STRM Probe Optimizer 完整开发方案 V3.0.md").exists()
+        )
+        self.assert_guard(True)
+
+    def test_missing_current_proposal_is_rejected(self) -> None:
+        (self.repo / self.source).unlink()
+        self.assert_guard(False, "Required file missing or symbolic")
+
+    def test_symbolic_current_proposal_is_rejected(self) -> None:
+        source = self.repo / self.source
+        copy = self.repo / "proposal-copy.md"
+        source.rename(copy)
+        source.symlink_to(copy.name)
+        self.assert_guard(False, "Required file missing or symbolic")
+
+    def test_missing_current_requirements_is_rejected(self) -> None:
+        (self.repo / "docs/requirements.md").unlink()
+        self.assert_guard(False, "Required file missing or symbolic")
 
     def test_review_requires_implementation(self) -> None:
         replace_field(self.repo / "SLICE.md", "Status", "READY FOR A REVIEW")

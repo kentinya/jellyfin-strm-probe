@@ -1,59 +1,78 @@
 # 测试矩阵
 
-所有条目当前均为 `NOT RUN`。此表定义验收，不能当成已执行报告。已存在主流、版本化 STRM、有历史基线、允许探测是通常前提；例外在场景中指出。
+全部产品验收当前为 NOT RUN。表格是 V4.2 目标，不是执行报告。通常前提为受支持版本化 STRM、已有主流、历史指纹与允许探测；例外显式说明。
 
-## 原方案 T01～T28
+保留 T01～T28 身份以便追溯，但 T08／T22 按 V4.2 改为原生探测后新地址持久化，T02／T17～T19／T27 改为最小指纹合同。旧结果不自动继承。B01～B12 为新增批量／共享并发验收。
 
-| ID | 场景 | 预期 | 需求 | 最终证据类型 | 状态 |
+## 核心播放与指纹
+
+| ID | 场景 | V4.2 预期 | 需求（REQ- 前缀省略） | 最终证据类型 | 状态 |
 |---|---|---|---|---|---|
-| T01 | 首次无主媒体流 | 要求并实际探测，成功后确认 | DECISION-001、STATE-001 | 单元＋Jellyfin 集成 | NOT RUN |
-| T02 | 首次安装已有主流 | Assumed，不 ffprobe | STATE-001 | 单元＋Jellyfin 集成 | NOT RUN |
-| T03 | URL 不变、SHA-1 相同 | 不 ffprobe | DECISION-002 | 单元＋集成 | NOT RUN |
-| T04 | URL 不变、SHA-1 不同 | ffprobe | DECISION-002、PROBE-001 | 单元＋集成 | NOT RUN |
-| T05 | SHA-1 相同、Size 不同 | 不 ffprobe | DECISION-002 | 单元＋集成 | NOT RUN |
-| T06 | URL 不变、无 SHA-1、Size 相同 | 不 ffprobe | DECISION-003 | 单元＋集成 | NOT RUN |
-| T07 | URL 不变、无 SHA-1、Size 不同 | ffprobe | DECISION-003 | 单元＋集成 | NOT RUN |
-| T08 | URL 改变、SHA-1 相同 | 只更新 URL，保留主流 | DECISION-004、PATH-001 | 单元＋Jellyfin 集成 | NOT RUN |
-| T09 | URL 改变、SHA-1 不同 | ffprobe 并同步 URL | DECISION-004 | 单元＋集成 | NOT RUN |
-| T10 | URL 改变、无 SHA-1、Size 相同 | 必须 ffprobe；单独自动化回归 | DECISION-004 | 独立单元＋集成 | NOT RUN |
-| T11 | URL 改变、无 SHA-1、Size 不同 | ffprobe | DECISION-004 | 单元＋集成 | NOT RUN |
-| T12 | URL 改变、只有一侧有效 SHA-1 | ffprobe | DECISION-004、MANIFEST-002 | 单元＋集成 | NOT RUN |
-| T13 | 只有修改时间变化 | 不 ffprobe | DECISION-005 | 单元＋文件集成 | NOT RUN |
-| T14 | 相同 STRM 删除后重放，库记录／状态保留 | 不 ffprobe | DECISION-005 | 文件＋Jellyfin 集成 | NOT RUN |
-| T15 | 重写相同 SHA-1 的 STRM | 不 ffprobe | DECISION-005 | 文件＋集成 | NOT RUN |
-| T16 | 同 URL 远程替换且 SHA-1 变化 | ffprobe | DECISION-002 | 原生探测集成 | NOT RUN |
-| T17 | ffprobe 失败，旧流仍存在 | 不提交新确认版本 | PROBE-002、PROBE-003 | 失败注入＋真实探测 | NOT RUN |
-| T18 | 探测期间 STRM 再变化 | 旧结果不确认新版本 | STATE-002、PROBE-002 | 竞态集成 | NOT RUN |
-| T19 | Jellyfin 重启 | 正确恢复基线／待测状态 | STATE-003 | 持久化＋真实重启 | NOT RUN |
-| T20 | 多客户端同媒体源并发 | 同一次探测共享，不重复执行 | CONCURRENCY-001 | 并发＋真实计数 | NOT RUN |
-| T21 | 手动强制刷新 | 原生刷新可执行，可靠协调状态 | REFRESH-001 | Jellyfin 集成 | NOT RUN |
-| T22 | ShortcutPath 更新后重启 | 新 URL 有效、原流保留 | PATH-001 | Jellyfin 重启 | NOT RUN |
+| T01 | 首次无主流 | 实际原生探测；成功、保存且版本一致后初建指纹 | DECISION-001、STATE-001、PROBE-002 | 单元＋Jellyfin 集成 | NOT RUN |
+| T02 | 首次已有主流 | 默认信任接管，建立指纹、零探测，不计本次成功 | STATE-001 | 单元＋Jellyfin 集成 | NOT RUN |
+| T03 | URL 不变、SHA-1 相同 | 跳过 | DECISION-002 | 单元＋集成 | NOT RUN |
+| T04 | URL 不变、SHA-1 不同 | 实际探测 | DECISION-002、PROBE-001 | 单元＋集成 | NOT RUN |
+| T05 | URL 不变、SHA-1 相同、Size 不同 | 跳过；URL 变化不适用此豁免 | DECISION-002 | 单元＋集成 | NOT RUN |
+| T06 | URL 不变、SHA-1 不可比、Size 相同 | 跳过 | DECISION-003 | 单元＋集成 | NOT RUN |
+| T07 | URL 不变、SHA-1 不可比、Size 不同 | 实际探测 | DECISION-003 | 单元＋集成 | NOT RUN |
+| T08 | URL 改变、SHA-1 相同 | 必须实际探测，原生保存新地址和有效主流 | DECISION-004、PATH-001 | 独立单元＋真实探测／播放 | NOT RUN |
+| T09 | URL 改变、SHA-1 不同 | 实际探测并保存最新地址 | DECISION-004 | 单元＋集成 | NOT RUN |
+| T10 | URL 改变、无 SHA-1、Size 相同 | 必须探测，单独自动化回归 | DECISION-004 | 独立单元＋集成 | NOT RUN |
+| T11 | URL 改变、无 SHA-1、Size 不同 | 必须探测 | DECISION-004 | 单元＋集成 | NOT RUN |
+| T12 | URL 改变、仅一侧有效 SHA-1 | 必须探测 | DECISION-004、MANIFEST-002 | 单元＋集成 | NOT RUN |
+| T13 | 仅 Modified 变化 | 跳过 | DECISION-005 | 单元＋文件集成 | NOT RUN |
+| T14 | 同内容 STRM 删除后重放且库记录／指纹保留 | 不因文件重放探测 | DECISION-005 | 文件＋Jellyfin 集成 | NOT RUN |
+| T15 | 同 URL、同 SHA-1 重写 STRM | 跳过；地址改变则按 T08 | DECISION-005 | 文件＋集成 | NOT RUN |
+| T16 | 同 URL 远程替换、SHA-1 变化 | 实际探测 | DECISION-002 | 原生探测集成 | NOT RUN |
+| T17 | 探测失败且旧流仍在 | 旧指纹不变，后续仍识别变化；不写失败状态 | PROBE-002、PROBE-003、STATE-002 | 失败注入＋真实探测 | NOT RUN |
+| T18 | 探测期间 STRM 再变 | 不提交过期结果，后续重查最新文件 | PROBE-002、PROBE-003 | 竞态集成 | NOT RUN |
+| T19 | 重启，含上次未完成变化 | 指纹恢复并重新比较；无待测状态表也能重试 | STATE-003、PROBE-003 | SQLite＋真实重启 | NOT RUN |
+| T20 | 多客户端同源并发 | 同一次探测共享，结束各自重查 | CONCURRENCY-001 | 并发＋真实计数 | NOT RUN |
+| T21 | 手动强制刷新 | 保留原生，更新事件不足以提交指纹 | REFRESH-001 | Jellyfin 集成 | NOT RUN |
+| T22 | 地址变化成功探测后重启 | 新 URL 与有效主流仍可用；不是仅更新路径测试 | PATH-001 | 真实探测＋Jellyfin 重启 | NOT RUN |
 | T23 | 未安装插件 | 原生基线 | COMPAT-001、COMPAT-002 | 对照实例 | NOT RUN |
-| T24 | 禁用插件 | 原生行为 | COMPAT-002、CONFIG-001 | 配置＋原生对照 | NOT RUN |
-| T25 | 多版本影片 | 媒体源身份独立、流与 URL 正确 | CONCURRENCY-001 | 多媒体源集成 | NOT RUN |
-| T26 | 无版本标记旧 STRM | 默认原生策略 | COMPAT-002 | 解析＋Jellyfin 集成 | NOT RUN |
-| T27 | SHA-1 缺失后恢复 | 保留对应版本哈希，不错用历史身份 | STATE-004 | 状态＋序列集成 | NOT RUN |
-| T28 | allowMediaProbe=false | 不启动探测，需求保留 | DECISION-006 | 所有分支权限测试 | NOT RUN |
+| T24 | 禁用插件 | 原生播放，批量不发起插件探测 | COMPAT-002、CONFIG-001 | 配置＋原生对照 | NOT RUN |
+| T25 | 多版本影片 | source_key 独立，地址／流／指纹不串版本 | CONCURRENCY-001、STATE-003 | 多媒体源集成 | NOT RUN |
+| T26 | 无协议标记旧 STRM | 默认原生，批量不优化 | COMPAT-002 | 解析＋Jellyfin 集成 | NOT RUN |
+| T27 | 同基线 SHA-1 暂缺后恢复；再探测另一版本且新哈希缺失 | 前者保留有效历史哈希；后者不得继承旧版本哈希 | STATE-004、MANIFEST-002 | 指纹序列＋集成 | NOT RUN |
+| T28 | allowMediaProbe=false，含同 SHA-1 换 URL | 不发起探测，不提交变化指纹；后续允许请求可重试 | DECISION-006、PATH-002 | 所有分支权限＋真实计数 | NOT RUN |
 
-表中需求缩写统一加 `REQ-` 前缀，例如 `DECISION-004` 对应 `REQ-DECISION-004`。
+## 新增批量与全局并发
+
+| ID | 场景／验证 | 预期 | 需求（REQ- 前缀省略） | 最终证据类型 | 状态 |
+|---|---|---|---|---|---|
+| B01 | 并发默认／配置边界 | 默认 2；1 与 8 可用；0、9、非整数保存反馈，实际并发不越界 | CONFIG-001、CONCURRENCY-002 | 配置＋协调集成＋真实计数 | NOT RUN |
+| B02 | 多项目播放与批量混合探测 | 共用插件全局上限；Jellyfin／其他插件独立探测不被限流 | CONCURRENCY-002 | 隔离实机并发对照 | NOT RUN |
+| B03 | 媒体库范围及类型过滤 | 默认全部，可选部分；普通媒体、旧／不支持 STRM 不探测；分页稳定去重 | BATCH-002、COMPAT-002、CONFIG-001 | 分页夹具＋实机库 | NOT RUN |
+| B04 | 大量已有主流的首次任务／随后增量变化 | 默认信任，不全库重探测；仅缺流／变化者执行，与播放决策一致 | STATE-001、BATCH-002、BATCH-003 | 大规模夹具＋真实增量计数 | NOT RUN |
+| B05 | 批量与播放同源，含播放不允许探测 | 允许上下文至多一个执行；播放不提高权限，独立批量上下文可执行 | DECISION-006、CONCURRENCY-001、BATCH-003 | 混合并发＋真实计数 | NOT RUN |
+| B06 | 两入口遇成功／失败／保存失败／Manifest 再变 | 使用同一提交门槛，无错误新指纹；无法确认的刷新不计成功 | PROBE-002、BATCH-003 | 失败注入＋真实结果／存储 | NOT RUN |
+| B07 | 取消分页、排队或同源共享等待 | 停止新增工作、资源释放；播放等待者仍获共享结果；取消不提交错误基线 | CONCURRENCY-001、BATCH-004 | 并发取消＋真实任务停止 | NOT RUN |
+| B08 | 单项损坏／探测失败及全局数据库不可用 | 单项报告未完成；旧指纹保留；状态库不可用停止优化，不转全库探测；恢复可再查 | MANIFEST-003、FAILURE-001、PROBE-003 | 注入＋实机恢复 | NOT RUN |
+| B09 | 进度、完成／取消统计和日志 | 单调进度；成功仅可靠结果；计数可对账，信任接管算跳过；不泄露地址／秘密 | BATCH-005、PRIVACY-001 | 原生任务 UI／日志＋结果对账 | NOT RUN |
+| B10 | 原生任务注册、手动／定时／停止、配置 | 名称正确，默认无触发；管理员原生设置；无独立按钮／调度器／扫描后触发；关闭播放检查仍可批量 | BATCH-001、BATCH-006、CONFIG-001 | 固定版本原生任务实测 | NOT RUN |
+| B11 | 媒体库扫描／手动刷新同时增删或更新 STRM | 不提交过期指纹、不越范围、不假定时间计划已串行完成；后续增量可收敛 | BATCH-002、BATCH-006、REFRESH-001 | 隔离扫描竞态＋任务 | NOT RUN |
+| B12 | 十万条模拟枚举／并发配置变更／队列故障 | 页与队列容量有界，不创建全库 Task；许可不泄漏；配置生效语义与实测一致 | CONCURRENCY-002、BATCH-002 | 压力指标＋代表性实机运行 | NOT RUN |
 
 ## 补充边界
 
 | ID | 验证目标 | 状态 |
 |---|---|---|
-| X01 | 文件读取不写 STRM、不调用 OpenList API、不计算远程媒体哈希；夹具均在临时目录 | NOT RUN |
-| X02 | 全接口委托、非 STRM、直播、注册顺序、单例／释放、启动／关闭 | NOT RUN |
-| X03 | 编码／BOM／空白、缺失字段、非法 SHA-1、非法／缺失／零／超范围 Size、未知协议、冲突标记、有界读取及非法 URL | NOT RUN |
-| X04 | 文件／路径同步／数据库错误不覆盖可信状态，回退保留探测权限，错误脱敏 | NOT RUN |
-| X05 | 同 URL 信息不足按性能优先跳过并说明限制，mtime 不参与 | NOT RUN |
-| X06 | 重启、SQLite 迁移／损坏／不可写处理，不复制媒体流或完整 PlaybackInfo | NOT RUN |
-| X07 | 成功信号与实际 ffprobe、新结果持久化关联；旧流／更新事件／刷新返回值不足；记录 FullRefresh 额外开销 | NOT RUN |
-| X08 | 等待者取消、不同项目独立、探测中版本更换、完成重检查和多版本隔离 | NOT RUN |
-| X09 | 配置保存／生效／错误反馈、固定规则不可关闭、默认策略 | NOT RUN |
-| X10 | 签名 URL、token、Cookie、私有路径不进入日志、状态或证据 | NOT RUN |
+| X01 | STRM 只读、不调用 OpenList API、不计算远程内容哈希；只用临时夹具 | NOT RUN |
+| X02 | 全接口委托、普通媒体／直播、DI 顺序、单例／释放、生命周期 | NOT RUN |
+| X03 | 编码／BOM／空白、缺失／非法字段、零／溢出 Size、未知／冲突协议、有界读取及非法 URL | NOT RUN |
+| X04 | 文件、原生地址／结果保存、SQLite 错误不覆盖指纹；原生回退保留探测权限；首次原生地址已过期不能静默成功 | NOT RUN |
+| X05 | 同 URL 信息不足跳过并说明限制，mtime 不参与，签名查询变化仍算 URL 变化 | NOT RUN |
+| X06 | SQLite 最小指纹／重启／schema 升级／损坏／不可写；无媒体流、完整 URL、PlaybackInfo 或独立探测状态 | NOT RUN |
+| X07 | 实际 ffprobe、新结果、主流与持久化关联；旧流／事件／刷新返回值不足；FullRefresh 额外开销 | NOT RUN |
+| X08 | 单等待者取消、不同源独立、版本变化、条件提交、完成重查与多版本隔离 | NOT RUN |
+| X09 | 配置保存／生效／错误反馈、默认值、固定规则不做关闭开关 | NOT RUN |
+| X10 | 签名 URL、token、Cookie、私有路径不进入状态、日志、进度或证据 | NOT RUN |
 
-## 执行报告要求
+## 执行与对账
 
-记录准确提交、Jellyfin 版本／源码、SDK、隔离实例、命令、总数、失败／跳过和原生 ffprobe 调用计数。测试媒体、SHA-1 和 URL 均使用假数据；不在仓库记录生产路径与秘密。
+按开发流程保留源码／工作区身份、精确命令、版本、隔离配置、耗时、日志及原生 ffprobe 计数。所有哈希／地址／媒体使用假数据。区分单元、真实 Jellyfin、压力夹具与外部代理；十万条模拟枚举不冒充十万条真实库通过。
 
-原生成功验证须有失败对照，重启与多客户端测试须有真实运行证据。单元测试通过不能覆盖真实 DI 和持久化门槛。外部代理联调不可用时记录 BLOCKED／NOT RUN，不能算通过。
+任务统计按检查对象（item_id＋source_key）去重，不把共享等待者当作多次实际 ffprobe。完成时需要数分为可靠成功与探测未完成；解析等检查阶段错误另外标注，计入未完成总数，避免不一致。首次信任计跳过，取消展示实际检查数和未遍历情况，不伪造 100%。具体进度分母及扫描期间库变化语义在 Slice 3 固定。
+
+原生成功必须有失败对照，定时／停止／重启／并发要求真实证据。外部代理联调不可用时 BLOCKED／NOT RUN，不算 PASS。

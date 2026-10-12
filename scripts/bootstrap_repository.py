@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create local Git checkpoints once the normal .git directory is writable."""
+"""Historical V3.0 bootstrap; not an initializer for the current V4.2 plan."""
 
 from __future__ import annotations
 

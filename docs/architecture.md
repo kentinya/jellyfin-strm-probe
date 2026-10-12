@@ -2,84 +2,106 @@
 
 ## CURRENT
 
-当前只有原始方案、范围与开发合同、治理／初始化脚本及 CI 文件。没有 C# 项目、运行时服务、SQLite schema、配置页或插件包。
+仓库只有方案、规划文档、治理／历史初始化工具与 CI，没有 C# 项目、运行时服务、SQLite schema、配置页或插件包。V4.2 取代 V3.0 作为当前开发基准，旧原文与合同留在 Git 历史。
 
-Git 基线与 Slice 1 合同已本地提交；尚无产品实现。目标 Jellyfin、.NET SDK 和包依赖尚未选定，不能从源码标签存在推导二进制兼容。三个核心接入问题尚无实机证据。
+Slice 1 保留原始 Base 并修订核心验证合同。目标服务器／SDK／依赖未固定；原生接入、成功信号和最新地址持久化没有实机证据。方案中的接口与 SQL 是目标设计，不能写成已经实现。
 
 ## TARGET
 
 ```mermaid
 flowchart TD
-    A[外部系统提供现有 STRM] --> B[只读 Manifest Reader / Parser]
-    C[Jellyfin 播放请求与原生主媒体流] --> D[经版本验证的媒体源适配层]
-    B --> E[ProbeDecisionService]
-    F[SQLite 观测与确认基线] --> E
-    D --> E
-    E --> G[SkipProbe / UpdatePathOnly / RequireProbe / Fallback]
-    G --> H[按项目与媒体源协调]
-    H --> I[Jellyfin 原生探测与结果验证]
-    H --> J[ShortcutPath 原生持久化]
-    I --> F
-    J --> K[原生 MediaSources / PlaybackInfo]
-    I --> K
-    K --> L[客户端或外部 JellyfinProxy]
+    A[现有版本化 STRM] --> R[只读 Manifest Reader]
+    P[Jellyfin 播放请求] --> I[经版本验证的播放接入层]
+    T[Jellyfin 原生计划任务] --> Q[所选媒体库分页枚举]
+    I --> R
+    Q --> R
+    R --> D[共用 ProbeDecisionService]
+    F[SQLite 最小历史指纹] --> D
+    N[Jellyfin 原生主媒体流] --> D
+    D --> S[跳过并复用原生媒体流]
+    D --> C[ProbeCoordinator 同源共享及全局并发]
+    C --> E[NativeProbeExecutor 原生探测及结果验证]
+    E --> N
+    E --> V[成功已保存且 Manifest 未变]
+    V --> F
+    N --> B[原生 MediaSources / PlaybackInfo]
+    B --> U[客户端或外部 JellyfinProxy]
+    Q --> G[Jellyfin 原生进度与结果]
+    E --> G
 ```
 
-外部生成系统不属于仓库实现。插件到 OpenList 元数据 API 没有调用链。
+生成器／OpenList／代理均为外部系统。插件不调用 OpenList API，不写 STRM；调度、运行与停止由 Jellyfin 管理。
 
-## 模块
+## 精简模块与责任
 
-| 模块 | 输入／输出与边界 |
+| 模块 | 边界 |
 |---|---|
-| Plugin／Configuration／ServiceRegistrator | 插件生命周期与配置；只在已验证版本注册适配 |
-| OptimizedMediaSourceManager | 限定受支持 STRM，其余接口完整委托，保持原始 allowMediaProbe 权限 |
-| StrmManifestReader | 有界只读本地 STRM；不写文件、不请求远程 |
-| StrmManifestParser | 纯解析，URL／内容 SHA-1／可空字节 Size／协议版本 |
-| ProbeDecisionService | 纯决策，使用有身份关联的历史基线；首次接管单独处理 |
-| ProbeCoordinator | 项目与媒体源级进行中任务，版本重检查和取消语义 |
-| ProbeExecutor | Jellyfin 版本适配的原生探测入口，评估 FullRefresh 附带提供器开销 |
-| ProbeResultValidator | 将本次执行证据、新流持久化、必要主流和 Manifest 一致性关联起来 |
-| ShortcutPathSynchronizer | 原生保存最新 URL 并重新取得 MediaSources，不清除原流 |
-| SqliteProbeStateRepository | 最小观测、基线与状态；不保存完整 URL、PlaybackInfo 或媒体流 |
+| Plugin／PluginConfiguration／ServiceRegistrator | 生命周期、有效配置、版本适配注册；不自建调度器 |
+| 播放接入层（候选 IMediaSourceManager 包装） | 受支持 STRM 进入共同检查链，其余完整委托；保留 allowMediaProbe 权限 |
+| StrmManifestReader | 有界本地只读与纯解析；字段验证无网络、数据库或刷新副作用 |
+| ProbeDecisionService | 纯决策：RequireProbe／SkipProbe／Fallback；没有 UpdatePathOnly |
+| ProbeCoordinator | 以 item_id＋source_key 共享内存进行中工作；全局许可默认 2、配置 1～8，播放／批量共用 |
+| NativeProbeExecutor | 版本相关原生探测、关联本次结果、媒体流／地址持久化验证；评估 FullRefresh 附带开销 |
+| StrmProbeScheduledTask | 候选 IScheduledTask／IConfigurableScheduledTask，分页所选库、有界消费、取消、原生进度及统计 |
+| StrmFingerprintRepository | SQLite 最小历史指纹、条件提交与异常保护；不保存媒体信息或持久化探测状态 |
 
-建议实施目录：
+结果验证是 Executor 的必需责任，不因移除独立 Validator／Synchronizer 类而消失。首次验证后才决定具体代码组织，不预建空类。
+
+建议目录均为 TARGET：
 
 ```text
 src/Jellyfin.Plugin.StrmProbeOptimizer/
   Plugin.cs, PluginConfiguration.cs, ServiceRegistrator.cs
-  Interceptors/
-  Services/
-  Models/
-  Persistence/
-  Configuration/
+  Interceptors/                 # 若包装方案验证成立
+  Services/                     # Reader、Decision、Coordinator、NativeExecutor
+  Tasks/                        # StrmProbeScheduledTask
+  Persistence/                  # StrmFingerprintRepository
+  Configuration/                # 配置页，无独立任务管理 UI
 tests/Jellyfin.Plugin.StrmProbeOptimizer.Tests/
 tests/Jellyfin.Plugin.StrmProbeOptimizer.IntegrationTests/
 ```
 
-以上路径是 TARGET；Task 1.1 核实版本后创建真实项目。当前不生成空类伪装成可构建插件。
+## 指纹与提交
 
-## 状态与确认边界
+V4.2 最小表目标：
 
-逻辑状态：`Assumed`、`Verified`、`PendingProbe`、`ProbeFailed`。观测记录与确认基线分离，具体 SQLite schema、迁移和事务由 Slice 2 确定。
+```sql
+CREATE TABLE strm_fingerprint (
+    item_id TEXT NOT NULL,
+    source_key TEXT NOT NULL,
+    url_hash TEXT NOT NULL,
+    sha1 TEXT,
+    file_size INTEGER,
+    PRIMARY KEY (item_id, source_key)
+);
+```
 
-| 事件 | 状态动作 |
+没有 state、pending、probe_failed 或媒体流字段。url_hash 表示完整有效播放 URL 的身份，不等于媒体内容 SHA-1；不去掉签名参数以掩盖地址变化。SHA-1／Size 合法性、source_key 身份、指纹算法与事务细节在 Slice 2 固定。
+
+| 检查结果 | 历史指纹操作 |
 |---|---|
-| 首次接管且已有必要主流 | 建立 Assumed，不宣称实测 |
-| 首次缺主流或判断版本变化 | 保留／建立 PendingProbe |
-| allowMediaProbe=false | 保留 PendingProbe；不执行探测 |
-| 探测实际成功、新流已保存且 Manifest 未变 | 提交关联版本的 Verified |
-| 探测失败或取消 | 保留确认基线，待测版本不提交；失败状态记录原因 |
-| 探测期间 Manifest 改变 | 旧结果不能确认当前版本；保留最新待验证需求 |
-| 内容相同而 URL 改变，路径保存成功 | 接受新 URL 指纹，复用同一内容的流；Assumed 不自动升级 Verified |
+| 无指纹且已有必要主流 | 默认信任并初建指纹；确认当前原生地址可用，不称为本次探测成功 |
+| 无主流／判断变化，但当前播放不允许探测 | 不执行、不提交变化；下一次重新比较 |
+| 未变化／仅 mtime 变化／字段暂缺且不构成变化 | 复用；不拿不完整观测覆盖既有有效指纹 |
+| 实际成功、有本次新结果、原生已保存、主流有效且前后 Manifest 一致 | 条件提交对应新指纹；缺少新 SHA-1 时不携带另一版本的旧 SHA-1 |
+| 失败、取消、无法确认成功、文件解析错误或探测期间变化 | 保留旧指纹（若无则仍无）；原因只在运行结果／脱敏日志，不另存失败状态 |
 
-历史 SHA-1 暂时缺失时保留对应版本的信息，但不能把这个哈希带到另一内容基线。仅 `RefreshMetadata` 返回成功、`ItemUpdateType` 或数据库中仍有旧流，都不足以提交新版本。
+执行前后读取 Manifest，关联媒体源身份与基线快照，提交时防止并发过期工作覆盖新基线。指纹写入失败不能返回“已提交成功”。重启后旧指纹与当前文件重新比较，即可恢复未完成检查需求。
 
-URL 指纹只表示有效播放 URL 身份，必须涵盖影响地址的部分；不能把签名查询参数随意去掉以制造“未变化”。内容 SHA-1 表示媒体身份，两者不能混用。指纹算法、URL 比较和多版本键在实施合同内明确。
+首次信任是指纹提交例外，不能用缺少状态字段来宣称历史记录都已实测。若原生地址与当前文件不同，须通过原生处理得到正确地址，不能首次信任后继续返回已知旧 URL。
 
-## 接入与故障
+## 并发、取消与批量内存
 
-包装 `IMediaSourceManager` 是候选方案，必须验证注册顺序、原生实例唯一性、循环依赖、释放所有权、全部接口委托、普通播放与直播。若核心包装不稳定，Slice 1 给出证据和调整建议，不能先绕过此门槛继续 Slice 2。
+先以媒体源身份汇合工作，再由唯一执行者占用全局许可；同源等待者不重复排队占许可。不同媒体源独立但共用总上限。排队后与结束后重新检查版本；信号量在所有结束路径释放。
 
-要求探测的请求必须能够实际触发原生探测；不能只把 `allowMediaProbe` 设为 true 并假设结果。所有回退仍保留原始调用的探测权限。
+调用者取消只结束自身等待。批量停止分页和排队，撤销自身等待；若仍有播放等待者，共享执行继续。没有任何等待者的工作是否取消及提交边界须在协调 Task 实测，不用首个请求的 cancellationToken 控制所有请求。
 
-SQLite 运行时异常尽可能委托原生处理，不覆盖可信状态。核心服务注册失败属于启动接入问题，不能用运行时 try/catch 承诺“肯定能回退”。路径同步失败不能返回旧地址并宣称已经更新。
+库查询使用稳定分页顺序、去重和有界生产／消费，不一次保存全库列表或为十万项创建十万个 Task。扫描并发增删项目时不误报完整静态快照；重读 STRM、防止旧版本提交。插件并发上限只覆盖主动发起的探测，外部原生刷新保持独立。
+
+## 接入门槛与故障
+
+Slice 1 先验证核心 DI、真正探测结果信号及原生地址持久化；失败时给出调整／阻塞结论，不绕过门槛铺开产品。任务接口源码定位不等于已加载或定时执行通过；实际注册、默认无触发时间、停止／进度在 Slice 3 验证。首版不接 ILibraryPostScanTask。
+
+原生刷新成功返回、ItemUpdateType、旧主流和媒体更新事件均不足以确认本次成功。URL 改变必须实际原生探测，并使用已保存的新地址，不另加路径单独更新服务。
+
+SQLite 运行时异常停止优化并尽可能原生委托，批量报告不可用而不转为全库强制刷新；核心注册失败明确报告，不承诺启动时总能自动回退。所有失败回退保留原调用探测权限。

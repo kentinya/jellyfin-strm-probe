@@ -1,73 +1,44 @@
 # Jellyfin STRM Probe Optimizer
 
-按 STRM 中的 URL、内容 SHA-1 和字节大小判断是否需要远程探测，复用 Jellyfin 已保存的媒体流；内容相同而 URL 改变时，只更新播放地址。
+按版本化 STRM 的 URL、内容 SHA-1 和字节 Size 判断是否需要 Jellyfin 原生探测。V4.2 采用播放自动检查、Jellyfin 原生批量计划任务和共享并发控制；URL 改变一律要求探测。
 
-项目名称：`Jellyfin.Plugin.StrmProbeOptimizer`。目标语言：C#。插件状态库：SQLite。媒体流仍由 Jellyfin 原生数据库保存。
+项目：`Jellyfin.Plugin.StrmProbeOptimizer`，C# 插件。SQLite 仅保存最小历史指纹，媒体流继续保存在 Jellyfin 原生库，不维护独立探测状态机。
 
-**当前只有开发基线文件，插件尚未实现。** Jellyfin 目标版本、.NET SDK、服务包装、探测成功信号和路径持久化需要先通过 Slice 1 验证。当前环境没有 `dotnet`，未运行任何插件构建或实机测试。
+**当前只有规划文档与治理工具，插件尚未实现。** 目标服务器／SDK／依赖尚未固定；构建、真实 Jellyfin 与外部代理验收均 NOT RUN。
 
-## 本次范围
+## 开发基准与范围
 
-本次建立开发流程、需求、架构、测试矩阵、Slice／Task 合同和 Git 初始化工具。后续产品开发限于 Jellyfin 插件及其隔离测试。
+[V4.2 原始方案](<Jellyfin STRM Probe Optimizer V4.2 开发方案.md>) 是当前基准。V3.0 已按用户改动从工作区移除，原文及旧合同可在 Git 检查点 `4b1d0468c1e43e6e9034ef98e99b6cc44ea59485` 中读取；不改写历史。
 
-**本次开发不包括 STRM 生成程序。** 插件读取现有 STRM，不生成、改写或删除 STRM，不请求 OpenList 元数据 API。生成程序与 JellyfinProxy 均为外部系统；参见 [范围说明](docs/scope.md)。
+**不开发 STRM 生成程序。** 插件只读现有 STRM，不调用 OpenList 元数据 API、不下载媒体计算哈希、不改写 JellyfinProxy。首版不开发独立调度器、独立任务按钮、仅更新路径服务或扫描后自动触发，见 [范围说明](docs/scope.md)。
 
 ## 从这里开始
 
-1. 阅读原始 [V3.0 方案](<Jellyfin STRM Probe Optimizer 完整开发方案 V3.0.md>) 和 [范围说明](docs/scope.md)。
-2. 阅读 [AGENTS.md](AGENTS.md) 和 [开发流程](docs/development-workflow.md)。
-3. 查看 [当前 Slice](SLICE.md)、[当前 Task](TASK.md) 和 [路线图](docs/roadmap.md)。
+1. 阅读 [AGENTS.md](AGENTS.md)、[开发流程](docs/development-workflow.md) 和 V4.2 方案。
+2. 阅读 [需求](docs/requirements.md)、[用户旅程](docs/product-experience.md)、[架构](docs/architecture.md) 与 [测试矩阵](docs/test-matrix.md)。
+3. 查看 [当前 Slice](SLICE.md)、[当前 Task](TASK.md)、[四个 Slice 路线图](docs/roadmap.md) 和 [进度](docs/progress.md)。
 
-核心规则：URL 改变且没有新旧两个有效且相同的 SHA-1 时，必须要求探测；大小相同不能豁免。修改时间不参与判断。`allowMediaProbe=false` 时保留待探测状态，不能自行启动 ffprobe。
+Slice 1 先证明核心接入、可靠的原生成功信号与最新地址持久化。后续依次完成播放／指纹闭环、批量任务、大规模集成与发布。总体方案不授权一次实现所有能力；本次仅重规划。
 
-## 当前仓库检查与初始化历史
+## 产品目标
 
-原规划环境的 `.git` 曾为只读文件系统。正常目录可写后，本地 Git 基线与 Slice 1 合同已初始化，首个 Task 在合同提交后计划；未配置远程或推送。
+- 未变化且有主媒体流时复用；URL 不变且 SHA-1 相同忽略 Size，SHA-1 不可比时比较有效 Size；Modified 不参与。
+- URL 改变始终探测，成功后使用并保存新地址；allowMediaProbe=false 不被提高权限。
+- 首次默认信任已有主流；变化指纹只在本次原生探测成功、结果已保存且 STRM 未再变后提交。失败保留旧指纹，下次重新比较。
+- 「控制台 → 计划任务 → STRM 媒体信息检查」支持原生运行／停止／定时，默认无自动触发；分页只处理需要探测的项目。
+- 播放与批量共用 ProbeCoordinator；插件主动探测并发默认 2、允许 1～8，不限制其他原生任务或插件。
 
-当前已初始化仓库运行：
+这些是 TARGET，不是已实现功能或安装说明。兼容性及接口定位见 [compatibility.md](docs/compatibility.md) 和 [references.md](docs/references.md)。
+
+## 仓库检查
 
 ```bash
 git status --short --branch
 python3 scripts/check_governance.py
 python3 -m unittest discover -s tests -v
+git diff --check
 ```
 
-测试只验证开发治理，不代表插件构建或 Jellyfin 播放通过。最新流程包含分阶段测试、证据复用、用户明确要求的冻结／恢复和关闭后停止规则；来源版本见 [references.md](docs/references.md)。
+治理与 Python 回归只验证文档文件身份、已提交合同及状态约束，不代表插件构建、探测、播放或独立审查通过。
 
-以下是原始基线的一次性初始化方式，留作历史说明；当前仓库不要重新执行。历史 `bootstrap-manifest.json` 保存初始化时的清单与摘要，不随后续维护重新生成。
-
-初始化前检查规划文件：
-
-```bash
-python3 scripts/check_governance.py --bootstrap
-```
-
-在运行环境允许写入 `.git` 后，执行：
-
-```bash
-python3 scripts/bootstrap_repository.py --author-name '你的名字' --author-email '你的邮箱'
-python3 scripts/check_governance.py
-git status --short --branch
-git log --oneline
-```
-
-脚本创建 `main`，依次提交原始方案基线、Slice 1 合同及开发文件、Task 1.1 计划，自动填入真实 Base SHA。它仅加入明确的文件清单，不配置远程或推送；已有仓库或文件偏离本次基线时会停止，避免覆盖后续工作。作者参数只用于这些提交，不写全局 Git 配置；省略时使用 `Codex <codex@localhost>`。
-
-初始化前的 `--bootstrap` 只验证规划文件，不能代替提交后的治理检查，更不代表产品验收。
-
-## 文档导航
-
-| 文件 | 用途 |
-|---|---|
-| [requirements.md](docs/requirements.md) | 稳定需求编号与业务判断 |
-| [product-experience.md](docs/product-experience.md) | 管理员与播放用户的完整旅程 |
-| [architecture.md](docs/architecture.md) | CURRENT／TARGET 分离、模块与状态边界 |
-| [compatibility.md](docs/compatibility.md) | 目标版本和三个接入风险的验证清单 |
-| [test-matrix.md](docs/test-matrix.md) | T01～T28 与补充测试，全部尚未运行 |
-| [progress.md](docs/progress.md) | Slice 关闭记录与当前开发指针 |
-| [references.md](docs/references.md) | mediaflow 流程来源、版本和适配说明 |
-| [A 经验](docs/agent-experience/slice-owner-architect-final-reviewer.md) | Slice 规划、合同变更与最终审查的方法 |
-| [B 经验](docs/agent-experience/task-planner-reviewer.md) | Task 规划、测试安排与停止规则的方法 |
-| [Developer 经验](docs/agent-experience/developer-implementation-role.md) | 本项目可复用的实施经验，目前暂空 |
-
-仓库中尚无 `.sln`、`.csproj`、插件安装包或 Docker 部署配置。Task 1.1 在核实 Jellyfin 版本和依赖后创建真实可构建项目，不先填入未经验证的包版本。
+`scripts/bootstrap_repository.py` 与 `bootstrap-manifest.json` 是 V3.0 首次初始化历史，当前已初始化仓库不得重新运行，也不重生成旧清单。当前治理使用 V4.2 原文身份及维护中的文件清单；需要追溯旧初始化时读取 Git 历史。

@@ -5,15 +5,14 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import json
 import re
 import subprocess
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = "Jellyfin STRM Probe Optimizer 完整开发方案 V3.0.md"
-SOURCE_SHA256 = "d236cab6b3992636b524f30bbe49a91adb9ef5d6b7010ed5695cae7d65f228ae"
+SOURCE = "Jellyfin STRM Probe Optimizer V4.2 开发方案.md"
+SOURCE_SHA256 = "4dc8e6aa4ebd16fa4ca32b35a6f58ac9e48932e334ac772f5c0f431a39ae32e2"
 COMMIT = re.compile(r"[0-9a-f]{40}")
 TASK_STATUSES = {"PLANNED", "IN PROGRESS", "READY FOR B REVIEW", "FIX REQUIRED"}
 SLICE_STATUSES = {"PLANNED", "ACTIVE", "FIX REQUIRED", "READY FOR A REVIEW", "PASS / CLOSED"}
@@ -21,6 +20,17 @@ WORKFLOW_FILES = (
     "docs/agent-experience/slice-owner-architect-final-reviewer.md",
     "docs/agent-experience/task-planner-reviewer.md",
     "docs/agent-experience/developer-implementation-role.md",
+)
+# Current inventory is maintained separately from the frozen V3.0 bootstrap.
+REQUIRED_FILES = (
+    SOURCE, "AGENTS.md", "CLAUDE.md", "README.md", "SLICE.md", "TASK.md",
+    "Task/TEMPLATE.md", "Task/FIRST_TASK.md", "docs/scope.md",
+    "docs/development-workflow.md", "docs/requirements.md", "docs/architecture.md",
+    "docs/product-experience.md", "docs/roadmap.md", "docs/progress.md",
+    "docs/compatibility.md", "docs/test-matrix.md", "docs/references.md",
+    "scripts/check_governance.py", "scripts/bootstrap_repository.py",
+    "scripts/bootstrap-manifest.json", "tests/test_governance.py",
+    ".github/workflows/quality.yml", ".gitignore", ".gitattributes", ".editorconfig",
 )
 
 
@@ -68,40 +78,20 @@ def roadmap_rows(document: str) -> dict[int, str]:
 
 
 def check_files() -> None:
-    manifest = json.loads((ROOT / "scripts/bootstrap-manifest.json").read_text("utf-8"))
-    if manifest.get("schema_version") != 1:
-        raise ValueError("Unsupported bootstrap manifest schema")
     seen: set[str] = set()
-    for entry in manifest["files"]:
-        name = entry["path"]
+    for name in (*REQUIRED_FILES, *WORKFLOW_FILES):
         relative = Path(name)
         if relative.is_absolute() or ".." in relative.parts or name in seen:
-            raise ValueError("Invalid or duplicate manifest path")
+            raise ValueError("Invalid or duplicate governance path")
         if relative.parts[0] in {".git", ".aws", ".agents", ".codex"}:
-            raise ValueError("Private metadata cannot be included in the manifest")
+            raise ValueError("Private metadata cannot be included in governance files")
         seen.add(name)
         path = ROOT / relative
         if not path.is_file() or path.is_symlink():
-            raise ValueError(f"Required file missing or symbolic: {name}")
-    required = {
-        SOURCE, "AGENTS.md", "CLAUDE.md", "README.md", "SLICE.md", "TASK.md",
-        "Task/TEMPLATE.md", "Task/FIRST_TASK.md", "docs/scope.md",
-        "docs/development-workflow.md", "docs/requirements.md", "docs/architecture.md",
-        "docs/product-experience.md", "docs/roadmap.md", "docs/progress.md",
-        "docs/compatibility.md", "docs/test-matrix.md", "docs/references.md",
-        "scripts/check_governance.py", "scripts/bootstrap_repository.py",
-        "scripts/bootstrap-manifest.json", ".github/workflows/quality.yml",
-        ".gitignore", ".gitattributes", ".editorconfig",
-    }
-    if not required.issubset(seen):
-        raise ValueError("Bootstrap manifest omits required baseline files")
-    # The frozen bootstrap inventory predates these ongoing workflow resources.
-    for name in WORKFLOW_FILES:
-        path = ROOT / name
-        if not path.is_file() or path.is_symlink():
-            raise ValueError(f"Required workflow file missing or symbolic: {name}")
+            kind = "workflow file" if name in WORKFLOW_FILES else "file"
+            raise ValueError(f"Required {kind} missing or symbolic: {name}")
     if hashlib.sha256((ROOT / SOURCE).read_bytes()).hexdigest() != SOURCE_SHA256:
-        raise ValueError("The original V3.0 proposal was changed")
+        raise ValueError("The current V4.2 proposal was changed")
 
 
 def check(bootstrap: bool) -> None:

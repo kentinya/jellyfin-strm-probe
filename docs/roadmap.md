@@ -1,15 +1,18 @@
 # Slice 路线图
 
-只记录完整能力的目标、次序、依赖与状态。生命周期见 [开发流程](development-workflow.md)，Task 和审查细节留在 Git。
+按 V4.2 的完整能力记录目标、次序与依赖。生命周期见 [开发流程](development-workflow.md)，详细 Task 与审查留在 Git。
 
 | Slice | 目标 | Status | 依赖 |
 |---|---|---|---|
-| 1 — Jellyfin 核心接入与播放验证 | 固定目标版本，证明核心服务接入、跳过与主动探测、结果可信确认及路径重启持久化 | ACTIVE | 已提交原始基线与合同；需要隔离 Jellyfin 环境 |
-| 2 — 版本感知探测完整闭环 | 只读解析、决策、首次接管、SQLite、并发、版本变化与失败恢复，满足 T01～T28 的核心行为 | PLANNED | Slice 1 PASS / CLOSED |
-| 3 — 配置、兼容联调与发布 | 配置页与诊断、禁用／故障原生处理、隔离代理兼容联调及单版本可安装发布包 | PLANNED | Slice 2 PASS / CLOSED |
+| 1 — Jellyfin 核心接入与指纹提交验证 | P0：固定目标版本，证明核心接入、跳过／主动探测、可靠成功信号及 URL 变化后的原生持久化 | ACTIVE | 原始 Base 保留，V4.2 修订合同；隔离 Jellyfin 环境 |
+| 2 — 播放检查与历史指纹完整闭环 | P1：只读解析、决策、首次信任、最小 SQLite 指纹、播放按需探测、同源共享／全局并发及失败恢复，满足修订 T01～T28 | PLANNED | Slice 1 PASS / CLOSED |
+| 3 — Jellyfin 原生批量检查任务 | P2：原生运行／停止／定时、所选库分页与有界排队、共享协调、进度统计及配置（并发默认 2、1～8） | PLANNED | Slice 2 PASS / CLOSED |
+| 4 — 大规模集成、兼容联调与发布 | P3：大规模 STRM、播放／批量并发、原生计划任务、库扫描、重启与 JellyfinProxy 隔离联调，单版本可安装包 | PLANNED | Slice 3 PASS / CLOSED |
 
 ## 当前边界
 
-Slice 1 合同已经本地提交并激活；Task 1.1 在合同提交后计划。后续 Slice 保持 PLANNED，未开始产品验收。
+本次只重规划。Slice 1 保留 ID 与真实 Base，修订原同 SHA-1 换地址验收为必须探测、原生保存最新地址；Task 1.1 在修订合同提交后重新计划。无产品实现、无验收 PASS，后续 Slice 不预建实施 Task。
 
-原方案 P1“修改 STRM 生成程序”从路线图移除。Slice 2／3 不承担生成器、OpenList API 客户端或 JellyfinProxy 代码改造。当前不预建后续 Slice 的实施 Task。
+从 V3.0 的三个 Slice 改为四个 Slice 是实质规划调整；旧规划见重规划前检查点 `4b1d0468c1e43e6e9034ef98e99b6cc44ea59485`。旧生成器 P1 始终排除，当前 P1 专指 V4.2 核心插件。
+
+首版不开发独立调度、探测状态机、路径单独更新器或扫描后自动触发。接口／成功信号验证未成立时停止后续铺开，给出真实限制与调整建议。

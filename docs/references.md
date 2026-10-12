@@ -2,11 +2,13 @@
 
 最新读取日期：2026-10-13。引用外部流程并针对本项目重新编写；没有复制 mediaflow 的媒体整理实现、Storage／Recognition 架构或“禁止 FFprobe”产品规则。
 
-## 原始方案
+## 当前原始方案与历史
 
-文件：[Jellyfin STRM Probe Optimizer 完整开发方案 V3.0.md](<../Jellyfin STRM Probe Optimizer 完整开发方案 V3.0.md>)。
+文件：[Jellyfin STRM Probe Optimizer V4.2 开发方案.md](<../Jellyfin STRM Probe Optimizer V4.2 开发方案.md>)。
 
-原文件 SHA-256：`d236cab6b3992636b524f30bbe49a91adb9ef5d6b7010ed5695cae7d65f228ae`。初始化前校验此值，原文保持不变。生成程序排除项由 [scope.md](scope.md) 明确记录。
+当前原文 SHA-256：`4dc8e6aa4ebd16fa4ca32b35a6f58ac9e48932e334ac772f5c0f431a39ae32e2`。治理核对此值，不改写用户方案。
+
+V3.0 已从工作区移除，其原文 SHA-256 为 `d236cab6b3992636b524f30bbe49a91adb9ef5d6b7010ed5695cae7d65f228ae`，原文件、旧合同与旧 Task 可从 `4b1d0468c1e43e6e9034ef98e99b6cc44ea59485` 读取。历史 bootstrap 清单不重生成；当前校验不再要求已被用户删除的旧文件。版本取舍与生成器排除见 [scope.md](scope.md)。
 
 ## mediaflow 开发流程
 
@@ -25,7 +27,7 @@
 
 还读取了 AGENTS、CLAUDE、SLICE、TASK 和 Roadmap，了解文档职责与当前合同格式。本项目没有继承这些文件中的产品规则和历史验收结果，没有配置该仓库为本项目远程。
 
-首次基线参考版本 `df4391bd2ff351cbcfc34d24f193aff5abb59dbc` 保留在 Git 历史。此次流程同步没有移动本项目 Slice／Task Base、改变业务验收或开始插件实现。
+首次基线参考版本 `df4391bd2ff351cbcfc34d24f193aff5abb59dbc` 保留在 Git 历史。此前 mediaflow 流程同步没有移动本项目 Slice／Task Base 或改变业务验收；本轮 V4.2 重规划另行记录实质合同变更，不开始插件实现。
 
 ### 本地参考检出
 
@@ -45,3 +47,15 @@
 | [BaseItem.cs](https://github.com/jellyfin/jellyfin/blob/v12.2/MediaBrowser.Controller/Entities/BaseItem.cs) | 原方案提出的 ShortcutPath 和持久化位置，Task 1.1 核实 |
 
 后三项是待核实定位，当前没有据此宣布接口或二进制已兼容。不读取 OpenList API 或生成程序实现，因为本次范围已经排除。
+
+## V4.2 计划任务定位
+
+2026-10-13 读取 [官方 v12.2 发布页](https://github.com/jellyfin/jellyfin/releases/tag/v12.2)，页面标示发布版本 12.2；这不是插件实机支持证据。
+
+| V4.2 引用／候选源码 | 本轮读取结论 |
+|---|---|
+| [IScheduledTask.cs](https://github.com/jellyfin/jellyfin/blob/v12.2/MediaBrowser.Model/Tasks/IScheduledTask.cs) | 网页及 raw 读取 Cache miss，未取得源码；Task 1.1 固定源码核实 |
+| [IConfigurableScheduledTask.cs](https://github.com/jellyfin/jellyfin/blob/v12.2/MediaBrowser.Model/Tasks/IConfigurableScheduledTask.cs) | raw 读取 Cache miss，未取得源码；核实是否适合任务注册 |
+| [ILibraryPostScanTask.cs](https://github.com/jellyfin/jellyfin/blob/v12.2/MediaBrowser.Controller/Library/ILibraryPostScanTask.cs) | raw 读取 Cache miss，未取得源码；仅候选定位，首版明确排除 |
+
+V4.2 的“已核对源码”是用户方案陈述；本项目仍须独立验证目标版本 API、注册、默认无触发时间、取消与进度，不把本轮不可读取的定位写成通过。
