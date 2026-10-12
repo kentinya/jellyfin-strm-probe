@@ -10,7 +10,7 @@
 ## 当前开发指针
 
 - 当前合同：Slice 1，ACTIVE，已提交真实 Base 与激活合同。
-- 当前 Task：无活动实施任务；首个 Task 草案见 [模板](../Task/FIRST_TASK.md)。
+- 当前 Task：Task 1.1，PLANNED，见 [TASK.md](../TASK.md)。
 - 产品实现、构建和实机验收：尚未开始。
 - Git：正常 .git 已创建本地检查点；未配置远程或推送。
 
