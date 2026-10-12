@@ -42,20 +42,24 @@ V3.0 已从工作区移除，其原文 SHA-256 为 `d236cab6b3992636b524f30bbe49
 | [v10.11.8 标签](https://github.com/jellyfin/jellyfin/tree/v10.11.8) | 对应提交 `2c62d40f0d13926874eef9118a95be0dcee4e659`，候选兼容版本 |
 | [v10.11.8 global.json](https://github.com/jellyfin/jellyfin/blob/2c62d40f0d13926874eef9118a95be0dcee4e659/global.json) | 已读取 SDK 9.0.0／latestMinor；不是插件已构建证据 |
 | [v12.2 标签提交](https://github.com/jellyfin/jellyfin/commit/ca0f16eb7c195f720a1493ed469a27c4657db0c6) | 确认原方案标签存在，仍需目标服务器验证 |
+| [v12.2 发布页](https://github.com/jellyfin/jellyfin/releases/tag/v12.2) | 2026-10-13 浏览时标为最新稳定版本；发布源码提交为 `ca0f16eb7c195f720a1493ed469a27c4657db0c6`，不代表插件兼容已验证 |
 | [MediaSourceManager.cs](https://github.com/jellyfin/jellyfin/blob/v12.2/Emby.Server.Implementations/Library/MediaSourceManager.cs) | 原方案提出的 GetPlaybackMediaSources 接入位置，Task 1.1 核实 |
 | [ProbeProvider.cs](https://github.com/jellyfin/jellyfin/blob/v12.2/MediaBrowser.Providers/MediaInfo/ProbeProvider.cs) | 原方案提出的 STRM 注释／URL 读取位置，Task 1.1 核实 |
 | [BaseItem.cs](https://github.com/jellyfin/jellyfin/blob/v12.2/MediaBrowser.Controller/Entities/BaseItem.cs) | 原方案提出的 ShortcutPath 和持久化位置，Task 1.1 核实 |
+| [MediaBrowser.Controller.csproj at v12.2](https://github.com/jellyfin/jellyfin/blob/ca0f16eb7c195f720a1493ed469a27c4657db0c6/MediaBrowser.Controller/MediaBrowser.Controller.csproj) | 本轮源码页面显示目标框架 `net10.0`；未取得固定 SDK、镜像 digest 或本项目依赖组合 |
 
 后三项是待核实定位，当前没有据此宣布接口或二进制已兼容。不读取 OpenList API 或生成程序实现，因为本次范围已经排除。
 
 ## V4.2 计划任务定位
 
-2026-10-13 读取 [官方 v12.2 发布页](https://github.com/jellyfin/jellyfin/releases/tag/v12.2)，页面标示发布版本 12.2；这不是插件实机支持证据。
+2026-10-13 读取 [官方 v12.2 发布页](https://github.com/jellyfin/jellyfin/releases/tag/v12.2)，页面标示发布版本 12.2；这不是插件实机支持证据。本轮通过 GitHub 源码页面检视 `MediaSourceManager.cs`、`ProbeProvider.cs` 和 `MediaBrowser.Controller.csproj`，没有本地检出 Jellyfin 源码；详细定位及环境限制见 [compatibility.md](compatibility.md)。
 
 | V4.2 引用／候选源码 | 本轮读取结论 |
 |---|---|
 | [IScheduledTask.cs](https://github.com/jellyfin/jellyfin/blob/v12.2/MediaBrowser.Model/Tasks/IScheduledTask.cs) | 网页及 raw 读取 Cache miss，未取得源码；Task 1.1 固定源码核实 |
 | [IConfigurableScheduledTask.cs](https://github.com/jellyfin/jellyfin/blob/v12.2/MediaBrowser.Model/Tasks/IConfigurableScheduledTask.cs) | raw 读取 Cache miss，未取得源码；核实是否适合任务注册 |
 | [ILibraryPostScanTask.cs](https://github.com/jellyfin/jellyfin/blob/v12.2/MediaBrowser.Controller/Library/ILibraryPostScanTask.cs) | raw 读取 Cache miss，未取得源码；仅候选定位，首版明确排除 |
+| [`MediaSourceManager.GetPlaybackMediaSources`](https://github.com/jellyfin/jellyfin/blob/ca0f16eb7c195f720a1493ed469a27c4657db0c6/Emby.Server.Implementations/Library/MediaSourceManager.cs#L2479-L2513) | 已由官方源码页面确认 `.strm` 且 `allowMediaProbe=true` 会触发 `FullRefresh`，随后重读静态媒体源；DI 替换和实际播放行为仍 NOT RUN |
+| [`ProbeProvider.FetchVideoInfo`](https://github.com/jellyfin/jellyfin/blob/ca0f16eb7c195f720a1493ed469a27c4657db0c6/MediaBrowser.Providers/MediaInfo/ProbeProvider.cs#L1498-L1601) | 已确认路径上会调用原生 `ProbeVideo` 并读取 STRM 地址；成功信号、失败保留、地址持久化和重启结果仍 NOT RUN |
 
 V4.2 的“已核对源码”是用户方案陈述；本项目仍须独立验证目标版本 API、注册、默认无触发时间、取消与进度，不把本轮不可读取的定位写成通过。
