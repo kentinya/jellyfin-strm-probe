@@ -1,11 +1,11 @@
 # Task 1.1 — V4.2 核心接入原型与可靠指纹提交验证
 
-本计划在已提交的 V4.2 Slice 1 修订合同后重新规划；本次只交付规划，不执行插件实施。产品测试全部 NOT RUN。
+Task 1.1 已由用户激活。本轮完成官方源码定位与环境诊断，但缺少 .NET SDK 和可访问的隔离 Jellyfin，无法安全验证核心接入与原生探测结果。没有创建插件源码；产品验收仍未运行，现交 B 审查阻塞及可复核证据。
 
 ```text
 Task ID: 1.1
 Parent Slice: 1
-Status: IN PROGRESS
+Status: READY FOR B REVIEW
 Task Base: b69a930495c762fe546f8970891a2c955766b28c
 Contract Checkpoint: 4a8536860fafaf25f7a1e573fef19255ca3d07c3
 Superseded Plan: 4b1d0468c1e43e6e9034ef98e99b6cc44ea59485
@@ -102,10 +102,53 @@ T19 在本 Task 验证原型结果／地址重启，不宣称完成 Slice 2 的�
 
 ## Developer Completion Report
 
-尚未实施。Changed Files、Implemented、Tests and Results、Decisions、Remaining In-Slice Work、Risks / Deviations 待真实实施记录；本轮规划／工具核验不写成此 Task 的产品完成报告。
+本报告交接环境阻塞，不表示 Task 产品目标已完成、Slice 验收通过或兼容性已确认。
+
+### Changed Files
+
+- `docs/compatibility.md`：记录 v12.2 源码路径、`net10.0` 目标框架及实测环境限制。
+- `docs/references.md`：添加官方发布／源码定位和读取状态。
+- `TASK.md`：记录本报告及 B 审查状态。Task 激活的 `IN PROGRESS` 是本轮开始前用户已有改动，现作为此 Task 检查点的一部分保留。
+- 本地原始验证记录：`.git/validation-evidence/0167aadc88d5ec4998a116e7457cf8c80ab6bcee/task-1.1-env-blocker-20261013/`（仅本机，不是远程 CI 产物）。
+
+### Implemented
+
+- 依据官方 v12.2 源码确认候选播放入口会在允许探测时对 `.strm` 触发 `FullRefresh` 并重读媒体源；Provider 路径会调用原生 `ProbeVideo`。Controller 项目目标框架为 `net10.0`。
+- 检查 Task Base 仓库树及当前容器能力，确认没有 C# 工程、.NET SDK／编译器或可访问的 Docker daemon。
+- 没有创建或修改产品代码；没有使用生产 Jellyfin、生产媒体或生产配置。
+
+### Tests and Results
+
+- `python3 scripts/check_governance.py` — PASS；只验证文件治理，不代表产品实现通过。
+- `python3 -m unittest discover -s tests -v` — PASS，24/24；仅为治理测试。
+- `git diff --check` — PASS。
+- 首次证据采集脚本在启动缺失的 `dotnet` 时未捕获 `FileNotFoundError` 并退出 1；治理、单元测试和差异检查的独立原始日志均已保留并显示 exit 0。该采集器错误记录在证据目录，没有把它算作产品测试结果。
+- 固定 SDK 的 `dotnet restore`／Release `build`／`test`／`format` — BLOCKED：`dotnet`、`csc`、`mcs`、`msbuild`、`mono`、`nuget` 不存在，且尚无 solution／project。
+- 隔离 Jellyfin 加载、真实探测／失败／取消／Manifest 竞态、播放地址保存及重启 — BLOCKED：Docker CLI 无法访问 `/var/run/docker.sock`；没有替代隔离服务器。
+- T01～T28、B01～B12、X01～X10 的产品验收 — NOT RUN。上述浏览器源码定位不是实机验证。
+
+### Decisions
+
+- 停止受影响的插件实现：RO-1～RO-4 依赖先完成构建和隔离原生链路验证；在缺少工具及服务时创建未编译的替换实现，无法满足合同，也不能证明核心风险成立。
+- 未自行改选 Jellyfin 版本、SDK、DI 方案或成功信号；v12.2 仍为候选，`.NET` 固定 SDK、服务器镜像 digest、依赖和可加载包均未确定。
+- 不声明 B PASS，不更新 `SLICE.md` 的 Implementation Head，不关闭 Slice。请 B 根据证据决定如何解除环境阻塞或是否需要调整当前 Task。
+
+### Remaining In-Slice Work
+
+- RO-1／AC-1：固定服务器镜像 digest、源码、SDK、依赖和真实原型，全部未完成。
+- RO-2／AC-2～AC-3：DI 所有权、全接口委托、正常播放及跳过／主动探测计数，全部未完成。
+- RO-3／AC-4：本次成功／失败／取消／Manifest 再变与保存关联，全部未完成。
+- RO-4／AC-5～AC-6：URL 变化原生探测、新地址保存／重启、`allowMediaProbe=false` 对照，全部未完成。
+- RO-5／AC-7：仅完成部分源码与环境定位；任务接口、构建／加载、原始实机证据、FullRefresh 开销和继续／调整结论未完成。
+
+### Risks / Deviations
+
+- 主风险是缺少运行环境，无法给出接入可靠性、探测成功信号、播放行为或地址持久化结论；此检查点仅包含文档调查与阻塞证据。
+- 单元／治理 PASS 不可复用为任何产品或 Jellyfin 集成门槛；T4 全套最终验证尚未开始。
 
 ```text
-Head SHA: NOT SET
+Head SHA: 0167aadc88d5ec4998a116e7457cf8c80ab6bcee
+Product implementation SHA: NOT SET
 ```
 
 ## B Review Result
