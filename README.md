@@ -4,7 +4,7 @@
 
 项目：`Jellyfin.Plugin.StrmProbeOptimizer`，C# 插件。SQLite 仅保存最小历史指纹，媒体流继续保存在 Jellyfin 原生库，不维护独立探测状态机。
 
-**插件尚未实现。** 已提供 [开发环境工具与交接](docs/development-environment.md)，SDK 固定为 `10.0.401`；当前沙箱的网络、Docker 和监听限制仍阻塞安装及隔离服务。目标服务器镜像／依赖尚未实证固定；构建、真实 Jellyfin 与外部代理验收均 NOT RUN。
+**插件尚未实现。** [开发环境](docs/development-environment.md) 已就绪：SDK `10.0.401`、固定源码、Jellyfin `12.2.0`、本地媒体服务及 `12.2.0` NuGet 引用编译已验证；镜像 digest 已记录。插件构建、加载与播放等产品验收及外部代理联调仍 NOT RUN。
 
 ## 开发基准与范围
 
@@ -19,7 +19,7 @@
 3. 查看 [当前 Slice](SLICE.md)、[当前 Task](TASK.md)、[四个 Slice 路线图](docs/roadmap.md) 和 [进度](docs/progress.md)。
 4. 开发环境执行 `python3 scripts/development_environment.py doctor`；安装与隔离运行见 [环境交接](docs/development-environment.md)。
 
-Slice 1 先证明核心接入、可靠的原生成功信号与最新地址持久化。后续依次完成播放／指纹闭环、批量任务、大规模集成与发布。总体方案不授权一次实现所有能力；Task 1.1 已授权，当前由 A 提供环境准备工具，受影响的真实验证仍受阻。
+Slice 1 先证明核心接入、可靠的原生成功信号与最新地址持久化。后续依次完成播放／指纹闭环、批量任务、大规模集成与发布。总体方案不授权一次实现所有能力；Task 1.1 已授权，A 已解除环境阻塞并提供运行交接，产品实现与审查仍待完成。
 
 ## 产品目标
 

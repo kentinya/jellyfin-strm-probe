@@ -2,6 +2,8 @@
 
 Task 1.1 已由用户激活。本轮完成官方源码定位与环境诊断，但缺少 .NET SDK 和可访问的隔离 Jellyfin，无法安全验证核心接入与原生探测结果。没有创建插件源码；产品验收仍未运行，现交 B 审查阻塞及可复核证据。
 
+上述为 Developer 前轮交接。A 已按用户要求补齐并实测环境，见下方 A 环境交接；原报告与产品未完成项保留，B 审查仍 PENDING。
+
 ```text
 Task ID: 1.1
 Parent Slice: 1
@@ -24,7 +26,7 @@ Decision: REPLAN。原 Task 1.1 是未实施计划，保留 ID／Task Base 供�
 
 在一个固定 Jellyfin 版本上建立可加载的最小原型，完成 Slice 1 的 RO-1～RO-4，并为 RO-5 提供可信接入、结果提交、原生持久化与任务接口调研结论；核心风险成立后才进入完整产品开发。
 
-## 实际缺口
+## 实际缺口（Developer 前轮）
 
 没有 C# 项目、固定 SDK／包依赖或隔离实机证据。V4.2 示例尚不是经过验证的插件代码；任务源码本轮未取得，版本定位见 [compatibility.md](docs/compatibility.md) 与 [references.md](docs/references.md)。
 
@@ -153,9 +155,9 @@ Product implementation SHA: NOT SET
 
 ## A 环境交接（2026-10-13）
 
-用户要求 A 为开发者提供必要环境。已提供 [准备与运行说明](docs/development-environment.md)、固定 SDK `10.0.401`／官方 SHA-512、仓库内安装与离线归档入口、镜像 digest 锁定、隔离 Jellyfin／本地媒体服务 Compose 和统一 dotnet 入口。实际安装下载受 DNS 限制，Docker socket 拒绝访问，本地监听 socket 被禁止，环境仍 BLOCKED。镜像 digest、插件依赖和真实产品门槛仍未取得；原 Developer 报告保留，不把准备工具当成产品实现。
+用户要求 A 为开发者提供必要环境。已提供 [准备与运行说明](docs/development-environment.md)。用户调整权限并恢复会话后，SDK `10.0.401` 下载／官方 SHA-512 校验／安装、固定源码检出、镜像 digest 锁定、Jellyfin `12.2.0` 启动、本机访问、原生 HTTP 媒体探测均已实测。忽略目录内 `Jellyfin.Controller`／`Jellyfin.Model` `12.2.0` 引用样例已 restore／Release build／运行，0 编译警告／错误，nuspec repository commit 与固定源码一致。已准备仅属于测试实例的账户、临时库和合成媒体；口令只存忽略目录，不进入提交或证据。修正首次纯内部网络未发布宿主端口的问题，并保留首次失败与重跑。环境阻塞已解除；产品项目、产品依赖锁和全部核心 T4 门槛仍未完成。
 
-A 保持 Slice／Task 的 ID、Base、Scope、T4 验收与 B 独立审查责任；本段是环境事实交接，不是 B Review。Task 仍 READY FOR B REVIEW；具备宿主执行能力后可继续原已授权 Task 的环境验证及实施。详细本机证据索引见环境说明。
+A 保持 Slice／Task 的 ID、Base、Scope、T4 验收与 B 独立审查责任；本段是环境事实交接，不是 B Review。Task 仍 READY FOR B REVIEW；B 可核查环境证据后由 Developer 恢复原已授权 Task 实施。详细本机证据索引见环境说明。
 
 ## B Review Result
 

@@ -2,7 +2,7 @@
 
 ## 当前结论
 
-尚无实测支持版本或插件包。目标服务器、SDK、框架及 NuGet 依赖在 Task 1.1 核实；源码定位不能当成可加载或二进制兼容证据。
+尚无实测支持的插件版本或插件包。A 已提供并验证 SDK `10.0.401`、固定源码、隔离 Jellyfin `12.2.0` 和 `12.2.0` NuGet 引用编译；镜像 digest、实际运行与本地媒体证据见 [环境交接](development-environment.md)。产品项目尚未创建，源码定位及环境样例不能当成插件可加载或二进制兼容证据。
 
 | 候选源码 | 已记录标签提交 | 定位用途 |
 |---|---|---|
@@ -27,7 +27,7 @@ V4.2 声明 v12.2 有 IScheduledTask、IConfigurableScheduledTask 和 ILibraryPo
 
 ## Slice 1 风险门槛
 
-A 环境准备后续：根 `global.json` 已具体固定 SDK `10.0.401`，官方归档校验值、准备脚本和隔离 Compose 已提供，见 [环境交接](development-environment.md)。安装下载仍因 DNS 失败阻塞，Docker socket／本地监听仍不可用；服务器镜像 digest、本地源码与插件依赖尚未取得。前述 Developer 诊断保持为历史事实，本次工具验证不构成实机兼容结论。
+A 环境准备后续：权限已解除，SDK 安装、固定源码检出、镜像 digest、隔离服务启动／访问及本地 HTTP 原生 ffprobe 均已验证；NuGet 引用样例 restore／Release build／运行 PASS。前述 Developer 诊断保持为历史事实，环境结果不构成插件实机兼容结论。官方镜像没有 revision 标签，镜像整体源码构建溯源仍需补证；NuGet nuspec repository commit 已与固定源码 SHA 核对一致。
 
 | 问题 | 必须取得的证据 | 状态 |
 |---|---|---|

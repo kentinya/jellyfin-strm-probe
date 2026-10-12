@@ -13,6 +13,7 @@ services:
       - ${JF_PROBE_WORK:?}/media:/media/local:ro
     networks:
       - acceptance
+      - frontend
   media:
     image: ${JF_PROBE_MEDIA_IMAGE:?Run provision first to resolve the image digest}
     platform: linux/amd64
@@ -27,3 +28,5 @@ services:
 networks:
   acceptance:
     internal: true
+  frontend:
+    driver: bridge

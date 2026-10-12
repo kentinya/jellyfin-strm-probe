@@ -69,3 +69,9 @@ V4.2 的“已核对源码”是用户方案陈述；本项目仍须独立验证
 2026-10-13 通过浏览工具读取 [目标源码 global.json](https://github.com/jellyfin/jellyfin/blob/ca0f16eb7c195f720a1493ed469a27c4657db0c6/global.json) 的 `10.0.0`／`latestMinor`，以及 [Microsoft .NET 10 官方发布元数据](https://dotnetcli.blob.core.windows.net/dotnet/release-metadata/10.0/releases.json) 中具体 SDK `10.0.401` 的 Linux x64 URL／SHA-512。本地固定与工具见 [环境交接](development-environment.md)；网页能读元数据不意味着终端可以下载 SDK。
 
 隔离安装方式参考 [Jellyfin 官方容器文档](https://jellyfin.org/docs/general/installation/container/) 和 [Microsoft 手动安装文档](https://learn.microsoft.com/en-us/dotnet/core/install/linux-scripted-manual)。没有取得实际 Docker manifest digest，未拉取镜像或安装 SDK；固定候选输入不声明二进制兼容。
+
+### 权限解除后的实测补充
+
+同日用户恢复权限后，终端重新读取 Microsoft 官方 release metadata 并核对固定 SDK 的 URL／SHA-512，成功安装 SDK。Jellyfin 源码已本地检出至 `artifacts/dev-env/source`，HEAD 为 `ca0f16eb7c195f720a1493ed469a27c4657db0c6`；官方镜像已拉取并记录 digest，实际 Public Info 为 `12.2.0`。已实际恢复 `Jellyfin.Controller`／`Jellyfin.Model` `12.2.0`，两包 nuspec 的 repository commit 与该源码一致，引用样例 Release 编译运行 PASS。此前“没有检出／未安装／未取得 digest”是前轮历史诊断，不是当前环境状态。
+
+源文件、镜像身份、包来源和原始运行日志保留于 [环境交接](development-environment.md) 所指本机证据目录；镜像未提供 revision 标签，不能仅凭版本号证明镜像整体构建源码。Task 的插件接入／成功信号／地址持久化及 T4 产品门槛仍须独立验证。

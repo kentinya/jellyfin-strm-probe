@@ -74,6 +74,8 @@ class EnvironmentGuardTests(unittest.TestCase):
             self.assertEqual((port["host_ip"], str(port["published"]), port["target"]),
                              ("127.0.0.1", "18096", 8096))
             self.assertNotIn("ports", services["media"])
+            self.assertEqual(set(services["media"]["networks"]), {"acceptance"})
+            self.assertEqual(set(services["jellyfin"]["networks"]), {"acceptance", "frontend"})
             for service in services.values():
                 self.assertNotIn("network_mode", service)
                 self.assertFalse(service.get("privileged", False))
