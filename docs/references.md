@@ -63,3 +63,9 @@ V3.0 已从工作区移除，其原文 SHA-256 为 `d236cab6b3992636b524f30bbe49
 | [`ProbeProvider.FetchVideoInfo`](https://github.com/jellyfin/jellyfin/blob/ca0f16eb7c195f720a1493ed469a27c4657db0c6/MediaBrowser.Providers/MediaInfo/ProbeProvider.cs#L1498-L1601) | 已确认路径上会调用原生 `ProbeVideo` 并读取 STRM 地址；成功信号、失败保留、地址持久化和重启结果仍 NOT RUN |
 
 V4.2 的“已核对源码”是用户方案陈述；本项目仍须独立验证目标版本 API、注册、默认无触发时间、取消与进度，不把本轮不可读取的定位写成通过。
+
+## A 开发环境准备来源
+
+2026-10-13 通过浏览工具读取 [目标源码 global.json](https://github.com/jellyfin/jellyfin/blob/ca0f16eb7c195f720a1493ed469a27c4657db0c6/global.json) 的 `10.0.0`／`latestMinor`，以及 [Microsoft .NET 10 官方发布元数据](https://dotnetcli.blob.core.windows.net/dotnet/release-metadata/10.0/releases.json) 中具体 SDK `10.0.401` 的 Linux x64 URL／SHA-512。本地固定与工具见 [环境交接](development-environment.md)；网页能读元数据不意味着终端可以下载 SDK。
+
+隔离安装方式参考 [Jellyfin 官方容器文档](https://jellyfin.org/docs/general/installation/container/) 和 [Microsoft 手动安装文档](https://learn.microsoft.com/en-us/dotnet/core/install/linux-scripted-manual)。没有取得实际 Docker manifest digest，未拉取镜像或安装 SDK；固定候选输入不声明二进制兼容。

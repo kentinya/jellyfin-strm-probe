@@ -151,6 +151,12 @@ Head SHA: 0167aadc88d5ec4998a116e7457cf8c80ab6bcee
 Product implementation SHA: NOT SET
 ```
 
+## A 环境交接（2026-10-13）
+
+用户要求 A 为开发者提供必要环境。已提供 [准备与运行说明](docs/development-environment.md)、固定 SDK `10.0.401`／官方 SHA-512、仓库内安装与离线归档入口、镜像 digest 锁定、隔离 Jellyfin／本地媒体服务 Compose 和统一 dotnet 入口。实际安装下载受 DNS 限制，Docker socket 拒绝访问，本地监听 socket 被禁止，环境仍 BLOCKED。镜像 digest、插件依赖和真实产品门槛仍未取得；原 Developer 报告保留，不把准备工具当成产品实现。
+
+A 保持 Slice／Task 的 ID、Base、Scope、T4 验收与 B 独立审查责任；本段是环境事实交接，不是 B Review。Task 仍 READY FOR B REVIEW；具备宿主执行能力后可继续原已授权 Task 的环境验证及实施。详细本机证据索引见环境说明。
+
 ## B Review Result
 
 ```text

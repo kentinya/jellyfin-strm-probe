@@ -27,6 +27,8 @@ V4.2 声明 v12.2 有 IScheduledTask、IConfigurableScheduledTask 和 ILibraryPo
 
 ## Slice 1 风险门槛
 
+A 环境准备后续：根 `global.json` 已具体固定 SDK `10.0.401`，官方归档校验值、准备脚本和隔离 Compose 已提供，见 [环境交接](development-environment.md)。安装下载仍因 DNS 失败阻塞，Docker socket／本地监听仍不可用；服务器镜像 digest、本地源码与插件依赖尚未取得。前述 Developer 诊断保持为历史事实，本次工具验证不构成实机兼容结论。
+
 | 问题 | 必须取得的证据 | 状态 |
 |---|---|---|
 | 核心 DI 接入 | 注册顺序、单一原生实例、无循环依赖、释放所有权、全接口委托、启动／关闭、普通媒体／直播 | NOT RUN |

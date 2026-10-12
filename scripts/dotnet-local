@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+probe_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+export DOTNET_ROOT="$probe_root/artifacts/dev-env/sdk"
+export DOTNET_CLI_HOME="$probe_root/artifacts/dev-env/cli"
+export NUGET_PACKAGES="$probe_root/artifacts/dev-env/nuget"
+export DOTNET_CLI_TELEMETRY_OPTOUT=1
+export DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1
+if [[ ! -x "$DOTNET_ROOT/dotnet" ]]; then
+    echo 'BLOCKED: run python3 scripts/development_environment.py sdk first' >&2
+    exit 2
+fi
+cd -- "$probe_root"
+exec "$DOTNET_ROOT/dotnet" "$@"
