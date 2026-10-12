@@ -1,0 +1,44 @@
+# Workspace metadata and private configuration
+.agents/
+.codex/
+.aws/
+.env
+.env.*
+!.env.example
+config/*.local.*
+config/secrets.*
+secrets/
+
+# .NET and editor output
+**/bin/
+**/obj/
+.vs/
+.idea/
+*.user
+*.suo
+TestResults/
+coverage/
+*.coverage
+*.coveragexml
+artifacts/
+
+# Runtime state and private acceptance data
+data/
+logs/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.log
+*.strm
+!tests/fixtures/**/*.strm
+
+# Tool caches
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.DS_Store
+Thumbs.db
