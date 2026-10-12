@@ -6,6 +6,8 @@
 
 先阅读本文件、[开发流程](docs/development-workflow.md)、根目录 V3.0 方案、[范围说明](docs/scope.md)、[需求](docs/requirements.md)、[用户旅程](docs/product-experience.md)、[架构](docs/architecture.md)、[路线图](docs/roadmap.md)、[SLICE.md](SLICE.md) 和 [TASK.md](TASK.md)。
 
+按当前职责阅读对应经验：[A：Slice 所有者／最终审查](docs/agent-experience/slice-owner-architect-final-reviewer.md)、[B：Task 规划／审查](docs/agent-experience/task-planner-reviewer.md)、[Developer：实施](docs/agent-experience/developer-implementation-role.md)。经验文件只提供方法参考，不改变授权、范围、测试门槛或审查责任。
+
 先检查 `git status --short --branch`，记录已有改动。实施任务前运行 `python3 scripts/check_governance.py`。尚未初始化 Git 时只能用 `--bootstrap` 检查规划，不能据此开始未激活的产品 Task。
 
 用户在会话中明确给出的范围和授权优先于仓库指南。本次生成开发基线文件的工作已经获授权；这里的实施合同用于后续插件开发。
@@ -15,9 +17,10 @@
 1. 本文件维护长期业务、架构和范围约束。
 2. `docs/development-workflow.md` 独立维护 Slice／Task 状态、Git、测试和审查流程。
 3. V3.0 原方案保留原文；`docs/scope.md` 记录本次明确排除的生成程序部分。
-4. `docs/requirements.md` 和 `docs/product-experience.md` 定义稳定需求与用户结果。
+4. `docs/requirements.md` 是本次插件开发的稳定需求规范；`docs/product-experience.md` 定义用户结果。原方案作为保留的输入参考，不把其中被排除的生成程序重新纳入范围。
 5. `docs/architecture.md` 明确区分已经实现与目标设计。
 6. `SLICE.md` 限定当前完整能力，活动 `TASK.md` 限定其中的实施单元。
+7. `docs/agent-experience/` 保存可复用的角色经验，不保存 Task 历史或验收结论。
 
 下层文件只能细化范围，不能偷偷弱化业务规则。总体方案不是一次实现全部产品的授权。
 

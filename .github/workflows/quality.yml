@@ -11,16 +11,18 @@ jobs:
   governance:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
       - name: Check committed Slice and Task contracts
         run: python3 scripts/check_governance.py
+      - name: Check governance state transitions in isolated Git repositories
+        run: python3 -m unittest discover -s tests -v
       - name: Check Python syntax
-        run: python3 -m py_compile scripts/check_governance.py scripts/bootstrap_repository.py
+        run: python3 -m py_compile scripts/check_governance.py scripts/bootstrap_repository.py tests/test_governance.py
       - name: Check patch whitespace
         run: git show --format= --check HEAD
 

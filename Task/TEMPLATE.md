@@ -2,6 +2,8 @@
 
 模板受当前 [Slice](../SLICE.md) 约束，执行顺序见 [开发流程](../docs/development-workflow.md)。复制到根 TASK.md 时将链接改为根目录相对路径。
 
+规划／审查阅读 [B 经验](../docs/agent-experience/task-planner-reviewer.md)，实施阅读 [Developer 经验](../docs/agent-experience/developer-implementation-role.md)。
+
 ```text
 Task ID: [Slice.Task]
 Parent Slice: [数字 ID]
@@ -31,7 +33,23 @@ Planner / Reviewer: B
 
 ## 必要测试
 
-记录准确的聚焦／相关／质量命令与实机门槛。T4 包含已有完整回归及高风险边界；其他等级按实际影响确定。不得列出不存在项目的“已通过”命令。
+遵循开发流程的测试阶段与证据规则，Slice 明确验证要求优先。填入本 Task 的命令和风险，不复制整套流程。不得列出不存在项目的“已通过”命令。
+
+### 开发／修正反馈
+
+新增／修改测试、已知失败、受影响回归和必要的集成／原生链路命令。
+
+### 最终检查点门槛
+
+指定等级的准确命令与覆盖风险。T0～T3 全量验证说明理由；T4 保留完整指定门槛。标明完整运行已包含的聚焦用例及单独必需的实机门槛。
+
+### B 独立验证
+
+B 要独立复现的关键行为、需阅读的匹配证据和明确的复用范围。
+
+### 证据与重跑规则
+
+稳定的忽略目录／CI 产物引用、候选及输入身份、风险对应的重跑条件。记录首败、重复、缺失和不可用项。修改既有计划时记录原因并保留 ID／Base／Goal／Scope／验收。
 
 ## 非目标
 
@@ -41,11 +59,13 @@ Planner / Reviewer: B
 
 - Changed Files：
 - Implemented：
-- Tests and Results：
+- Tests and Results：证据索引、被测候选、精确命令／计数／耗时、首败／重跑、复用运行和缺失门槛。
 - Decisions：
 - Remaining In-Slice Work：
 - Risks / Deviations：
 - Head SHA：真实实现检查点；尚未完成时为 NOT SET。
+
+若出现可复用经验，提供简短候选供 A 在 Slice 关闭时合并；不要求每个 Task 单独总结，不作为 PASS 门槛。
 
 ## B Review Result
 

@@ -16,7 +16,12 @@ SOURCE = "Jellyfin STRM Probe Optimizer 完整开发方案 V3.0.md"
 SOURCE_SHA256 = "d236cab6b3992636b524f30bbe49a91adb9ef5d6b7010ed5695cae7d65f228ae"
 COMMIT = re.compile(r"[0-9a-f]{40}")
 TASK_STATUSES = {"PLANNED", "IN PROGRESS", "READY FOR B REVIEW", "FIX REQUIRED"}
-SLICE_STATUSES = {"ACTIVE", "FIX REQUIRED", "READY FOR A REVIEW", "PASS / CLOSED"}
+SLICE_STATUSES = {"PLANNED", "ACTIVE", "FIX REQUIRED", "READY FOR A REVIEW", "PASS / CLOSED"}
+WORKFLOW_FILES = (
+    "docs/agent-experience/slice-owner-architect-final-reviewer.md",
+    "docs/agent-experience/task-planner-reviewer.md",
+    "docs/agent-experience/developer-implementation-role.md",
+)
 
 
 def field(document: str, name: str) -> str:
@@ -90,6 +95,11 @@ def check_files() -> None:
     }
     if not required.issubset(seen):
         raise ValueError("Bootstrap manifest omits required baseline files")
+    # The frozen bootstrap inventory predates these ongoing workflow resources.
+    for name in WORKFLOW_FILES:
+        path = ROOT / name
+        if not path.is_file() or path.is_symlink():
+            raise ValueError(f"Required workflow file missing or symbolic: {name}")
     if hashlib.sha256((ROOT / SOURCE).read_bytes()).hexdigest() != SOURCE_SHA256:
         raise ValueError("The original V3.0 proposal was changed")
 
@@ -127,18 +137,18 @@ def check(bootstrap: bool) -> None:
     if roadmap_text != git("show", "HEAD:docs/roadmap.md"):
         raise ValueError("Roadmap differs from committed HEAD; checkpoint the contract first")
     if status not in SLICE_STATUSES:
-        raise ValueError("No activated Slice contract exists at HEAD")
+        raise ValueError("Invalid committed Slice status")
     require_ancestor(base, head, "Slice Base SHA")
     if implementation != "NOT SET":
         require_ancestor(implementation, head, "Implementation Head")
         require_ancestor(base, implementation, "Slice Base SHA")
     if status in {"READY FOR A REVIEW", "PASS / CLOSED"} and implementation == "NOT SET":
         raise ValueError("Final review/closure requires a real Implementation Head")
-    expected_row = "PASS / CLOSED" if status == "PASS / CLOSED" else "ACTIVE"
+    expected_row = status if status in {"PLANNED", "PASS / CLOSED"} else "ACTIVE"
     if rows.get(slice_id) != expected_row:
         raise ValueError("Committed Roadmap status does not match the Slice")
     active_rows = [number for number, row in rows.items() if row == "ACTIVE"]
-    if active_rows != ([] if status == "PASS / CLOSED" else [slice_id]):
+    if active_rows != ([] if status in {"PLANNED", "PASS / CLOSED"} else [slice_id]):
         raise ValueError("Only the current Slice may be ACTIVE")
     if no_task:
         if status == "FIX REQUIRED":

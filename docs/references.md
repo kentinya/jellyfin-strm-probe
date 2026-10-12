@@ -1,6 +1,6 @@
 # 参考来源
 
-读取日期：2026-10-12。引用外部流程并针对本项目重新编写；没有复制 mediaflow 的媒体整理实现、Storage／Recognition 架构或“禁止 FFprobe”产品规则。
+最新读取日期：2026-10-13。引用外部流程并针对本项目重新编写；没有复制 mediaflow 的媒体整理实现、Storage／Recognition 架构或“禁止 FFprobe”产品规则。
 
 ## 原始方案
 
@@ -10,15 +10,28 @@
 
 ## mediaflow 开发流程
 
-仓库：[kentinya/mediaflow](https://github.com/kentinya/mediaflow)。本次读取时 main 提交：`df4391bd2ff351cbcfc34d24f193aff5abb59dbc`。
+仓库：[kentinya/mediaflow](https://github.com/kentinya/mediaflow)。本次读取时 main 提交：[`ba6b4f92f278950a5e0346d7dfa1387fafac2fca`](https://github.com/kentinya/mediaflow/commit/ba6b4f92f278950a5e0346d7dfa1387fafac2fca)，提交时间 2026-10-12 11:42:48 UTC，tree 为 `c4c29366968ef33ec1dc1e8d4d9173a3d8fca588`。
 
 | 来源 | 读取文件的 Git blob SHA | 本项目适配 |
 |---|---|---|
-| [development-workflow.md](https://github.com/kentinya/mediaflow/blob/df4391bd2ff351cbcfc34d24f193aff5abb59dbc/docs/development-workflow.md) | `b9e2b0a94fad4afce61efdd94ad175162c02a7e5` | Slice／Task、A／B／Developer、T0～T4、Git 激活、审查和停止规则 |
-| [Task/TEMPLATE.md](https://github.com/kentinya/mediaflow/blob/df4391bd2ff351cbcfc34d24f193aff5abb59dbc/Task/TEMPLATE.md) | `c5af426b93031b30ceff8647ffb2371dadc34f18` | Task 目标、范围、测试、完成报告与审查结构 |
-| [check_governance.py](https://github.com/kentinya/mediaflow/blob/df4391bd2ff351cbcfc34d24f193aff5abb59dbc/scripts/check_governance.py) | `548c7a89020a567af4936ec1215e20871d05589c` | 本项目独立实现只读合同检查，增加未初始化的规划检查 |
+| [development-workflow.md](https://github.com/kentinya/mediaflow/blob/ba6b4f92f278950a5e0346d7dfa1387fafac2fca/docs/development-workflow.md) | `84072c1fac4a76f7f8fdd368adc83a7350db8848` | 测试阶段、证据复用、用户冻结／恢复、合同变更与关闭后停止 |
+| [Task/TEMPLATE.md](https://github.com/kentinya/mediaflow/blob/ba6b4f92f278950a5e0346d7dfa1387fafac2fca/Task/TEMPLATE.md) | `18e9ff82b9d28c03e72e3163ba3f537d07855cf1` | 四部分测试计划、证据索引与可选经验候选 |
+| [check_governance.py](https://github.com/kentinya/mediaflow/blob/ba6b4f92f278950a5e0346d7dfa1387fafac2fca/scripts/check_governance.py) | `28ab299e43fd359f0cea04cc0e495276dcc543f3` | 接受已提交 PLANNED／无活动 Task；拒绝 PLANNED 下活动 Task，保留本项目祖先与原文校验 |
+| [AGENTS.md](https://github.com/kentinya/mediaflow/blob/ba6b4f92f278950a5e0346d7dfa1387fafac2fca/AGENTS.md) | `572d2be874e2fa724027e45f32d7835ed39e2fb2` | 按职责阅读经验，稳定需求规范与原始参考分工 |
+| [A 经验](https://github.com/kentinya/mediaflow/blob/ba6b4f92f278950a5e0346d7dfa1387fafac2fca/docs/agent-experience/slice-owner-architect-final-reviewer.md) | `6dc344e9e62548194542d6fedccdd59a6e6b72bc` | 适用方法明确标为外部参考 |
+| [B 经验](https://github.com/kentinya/mediaflow/blob/ba6b4f92f278950a5e0346d7dfa1387fafac2fca/docs/agent-experience/task-planner-reviewer.md) | `cb760a3a34155d39a270c3121f6d9a6d83e21faa` | 适用方法明确标为外部参考 |
+| [Developer 经验](https://github.com/kentinya/mediaflow/blob/ba6b4f92f278950a5e0346d7dfa1387fafac2fca/docs/agent-experience/developer-implementation-role.md) | `83da6992a97120650affcebeb08d09c5c989d485` | 仅借鉴维护格式；本项目尚无插件实施经验，清单暂空 |
+| [quality.yml](https://github.com/kentinya/mediaflow/blob/ba6b4f92f278950a5e0346d7dfa1387fafac2fca/.github/workflows/quality.yml) | `da541a1848576b9885e46daeaf03eb950159e0dc` | 更新 checkout／setup-python 版本，补治理回归；不复制 Python／Web 产品门槛 |
 
 还读取了 AGENTS、CLAUDE、SLICE、TASK 和 Roadmap，了解文档职责与当前合同格式。本项目没有继承这些文件中的产品规则和历史验收结果，没有配置该仓库为本项目远程。
+
+首次基线参考版本 `df4391bd2ff351cbcfc34d24f193aff5abb59dbc` 保留在 Git 历史。此次流程同步没有移动本项目 Slice／Task Base、改变业务验收或开始插件实现。
+
+### 本地参考检出
+
+终端 clone 因 GitHub DNS 解析失败，改用 GitHub 连接读取固定提交及递归 tree，核验 blob／tree／commit 对象后构建浅层稀疏 Git 检出：`/tmp/jf-strm-probe-mediaflow-latest`。包含流程、角色经验、模板、检查脚本、CI、当前合同及导航等 16 个文件，HEAD 为上述 main 提交；其 origin 仅属于独立参考目录。
+
+这是本次会话的流程参考检出，未下载全部源码 blob 或历史；目录位于 `/tmp`，不是持久证据。可核验的来源由以上固定提交链接保存。本项目保留适用于 C# Jellyfin 插件的独立治理实现，不能拿参考仓库测试结果作为本项目验收。
 
 ## Jellyfin 源码定位
 

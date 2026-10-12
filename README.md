@@ -20,11 +20,23 @@
 
 核心规则：URL 改变且没有新旧两个有效且相同的 SHA-1 时，必须要求探测；大小相同不能豁免。修改时间不参与判断。`allowMediaProbe=false` 时保留待探测状态，不能自行启动 ffprobe。
 
-## 初始化 Git
+## 当前仓库检查与初始化历史
 
 原规划环境的 `.git` 曾为只读文件系统。正常目录可写后，本地 Git 基线与 Slice 1 合同已初始化，首个 Task 在合同提交后计划；未配置远程或推送。
 
-先检查文件：
+当前已初始化仓库运行：
+
+```bash
+git status --short --branch
+python3 scripts/check_governance.py
+python3 -m unittest discover -s tests -v
+```
+
+测试只验证开发治理，不代表插件构建或 Jellyfin 播放通过。最新流程包含分阶段测试、证据复用、用户明确要求的冻结／恢复和关闭后停止规则；来源版本见 [references.md](docs/references.md)。
+
+以下是原始基线的一次性初始化方式，留作历史说明；当前仓库不要重新执行。历史 `bootstrap-manifest.json` 保存初始化时的清单与摘要，不随后续维护重新生成。
+
+初始化前检查规划文件：
 
 ```bash
 python3 scripts/check_governance.py --bootstrap
@@ -54,5 +66,8 @@ git log --oneline
 | [test-matrix.md](docs/test-matrix.md) | T01～T28 与补充测试，全部尚未运行 |
 | [progress.md](docs/progress.md) | Slice 关闭记录与当前开发指针 |
 | [references.md](docs/references.md) | mediaflow 流程来源、版本和适配说明 |
+| [A 经验](docs/agent-experience/slice-owner-architect-final-reviewer.md) | Slice 规划、合同变更与最终审查的方法 |
+| [B 经验](docs/agent-experience/task-planner-reviewer.md) | Task 规划、测试安排与停止规则的方法 |
+| [Developer 经验](docs/agent-experience/developer-implementation-role.md) | 本项目可复用的实施经验，目前暂空 |
 
 仓库中尚无 `.sln`、`.csproj`、插件安装包或 Docker 部署配置。Task 1.1 在核实 Jellyfin 版本和依赖后创建真实可构建项目，不先填入未经验证的包版本。
