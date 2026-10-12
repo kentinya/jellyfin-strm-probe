@@ -1,0 +1,28 @@
+name: Repository quality
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  governance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Check committed Slice and Task contracts
+        run: python3 scripts/check_governance.py
+      - name: Check Python syntax
+        run: python3 -m py_compile scripts/check_governance.py scripts/bootstrap_repository.py
+      - name: Check patch whitespace
+        run: git show --format= --check HEAD
+
+# Task 1.1 adds the actual pinned .NET build/test gates once projects exist.
+# This workflow does not claim plugin build or Jellyfin runtime acceptance.
