@@ -1,10 +1,10 @@
 # NO ACTIVE IMPLEMENTATION TASK
 
-Task 1.1 已 PASS；当前执行 Slice Final，无后继实施 Task。以下保留通过的 Task 与审查记录，供 A 核对。
+Task 1.1 已 PASS；Slice Final 已完成，Closure Packet 已交 A，无后继实施 Task。以下保留通过的 Task 与审查记录，供 A 核对。
 
 # Task 1.1 — V4.2 核心接入原型与可靠指纹提交验证
 
-Task 1.1 已由用户激活。B 已独立审查修正候选 `2b1e1b5bcf77b06997fabed5a31147838db16b47`，裁定 **PASS**；BR-1 保存关联与 BR-3 真实对照／FullRefresh 观察已满足，见下方 Current B Review Result。A 调整后的播放取消范围持续有效；BR-2 的历史 FAIL 保留，退出当前阻塞范围，不改写为修复或 PASS。全部 Slice 1 Required Outcomes／Surfaces 已核对满足，停止创建 Task，接续 Slice Final 后交 A 最终审查；本 Task PASS 不关闭 Slice。
+Task 1.1 已由用户激活。B 已独立审查修正候选 `2b1e1b5bcf77b06997fabed5a31147838db16b47`，裁定 **PASS**；BR-1 保存关联与 BR-3 真实对照／FullRefresh 观察已满足，见下方 Current B Review Result。A 调整后的播放取消范围持续有效；BR-2 的历史 FAIL 保留，退出当前阻塞范围，不改写为修复或 PASS。全部 Slice 1 Required Outcomes／Surfaces 已核对满足，停止创建 Task，Slice Final 已完成，Closure Packet 见 SLICE.md；本 Task PASS 不关闭 Slice。
 
 未移动 Base、未新建 Task，T4 等级与四阶段流程保留；按新合同调整取消验收范围。Developer 不签发 B PASS，不更新 Slice Implementation Head，也不关闭 Slice。
 
@@ -343,7 +343,7 @@ Reviewed Contract Checkpoint: 4c749d7cce0f48b5c8146755db43837960e79f4f
 Decision: PASS
 P0/P1 Blockers: NONE
 Slice Required Outcomes all satisfied: YES
-Next: Slice Final, then SLICE READY FOR A REVIEW; no next Task
+Next: SLICE READY FOR A REVIEW; Slice Final and Closure Packet in SLICE.md; no next Task
 ```
 
 ### 独立审查与证据（2026-10-13）

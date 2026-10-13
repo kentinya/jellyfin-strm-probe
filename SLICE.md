@@ -4,9 +4,9 @@
 Slice ID: 1
 Name: Jellyfin 核心接入与指纹提交验证
 Owner: A
-Status: ACTIVE
+Status: READY FOR A REVIEW
 Base SHA: 8a6a955357a6fe7a6aea9dafead0ec33ffd203f3
-Implementation Head: NOT SET
+Implementation Head: 2b1e1b5bcf77b06997fabed5a31147838db16b47
 ```
 
 ## V4.2 合同修订
@@ -111,8 +111,88 @@ B／Developer 只记录真实实现 Head、结果和 Required Outcomes 进度，
 
 ## Closure Packet
 
-尚未生成；产品实现和最终验证 NOT RUN。
+本段由 B 提交最终审查包；不是 A Final Review，也不关闭 Slice。
+
+```text
+Slice: 1
+Slice Base: 8a6a955357a6fe7a6aea9dafead0ec33ffd203f3
+Implementation Head: 2b1e1b5bcf77b06997fabed5a31147838db16b47
+Reviewed Contract Checkpoint: 4c749d7cce0f48b5c8146755db43837960e79f4f
+Task: 1.1 — PASS
+Task Review Checkpoint: 15ce799b1ca0330378f498a4cd83ec8064cae783
+Slice Final Tested Checkout: 15ce799b1ca0330378f498a4cd83ec8064cae783
+B Decision: SLICE READY FOR A REVIEW
+P0/P1 Blockers: NONE
+Next: A independently reviews Slice Base..Implementation Head
+```
+
+### 实现与 Task 索引
+
+最小原型在固定 Jellyfin 12.2.0／SDK 10.0.401 上包装原生媒体源、编码器和两处保存服务，使用只读 Manifest 与纯决策、进程内最小指纹条件提交。变化 URL 的本次编码器结果、媒体流事务保存、地址事务保存、返回主流和稳定 Manifest 必须相符；失败或不能证明时保留基线。普通媒体、旧 STRM、禁用、false 权限及未匹配接口继续原生委托。未增加生成器、独立状态机、路径单独更新分支或另一套 FFmpeg。
+
+只有一个实施单元：[Task 1.1 当前 B 审查](TASK.md#current-b-review-result)；完整任务／Developer 报告保留于根 TASK 与其 Git 检查点。原 BR-1／BR-3 已解决；BR-2 依 A RESCOPE 退出当前门槛，旧 FAIL／NOT RUN 不改写为 PASS。Task Base 未移动；停止创建 Task，不激活后续 Slice。
+
+### Required Outcomes / Surfaces 对账
+
+| Outcome | 完成与证据 |
+|---|---|
+| RO-1 | 满足：真实 solution、固定 SDK／依赖锁与源码 SHA／镜像 digest，Release 构建、实际加载与正常启停。镜像整体源码溯源限制见下。 |
+| RO-2 | 满足：全接口委托和单例释放回归、固定源码注册核对、真实普通媒体／Live TV／禁用对照；首信任／未变化 0 匹配调用，地址变化 1。 |
+| RO-3 | 满足：成功保存代理在原生事务完成后取证，关联本次主流；不可达 URL 保留旧流／重试，真实 Manifest 竞态不提交；独立保存失败 harness 与原生取消异常回归。 |
+| RO-4 | 满足：同 SHA-1／Size 换 URL 实际探测，当次／重启均新地址与 Video／Audio 主流；地址保存失败拒绝、false 权限保留、手动 FullRefresh 原生对照。 |
+| RO-5 | 满足：本地可核验证据、版本／接口定位、附带提供器观察及继续结论。原生计划任务接口调研不计 Slice 3 实机验收。 |
+
+| Required Surface | 已交付 |
+|---|---|
+| 真实 C# 原型及验证入口 | solution、产品／测试项目、锁文件、单元与隔离运行脚本 |
+| 隔离加载／生命周期／PlaybackInfo／原生媒体源链 | 独立 Task 与 Slice Final 的实际启停、对照和 PlaybackInfo 输出 |
+| 实际计数／本次成功失败／原生保存与重启 | 匹配调用＋本地媒体 GET、保存信号、流摘要、正确 URL／主流、真实重启 |
+| 可重复指纹提交条件 | 进程内条件提交、既有回归、独立三类保存失败 harness、真实失败／竞态恢复 |
+| 目标版本／任务接口调研 | 固定源码中的注册、ExecuteAsync 的进度／token、空默认触发与错误回退定位 |
+
+### Slice Final 与验收
+
+独立于 Task 验证再次运行当前合同最终门槛。证据索引：`.git/validation-evidence/2b1e1b5bcf77b06997fabed5a31147838db16b47/slice-final-20261013/INDEX.md`；Task B 证据：同级 `b-review-20261013/INDEX.md`。均仅本机可读，A 需要本工作区读取。索引记录完整测试 HEAD、前后跟踪输入／运行配置／夹具摘要、构建与部署 DLL、精确命令、退出码、计数、耗时和脱敏原始产物。此文档后继只同步状态／事实；产品、测试、工具、依赖与夹具定义未变，另跑消费文档的治理／链接／工具检查。
+
+| 最终门槛 | 结果 |
+|---|---|
+| 固定 SDK locked restore／Release build | PASS；0 warnings／errors |
+| 全部 C# 回归 | PASS；32 passed，0 failed，0 skipped |
+| format verify | PASS |
+| 真实隔离 Jellyfin 完整脚本 | PASS；包含加载／启停、播放／失败／Manifest 变化／真实重启及恢复 |
+| Python 工具全部回归 | PASS；30 passed，0 failed，0 skipped |
+| 治理／差异／本地 Markdown 链接检查 | PASS；文档后继的治理复验见证据索引 |
+
+AC-1～AC-7 按上述证据及 Task B Review 映射满足。两轮独立集成均观察到首信任／未变化零调用，同内容换 URL 1 次、当次及重启正确；不可达新 URL 两次 HTTP 500／1 次且旧流摘要不变，Manifest 竞态 HTTP 500／1 次、保留指纹并恢复。普通媒体、Live TV、旧 STRM、禁用和恢复及手动刷新真实对照正常。
+
+false 权限实机采用固定源码真实 `/Videos/{itemId}/stream?static=true` 入口；返回 HTTP 200／20995 字节，随后允许的 PlaybackInfo 仍探测一次。公共 PlaybackInfo 固定传 true／CancellationToken.None，不声称验证了其 false 参数或客户端取消。原生取消异常传播及保留基线由现有单元回归证明；当前合同移除的人为取消实机门槛保持历史 NOT RUN。
+
+FullRefresh 的两次独立提供器日志观察均为 ProbeProvider、MovieNfoProvider、TrickplayProvider 各一次，条目 ETag 改变，1 次匹配探测／1 次合成媒体 GET；91／75 ms 是本地短媒体下含诊断日志的端到端观察。它证明附带提供器调用，未证明远程下载、Trickplay 生成或开销分项。临时日志级别和 STRM 已恢复；只保存提供器名与项目身份摘要。Slice Final 的完整脚本另保留手动 FullRefresh 与重复地址切换计数，不把探测计数替代全部附带工作。
+
+### 不变量证据
+
+- 源码与提交审查：插件只读 STRM、解析／决策没有网络／数据库／刷新副作用，无 OpenList API／代理改写／媒体下载哈希；只有隔离测试写夹具。产品指纹只保存最小内存身份，不复制媒体流／PlaybackInfo，不引入持久化探测状态。
+- 决策回归与实机：URL 优先且改变必探测，SHA-1 双侧有效才比较，相同忽略 Size；无比较哈希时有效 Size 判断，mtime 不参与。完整产品矩阵仍延期，原型证据不覆盖其所有变体。
+- 权限／恢复：false、禁用／旧／普通／直播保留原生；首次信任不计实测成功；新结果在实际探测／保存／Manifest 一致后才条件提交。失败、原生取消异常、解析或版本变化保护旧基线；保存抛错或仅内存地址不能确认成功。
+- 保存边界：固定源码流保存与条目保存均在事务 Commit 后正常返回，代理随后记录；提供器上层吞错不能制造信号。独立 harness 包括“旧流与本次结果完全相同但流保存失败”，避免只靠字段差异检验拒绝逻辑。
+- 隐私／环境：日志不输出完整 URL／token／Cookie／私有路径；证据经过指定提取。临时媒体库和专用 Compose 实例，仅本机端口；未使用生产媒体／配置。
+
+### 非阻塞限制、延期与文档协调
+
+原型仓库为进程内 `primary`，重启重新信任；重启证据只证明 Jellyfin 原生地址／媒体流。正式 SQLite／迁移／异常回退、多源身份、完整矩阵、共享与全局并发、实际可取消执行保护属于 Slice 2。原生批量任务／停止／定时／分页／进度与完整配置属 Slice 3；大规模、扫描、外部代理／OpenList 联调、广泛格式／客户端与发布属 Slice 4，均不预先 PASS。
+
+内部数据库保存故障没有真实注入；本 Slice 以事务边界固定源码、实际成功保存／重启、真实不可达失败和独立保存失败控制测试组合取证，不把单元当成数据库故障实机证据。镜像缺 revision 标签：digest／实际版本、源码及 NuGet repository commit 分别固定，不能证明镜像所有构建输入。合成短媒体、禁用远程提供器的配置不代表生产开销或多版本支持；仍无发布包。
+
+本交接同步 README、Progress、架构、兼容性、环境、范围与 Roadmap 的当前事实，完整需求／旅程保持 TARGET；测试矩阵保留后续产品状态并指向原型分项证据。Roadmap 当前行仍 ACTIVE，表示等待 A；关闭账本保持无已关闭 Slice。A 最终决定后才进行 Closure Reconciliation、PASS / CLOSED、角色经验合并及下一 Slice 选择／激活。
+
+可复用经验候选（由 A 关闭时酌情合并）：提供器可能吞掉保存异常 → 在实际事务返回处关联本次结果，并独立验证保存失败仍可重试 → 适用于原生刷新接入；FullRefresh 只有探测计数看不到附带工作 → 同时观察提供器调用与端到端计数并声明调用／完成边界 → 适用于刷新成本验证。取消入口经验沿用现有候选，不新增流水账。
 
 ## A Final Review
 
-尚未进行产品最终审查。合同修订决定不是验收 PASS，也不表示 PASS / CLOSED。
+```text
+Reviewed Range: NOT SET
+Decision: PENDING
+P0/P1 Blockers: NOT REVIEWED BY A
+```
+
+B 已交 Closure Packet；A 尚未进行独立最终审查。Task PASS 和 B 的 READY 决定不是 A PASS / CLOSED，后续 Slice 未激活。

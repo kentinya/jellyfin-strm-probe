@@ -1,23 +1,19 @@
 # Slice 关闭账本
 
-只记录已经完成最终审查的 Slice，不复制逐 Task 日志。
+只记录已经完成 A 最终审查的 Slice，不复制逐 Task 日志。
 
 | Slice | Base SHA | Implementation Head | A Final Review |
 |---|---|---|---|
 
-当前没有已关闭 Slice，没有产品实现。
+当前没有已关闭 Slice；已有 Slice 1 最小原型与 B Task PASS，尚无 A 最终 PASS。
 
 ## 当前开发指针
 
-- 开发基准：用户提供的 V4.2；V3.0 原文及旧规划保留在 Git 历史。
-- 当前合同：Slice 1，ACTIVE，保留原始 Base，实质修订为核心接入与可靠指纹提交验证。
-- 当前 Task：Task 1.1，FIX REQUIRED。B 已复核环境交接提交 `1035b1b3d31d88cde1a47154f24597d120530380`，确认前轮环境阻塞解除；产品原型和核心验收未完成，交回 Developer 在原 Task 内继续，见 [TASK.md](../TASK.md) 和 [环境交接](development-environment.md)。
-- 后续 Slice：播放／指纹闭环、原生批量任务、集成与发布，均 PLANNED。
-- 插件构建、插件在 Jellyfin 中的产品验收、外部代理联调：全部 NOT RUN；隔离服务器与基础媒体链路已实际运行。
-- 本次工作：B 完成环境交接复核与接续决定；环境诊断 10/10、工具回归 30/30、锁定依赖的引用样例编译运行及基础媒体链路 PASS。未签发 Task 产品 PASS 或 A Final Review。
+- 开发基准：V4.2；V3.0 原文／旧合同保留在 Git 历史。
+- 当前 Slice：1，READY FOR A REVIEW；Base `8a6a955357a6fe7a6aea9dafead0ec33ffd203f3`，实际 Implementation Head `2b1e1b5bcf77b06997fabed5a31147838db16b47`。
+- Task 1.1：B 独立审查 PASS，审查检查点 `15ce799b1ca0330378f498a4cd83ec8064cae783`；当前无活动实施 Task，全部 Required Outcomes／Surfaces 已核对满足，停止创建 Task。
+- Slice Final：另行运行固定 SDK 构建／质量门槛、32 项 C# 与 30 项工具回归、真实隔离加载／播放／失败／竞态／重启，结果和限制见 [Closure Packet](../SLICE.md#closure-packet)。
+- 后续 Slice：播放／正式指纹闭环、批量任务、集成与发布均 PLANNED；外部代理联调、完整产品矩阵／发布未完成。
+- 下一动作：A 独立审查 Slice Base..Implementation Head 并决定；B 不关闭 Slice、不激活后续实施。
 
-V4.2 初始合同检查点为 `4a8536860fafaf25f7a1e573fef19255ca3d07c3`；A 的播放／批量取消语义澄清检查点为 `0c2315ffa735694f4cae5a21771af9cc95c33488`。Task 保留原 ID／Base 并继续 FIX REQUIRED，当前合同身份见 [TASK.md](../TASK.md)。初始重规划核验：治理、24 项工具回归、Python 语法、本地 Markdown 链接与差异空白检查通过；不代表本次新增产品验收。
-
-被替代规划快照为 `4b1d0468c1e43e6e9034ef98e99b6cc44ea59485`，不是产品 Implementation Head。开发合同与后继 Task 使用真实 Git 检查点，不填虚构 SHA。
-
-A 播放取消范围调整检查点为 `4c749d7cce0f48b5c8146755db43837960e79f4f`：当前 Slice 1 不要求成功返回后的额外取消防御与人为注入取消验收，原生取消异常处理及已有回归保留；可取消共享执行／批量停止分别归 Slice 2／3。B ADJUST 原 Task，BR-2 历史 FAIL 保留且退出当前阻塞，BR-1 与调整后的 BR-3 继续阻塞；Task 仍 FIX REQUIRED，无产品验收 PASS。
+详细 Task、历史 FIX REQUIRED、取消 RESCOPE 与原始失败事实见 [TASK.md](../TASK.md) 及 Git。当前事实同步不改变 Base、合同边界或 A 最终审查责任；关闭账本由 A 最终决定后的协调检查点更新。

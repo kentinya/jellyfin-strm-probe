@@ -66,9 +66,9 @@ python3 scripts/development_environment.py up
 
 合成媒体服务使用实例自带的 FFmpeg `8.1.3-Jellyfin` 制作两秒媒体：`media/fixture.mp4` 与相同字节的 `fixture-alt.mp4`。本次隔离集成脚本在 STRM 中写入从实际字节计算的 SHA-1／Size，验证换 URL 的同内容分支，并在脚本退出时恢复原始 STRM。
 
-固定 SDK 的 locked restore、Release build、C# 全部测试、format verify、仓库治理测试和真实 PlaybackInfo 集成均已有执行记录。T4 最终候选的证据索引、任务接口调研、未完成行为及实现 SHA 见 [Task 1.1 Developer Rework Report](../TASK.md)。B 的独立复核和 Slice Final 仍由各自角色负责。
+固定 SDK 的 locked restore、Release build、C# 全部测试、format verify、仓库治理测试和真实 PlaybackInfo 集成均已有执行记录。T4 最终候选的证据索引、任务接口调研、未完成行为及实现 SHA 见 [Task 1.1 Developer Rework Report](../TASK.md)。B 已完成独立复核及单独的 Slice Final；当前交 A 最终审查，证据见 [Closure Packet](../SLICE.md#closure-packet)。
 
-本文件记录 A 提供的已运行环境及事实交接，原 Developer 阻塞报告保留为历史。随后 B 已复核交接提交和当前环境，确认阻塞解除；上一实现的 B 决定为 FIX REQUIRED。当前修正候选已交 Developer Rework Report，等待 B 独立审查，见 [上一份 B Review 决定](../TASK.md#current-b-review-result)。
+本文件记录 A 提供的已运行环境及事实交接，原环境阻塞和旧实现 FIX REQUIRED 保留为历史。B 已独立审查修正候选并裁定 Task 1.1 PASS，单独完成 Slice Final；当前 Slice 待 A 最终审查，见 [B Review 决定](../TASK.md#current-b-review-result)。隔离测试均恢复 STRM、启用插件并同步 Jellyfin 地址，不改变生产实例。
 
 ## 已运行环境证据
 
