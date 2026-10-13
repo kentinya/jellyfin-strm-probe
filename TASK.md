@@ -118,7 +118,7 @@ python3 scripts/run_isolated_plugin_integration.py
 Reviewed: NOT SET
 Decision: PENDING
 Slice Required Outcomes all satisfied: NO
-Next: DEVELOPER IMPLEMENTS TASK 2.2
+Next: B REVIEWS TASK 2.2 (DEVELOPER HEAD d651950950d6d3ad2be4322ddf8f0afb658c7755)
 ```
 
 B 独立审查后只返回 PASS 或 FIX REQUIRED；通过后重新核对全部 RO／Required Surfaces，选择 NEXT TASK 或 SLICE READY FOR A REVIEW，不在 Task 内关闭 Slice。
