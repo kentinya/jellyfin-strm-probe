@@ -18,6 +18,7 @@ public sealed class StrmPlaybackOptimizer
     private readonly IPlaybackSettings _settings;
     private readonly ILogger<StrmPlaybackOptimizer> _logger;
     private readonly ILibraryManager? _libraryManager;
+    private readonly Lazy<ProbeCoordinator> _coordinator;
     private int _fingerprintStoreFailed;
 
     public StrmPlaybackOptimizer(
@@ -26,7 +27,8 @@ public sealed class StrmPlaybackOptimizer
         IStrmFingerprintRepository fingerprintRepository,
         IPlaybackSettings settings,
         ILogger<StrmPlaybackOptimizer> logger,
-        ILibraryManager? libraryManager = null)
+        ILibraryManager? libraryManager = null,
+        ProbeCoordinator? coordinator = null)
     {
         _manifestReader = manifestReader;
         _decisionService = decisionService;
@@ -34,7 +36,20 @@ public sealed class StrmPlaybackOptimizer
         _settings = settings;
         _logger = logger;
         _libraryManager = libraryManager;
+        // Jellyfin resolves IMediaSourceManager (and therefore this optimizer) before it creates plugin
+        // instances, so the global pool must be created on first use. It then reads the concurrency that was
+        // captured when the plugin started, so a saved change still only applies after the next restart.
+        _coordinator = new Lazy<ProbeCoordinator>(() =>
+        {
+            var pool = coordinator ?? new ProbeCoordinator(settings.MaxConcurrentProbes);
+            logger.LogInformation(
+                "STRM Probe Optimizer global probe pool created with {MaxConcurrentProbes} permit(s).",
+                pool.MaxConcurrentProbes);
+            return pool;
+        });
     }
+
+    private ProbeCoordinator Coordinator => _coordinator.Value;
 
     public async Task<IReadOnlyList<MediaSourceInfo>> GetPlaybackMediaSourcesAsync(
         IMediaSourceManager native,
@@ -44,7 +59,7 @@ public sealed class StrmPlaybackOptimizer
         bool enablePathSubstitution,
         CancellationToken cancellationToken)
     {
-        if (!_settings.PlaybackAutoCheck || !allowMediaProbe || Volatile.Read(ref _fingerprintStoreFailed) != 0)
+        if (!_settings.Enabled || !_settings.PlaybackAutoCheck || !allowMediaProbe || Volatile.Read(ref _fingerprintStoreFailed) != 0)
         {
             return await DelegateAsync(native, item, user, allowMediaProbe, enablePathSubstitution, cancellationToken)
                 .ConfigureAwait(false);
@@ -135,6 +150,8 @@ public sealed class StrmPlaybackOptimizer
 
     /// <summary>
     /// Checks one caller-visible source. This is the shared source-level entry point for playback and a future native task.
+    /// It re-reads the current manifest and fingerprint every time it obtains an execution opportunity, so a queued
+    /// caller never starts from a stale decision. A queued or waiting caller is not registered as a running probe.
     /// </summary>
     public async Task<MediaSourceInfo?> CheckSourceAsync(
         IMediaSourceManager native,
@@ -154,17 +171,39 @@ public sealed class StrmPlaybackOptimizer
                 .ConfigureAwait(false);
         }
 
-        if (Volatile.Read(ref _fingerprintStoreFailed) != 0)
+        if (!_settings.Enabled || Volatile.Read(ref _fingerprintStoreFailed) != 0)
         {
             return await GetSourceWithNativeAsync(native, sourceItem, sourceId, allowMediaProbe, user, enablePathSubstitution, cancellationToken)
                 .ConfigureAwait(false);
         }
 
+        return await CheckSourceCoreAsync(
+            native,
+            projectItemId,
+            sourceItem,
+            source,
+            sourceKey,
+            user,
+            enablePathSubstitution,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<MediaSourceInfo?> CheckSourceCoreAsync(
+        IMediaSourceManager native,
+        Guid projectItemId,
+        BaseItem sourceItem,
+        MediaSourceInfo source,
+        string sourceKey,
+        User? user,
+        bool enablePathSubstitution,
+        CancellationToken cancellationToken)
+    {
+        var sourceId = source.Id;
         var isStrm = IsStrm(sourceItem);
         var readResult = isStrm ? _manifestReader.Read(sourceItem.Path) : ManifestReadResult.Unsupported;
         if (readResult.Status != ManifestReadStatus.Supported || readResult.Manifest is not { } manifest)
         {
-            return await GetSourceWithNativeAsync(native, sourceItem, sourceId, allowMediaProbe, user, enablePathSubstitution, cancellationToken)
+            return await GetSourceWithNativeAsync(native, sourceItem, sourceId, allowMediaProbe: true, user, enablePathSubstitution, cancellationToken)
                 .ConfigureAwait(false);
         }
 
@@ -176,7 +215,7 @@ public sealed class StrmPlaybackOptimizer
         catch (Exception exception)
         {
             MarkFingerprintStoreFailed(exception, sourceItem.Id);
-            return await GetSourceWithNativeAsync(native, sourceItem, sourceId, allowMediaProbe, user, enablePathSubstitution, cancellationToken)
+            return await GetSourceWithNativeAsync(native, sourceItem, sourceId, allowMediaProbe: true, user, enablePathSubstitution, cancellationToken)
                 .ConfigureAwait(false);
         }
 
@@ -191,7 +230,7 @@ public sealed class StrmPlaybackOptimizer
             if (!ManifestIsStillCurrent(sourceItem.Path, manifest))
             {
                 _logger.LogInformation("STRM changed during playback decision for item {ItemId}, source {SourceId}; delegating to Jellyfin.", projectItemId, sourceKey);
-                return await GetSourceWithNativeAsync(native, sourceItem, sourceId, allowMediaProbe, user, enablePathSubstitution, cancellationToken)
+                return await GetSourceWithNativeAsync(native, sourceItem, sourceId, allowMediaProbe: true, user, enablePathSubstitution, cancellationToken)
                     .ConfigureAwait(false);
             }
 
@@ -227,17 +266,12 @@ public sealed class StrmPlaybackOptimizer
                 catch (Exception exception)
                 {
                     MarkFingerprintStoreFailed(exception, sourceItem.Id);
-                    return await GetSourceWithNativeAsync(native, sourceItem, sourceId, allowMediaProbe, user, enablePathSubstitution, cancellationToken)
+                    return await GetSourceWithNativeAsync(native, sourceItem, sourceId, allowMediaProbe: true, user, enablePathSubstitution, cancellationToken)
                         .ConfigureAwait(false);
                 }
             }
 
-            _logger.LogInformation(
-                "STRM source reused saved media information for project {ItemId}, source {SourceId}; reason {Reason}, plugin probe calls 0, Jellyfin GetMediaInfo calls observed {EncoderCallsTotal}.",
-                projectItemId,
-                sourceKey,
-                decision.Reason,
-                MediaEncoderDispatchProxy.GetMediaInfoCallCount);
+            LogDecision("reused saved media information", projectItemId, sourceKey, decision.Reason);
             return null;
         }
 
@@ -266,8 +300,157 @@ public sealed class StrmPlaybackOptimizer
         StrmManifest manifest,
         StrmFingerprint? previous)
     {
+        if (Coordinator.TryGetRunning(projectItemId, sourceKey, out var running))
+        {
+            return await JoinRunningProbeAsync(
+                native,
+                projectItemId,
+                sourceItem,
+                previousSource,
+                sourceKey,
+                user,
+                enablePathSubstitution,
+                cancellationToken,
+                running!).ConfigureAwait(false);
+        }
+
+        var reservation = await Coordinator.AcquireAsync(projectItemId, sourceKey, manifest.ContentHash, cancellationToken)
+            .ConfigureAwait(false);
+        if (!reservation.IsOwner)
+        {
+            return await JoinRunningProbeAsync(
+                native,
+                projectItemId,
+                sourceItem,
+                previousSource,
+                sourceKey,
+                user,
+                enablePathSubstitution,
+                cancellationToken,
+                reservation.Item).ConfigureAwait(false);
+        }
+
+        var workItem = reservation.Item;
+        if (!Coordinator.TryMarkStarted(workItem, out var existing))
+        {
+            // Another caller actually started between reserving the permit and registering. Join it instead of
+            // starting a duplicate native probe, and release the permit that this call no longer needs.
+            reservation.Permit!.Release();
+            return await JoinRunningProbeAsync(
+                native,
+                projectItemId,
+                sourceItem,
+                previousSource,
+                sourceKey,
+                user,
+                enablePathSubstitution,
+                cancellationToken,
+                existing!).ConfigureAwait(false);
+        }
+
+        try
+        {
+            var result = await ExecuteProbeAsync(
+                native,
+                projectItemId,
+                sourceItem,
+                previousSource,
+                sourceKey,
+                user,
+                enablePathSubstitution,
+                cancellationToken,
+                manifest,
+                previous).ConfigureAwait(false);
+            Coordinator.Complete(workItem, result);
+            return result;
+        }
+        catch (Exception exception)
+        {
+            // Every failure, cancellation and validation path releases the running entry and the global permit.
+            Coordinator.Fail(workItem, exception);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Waits for an already running probe for the same project and source, then re-reads the current manifest and
+    /// fingerprint instead of reusing the other caller's media source. This keeps each caller's authorization,
+    /// source selection and path substitution intact.
+    /// </summary>
+    private async Task<MediaSourceInfo?> JoinRunningProbeAsync(
+        IMediaSourceManager native,
+        Guid projectItemId,
+        BaseItem sourceItem,
+        MediaSourceInfo source,
+        string sourceKey,
+        User? user,
+        bool enablePathSubstitution,
+        CancellationToken cancellationToken,
+        ProbeWorkItem running)
+    {
+        _logger.LogInformation(
+            "Joined a running native probe for item {ItemId}, source_key {SourceId}; running probes {Running}, active permits {Active}.",
+            projectItemId,
+            sourceKey,
+            Coordinator.RunningCount,
+            Coordinator.ActivePermits);
+
+        try
+        {
+            await running.Result.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // The waiting caller exited. The already started probe is not cancelled and still completes on its own.
+            throw;
+        }
+        catch (Exception)
+        {
+            var current = _manifestReader.Read(sourceItem.Path);
+            var currentHash = current.Status == ManifestReadStatus.Supported ? current.Manifest!.ContentHash : null;
+            if (currentHash is not null && string.Equals(currentHash, running.ManifestContentHash, StringComparison.Ordinal))
+            {
+                // The same version failed. Surface the same failure instead of silently retrying.
+                throw;
+            }
+
+            // The running probe verified a different version; fall through and re-evaluate the current one.
+        }
+
+        // Re-read the current native source, manifest and fingerprint so this caller never reuses another caller's response.
+        var currentSource = await GetSourceWithNativeAsync(native, sourceItem, source.Id, allowMediaProbe: false, user, enablePathSubstitution, cancellationToken)
+            .ConfigureAwait(false);
+        return await CheckSourceCoreAsync(
+            native,
+            projectItemId,
+            sourceItem,
+            currentSource,
+            sourceKey,
+            user,
+            enablePathSubstitution,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<MediaSourceInfo> ExecuteProbeAsync(
+        IMediaSourceManager native,
+        Guid projectItemId,
+        BaseItem sourceItem,
+        MediaSourceInfo previousSource,
+        string sourceKey,
+        User? user,
+        bool enablePathSubstitution,
+        CancellationToken cancellationToken,
+        StrmManifest manifest,
+        StrmFingerprint? previous)
+    {
         var requiredStreamType = GetRequiredStreamType(sourceItem);
         using var probeContext = ProbeExecutionContext.Begin(projectItemId, sourceItem.Id, sourceKey, manifest.Url, requiredStreamType);
+        _logger.LogInformation(
+            "Native STRM probe started for item {ItemId}, source_key {SourceId}; running probes {Running}, active permits {Active}.",
+            projectItemId,
+            sourceKey,
+            Coordinator.RunningCount,
+            Coordinator.ActivePermits);
         IReadOnlyList<MediaSourceInfo> sources;
         try
         {
@@ -357,10 +540,10 @@ public sealed class StrmPlaybackOptimizer
                 probeContext.MatchingCallCount);
         }
 
-        return resultSource;
+        return resultSource!;
     }
 
-    private async Task<MediaSourceInfo?> GetSourceWithNativeAsync(
+    private async Task<MediaSourceInfo> GetSourceWithNativeAsync(
         IMediaSourceManager native,
         BaseItem sourceItem,
         string? sourceId,
@@ -474,6 +657,28 @@ public sealed class StrmPlaybackOptimizer
     {
         return expected.Status == actual.Status
             && string.Equals(expected.Manifest?.ContentHash, actual.Manifest?.ContentHash, StringComparison.Ordinal);
+    }
+
+    private void LogDecision(string action, Guid projectItemId, string sourceKey, ProbeDecisionReason reason)
+    {
+        if (_settings.DetailedLog)
+        {
+            _logger.LogInformation(
+                "STRM source {Action} for project {ItemId}, source {SourceId}; reason {Reason}, plugin probe calls 0, Jellyfin GetMediaInfo calls observed {EncoderCallsTotal}.",
+                action,
+                projectItemId,
+                sourceKey,
+                reason,
+                MediaEncoderDispatchProxy.GetMediaInfoCallCount);
+            return;
+        }
+
+        _logger.LogInformation(
+            "STRM source {Action} for project {ItemId}, source {SourceId}; reason {Reason}, plugin probe calls 0.",
+            action,
+            projectItemId,
+            sourceKey,
+            reason);
     }
 
     private void MarkFingerprintStoreFailed(Exception exception, Guid itemId)

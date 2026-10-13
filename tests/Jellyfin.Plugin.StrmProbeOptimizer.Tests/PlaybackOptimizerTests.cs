@@ -848,15 +848,230 @@ public sealed class PlaybackOptimizerTests
         Assert.IsNotNull(healthyRepository.Get(item.Id, SourceKey(item.Id)), "After restart the repaired store was not rechecked and committed.");
     }
 
-    private static StrmPlaybackOptimizer CreateOptimizer(IStrmFingerprintRepository repository, ILibraryManager? libraryManager = null)
+    [TestMethod]
+    public async Task RunningProbeIsSharedOnlyAfterItActuallyStarted()
+    {
+        const string oldUrl = "https://media.example.invalid/video.mp4?sig=old";
+        const string newUrl = "https://media.example.invalid/video.mp4?sig=new";
+        using var fixture = new ManifestFixture(oldUrl, ValidSha1, 42);
+        var reader = new StrmManifestReader();
+        var repository = new InMemoryStrmFingerprintRepository();
+        var item = CreateItem(fixture.Path, oldUrl);
+        repository.TryCommit(Fingerprint(item.Id, reader.Read(fixture.Path).Manifest!), expectedPrevious: null);
+        fixture.Write(newUrl, ValidSha1, 42);
+
+        using var coordinator = new ProbeCoordinator(2);
+        var native = ScriptedManager.Create();
+        var streamRepository = ProbePersistenceDispatchProxy.Create(NativePersistence.Create<IMediaStreamRepository>());
+        var itemPersistence = ProbePersistenceDispatchProxy.Create(NativePersistence.Create<IItemPersistenceService>());
+        var probeStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseProbe = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var probeExecutions = 0;
+        native.StaticSources = [Source(oldUrl)];
+        native.Playback = async (updatedItem, allowProbe, _, _) =>
+        {
+            Assert.IsTrue(allowProbe);
+            var execution = Interlocked.Increment(ref probeExecutions);
+            if (execution == 1)
+            {
+                probeStarted.TrySetResult();
+                await releaseProbe.Task;
+                var result = MediaInfoWithVideo();
+                ProbeExecutionContext.Current!.MarkCall(newUrl);
+                ProbeExecutionContext.Current.RecordResult(newUrl, result);
+                streamRepository.SaveMediaStreams(updatedItem.Id, result.MediaStreams, CancellationToken.None);
+                updatedItem.ShortcutPath = newUrl;
+                itemPersistence.SaveItems([updatedItem], CancellationToken.None);
+                native.StaticSources = [Source(newUrl)];
+            }
+
+            return [Source(newUrl)];
+        };
+        var optimizer = CreateOptimizer(repository, coordinator: coordinator);
+
+        var first = optimizer.GetPlaybackMediaSourcesAsync(native.Interface, item, null, true, false, CancellationToken.None);
+        await probeStarted.Task;
+        Assert.AreEqual(1, coordinator.RunningCount, "The probe must be registered as running only after it actually started.");
+
+        var second = optimizer.GetPlaybackMediaSourcesAsync(native.Interface, item, null, true, false, CancellationToken.None);
+        releaseProbe.TrySetResult();
+        var results = await Task.WhenAll(first, second);
+
+        Assert.AreEqual(1, probeExecutions, "A second caller must join the actually running probe instead of starting another one.");
+        Assert.AreEqual(0, coordinator.RunningCount, "A finished probe must not stay registered.");
+        Assert.AreEqual(0, coordinator.ActivePermits, "Every completion path must release its permit.");
+        Assert.AreEqual(newUrl, results[0][0].Path);
+        Assert.AreEqual(newUrl, results[1][0].Path, "A follower must re-read the current manifest and return the same usable source.");
+        Assert.IsNotNull(repository.Get(item.Id, SourceKey(item.Id)));
+    }
+
+    [TestMethod]
+    public async Task WaitingCallerCancellationDoesNotCancelAnAlreadyStartedProbe()
+    {
+        const string oldUrl = "https://media.example.invalid/video.mp4?sig=old";
+        const string newUrl = "https://media.example.invalid/video.mp4?sig=new";
+        using var fixture = new ManifestFixture(oldUrl, ValidSha1, 42);
+        var reader = new StrmManifestReader();
+        var repository = new InMemoryStrmFingerprintRepository();
+        var item = CreateItem(fixture.Path, oldUrl);
+        var oldFingerprint = Fingerprint(item.Id, reader.Read(fixture.Path).Manifest!);
+        repository.TryCommit(oldFingerprint, expectedPrevious: null);
+        fixture.Write(newUrl, ValidSha1, 42);
+
+        using var coordinator = new ProbeCoordinator(2);
+        var native = ScriptedManager.Create();
+        var streamRepository = ProbePersistenceDispatchProxy.Create(NativePersistence.Create<IMediaStreamRepository>());
+        var itemPersistence = ProbePersistenceDispatchProxy.Create(NativePersistence.Create<IItemPersistenceService>());
+        var probeStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseProbe = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        native.StaticSources = [Source(oldUrl)];
+        native.Playback = async (updatedItem, _, _, _) =>
+        {
+            probeStarted.TrySetResult();
+            await releaseProbe.Task;
+            var result = MediaInfoWithVideo();
+            ProbeExecutionContext.Current!.MarkCall(newUrl);
+            ProbeExecutionContext.Current.RecordResult(newUrl, result);
+            streamRepository.SaveMediaStreams(updatedItem.Id, result.MediaStreams, CancellationToken.None);
+            updatedItem.ShortcutPath = newUrl;
+            itemPersistence.SaveItems([updatedItem], CancellationToken.None);
+            native.StaticSources = [Source(newUrl)];
+            return [Source(newUrl)];
+        };
+        var optimizer = CreateOptimizer(repository, coordinator: coordinator);
+
+        using var cancellation = new CancellationTokenSource();
+        var leader = optimizer.GetPlaybackMediaSourcesAsync(native.Interface, item, null, true, false, CancellationToken.None);
+        await probeStarted.Task;
+
+        // The second caller waits for the running probe and then gives up. It must not cancel the probe.
+        var waiter = optimizer.GetPlaybackMediaSourcesAsync(native.Interface, item, null, true, false, cancellation.Token);
+        await Task.Delay(25);
+        cancellation.Cancel();
+        await AssertThrowsAsync<OperationCanceledException>(() => waiter);
+
+        releaseProbe.TrySetResult();
+        var leaderResult = await leader;
+
+        Assert.AreEqual(newUrl, leaderResult![0].Path, "An already started probe must finish even when a waiting caller exits.");
+        Assert.AreEqual(newUrl, item.ShortcutPath);
+        Assert.AreEqual(0, coordinator.RunningCount);
+        Assert.AreEqual(0, coordinator.ActivePermits);
+        Assert.IsNotNull(repository.Get(item.Id, SourceKey(item.Id)));
+        Assert.AreNotEqual(oldFingerprint, repository.Get(item.Id, SourceKey(item.Id)));
+    }
+
+    [TestMethod]
+    public async Task RunningProbeFailureIsSharedWithWaitingCallers()
+    {
+        const string oldUrl = "https://media.example.invalid/video.mp4?sig=old";
+        const string newUrl = "https://media.example.invalid/video.mp4?sig=new";
+        using var fixture = new ManifestFixture(oldUrl, ValidSha1, 42);
+        var reader = new StrmManifestReader();
+        var repository = new InMemoryStrmFingerprintRepository();
+        var item = CreateItem(fixture.Path, oldUrl);
+        var oldFingerprint = Fingerprint(item.Id, reader.Read(fixture.Path).Manifest!);
+        repository.TryCommit(oldFingerprint, expectedPrevious: null);
+        fixture.Write(newUrl, ValidSha1, 42);
+
+        using var coordinator = new ProbeCoordinator(2);
+        var native = ScriptedManager.Create();
+        var probeStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseProbe = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        native.StaticSources = [Source(oldUrl)];
+        native.Playback = async (_, _, _, _) =>
+        {
+            probeStarted.TrySetResult();
+            await releaseProbe.Task;
+            return [Source(oldUrl)];
+        };
+        var optimizer = CreateOptimizer(repository, coordinator: coordinator);
+
+        var leader = optimizer.GetPlaybackMediaSourcesAsync(native.Interface, item, null, true, false, CancellationToken.None);
+        await probeStarted.Task;
+        var follower = optimizer.GetPlaybackMediaSourcesAsync(native.Interface, item, null, true, false, CancellationToken.None);
+        releaseProbe.TrySetResult();
+
+        await AssertThrowsAsync<InvalidOperationException>(() => leader);
+        await AssertThrowsAsync<InvalidOperationException>(() => follower);
+
+        Assert.AreEqual(oldFingerprint, repository.Get(item.Id, SourceKey(item.Id)), "A shared failure must retain the trusted baseline.");
+        Assert.AreEqual(0, coordinator.RunningCount);
+        Assert.AreEqual(0, coordinator.ActivePermits);
+    }
+
+    [TestMethod]
+    public async Task FailedProbeIsNotReusedAsAnInFlightProbeByALaterCaller()
+    {
+        const string oldUrl = "https://media.example.invalid/video.mp4?sig=old";
+        const string newUrl = "https://media.example.invalid/video.mp4?sig=new";
+        using var fixture = new ManifestFixture(oldUrl, ValidSha1, 42);
+        var reader = new StrmManifestReader();
+        var repository = new InMemoryStrmFingerprintRepository();
+        var item = CreateItem(fixture.Path, oldUrl);
+        repository.TryCommit(Fingerprint(item.Id, reader.Read(fixture.Path).Manifest!), expectedPrevious: null);
+        fixture.Write(newUrl, ValidSha1, 42);
+
+        using var coordinator = new ProbeCoordinator(2);
+        var native = ScriptedManager.Create();
+        var probeExecutions = 0;
+        native.StaticSources = [Source(oldUrl)];
+        native.Playback = (_, _, _, _) =>
+        {
+            Interlocked.Increment(ref probeExecutions);
+            return Task.FromResult<IReadOnlyList<MediaSourceInfo>>([Source(oldUrl)]);
+        };
+        var optimizer = CreateOptimizer(repository, coordinator: coordinator);
+
+        await AssertThrowsAsync<InvalidOperationException>(() => optimizer.GetPlaybackMediaSourcesAsync(native.Interface, item, null, true, false, CancellationToken.None));
+        await AssertThrowsAsync<InvalidOperationException>(() => optimizer.GetPlaybackMediaSourcesAsync(native.Interface, item, null, true, false, CancellationToken.None));
+
+        Assert.AreEqual(2, probeExecutions, "A finished failed probe must not be cached as a running probe.");
+        Assert.AreEqual(0, coordinator.RunningCount);
+        Assert.AreEqual(0, coordinator.ActivePermits);
+    }
+
+    [TestMethod]
+    public async Task DisabledOptimizerDelegatesWithoutStartingOrSharingAProbe()
+    {
+        const string url = "https://media.example.invalid/video.mp4?sig=a";
+        using var fixture = new ManifestFixture(url, ValidSha1, 42);
+        var repository = new InMemoryStrmFingerprintRepository();
+        var item = CreateItem(fixture.Path, url);
+        var native = ScriptedManager.Create();
+        native.StaticSources = [Source(url)];
+        native.Playback = (_, allowProbe, _, _) =>
+        {
+            Assert.IsTrue(allowProbe);
+            return Task.FromResult<IReadOnlyList<MediaSourceInfo>>([Source(url)]);
+        };
+        using var coordinator = new ProbeCoordinator(2);
+        var optimizer = CreateOptimizer(
+            repository,
+            settings: new PlaybackSettings(true, Enabled: false),
+            coordinator: coordinator);
+
+        await optimizer.GetPlaybackMediaSourcesAsync(native.Interface, item, null, true, false, CancellationToken.None);
+
+        Assert.AreEqual(0, coordinator.RunningCount, "A disabled plugin must not register or start plugin probes.");
+        Assert.AreEqual(0, coordinator.ActivePermits);
+        Assert.IsNull(repository.Get(item.Id, SourceKey(item.Id)));
+    }
+
+    private static StrmPlaybackOptimizer CreateOptimizer(
+        IStrmFingerprintRepository repository,
+        ILibraryManager? libraryManager = null,
+        IPlaybackSettings? settings = null,
+        ProbeCoordinator? coordinator = null)
     {
         return new StrmPlaybackOptimizer(
             new StrmManifestReader(),
             new ProbeDecisionService(),
             repository,
-            new PlaybackSettings(true),
+            settings ?? new PlaybackSettings(true),
             NullLogger<StrmPlaybackOptimizer>.Instance,
-            libraryManager);
+            libraryManager,
+            coordinator);
     }
 
     private static Video CreateItem(string path, string url)
@@ -941,7 +1156,11 @@ public sealed class PlaybackOptimizerTests
         throw new AssertFailedException($"Expected {typeof(TException).Name}.");
     }
 
-    private sealed record PlaybackSettings(bool PlaybackAutoCheck) : IPlaybackSettings;
+    private sealed record PlaybackSettings(
+        bool PlaybackAutoCheck,
+        bool Enabled = true,
+        bool DetailedLog = false,
+        int MaxConcurrentProbes = PluginConfiguration.DefaultMaxConcurrentProbes) : IPlaybackSettings;
 
     private sealed class FaultInjectingFingerprintRepository : IStrmFingerprintRepository
     {

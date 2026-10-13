@@ -36,6 +36,16 @@ FIXTURE = ROOT / "artifacts" / "dev-env" / "strm" / "Environment Fixture.strm"
 PLUGIN_LOGGER = "Jellyfin.Plugin.StrmProbeOptimizer.Services.StrmPlaybackOptimizer"
 MAX_WAIT_SECONDS = 90
 
+# Well-formed JSON bodies whose values are invalid for the core configuration. Each must be rejected
+# without changing the effective configuration or the persisted file.
+INVALID_CONFIGURATION_CASES: dict[str, dict[str, object]] = {
+    "zero": {"Enabled": True, "PlaybackAutoCheck": True, "MaxConcurrentProbes": 0, "DetailedLog": False},
+    "nine": {"Enabled": True, "PlaybackAutoCheck": True, "MaxConcurrentProbes": 9, "DetailedLog": False},
+    "negative": {"Enabled": True, "PlaybackAutoCheck": True, "MaxConcurrentProbes": -1, "DetailedLog": False},
+    "non_integer": {"Enabled": True, "PlaybackAutoCheck": True, "MaxConcurrentProbes": "two", "DetailedLog": False},
+    "wrong_type": {"Enabled": "yes", "PlaybackAutoCheck": True, "MaxConcurrentProbes": 2, "DetailedLog": False},
+}
+
 
 def run(command: list[str], *, timeout: int = 120) -> subprocess.CompletedProcess[str]:
     return subprocess.run(command, cwd=ROOT, capture_output=True, text=True, timeout=timeout, check=False)
@@ -1437,6 +1447,267 @@ def replay_and_mtime_zero_probe_check(
         FIXTURE.write_bytes(original)
 
 
+def configuration_api_check(api: JellyfinApi, container: str) -> dict[str, object]:
+    """Exercise the core configuration through Jellyfin's existing plugin configuration channel."""
+    path = f"/Plugins/{PLUGIN_ID}/Configuration"
+    defaults_status, defaults_body = api.request_response(path)
+    require(defaults_status == 200, "Jellyfin did not return the plugin configuration.")
+    defaults = json.loads(defaults_body)
+    require(
+        defaults.get("Enabled") is True
+        and defaults.get("PlaybackAutoCheck") is True
+        and defaults.get("MaxConcurrentProbes") == 2
+        and defaults.get("DetailedLog") is False,
+        f"The plugin configuration defaults are not Enabled=true, PlaybackAutoCheck=true, MaxConcurrentProbes=2, DetailedLog=false: {defaults}.",
+    )
+
+    rejected: dict[str, object] = {}
+    for name, payload in INVALID_CONFIGURATION_CASES.items():
+        status, _ = api.request_response(path, method="POST", data=json.dumps(payload).encode("utf-8"))
+        require(status >= 400, f"Jellyfin accepted the invalid configuration case {name!r}.")
+        _, body = api.request_response(path)
+        current = json.loads(body)
+        require(
+            current == defaults,
+            f"The rejected configuration case {name!r} changed the effective configuration to {current}.",
+        )
+        rejected[name] = status
+
+    saved_status, _ = api.request_response(
+        path,
+        method="POST",
+        data=b'{"Enabled":true,"PlaybackAutoCheck":true,"MaxConcurrentProbes":8,"DetailedLog":true}',
+    )
+    require(saved_status == 204, "Jellyfin did not accept a valid plugin configuration update.")
+    _, saved_body = api.request_response(path)
+    saved = json.loads(saved_body)
+    require(
+        saved.get("MaxConcurrentProbes") == 8 and saved.get("DetailedLog") is True,
+        f"The saved plugin configuration was not read back: {saved}.",
+    )
+
+    # A concurrency change only applies after a restart; the detailed-log flag applies to the next check request.
+    container = restart_isolated_server()
+    api = JellyfinApi()
+    _, restarted_body = api.request_response(path)
+    restarted = json.loads(restarted_body)
+    require(restarted == saved, f"The plugin configuration did not survive restart: {restarted}.")
+
+    restore_status, _ = api.request_response(
+        path,
+        method="POST",
+        data=b'{"Enabled":true,"PlaybackAutoCheck":true,"MaxConcurrentProbes":2,"DetailedLog":false}',
+    )
+    require(restore_status == 204, "Jellyfin did not accept the restored plugin configuration.")
+    _, restored_body = api.request_response(path)
+    require(json.loads(restored_body) == defaults, "The plugin configuration was not restored to its defaults.")
+
+    return {
+        "defaults": defaults,
+        "rejected_cases": rejected,
+        "saved": saved,
+        "read_back_after_restart": restarted,
+        "restored": json.loads(restored_body),
+        "restart_container": container,
+    }
+
+
+def same_source_sharing_check(
+    api: JellyfinApi,
+    container: str,
+    media_container: str,
+    item_id: str,
+    current_url: str,
+) -> dict[str, object]:
+    """Two concurrent playback requests for the same source must share one actually running probe."""
+    request_id = uuid.uuid4().hex
+    parts = urlsplit(current_url)
+    slow_url = urlunsplit((parts.scheme, parts.netloc, f"/slow/{request_id}/fixture.mp4", "", ""))
+    FIXTURE.write_bytes(replace_manifest_url(FIXTURE.read_bytes(), slow_url))
+    before = plugin_events(container, item_id)
+    results: dict[str, object] = {}
+
+    def playback(key: str) -> None:
+        try:
+            status, response = api.playback_info(item_id)
+            results[key] = (status, response)
+        except Exception as error:  # Retain thread failures for the owning assertion.
+            results[key] = ("error", type(error).__name__)
+
+    leader = threading.Thread(target=playback, args=("leader",), name="isolated-share-leader", daemon=True)
+    leader.start()
+    wait_for_slow_media_request(media_container, request_id)
+    follower = threading.Thread(target=playback, args=("follower",), name="isolated-share-follower", daemon=True)
+    follower.start()
+    leader.join(timeout=120)
+    follower.join(timeout=120)
+    require(not leader.is_alive() and not follower.is_alive(), "The concurrent same-source playback requests did not finish.")
+    after = plugin_events(container, item_id)
+    events = [safe_event(line) for line in event_delta(before, after) if str(uuid.UUID(item_id)) in line]
+    started = [event for event in events if "probe started" in str(event)]
+    committed = [event for event in events if "fingerprint committed" in str(event)]
+    require("error" not in {results.get("leader", (None,))[0], results.get("follower", (None,))[0]}, "A concurrent same-source playback request failed outside the HTTP response path.")
+    leader_status, leader_response = results["leader"]
+    follower_status, follower_response = results["follower"]
+    require(leader_status == 200 and follower_status == 200, f"Concurrent same-source PlaybackInfo did not return HTTP 200: {leader_status}, {follower_status}.")
+    leader_source = source_result(leader_response, slow_url)
+    follower_source = source_result(follower_response, slow_url)
+    require(leader_source["path_matches_manifest"] and leader_source["has_video"], "The leading request did not return the current address and primary stream.")
+    require(follower_source["path_matches_manifest"] and follower_source["has_video"], "The joining request did not return the current address and primary stream.")
+    require(len(started) == 1, f"The concurrent same-source requests started {len(started)} native probes instead of exactly one.")
+    require(len(committed) == 1, f"The concurrent same-source requests committed {len(committed)} fingerprints instead of exactly one.")
+
+    followup = call_playback(api, container, item_id, slow_url)
+    ensure_success(followup, slow_url, 0)
+
+    # Restore the caller's manifest URL so the remaining checks keep operating on the same fixture version.
+    FIXTURE.write_bytes(replace_manifest_url(FIXTURE.read_bytes(), current_url))
+    restored = call_playback(api, container, item_id, current_url)
+    ensure_success(restored, current_url, 1)
+    return {
+        "leader_http_status": leader_status,
+        "follower_http_status": follower_status,
+        "probes_started": len(started),
+        "fingerprints_committed": len(committed),
+        "followup_probe_calls": followup["probe_calls"],
+        "restored_probe_calls": restored["probe_calls"],
+        "events": events,
+    }
+
+
+def _concurrent_slow_probes(
+    api: JellyfinApi,
+    media_container: str,
+    item_ids: list[str],
+    slow_ids: list[str],
+) -> tuple[list[float | None], dict[int, object]]:
+    """Fire one playback request per item concurrently and record when each slow media request actually starts."""
+    results: dict[int, object] = {}
+
+    def playback(index: int, item_id: str) -> None:
+        try:
+            status, _ = api.playback_info(item_id)
+            results[index] = status
+        except Exception as error:  # Retain thread failures for the owning assertion.
+            results[index] = f"error:{type(error).__name__}"
+
+    threads = [
+        threading.Thread(target=playback, args=(index, item_id), name=f"isolated-concurrency-{index}", daemon=True)
+        for index, item_id in enumerate(item_ids)
+    ]
+    started = time.monotonic()
+    for thread in threads:
+        thread.start()
+    marker_times: list[float | None] = [None] * len(slow_ids)
+    deadline = started + 90
+    while time.monotonic() < deadline and any(marker is None for marker in marker_times):
+        logs = run(["docker", "logs", "--tail", "600", media_container], timeout=20)
+        output = logs.stdout + logs.stderr
+        for index, slow_id in enumerate(slow_ids):
+            if marker_times[index] is None and ("SLOW_MEDIA_REQUEST_STARTED " + slow_id) in output:
+                marker_times[index] = time.monotonic() - started
+        time.sleep(0.05)
+    for thread in threads:
+        thread.join(timeout=120)
+    require(all(not thread.is_alive() for thread in threads), "The concurrent different-source playback requests did not finish.")
+    return marker_times, results
+
+
+def concurrency_limit_check(
+    api: JellyfinApi,
+    container: str,
+    media_container: str,
+    media_sha1: str,
+    media_size: int,
+) -> tuple[dict[str, object], JellyfinApi, str]:
+    """Prove the global plugin probe limit with real slow sources: default 2 overlaps, configured 1 serializes."""
+    config_path = f"/Plugins/{PLUGIN_ID}/Configuration"
+    nonce = uuid.uuid4().hex[:8]
+    names = [f"Concurrency A {nonce}", f"Concurrency B {nonce}", f"Concurrency C {nonce}"]
+    paths: list[Path] = []
+    slow_ids: dict[str, str] = {}
+    result: dict[str, object] = {}
+    try:
+        for name in names:
+            slow_id = uuid.uuid4().hex
+            slow_ids[name] = slow_id
+            paths.append(temporary_versioned_fixture(name, f"http://media:8080/slow/{slow_id}/fixture.mp4", media_sha1, media_size))
+        api.refresh_library()
+        item_ids = [api.wait_for_named_library_item(name)["Id"] for name in names]
+
+        # Default limit 2: with three independent changed sources, at most two probes may execute at once
+        # and the third must wait for a freed permit.
+        default_before = plugin_events_for_ids(container, item_ids)
+        default_markers, default_results = _concurrent_slow_probes(api, media_container, item_ids, [slow_ids[name] for name in names])
+        default_after = plugin_events_for_ids(container, item_ids)
+        default_starts = [safe_event(line) for line in event_delta(default_before, default_after) if "probe started" in line]
+        require(all(status == 200 for status in default_results.values()), f"The default-limit concurrent playback requests failed: {default_results}.")
+        require(all(marker is not None for marker in default_markers), "The default-limit concurrent probes did not all reach the slow media request.")
+        default_overlap = sum(1 for marker in default_markers if marker is not None and marker < 1.0)  # type: ignore[operator]
+        default_max = max(default_markers)  # type: ignore[type-var]
+        require(default_overlap == 2, f"Exactly two of three sources must overlap under the default limit of 2; observed {default_overlap}.")
+        require(default_max >= 2.5, f"The third source did not wait for a freed permit under the default limit of 2 (last start {default_max:.2f}s).")
+        require(len(default_starts) == 3, f"The default-limit run did not start exactly three probes: {default_starts}.")
+
+        # Configured limit 1: every source must wait for the previous one to finish.
+        for name, path in zip(names, paths):
+            slow_id = uuid.uuid4().hex
+            slow_ids[name] = slow_id
+            path.write_bytes(write_versioned_fixture(path.read_bytes(), f"http://media:8080/slow/{slow_id}/fixture.mp4", media_sha1, media_size))
+        configured_status, _ = api.request_response(
+            config_path,
+            method="POST",
+            data=b'{"Enabled":true,"PlaybackAutoCheck":true,"MaxConcurrentProbes":1,"DetailedLog":false}',
+        )
+        require(configured_status == 204, "Jellyfin did not accept the concurrency-1 configuration.")
+        container = restart_isolated_server()
+        api = JellyfinApi()
+        item_ids = [api.wait_for_named_library_item(name)["Id"] for name in names]
+        limited_before = plugin_events_for_ids(container, item_ids)
+        limited_markers, limited_results = _concurrent_slow_probes(api, media_container, item_ids, [slow_ids[name] for name in names])
+        limited_after = plugin_events_for_ids(container, item_ids)
+        limited_starts = [safe_event(line) for line in event_delta(limited_before, limited_after) if "probe started" in line]
+        require(all(status == 200 for status in limited_results.values()), f"The concurrency-1 concurrent playback requests failed: {limited_results}.")
+        require(all(marker is not None for marker in limited_markers), "The concurrency-1 concurrent probes did not all reach the slow media request.")
+        ordered = sorted(marker for marker in limited_markers if marker is not None)  # type: ignore[type-var]
+        limited_gaps = [round(ordered[index + 1] - ordered[index], 3) for index in range(len(ordered) - 1)]
+        require(all(gap >= 2.5 for gap in limited_gaps), f"A source started before the previous finished under the configured limit of 1 (start gaps {limited_gaps}).")
+        require(len(limited_starts) == 3, f"The concurrency-1 run did not start exactly three probes in total: {limited_starts}.")
+        result = {
+            "default_limit_2": {
+                "start_gaps_seconds": [round(marker, 3) for marker in default_markers if marker is not None],
+                "max_concurrent": default_overlap,
+                "probe_starts": len(default_starts),
+                "http_statuses": default_results,
+            },
+            "configured_limit_1": {
+                "start_gaps_seconds": limited_gaps,
+                "probe_starts": len(limited_starts),
+                "http_statuses": limited_results,
+            },
+        }
+
+        restore_status, _ = api.request_response(
+            config_path,
+            method="POST",
+            data=b'{"Enabled":true,"PlaybackAutoCheck":true,"MaxConcurrentProbes":2,"DetailedLog":false}',
+        )
+        require(restore_status == 204, "Jellyfin did not accept the restored default concurrency.")
+        container = restart_isolated_server()
+        api = JellyfinApi()
+        return result, api, container
+    finally:
+        for path in paths:
+            path.unlink(missing_ok=True)
+        if paths:
+            try:
+                api.refresh_library()
+                for name in names:
+                    api.wait_for_named_library_item_absent(name)
+            except Exception:  # Cleanup failures are surfaced through the fixture restoration summary.
+                pass
+
+
 def ensure_success(result: dict, expected_url: str, expected_calls: int) -> None:
     require(result["http_status"] == 200, "Isolated PlaybackInfo did not return HTTP 200.")
     require(result["path_matches_manifest"], "PlaybackInfo did not return the current STRM address.")
@@ -1575,6 +1846,8 @@ def main() -> int:
         unchanged_repeat = call_playback(api, container, item_id, current_url)
         ensure_success(unchanged_repeat, current_url, 0)
         summary["unchanged_repeat"] = unchanged_repeat
+
+        summary["same_source_sharing"] = same_source_sharing_check(api, container, media_container, item_id, current_url)
 
         baseline_with_sha = fingerprint_row(item_id, item_id)
         require(baseline_with_sha and baseline_with_sha["sha1"] == current_sha1, "The accepted baseline is missing its initial media SHA-1.")
@@ -1805,6 +2078,19 @@ def main() -> int:
         enabled_playback = call_playback(api, container, item_id, refreshed_url)
         ensure_success(enabled_playback, refreshed_url, 0)
         summary["enabled_plugin_after_restart"] = enabled_playback
+
+        summary["global_concurrency_limit"], api, container = concurrency_limit_check(
+            api,
+            container,
+            media_container,
+            current_sha1,
+            len(media_a),
+        )
+
+        summary["core_configuration_api"] = configuration_api_check(api, container)
+        api = JellyfinApi()
+        container = isolated_container_name()
+        summary["plugin_status_after_configuration"] = api.plugin_status()
 
         summary["status"] = "PASS"
         exit_code = 0

@@ -42,7 +42,13 @@ public sealed class MediaSourceManagerProxyTests
 
     private sealed class TestPlaybackSettings : IPlaybackSettings
     {
+        public bool Enabled => true;
+
         public bool PlaybackAutoCheck => false;
+
+        public bool DetailedLog => false;
+
+        public int MaxConcurrentProbes => PluginConfiguration.DefaultMaxConcurrentProbes;
     }
 
     public class NativeManager : DispatchProxy
