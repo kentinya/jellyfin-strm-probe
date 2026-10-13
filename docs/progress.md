@@ -16,6 +16,6 @@
 - 插件构建、插件在 Jellyfin 中的产品验收、外部代理联调：全部 NOT RUN；隔离服务器与基础媒体链路已实际运行。
 - 本次工作：B 完成环境交接复核与接续决定；环境诊断 10/10、工具回归 30/30、锁定依赖的引用样例编译运行及基础媒体链路 PASS。未签发 Task 产品 PASS 或 A Final Review。
 
-V4.2 合同检查点为 `4a8536860fafaf25f7a1e573fef19255ca3d07c3`；Task 保留原 ID／Base，记录此新合同身份。本轮规划核验：治理、24 项工具回归、Python 语法、本地 Markdown 链接与差异空白检查通过；不代表产品验收。
+V4.2 初始合同检查点为 `4a8536860fafaf25f7a1e573fef19255ca3d07c3`；A 的播放／批量取消语义澄清检查点为 `0c2315ffa735694f4cae5a21771af9cc95c33488`。Task 保留原 ID／Base 并继续 FIX REQUIRED，当前合同身份见 [TASK.md](../TASK.md)。初始重规划核验：治理、24 项工具回归、Python 语法、本地 Markdown 链接与差异空白检查通过；不代表本次新增产品验收。
 
 被替代规划快照为 `4b1d0468c1e43e6e9034ef98e99b6cc44ea59485`，不是产品 Implementation Head。开发合同与后继 Task 使用真实 Git 检查点，不填虚构 SHA。
