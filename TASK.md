@@ -1,13 +1,13 @@
 # Task 1.1 — V4.2 核心接入原型与可靠指纹提交验证
 
-Task 1.1 已由用户激活。本轮完成官方源码定位与环境诊断，但缺少 .NET SDK 和可访问的隔离 Jellyfin，无法安全验证核心接入与原生探测结果。没有创建插件源码；产品验收仍未运行，现交 B 审查阻塞及可复核证据。
+Task 1.1 已由用户激活。Developer 前轮因缺少 SDK／隔离服务器交接阻塞；A 随后补齐环境，B 已复核交接提交与当前运行状态。环境阻塞已解除，但尚无 C# 产品原型，产品验收仍未运行；本次决定 FIX REQUIRED，交回 Developer 继续原已授权 Task。
 
-上述为 Developer 前轮交接。A 已按用户要求补齐并实测环境，见下方 A 环境交接；原报告与产品未完成项保留，B 审查仍 PENDING。
+原 Developer 报告及 A 环境交接保留为历史。当前结论、证据和接续要求见下方 B Review Result；不移动 Base、不重规划、不降低 T4 门槛。
 
 ```text
 Task ID: 1.1
 Parent Slice: 1
-Status: READY FOR B REVIEW
+Status: FIX REQUIRED
 Task Base: b69a930495c762fe546f8970891a2c955766b28c
 Contract Checkpoint: 4a8536860fafaf25f7a1e573fef19255ca3d07c3
 Superseded Plan: 4b1d0468c1e43e6e9034ef98e99b6cc44ea59485
@@ -162,10 +162,45 @@ A 保持 Slice／Task 的 ID、Base、Scope、T4 验收与 B 独立审查责任�
 ## B Review Result
 
 ```text
-Reviewed: NOT SET
-Decision: PENDING
-Slice Required Outcomes all satisfied: PENDING
-Next: PENDING
+Reviewed: b69a930495c762fe546f8970891a2c955766b28c..1035b1b3d31d88cde1a47154f24597d120530380
+Contract Checkpoint: 4a8536860fafaf25f7a1e573fef19255ca3d07c3
+Product implementation SHA: NOT SET
+Decision: FIX REQUIRED
+Slice Required Outcomes all satisfied: NO
+Next: Developer resumes Task 1.1 as IN PROGRESS
 ```
 
-产品审查尚未开始；上方 REPLAN 只是对新合同的计划决定。
+### 审查范围与结论（2026-10-13）
+
+用户要求本轮按 B 职责处理。已检查真实 Task Base..Reviewed 差异、已提交 V4.2 合同、前轮阻塞报告及 A 的原始环境日志；初始 `git status --short --branch` 为干净的 `main`。当前 Task 身份、Base、Goal、Scope 与验收仍合法，无须重新规划或申请原已授权范围。
+
+**环境阻塞已解除，允许继续原 Task；Task 产品目标未完成，不能签发 PASS。** 本会话前轮承担 A 环境准备，本轮是环境交接复核和 B 接续决定；没有被审查的产品实现，也不宣称已完成独立产品关键行为验证。未来候选仍须满足本 Task 的 B 独立验证责任。
+
+### 证据核验与本轮复测
+
+- A 索引的 13 项输入摘要与交接提交、当前文件和保存的快照一致；样例源码／项目／依赖锁、两份媒体夹具和镜像锁与证据一致。检查首次网络、授权头及停止期间命令失败和成功重跑，未将首败算为 PASS。
+- 本轮 `doctor` 10/10 PASS；固定 SDK 为 `10.0.401`，源码检出 HEAD 与合同记录一致且源码工作区干净；运行容器镜像引用匹配 digest 锁，挂载均属于隔离目录，媒体只读，发布端口为 `127.0.0.1:18096`。
+- 本轮样例 `restore --locked-mode`、Release build／run 均 PASS，0 编译警告／错误；两包 nuspec repository commit 与固定源码一致。样例仍在忽略目录，不能计为可加载产品插件。
+- 当前 Public Info 为 `12.2.0`，Jellyfin healthy；测试账户登录、两个临时库及远程提供器／插件仓库禁用配置核验 PASS，凭据权限 `0600` 且被 Git 忽略。原生 HTTP ffprobe 返回 H.264／AAC；这只验证基础媒体链路，不是插件主动探测计数或本次成功信号。
+- 治理检查 PASS、工具回归 30/30 PASS（0 跳过）、Task Base..Reviewed 空白检查 PASS。纯文档审查后继不改变上述可执行输入，复用这些运行；变更文档消费的治理及差异检查另行执行。
+- A 的停止／启动原始日志和身份／配置恢复记录作为环境历史证据保留；本轮没有再次重启。插件播放地址／主流重启验收仍 NOT RUN。
+
+本轮原始本机证据：`.git/validation-evidence/1035b1b3d31d88cde1a47154f24597d120530380/b-env-review-20261013/index.json`。保留精确命令、退出码、耗时、原始输出、输入身份和被审查差异；仅本机可读，不是远程 CI。
+
+### 当前 Task 阻塞项与 Required Outcomes
+
+| 项 | 当前事实与必须补齐的结果 |
+|---|---|
+| RO-1／AC-1 | 环境已具备；仍缺真实 solution、产品依赖锁、最小插件／测试项目和构建／加载／启停证据。官方镜像没有 revision 标签，不能仅凭版本号认定整体源码身份；补齐目标二进制／源码关联证据并披露限制。 |
+| RO-2／AC-2～AC-3 | 原生实例唯一、DI／生命周期／全接口委托、普通／直播／旧 STRM／禁用对照及实际跳过／主动探测计数均 NOT RUN。 |
+| RO-3／AC-4 | 本次成功且已保存的关联信号、失败保留旧流、取消、Manifest 再变及保存失败的条件提交均 NOT RUN。 |
+| RO-4／AC-5～AC-6 | 同 SHA-1 换 URL 必须实际探测、当次 PlaybackInfo 与重启新地址／有效主流、allowMediaProbe=false 各分支均 NOT RUN。 |
+| RO-5／AC-7 | 已有部分接口与环境定位；仍缺完整任务接口调研、FullRefresh 开销、原型构建／加载及核心行为证据和继续／调整结论。 |
+| T4 最终门槛 | 产品项目未创建，产品 restore／build／test／format、真实集成及 B 独立关键行为验证均 NOT RUN。现有工具和环境样例 PASS 不能代替。 |
+
+### Developer 接续要求
+
+1. 接手时记录 Git 状态并运行治理检查，将原 Task 1.1 改为 `IN PROGRESS`。沿用既有合同和 [环境说明](docs/development-environment.md)，不新建 Task、不变更 Base／Scope／T4。
+2. 先创建可构建／加载的最小插件及必要测试，提交固定产品依赖锁和真实命令；实证 DI、单例所有权、完整委托及正常启停。核心接入不成立时报告阻塞，不铺开 Slice 2／3。
+3. 按原验收和四阶段测试计划完成探测计数、本次成功／保存关联、失败／取消／竞态保护、URL 变化当次与重启、探测权限对照，以及任务接口和刷新开销调研。不得用旧流或刷新返回值冒充本次成功。
+4. 完成候选的全部 T4 指定门槛，保存准确实现 SHA、输入身份、脱敏原始日志及未完成项；更新完成报告并交为 `READY FOR B REVIEW`。B 再独立复现指定关键行为；全部 Slice Outcomes 满足后才提交 A 最终审查。

@@ -67,7 +67,7 @@ python3 scripts/development_environment.py up
 3. 创建 Task 内的最小 solution／插件／测试项目，核实 `net10.0` 与目标 NuGet 依赖，补真实 restore／Release build／test／format 命令及依赖锁。统一使用 `bash scripts/dotnet-local ...`。
 4. 原 Task T4 门槛、B 独立关键行为验证和 Slice Final 均保留。服务启动不是插件加载成功，媒体服务请求数不是 ffprobe 调用数；DI、探测成功、URL 保存和重启仍需各自真实证据。
 
-本轮提供已运行环境及事实交接，原 Developer 阻塞报告保留为历史，Task 状态仍为 READY FOR B REVIEW，不由 A 冒充 B 改为 PASS。环境阻塞已解除；B 可据证据核查后由 Developer 恢复原 Task 实施，无须重新申请已授权范围。
+本文件记录 A 提供的已运行环境及事实交接，原 Developer 阻塞报告保留为历史。随后 B 已复核交接提交和当前环境，确认阻塞解除；Task 1.1 为 FIX REQUIRED，交回 Developer 恢复原 Task 实施，无须重新申请已授权范围。该决定不代表产品 PASS，详见 [B Review Result](../TASK.md#b-review-result)。
 
 ## 已运行环境证据
 
