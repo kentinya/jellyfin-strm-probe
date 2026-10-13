@@ -8,7 +8,7 @@ V4.2 取代 V3.0 作为当前开发基准，旧原文与合同留在 Git 历史�
 
 B 已独立审查修正候选 `2b1e1b5bcf77b06997fabed5a31147838db16b47` 并裁定 Task 1.1 PASS；保存关联、指定真实对照、Manifest 竞态和 FullRefresh 附带工作均已有独立证据。单独 Slice Final 与 A 完整范围审查均已完成，Slice 1 为 PASS / CLOSED；见 [A 最终审查快照](progress.md#slice-1-closed)。
 
-Slice 2 合同现为 ACTIVE，Base 是上述真实关闭提交 `924816a84c74f5d79c107478f2d40e621cb8be8d`，Implementation Head 为 NOT SET；当前无活动实施 Task，由 B 先计划。正式 SQLite、多源映射、共用协调和核心配置属于当前合同的 TARGET，尚未改变以下实现事实。
+Slice 2 合同现为 ACTIVE，Base 是上述真实关闭提交 `924816a84c74f5d79c107478f2d40e621cb8be8d`，Implementation Head 为 NOT SET；B 已规划 [Task 2.1](../TASK.md)（PLANNED），尚未实施。正式 SQLite、多源映射、共用协调和核心配置属于当前合同的 TARGET，尚未改变以下实现事实。
 
 ### 已实现的 Task 1.1 原型边界
 

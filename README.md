@@ -19,7 +19,7 @@
 3. 查看 [当前 Slice](SLICE.md)、[当前 Task](TASK.md)、[四个 Slice 路线图](docs/roadmap.md) 和 [进度](docs/progress.md)。
 4. 开发环境执行 `python3 scripts/development_environment.py doctor`；安装与隔离运行见 [环境交接](docs/development-environment.md)。
 
-Slice 1 已证明固定版本上的核心接入、可靠的原生成功信号与最新地址持久化。Slice 2 已由 A 在独立一轮激活，以 Slice 1 关闭提交为 Base；当前无活动实施 Task，下一动作是 B 先计划首个 Task。Slice 3／4 保持 PLANNED，本轮只提交合同，没有产品代码变更。
+Slice 1 已证明固定版本上的核心接入、可靠的原生成功信号与最新地址持久化。Slice 2 已由 A 在独立一轮激活，以 Slice 1 关闭提交为 Base；B 已在修订合同上规划 [Task 2.1](TASK.md)（PLANNED）：按真实媒体源持久化播放指纹与重启恢复，下一动作是 Developer 在该 Task 内实施。Slice 3／4 保持 PLANNED；本轮只有计划与指针同步，没有产品代码变更。
 
 ## 产品目标
 

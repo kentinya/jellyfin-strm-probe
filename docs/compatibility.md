@@ -72,7 +72,7 @@ A 环境准备及 Task 1.1 原型后续：SDK、固定源码、镜像 digest、�
 | 地址／流持久化 | URL 改变后原生探测并保存，当次 PlaybackInfo 新地址，重启仍有效且有必要主流；保存失败明确 | PASS；当次／重启保存与失败保流重试已独立复验；内部数据库故障未注入 |
 | 探测权限／禁用 | allowMediaProbe=false 各分支不执行；禁用／旧 STRM／手动刷新原生对照 | PASS；真实 false 流入口、禁用、旧 STRM、手动 FullRefresh 已独立复验；公共 PlaybackInfo 不提供 false 参数 |
 
-Task 1.1 PASS；全部 Outcomes／Surfaces 与单独 Slice Final 经 A 最终审查接受，Slice 1 PASS / CLOSED。当前无活动实施 Task，历史失败按原事实保留。外部 JellyfinProxy／OpenList 联调、完整 T01～T28 与 B01～B12 矩阵仍未运行；本原型使用 Jellyfin 已有 FFmpeg／ffprobe。
+Task 1.1 PASS；全部 Outcomes／Surfaces 与单独 Slice Final 经 A 最终审查接受，Slice 1 PASS / CLOSED。当前 [Task 2.1](../TASK.md) 为 PLANNED，尚未实施；历史失败按原事实保留。外部 JellyfinProxy／OpenList 联调、完整 T01～T28 与 B01～B12 矩阵仍未运行；本原型使用 Jellyfin 已有 FFmpeg／ffprobe。
 
 ## 后续真实运行门槛
 

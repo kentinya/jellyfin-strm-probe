@@ -68,7 +68,7 @@ python3 scripts/development_environment.py up
 
 固定 SDK 的 locked restore、Release build、C# 全部测试、format verify、仓库治理测试和真实 PlaybackInfo 集成均已有执行记录。T4 最终候选、单独 Slice Final 的证据索引、任务接口调研、实现 SHA 与延期见 [Closure Packet](progress.md#slice-1-closed)；完整 Developer 报告见 [Task 历史指针](progress.md#slice-1-closed)。A 已核验原始证据及输入身份，Slice 1 PASS / CLOSED。
 
-本文件记录 A 提供的已运行环境及事实交接，原环境阻塞和旧实现 FIX REQUIRED 保留为历史。B 独立审查 Task 1.1 PASS、单独 Slice Final 与 [A 最终审查](progress.md#slice-1-closed) 均已完成；当前 Slice 2 已激活但无活动实施 Task，B 先计划，其最终门槛不能由环境可用或旧原型运行替代。Slice 1 隔离测试已恢复 STRM、启用插件并同步 Jellyfin 地址。
+本文件记录 A 提供的已运行环境及事实交接，原环境阻塞和旧实现 FIX REQUIRED 保留为历史。B 独立审查 Task 1.1 PASS、单独 Slice Final 与 [A 最终审查](progress.md#slice-1-closed) 均已完成；当前 Slice 2 已激活，B 已规划 [Task 2.1](../TASK.md)（PLANNED），尚未实施；其最终门槛不能由环境可用或旧原型运行替代。Slice 1 隔离测试已恢复 STRM、启用插件并同步 Jellyfin 地址。
 
 ## 已运行环境证据
 

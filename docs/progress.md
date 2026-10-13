@@ -21,10 +21,10 @@ Slice 1 交付固定 Jellyfin 12.2.0 的最小核心原型：未变化零探测�
 
 - 开发基准：V4.2；V3.0 原文／旧合同保留在 Git 历史。
 - 当前 Slice：2，ACTIVE；真实 Base 为 Slice 1 关闭提交 `924816a84c74f5d79c107478f2d40e621cb8be8d`，Implementation Head 为 NOT SET；完整合同见 [SLICE.md](../SLICE.md)。
-- 当前 Task：无活动实施 Task，见 [TASK.md](../TASK.md)；本轮 A 只激活合同，没有 Task 计划或产品代码变更。
+- 当前 Task：[Task 2.1](../TASK.md)，PLANNED／High／T4；Task Base 与 Contract Checkpoint 为 `7e0240cd1cada74f142b7b0afd612943ca991a91`。目标为按真实媒体源持久化播放指纹与重启恢复，本轮 B 只规划，没有产品代码变更或产品验收。
 - 当前实现仍是已关闭的 Slice 1 原型；Slice 2 的正式 SQLite、稳定多源、运行中共享／全局并发和正常收尾尚未交付，新验收 NOT RUN。
 - Slice 3／4：PLANNED；原生批量与完整配置页、大规模／扫描、外部代理及发布仍未完成。
 - 合同修订：A 按用户“批量停止只撤销未开始工作、只共享已实际开始探测”提交 [Material Contract Change](../SLICE.md#a-停止与共享边界修订2026-10-13)，替代 `ac2fcead73664cfdaf66f62954ec6b11fb303168` 的人为执行取消约定，Base／ID 不变；原生取消异常保护及历史结果保留。
-- 下一动作：B 先重新判断修订合同下的 Task 合法性并计划首个 Task；不复用 Task 1.1 身份或 Base 作为新 Task，不在 A 本轮启动实施。
+- 下一动作：Developer 在 Task 2.1 内实施、验证并提交 READY FOR B REVIEW；B 后续审查真实提交，PASS 后重新对账全部 RO／Surfaces。共享／全局并发／正常收尾及完整核心配置仍是后续连贯工作，不提前激活其他 Task。
 
-NEXT ACTION: B PLANS FIRST TASK
+NEXT ACTION: DEVELOPER IMPLEMENTS TASK 2.1
