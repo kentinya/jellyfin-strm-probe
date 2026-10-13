@@ -68,7 +68,7 @@ python3 scripts/development_environment.py up
 
 固定 SDK 的 locked restore、Release build、C# 全部测试、format verify、仓库治理测试和真实 PlaybackInfo 集成均已有执行记录。T4 最终候选的证据索引、任务接口调研、未完成行为及实现 SHA 见 [Task 1.1 Developer Completion Report](../TASK.md)。B 的独立复核和 Slice Final 仍由各自角色负责。
 
-本文件记录 A 提供的已运行环境及事实交接，原 Developer 阻塞报告保留为历史。随后 B 已复核交接提交和当前环境，确认阻塞解除；Task 1.1 为 FIX REQUIRED，交回 Developer 恢复原 Task 实施，无须重新申请已授权范围。该决定不代表产品 PASS，详见 [B Review Result](../TASK.md#b-review-result)。
+本文件记录 A 提供的已运行环境及事实交接，原 Developer 阻塞报告保留为历史。随后 B 已复核交接提交和当前环境，确认阻塞解除；Task 1.1 的历史决定为 FIX REQUIRED。当前产品原型已交 Developer 报告，等待新的 B 独立审查，见 [当前 B Review 状态](../TASK.md#current-b-review-result)。
 
 ## 已运行环境证据
 

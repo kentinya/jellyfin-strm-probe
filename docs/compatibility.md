@@ -17,7 +17,7 @@
 
 - [`MediaSourceManager.GetPlaybackMediaSources`](https://github.com/jellyfin/jellyfin/blob/ca0f16eb7c195f720a1493ed469a27c4657db0c6/Emby.Server.Implementations/Library/MediaSourceManager.cs#L2479-L2513) 在 `allowMediaProbe` 为 true 且项目为 `.strm` 时会调用 `RefreshMetadata`，设置 `EnableRemoteContentProbe=true` 和 `FullRefresh`，再重新读取静态媒体源；缺主视频／音频流也会进入该刷新分支。源码定位确认原生播放接入候选，但不能证明包装 DI、单例所有权、实际探测计数或失败语义。
 - [`ProbeProvider.FetchVideoInfo`](https://github.com/jellyfin/jellyfin/blob/ca0f16eb7c195f720a1493ed469a27c4657db0c6/MediaBrowser.Providers/MediaInfo/ProbeProvider.cs#L1498-L1601) 对可探测视频 STRM 调用 `ProbeVideo`，并由原生 Provider 从 STRM 读取远程地址。该源码路径仍不能替代本次结果、持久化主流和地址的实机关联验证。
-- [`MediaBrowser.Controller.csproj`](https://github.com/jellyfin/jellyfin/blob/ca0f16eb7c195f720a1493ed469a27c4657db0c6/MediaBrowser.Controller/MediaBrowser.Controller.csproj#L369-L384) 目标框架为 `net10.0`。本轮未取得该提交的 SDK 固定版本，也未确定服务器镜像 digest、插件依赖版本或可加载包。
+- [`MediaBrowser.Controller.csproj`](https://github.com/jellyfin/jellyfin/blob/ca0f16eb7c195f720a1493ed469a27c4657db0c6/MediaBrowser.Controller/MediaBrowser.Controller.csproj#L369-L384) 目标框架为 `net10.0`。源码定位阶段尚未固定 SDK、镜像、依赖或可加载插件；后续 Task 1.1 的固定组合与原型加载证据见下节。
 
 先前执行环境缺少 SDK／可用 Docker daemon 的记录保留在 [Task 1.1 历史交接](../TASK.md) 及 [环境交接](development-environment.md)；阻塞已解除，真实插件构建和隔离加载证据见下节。
 
@@ -41,18 +41,18 @@
 
 ## Slice 1 风险门槛
 
-A 环境准备后续：权限已解除，SDK 安装、固定源码检出、镜像 digest、隔离服务启动／访问及本地 HTTP 原生 ffprobe 均已验证；NuGet 引用样例 restore／Release build／运行 PASS。前述 Developer 诊断保持为历史事实，环境结果不构成插件实机兼容结论。官方镜像没有 revision 标签，镜像整体源码构建溯源仍需补证；NuGet nuspec repository commit 已与固定源码 SHA 核对一致。
+A 环境准备及 Task 1.1 原型后续：SDK、固定源码、镜像 digest、隔离服务、本地媒体链路和真实插件 PlaybackInfo 均已有分项证据。下表状态只区分已取得的原型证据与仍待 B／Slice 审查的内容，不代表 Slice Outcome 已接受。官方镜像没有 revision 标签，镜像整体源码构建溯源仍有限；NuGet nuspec repository commit 已与固定源码 SHA 核对一致。
 
 | 问题 | 必须取得的证据 | 状态 |
 |---|---|---|
-| 核心 DI 接入 | 注册顺序、单一原生实例、无循环依赖、释放所有权、全接口委托、启动／关闭、普通媒体／直播 | NOT RUN |
-| 跳过重复探测 | 未变化且已有主流的版本化 STRM 二次播放 ffprobe 零增量，原生媒体源有效 | NOT RUN |
-| 主动原生探测 | 变化时实际执行，包含 URL 改变且 SHA-1 相同；不靠 true 参数猜测 | NOT RUN |
-| 成功与指纹提交 | 真成功、故意失败而保留旧流、取消、Manifest 再变的对照；新结果已保存后才提交 | NOT RUN |
-| 地址／流持久化 | URL 改变后原生探测并保存，当次 PlaybackInfo 新地址，重启仍有效且有必要主流；保存失败明确 | NOT RUN |
-| 探测权限／禁用 | allowMediaProbe=false 各分支不执行；禁用／旧 STRM／手动刷新原生对照 | NOT RUN |
+| 核心 DI 接入 | 注册顺序、单一原生实例、无循环依赖、释放所有权、全接口委托、启动／关闭、普通媒体／直播 | 原型已加载；注册／委托／释放有单测；普通与 Live TV 实机未跑；待 B 审查 |
+| 跳过重复探测 | 未变化且已有主流的版本化 STRM 二次播放 ffprobe 零增量，原生媒体源有效 | 原型隔离实测 0 匹配调用；待 B 独立复现 |
+| 主动原生探测 | 变化时实际执行，包含 URL 改变且 SHA-1 相同；不靠 true 参数猜测 | 同 SHA-1／Size URL 变化实测 1 次匹配调用；待 B 独立复现 |
+| 成功与指纹提交 | 真成功、故意失败而保留旧流、取消、Manifest 再变的对照；新结果已保存后才提交 | 成功／失败保流重试实测；取消、竞态及未保存地址有单测；真实取消 BLOCKED、Jellyfin 保存层故障未注入；待 B 审查 |
+| 地址／流持久化 | URL 改变后原生探测并保存，当次 PlaybackInfo 新地址，重启仍有效且有必要主流；保存失败明确 | 原型隔离实测当次／重启新地址及主流；保存失败拒绝逻辑有单测；待 B 审查 |
+| 探测权限／禁用 | allowMediaProbe=false 各分支不执行；禁用／旧 STRM／手动刷新原生对照 | 权限、禁用和旧 STRM 委托有单测；false 权限真实对照及手动刷新实机未跑；待 B 审查 |
 
-找不到可靠成功信号时记录 BLOCKED，不继续扩大产品。FullRefresh 若触发其他提供器，记录额外开销及更精确原生入口是否可用。不新增另一个 FFmpeg／ffprobe。
+当前 Task 原型在这一条 v12.2 STRM 播放路径观察到与请求 URL 匹配的编码器结果、已保存地址和主流；B 仍需裁定该证据是否满足合同。其他失败／刷新路径若缺少可靠成功信号，应记录 BLOCKED，不继续扩大产品。FullRefresh 的额外提供器开销和更精确原生入口仍需在适用场景记录；不新增另一个 FFmpeg／ffprobe。
 
 ## 后续真实运行门槛
 

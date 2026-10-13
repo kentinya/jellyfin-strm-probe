@@ -1,13 +1,13 @@
 # Task 1.1 — V4.2 核心接入原型与可靠指纹提交验证
 
-Task 1.1 已由用户激活。Developer 前轮因缺少 SDK／隔离服务器交接阻塞；A 随后补齐环境，B 已复核交接提交与当前运行状态。环境阻塞已解除，但尚无 C# 产品原型，产品验收仍未运行。B 决定 FIX REQUIRED，并明确由 Developer 恢复同一 Task；本轮进入实施。
+Task 1.1 已由用户激活。前轮的环境阻塞已由 A 补齐并由 B 解除；Developer 在原 Contract、Task Base 与 T4 范围内完成最小插件原型及最终候选验证。当前交接报告见下方 “Developer Completion Report: Task 1.1 implementation”。早期环境交接及 B 的 FIX REQUIRED 决定保留为历史，本次交付等待 B 独立审查。
 
-原 Developer 报告及 A 环境交接保留为历史。当前结论、证据和接续要求见下方 B Review Result；不移动 Base、不重规划、不降低 T4 门槛。
+未移动 Base、未重规划、未降低 T4 门槛。Developer 不签发 B PASS，不更新 Slice Implementation Head，也不关闭 Slice。
 
 ```text
 Task ID: 1.1
 Parent Slice: 1
-Status: IN PROGRESS
+Status: READY FOR B REVIEW
 Task Base: b69a930495c762fe546f8970891a2c955766b28c
 Contract Checkpoint: 4a8536860fafaf25f7a1e573fef19255ca3d07c3
 Superseded Plan: 4b1d0468c1e43e6e9034ef98e99b6cc44ea59485
@@ -56,7 +56,7 @@ Decision: REPLAN。原 Task 1.1 是未实施计划，保留 ID／Task Base 供�
 
 ## 必要测试
 
-V4.2 是验收含义变化，已由 B 重规划；保留原 Task 的四阶段测试安排和全部 T4 门槛，更新 T08／T22 与指纹断言。当前没有 C# 工程，准确 .NET 命令在固定版本并创建项目后补入。
+V4.2 是验收含义变化，已由 B 重规划；保留原 Task 的四阶段测试安排和全部 T4 门槛，更新 T08／T22 与指纹断言。当前候选的最终命令固定如下：
 
 ### 开发／修正反馈
 
@@ -64,7 +64,15 @@ V4.2 是验收含义变化，已由 B 重规划；保留原 Task 的四阶段测
 
 ### 最终检查点门槛
 
-真实项目创建后填写固定 SDK 的 restore、Release build、全部已有 test 和相关 format／分析器命令。核心服务替换、刷新、持久化和播放属于 T4，最终候选必须完整回归；套件已覆盖的聚焦用例记录覆盖关系，不机械重复。
+核心服务替换、刷新、持久化和播放属于 T4，最终候选必须完整回归；套件已覆盖的聚焦用例记录覆盖关系，不机械重复。
+
+```bash
+bash scripts/dotnet-local restore Jellyfin.Plugin.StrmProbeOptimizer.sln --locked-mode
+bash scripts/dotnet-local build Jellyfin.Plugin.StrmProbeOptimizer.sln --configuration Release --no-restore
+bash scripts/dotnet-local test Jellyfin.Plugin.StrmProbeOptimizer.sln --configuration Release --no-restore
+bash scripts/dotnet-local format Jellyfin.Plugin.StrmProbeOptimizer.sln --verify-no-changes --no-restore
+python3 scripts/run_isolated_plugin_integration.py
+```
 
 仓库门槛：`python3 scripts/check_governance.py`、`python3 -m unittest discover -s tests -v`、`git diff --check`。
 
@@ -93,7 +101,7 @@ T19 在本 Task 验证原型结果／地址重启，不宣称完成 Slice 2 的�
 
 可执行代码、测试、工具、依赖或运行输入变更后更新证据；T4 修正候选完成全部最终门槛。纯文档后继提交核对输入不变并重跑相关治理。Slice Final 另行执行新合同最终验证。
 
-当前产品门槛全为 NOT RUN；缺 SDK／环境／成功信号如实报告，不用文档治理通过代替。
+Task 环境阻塞阶段的原始计划快照曾记录产品门槛全为 NOT RUN；该历史状态已由下方当前 Developer Completion Report 的候选证据更新，不代表本次最终结果。治理检查与文件测试仍不代替产品测试。
 
 ## 非目标
 
@@ -102,7 +110,58 @@ T19 在本 Task 验证原型结果／地址重启，不宣称完成 Slice 2 的�
 - 大规模／扫描／代理联调、发布包与多版本兼容：Slice 4。
 - 生成器、OpenList API、媒体下载哈希、代理改造、独立调度器／探测状态机、仅更新路径服务、首版扫描后自动触发。
 
-## Developer Completion Report
+## Developer Completion Report: Task 1.1 implementation
+
+本报告提交固定候选供 B 独立审查，不是 B PASS 或 Slice Final。验收框仍由 B 对照 Contract 检查。
+
+### Checkpoint and changed files
+
+- Product implementation SHA: `153c0d31a699ff15047b6a2e274237497476ec76` (tree `06890347a0c359c7786de1d75c09b08179573012`). 后续本报告为文档检查点，不改可执行候选。
+- 连贯本地提交：`6245586a69d9b289fbcb17162c545f0e08aa046e` 建立最小插件／测试；`073a747fbaac18f079b7b3b6fa150befcaba3482` 增加失败后媒体流保留实测；`55237a9d330070b9a569ef8ba2185b13c9e7e836` 覆盖探测成功但新地址未保存；`153c0d31a699ff15047b6a2e274237497476ec76` 覆盖传入 token 取消。
+- 新增真实 solution、插件项目、`meta.json`、插件服务／拦截器、只读 STRM reader、决策服务、内存条件指纹仓库、执行上下文、29 项单元测试和隔离 Jellyfin 集成脚本。
+- 更新 [架构](docs/architecture.md)、[兼容性](docs/compatibility.md) 和 [开发环境交接](docs/development-environment.md)，将 Task 原型实况与目标设计／历史阻塞分开记录。
+- 最终原始验证索引：`.git/validation-evidence/153c0d31a699ff15047b6a2e274237497476ec76/developer-t4-20261013/INDEX.md`。只含脱敏输出、SHA 与调用次数；无凭据或完整媒体地址。
+
+### Implemented and observed
+
+- 固定 SDK `10.0.401`、`net10.0`、Jellyfin.Controller／Model `12.2.0`、源码 `ca0f16eb7c195f720a1493ed469a27c4657db0c6`；产品与测试项目均有 lock 文件。固定容器在隔离实例成功加载插件并三次启动为 Active。产品 DLL 和部署 DLL SHA-256 相同，记录于验证索引。
+- `ServiceRegistrator` 在核心服务注册后用 DispatchProxy 包装 `IMediaSourceManager` 与 `IMediaEncoder`，迁移原生实现到其 concrete registration，保留原 lifetime／单例释放；所有未优化方法委托到原生服务。测试覆盖重复／异常注册、完整 manager 接口委托及释放所有权。
+- 支持的版本化 `.strm` 才进入检查；解析只读、有界且纯本地。旧／非法／不可用 STRM、普通媒体、禁用设置和原调用 `allowMediaProbe=false` 保留原权限并委托。决定器先比较 URL，再仅在双方 SHA-1 均有效时比较内容；URL 相同且 SHA-1 相同忽略 Size，否则按有效 Size 判断。mtime 不触发。
+- 原生刷新调用以 AsyncLocal 上下文关联目标 URL 的 `IMediaEncoder.GetMediaInfo`；只有本次返回必要主流、Jellyfin 返回和保存了新 URL／主流、Manifest 未变且条件提交成功才更新内存基线。初次接管已有主流只建立基线，不宣称探测成功。失败、取消、地址未保存、旧流返回、Manifest 竞态和条件提交竞争不接受变化基线；地址变化无法证明新结果时拒绝用旧地址成功返回。
+- 隔离实测的首次接管与未变化播放分别为 0 次匹配探测；同 SHA-1、同 Size URL 变化为 1 次且返回新地址及 Video／Audio 流；新地址重启后仍可用，再次首信任为 0 次探测。
+- 不存在的新 URL 实际触发 1 次探测后 HTTP 500；Jellyfin 保存流快照与失败前 SHA-256 完全相同；下一次仍触发 1 次重试。另有单测证明已观察到探测主流、但新地址未保存时不提交指纹且不返回旧地址。
+- 固定源码任务接口调研已记录：`IScheduledTask` 提供进度、取消和默认触发；任务由 `ApplicationHost` 的 `GetExports<IScheduledTask>(false)` 加入 `TaskManager`；管理员 API 支持运行、停止和更新触发器；默认触发读取失败会回退每日触发，故无自动时间须返回空序列而不能抛异常。本 Task 未实现计划任务。
+
+### Tests and results for the implementation candidate
+
+- `python3 scripts/check_governance.py` — PASS；`python3 -m unittest discover -s tests -v` — PASS，30/30；`git diff --check` — PASS。
+- `bash scripts/dotnet-local restore Jellyfin.Plugin.StrmProbeOptimizer.sln --locked-mode` — PASS。
+- `bash scripts/dotnet-local build Jellyfin.Plugin.StrmProbeOptimizer.sln --configuration Release --no-restore` — PASS，0 warnings／errors。
+- `bash scripts/dotnet-local test Jellyfin.Plugin.StrmProbeOptimizer.sln --configuration Release --no-restore` — PASS，29/29，0 skipped；包括取消 token、保存地址失败、探测失败、Manifest 竞态、探测权限与 URL／SHA-1／Size 决策。
+- `bash scripts/dotnet-local format Jellyfin.Plugin.StrmProbeOptimizer.sln --verify-no-changes --no-restore` — PASS。
+- `python3 scripts/development_environment.py doctor` — PASS，10/10；隔离 Jellyfin status healthy。`python3 -m py_compile scripts/run_isolated_plugin_integration.py` — PASS。
+- `python3 scripts/run_isolated_plugin_integration.py` — PASS；真实计数、事件、重启、失败、旧流快照与单次端到端时延见原始脱敏 JSON。URL 变化请求为 1169 ms，随后未变化请求为 49 ms；仅作调用路径观测，不是 FullRefresh 性能基准。
+
+### Limits handed to B
+
+- 单元测试用传入的 CancellationToken 取消执行并验证基线保留。目标版本 PlaybackInfo 调用上游传 `CancellationToken.None`；唯一带请求取消 token 的可取消取源调用传 `allowMediaProbe=false`，本插件必须原样保留该权限。因此真实 PlaybackInfo 活跃探测取消为 BLOCKED／NOT RUN；没有通过私有测试接口伪造线上调用路径。
+- 已测试“成功编码器结果但新地址未保存”的拒绝逻辑；没有故障注入到 Jellyfin 内部数据库／保存层。
+- 普通媒体、旧 STRM、插件配置关闭、`allowMediaProbe=false` 及 live-stream 方法走委托路径有单元测试，但没有分别对 Live TV／各播放 API 做实机运行。实机集成聚焦版本化 STRM PlaybackInfo。
+- 指纹仓库是 Task 原型允许的进程内最小实现，重启后重新信任接管；正式 SQLite、完整决策矩阵、跨媒体源共享协调、并发限流、批量任务／配置 UI、发布包均未实现。本次重启只实证 Jellyfin 原生播放地址与媒体流持久化。
+- 本次没有外部 JellyfinProxy／OpenList 联调；未执行完整 T01～T28 或 B01～B12 矩阵。
+- 早期开发反馈中曾修正 Jellyfin API 类型／测试代理编译问题及一条 Manifest 再变测试失败；这些交互期原始 stdout 未保存。最终固定候选的全套原始门禁日志已留存，未将早期失败隐藏成 PASS。
+
+### Developer handoff
+
+当前代码与规定门禁已按上述 SHA 完整复验，工作树干净。请 B 基于原 Task Base 和 Contract Checkpoint 独立核对差异、复现跳过／同 SHA 地址变化探测／失败保流重试／探测与地址保存条件，并裁定上述限制对 AC-2／AC-4／AC-6 的影响。本状态仅表示交接 `READY FOR B REVIEW`，不自行满足验收勾选、不声明 Task PASS、不改 Slice Implementation Head、不关闭 Slice。
+
+```text
+Product implementation SHA: 153c0d31a699ff15047b6a2e274237497476ec76
+Evidence: .git/validation-evidence/153c0d31a699ff15047b6a2e274237497476ec76/developer-t4-20261013/
+Task status: READY FOR B REVIEW
+```
+
+## Developer Completion Report — Environment Blocker (historical, superseded)
 
 本报告交接环境阻塞，不表示 Task 产品目标已完成、Slice 验收通过或兼容性已确认。
 
@@ -159,7 +218,7 @@ Product implementation SHA: NOT SET
 
 A 保持 Slice／Task 的 ID、Base、Scope、T4 验收与 B 独立审查责任；本段是环境事实交接，不是 B Review。Task 仍 READY FOR B REVIEW；B 可核查环境证据后由 Developer 恢复原已授权 Task 实施。详细本机证据索引见环境说明。
 
-## B Review Result
+## Previous B Review Result (environment handoff)
 
 ```text
 Reviewed: b69a930495c762fe546f8970891a2c955766b28c..1035b1b3d31d88cde1a47154f24597d120530380
@@ -204,3 +263,12 @@ Next: Developer resumes Task 1.1 as IN PROGRESS
 2. 先创建可构建／加载的最小插件及必要测试，提交固定产品依赖锁和真实命令；实证 DI、单例所有权、完整委托及正常启停。核心接入不成立时报告阻塞，不铺开 Slice 2／3。
 3. 按原验收和四阶段测试计划完成探测计数、本次成功／保存关联、失败／取消／竞态保护、URL 变化当次与重启、探测权限对照，以及任务接口和刷新开销调研。不得用旧流或刷新返回值冒充本次成功。
 4. 完成候选的全部 T4 指定门槛，保存准确实现 SHA、输入身份、脱敏原始日志及未完成项；更新完成报告并交为 `READY FOR B REVIEW`。B 再独立复现指定关键行为；全部 Slice Outcomes 满足后才提交 A 最终审查。
+
+## Current B Review Result
+
+```text
+Reviewed: PENDING
+Implementation SHA: 153c0d31a699ff15047b6a2e274237497476ec76
+Decision: PENDING B independent review
+Task status: READY FOR B REVIEW
+```
