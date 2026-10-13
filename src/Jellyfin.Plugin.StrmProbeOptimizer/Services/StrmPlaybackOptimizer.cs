@@ -112,9 +112,10 @@ public sealed class StrmPlaybackOptimizer
             }
 
             _logger.LogInformation(
-                "STRM playback reused saved media information for item {ItemId}; reason {Reason}, plugin probe calls 0.",
+                "STRM playback reused saved media information for item {ItemId}; reason {Reason}, plugin probe calls 0, Jellyfin GetMediaInfo calls observed {EncoderCallsTotal}.",
                 item.Id,
-                decision.Reason);
+                decision.Reason,
+                MediaEncoderDispatchProxy.GetMediaInfoCallCount);
             return await native.GetPlaybackMediaSources(item, user, false, enablePathSubstitution, cancellationToken)
                 .ConfigureAwait(false);
         }
@@ -152,12 +153,12 @@ public sealed class StrmPlaybackOptimizer
         }
         catch (OperationCanceledException)
         {
-            _logger.LogInformation("Native STRM probe canceled for item {ItemId}; matching encoder calls {ProbeCalls}, fingerprint retained.", item.Id, probeContext.MatchingCallCount);
+            _logger.LogInformation("Native STRM probe canceled for item {ItemId}; matching encoder calls {ProbeCalls}, Jellyfin GetMediaInfo calls observed {EncoderCallsTotal}, fingerprint retained.", item.Id, probeContext.MatchingCallCount, MediaEncoderDispatchProxy.GetMediaInfoCallCount);
             throw;
         }
         catch (Exception)
         {
-            _logger.LogWarning("Native STRM probe failed for item {ItemId}; matching encoder calls {ProbeCalls}, fingerprint retained.", item.Id, probeContext.MatchingCallCount);
+            _logger.LogWarning("Native STRM probe failed for item {ItemId}; matching encoder calls {ProbeCalls}, Jellyfin GetMediaInfo calls observed {EncoderCallsTotal}, fingerprint retained.", item.Id, probeContext.MatchingCallCount, MediaEncoderDispatchProxy.GetMediaInfoCallCount);
             throw;
         }
 
@@ -167,12 +168,24 @@ public sealed class StrmPlaybackOptimizer
         var resultSource = sources.FirstOrDefault(source => HasPrimaryStream(item, source)
             && string.Equals(source.Path, manifest.Url, StringComparison.Ordinal));
         var itemAddressMatches = string.Equals(item.ShortcutPath, manifest.Url, StringComparison.Ordinal);
-        var persistedResultIsUsable = resultSource is not null && itemAddressMatches;
         var urlChanged = (previous is not null && !string.Equals(previous.UrlHash, manifest.UrlHash, StringComparison.Ordinal))
             || (previousNativeUrl is not null && !string.Equals(previousNativeUrl, manifest.Url, StringComparison.Ordinal));
+        var returnedPrimaryMatchesProbe = resultSource?.MediaStreams?
+            .FirstOrDefault(stream => stream.Type == requiredStreamType) is { } returnedPrimary
+            && probeContext.IsPersistedProbeResult(returnedPrimary);
+        var addressPersistenceConfirmed = !urlChanged || probeContext.HasPersistedAddress;
+        var persistedResultIsUsable = resultSource is not null
+            && itemAddressMatches
+            && probeContext.HasPersistedPrimaryResult
+            && returnedPrimaryMatchesProbe
+            && addressPersistenceConfirmed;
 
         if (!currentUrlStillMatches)
         {
+            _logger.LogWarning(
+                "STRM manifest changed during native probe for item {ItemId}; matching encoder calls {ProbeCalls}, fingerprint retained.",
+                item.Id,
+                probeContext.MatchingCallCount);
             throw new InvalidOperationException("The STRM changed during Jellyfin's native probe; playback must retry with the current manifest.");
         }
 
@@ -183,9 +196,14 @@ public sealed class StrmPlaybackOptimizer
             if (_fingerprintRepository.TryCommit(candidate, previous))
             {
                 _logger.LogInformation(
-                    "Native probe observed for STRM item {ItemId}; calls {ProbeCalls}, saved primary stream true, fingerprint committed.",
+                    "Native probe observed for STRM item {ItemId}; calls {ProbeCalls}, encoder primary {EncoderPrimary}, persisted primary {PersistedPrimary}, address persisted {AddressPersisted}, returned primary matches probe {ReturnedPrimaryMatches}, Jellyfin GetMediaInfo calls observed {EncoderCallsTotal}, fingerprint committed.",
                     item.Id,
-                    probeContext.MatchingCallCount);
+                    probeContext.MatchingCallCount,
+                    probeContext.HasSuccessfulPrimaryResult,
+                    probeContext.HasPersistedPrimaryResult,
+                    probeContext.HasPersistedAddress,
+                    returnedPrimaryMatchesProbe,
+                    MediaEncoderDispatchProxy.GetMediaInfoCallCount);
             }
             else
             {
@@ -195,12 +213,16 @@ public sealed class StrmPlaybackOptimizer
         else
         {
             _logger.LogInformation(
-                "Native probe not accepted for STRM item {ItemId}; calls {ProbeCalls}, primary result {PrimaryResult}, saved result {SavedResult}, manifest stable {ManifestStable}.",
+                "Native probe not accepted for STRM item {ItemId}; calls {ProbeCalls}, encoder primary {EncoderPrimary}, persisted primary {PersistedPrimary}, address persisted {AddressPersisted}, returned primary matches probe {ReturnedPrimaryMatches}, saved result {SavedResult}, manifest stable {ManifestStable}, Jellyfin GetMediaInfo calls observed {EncoderCallsTotal}.",
                 item.Id,
                 probeContext.MatchingCallCount,
                 probeContext.HasSuccessfulPrimaryResult,
+                probeContext.HasPersistedPrimaryResult,
+                probeContext.HasPersistedAddress,
+                returnedPrimaryMatchesProbe,
                 persistedResultIsUsable,
-                currentUrlStillMatches && latestManifest?.ContentHash == manifest.ContentHash);
+                currentUrlStillMatches && latestManifest?.ContentHash == manifest.ContentHash,
+                MediaEncoderDispatchProxy.GetMediaInfoCallCount);
         }
 
         if (!persistedResultIsUsable && !hadPrimaryStream)

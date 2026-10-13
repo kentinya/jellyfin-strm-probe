@@ -1,10 +1,12 @@
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
+using Jellyfin.Plugin.StrmProbeOptimizer.Interceptors;
 using Jellyfin.Plugin.StrmProbeOptimizer.Services;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
+using MediaBrowser.Controller.Persistence;
 using MediaBrowser.Model.Dto;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.MediaInfo;
@@ -54,13 +56,20 @@ public sealed class PlaybackOptimizerTests
         fixture.Write(newUrl, ValidSha1, 42);
         var newManifest = reader.Read(fixture.Path).Manifest!;
         var native = ScriptedManager.Create();
+        var nativeStreamRepository = NativePersistence.Create<IMediaStreamRepository>();
+        var streamRepository = ProbePersistenceDispatchProxy.Create(nativeStreamRepository);
+        var nativeItemPersistence = NativePersistence.Create<IItemPersistenceService>();
+        var itemPersistence = ProbePersistenceDispatchProxy.Create(nativeItemPersistence);
         native.StaticSources = [Source(oldUrl)];
         native.Playback = (updatedItem, allowProbe, _, _) =>
         {
             Assert.IsTrue(allowProbe);
+            var result = MediaInfoWithVideo();
             ProbeExecutionContext.Current!.MarkCall(newUrl);
-            ProbeExecutionContext.Current.RecordResult(newUrl, MediaInfoWithVideo());
+            ProbeExecutionContext.Current.RecordResult(newUrl, result);
+            streamRepository.SaveMediaStreams(updatedItem.Id, result.MediaStreams, CancellationToken.None);
             updatedItem.ShortcutPath = newUrl;
+            itemPersistence.SaveItems([updatedItem], CancellationToken.None);
             native.StaticSources = [Source(newUrl)];
             return Task.FromResult<IReadOnlyList<MediaSourceInfo>>([Source(newUrl)]);
         };
@@ -161,6 +170,119 @@ public sealed class PlaybackOptimizerTests
 
         Assert.AreEqual(oldUrl, item.ShortcutPath);
         Assert.AreEqual(oldFingerprint, repository.Get(item.Id, "primary"));
+    }
+
+    [TestMethod]
+    public async Task NewAddressWithOldPersistedPrimaryStreamDoesNotCommitAndRemainsRetryable()
+    {
+        const string oldUrl = "https://media.example.invalid/video.mp4?sig=old";
+        const string newUrl = "https://media.example.invalid/video.mp4?sig=new";
+        using var fixture = new ManifestFixture(oldUrl, ValidSha1, 42);
+        var reader = new StrmManifestReader();
+        var oldManifest = reader.Read(fixture.Path).Manifest!;
+        var repository = new InMemoryStrmFingerprintRepository();
+        var item = CreateItem(fixture.Path, oldUrl);
+        var oldFingerprint = Fingerprint(item.Id, oldManifest);
+        repository.TryCommit(oldFingerprint, expectedPrevious: null);
+        fixture.Write(newUrl, ValidSha1, 42);
+        var native = ScriptedManager.Create();
+        var nativeStreamRepository = NativePersistence.Create<IMediaStreamRepository>();
+        var streamRepository = ProbePersistenceDispatchProxy.Create(nativeStreamRepository);
+        var nativeItemPersistence = NativePersistence.Create<IItemPersistenceService>();
+        var itemPersistence = ProbePersistenceDispatchProxy.Create(nativeItemPersistence);
+        var staleStream = new MediaStream { Type = MediaStreamType.Video, Codec = "mpeg2video", Width = 640, Height = 360 };
+        native.StaticSources = [Source(oldUrl, staleStream)];
+        native.Playback = (updatedItem, allowProbe, _, _) =>
+        {
+            Assert.IsTrue(allowProbe);
+            var result = MediaInfoWithVideo("h264", 1920, 1080);
+            ProbeExecutionContext.Current!.MarkCall(newUrl);
+            ProbeExecutionContext.Current.RecordResult(newUrl, result);
+            streamRepository.SaveMediaStreams(updatedItem.Id, [staleStream], CancellationToken.None);
+            updatedItem.ShortcutPath = newUrl;
+            itemPersistence.SaveItems([updatedItem], CancellationToken.None);
+            native.StaticSources = [Source(newUrl, staleStream)];
+            return Task.FromResult<IReadOnlyList<MediaSourceInfo>>([Source(newUrl, staleStream)]);
+        };
+        var optimizer = CreateOptimizer(repository);
+
+        await AssertThrowsAsync<InvalidOperationException>(() => optimizer.GetPlaybackMediaSourcesAsync(
+            native.Interface, item, null, true, false, CancellationToken.None));
+
+        Assert.AreEqual(oldFingerprint, repository.Get(item.Id, "primary"));
+        Assert.IsTrue(native.LastAllowMediaProbe);
+    }
+
+    [TestMethod]
+    public void PersistenceProxyDoesNotConfirmNativeSavesThatThrow()
+    {
+        var itemId = Guid.NewGuid();
+        const string url = "https://media.example.invalid/video.mp4?sig=new";
+        var item = new Video { Id = itemId, Path = "/tmp/fixture.strm", ShortcutPath = url };
+        var stream = MediaInfoWithVideo().MediaStreams[0];
+        using var context = ProbeExecutionContext.Begin(itemId, url, MediaStreamType.Video);
+        context.MarkCall(url);
+        context.RecordResult(url, MediaInfoWithVideo());
+
+        var failedStreamRepository = NativePersistence.Create<IMediaStreamRepository>(nameof(IMediaStreamRepository.SaveMediaStreams));
+        var streamRepository = ProbePersistenceDispatchProxy.Create(failedStreamRepository);
+        AssertThrows<InvalidOperationException>(() =>
+            streamRepository.SaveMediaStreams(itemId, [stream], CancellationToken.None));
+        Assert.IsFalse(context.HasPersistedPrimaryResult);
+
+        var failedItemPersistence = NativePersistence.Create<IItemPersistenceService>(nameof(IItemPersistenceService.SaveItems));
+        var itemPersistence = ProbePersistenceDispatchProxy.Create(failedItemPersistence);
+        AssertThrows<InvalidOperationException>(() =>
+            itemPersistence.SaveItems([item], CancellationToken.None));
+        Assert.IsFalse(context.HasPersistedAddress);
+    }
+
+    [TestMethod]
+    public async Task FailedNativeStreamSaveLeavesChangedAddressFingerprintRetryable()
+    {
+        const string oldUrl = "https://media.example.invalid/video.mp4?sig=old";
+        const string newUrl = "https://media.example.invalid/video.mp4?sig=new";
+        using var fixture = new ManifestFixture(oldUrl, ValidSha1, 42);
+        var reader = new StrmManifestReader();
+        var oldManifest = reader.Read(fixture.Path).Manifest!;
+        var repository = new InMemoryStrmFingerprintRepository();
+        var item = CreateItem(fixture.Path, oldUrl);
+        var oldFingerprint = Fingerprint(item.Id, oldManifest);
+        repository.TryCommit(oldFingerprint, expectedPrevious: null);
+        fixture.Write(newUrl, ValidSha1, 42);
+
+        var native = ScriptedManager.Create();
+        var failingStreamRepository = NativePersistence.Create<IMediaStreamRepository>(nameof(IMediaStreamRepository.SaveMediaStreams));
+        var streamRepository = ProbePersistenceDispatchProxy.Create(failingStreamRepository);
+        var itemPersistence = ProbePersistenceDispatchProxy.Create(NativePersistence.Create<IItemPersistenceService>());
+        var staleStream = new MediaStream { Type = MediaStreamType.Video, Codec = "mpeg2video", Width = 640, Height = 360 };
+        native.StaticSources = [Source(oldUrl, staleStream)];
+        native.Playback = (updatedItem, allowProbe, _, _) =>
+        {
+            Assert.IsTrue(allowProbe);
+            var result = MediaInfoWithVideo("h264", 1920, 1080);
+            ProbeExecutionContext.Current!.MarkCall(newUrl);
+            ProbeExecutionContext.Current.RecordResult(newUrl, result);
+            try
+            {
+                streamRepository.SaveMediaStreams(updatedItem.Id, result.MediaStreams, CancellationToken.None);
+            }
+            catch (InvalidOperationException)
+            {
+                // Jellyfin providers can continue after a persistence failure; the optimizer must not infer success.
+            }
+
+            updatedItem.ShortcutPath = newUrl;
+            itemPersistence.SaveItems([updatedItem], CancellationToken.None);
+            return Task.FromResult<IReadOnlyList<MediaSourceInfo>>([Source(newUrl, staleStream)]);
+        };
+        var optimizer = CreateOptimizer(repository);
+
+        await AssertThrowsAsync<InvalidOperationException>(() => optimizer.GetPlaybackMediaSourcesAsync(
+            native.Interface, item, null, true, false, CancellationToken.None));
+
+        Assert.AreEqual(oldFingerprint, repository.Get(item.Id, "primary"));
+        Assert.IsTrue(native.LastAllowMediaProbe);
     }
 
     [TestMethod]
@@ -428,20 +550,20 @@ public sealed class PlaybackOptimizerTests
         return new Video { Id = Guid.NewGuid(), Path = path, ShortcutPath = url };
     }
 
-    private static MediaSourceInfo Source(string url)
+    private static MediaSourceInfo Source(string url, MediaStream? videoStream = null)
     {
         return new MediaSourceInfo
         {
             Path = url,
-            MediaStreams = [new MediaStream { Type = MediaStreamType.Video }]
+            MediaStreams = [videoStream ?? new MediaStream { Type = MediaStreamType.Video }]
         };
     }
 
-    private static MediaInfo MediaInfoWithVideo()
+    private static MediaInfo MediaInfoWithVideo(string? codec = null, int? width = null, int? height = null)
     {
         return new MediaInfo
         {
-            MediaStreams = [new MediaStream { Type = MediaStreamType.Video }]
+            MediaStreams = [new MediaStream { Type = MediaStreamType.Video, Codec = codec, Width = width, Height = height }]
         };
     }
 
@@ -465,7 +587,73 @@ public sealed class PlaybackOptimizerTests
         throw new AssertFailedException($"Expected {typeof(TException).Name}.");
     }
 
+    private static TException AssertThrows<TException>(Action action)
+        where TException : Exception
+    {
+        try
+        {
+            action();
+        }
+        catch (TException exception)
+        {
+            return exception;
+        }
+
+        throw new AssertFailedException($"Expected {typeof(TException).Name}.");
+    }
+
     private sealed record PlaybackSettings(bool PlaybackAutoCheck) : IPlaybackSettings;
+
+    public class NativePersistence : DispatchProxy
+    {
+        private string? _failureMethodName;
+
+        public static T Create<T>()
+            where T : class
+        {
+            return Create<T>(null);
+        }
+
+        public static T Create<T>(string? failureMethodName)
+            where T : class
+        {
+            var proxy = DispatchProxy.Create<T, NativePersistence>();
+            ((NativePersistence)(object)proxy)._failureMethodName = failureMethodName;
+            return proxy;
+        }
+
+        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
+        {
+            if (targetMethod is null)
+            {
+                throw new InvalidOperationException("Missing persistence method.");
+            }
+
+            if (string.Equals(targetMethod.Name, _failureMethodName, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("Injected native persistence failure.");
+            }
+
+            if (targetMethod.ReturnType == typeof(void))
+            {
+                return null;
+            }
+
+            if (targetMethod.ReturnType == typeof(Task))
+            {
+                return Task.CompletedTask;
+            }
+
+            if (targetMethod.ReturnType.IsGenericType && targetMethod.ReturnType.GetGenericTypeDefinition() == typeof(Task<>))
+            {
+                var resultType = targetMethod.ReturnType.GenericTypeArguments[0];
+                var value = resultType.IsValueType ? Activator.CreateInstance(resultType) : null;
+                return typeof(Task).GetMethod(nameof(Task.FromResult))!.MakeGenericMethod(resultType).Invoke(null, [value]);
+            }
+
+            return targetMethod.ReturnType.IsValueType ? Activator.CreateInstance(targetMethod.ReturnType) : null;
+        }
+    }
 
     private sealed class ManifestFixture : IDisposable
     {

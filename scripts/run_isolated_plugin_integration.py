@@ -10,6 +10,7 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -23,7 +24,10 @@ ENVIRONMENT = ROOT / "scripts" / "development_environment.py"
 PLUGIN_BUILD = ROOT / "src" / "Jellyfin.Plugin.StrmProbeOptimizer" / "bin" / "Release" / "net10.0"
 PLUGIN_SOURCE = PLUGIN_BUILD / "Jellyfin.Plugin.StrmProbeOptimizer.dll"
 PLUGIN_META = ROOT / "src" / "Jellyfin.Plugin.StrmProbeOptimizer" / "Packaging" / "meta.json"
-PLUGIN_FOLDER_NAME = "Jellyfin.Plugin.StrmProbeOptimizer_0.1.0.0"
+PLUGIN_METADATA = json.loads(PLUGIN_META.read_text(encoding="utf-8"))
+PLUGIN_ID = PLUGIN_METADATA["guid"]
+PLUGIN_VERSION = PLUGIN_METADATA["version"]
+PLUGIN_FOLDER_NAME = f"Jellyfin.Plugin.StrmProbeOptimizer_{PLUGIN_VERSION}"
 FIXTURE = ROOT / "artifacts" / "dev-env" / "strm" / "Environment Fixture.strm"
 PLUGIN_LOGGER = "Jellyfin.Plugin.StrmProbeOptimizer.Services.StrmPlaybackOptimizer"
 MAX_WAIT_SECONDS = 90
@@ -62,6 +66,18 @@ def isolated_container_name() -> str:
         if len(columns) >= 4 and columns[3] == "jellyfin":
             matches.append(columns[0])
     require(len(matches) == 1, "Expected exactly one Jellyfin container in the isolated environment.")
+    return matches[0]
+
+
+def isolated_media_container_name() -> str:
+    project = "jf-strm-probe-" + hashlib.sha256(str(ROOT).encode()).hexdigest()[:10]
+    result = run([
+        "docker", "ps", "--filter", "label=com.docker.compose.project=" + project,
+        "--format", "{{.Names}} {{.Label \"com.docker.compose.service\"}}",
+    ], timeout=30)
+    require(result.returncode == 0, "Could not inspect the isolated media service.")
+    matches = [line.split()[0] for line in result.stdout.splitlines() if line.split()[-1:] == ["media"]]
+    require(len(matches) == 1, "Expected exactly one media service in the repository's isolated environment.")
     return matches[0]
 
 
@@ -115,13 +131,41 @@ class JellyfinApi:
     def public_info(self) -> dict:
         return request_json(self.base_url + "/System/Info/Public", timeout=15)
 
-    def plugin_status(self) -> str:
+    def plugin_state(self) -> str:
         plugins = request_json(self.base_url + "/Plugins", headers=self.headers, timeout=20)
-        matches = [plugin for plugin in plugins if plugin.get("Name") == "STRM Probe Optimizer"]
+        matches = [
+            plugin for plugin in plugins
+            if str(plugin.get("Id", "")).lower() == PLUGIN_ID.lower()
+            or plugin.get("Name") == "STRM Probe Optimizer"
+        ]
         require(len(matches) == 1, "The STRM Probe Optimizer plugin was not found exactly once.")
-        status = str(matches[0].get("Status"))
+        return str(matches[0].get("Status"))
+
+    def plugin_status(self) -> str:
+        status = self.plugin_state()
         require(status.lower() in {"active", "0"}, "The STRM Probe Optimizer plugin is not active.")
         return status
+
+    def plugin_action(self, enabled: bool) -> int:
+        action = "Enable" if enabled else "Disable"
+        status, _ = self.request_response(
+            f"/Plugins/{PLUGIN_ID}/{PLUGIN_VERSION}/{action}",
+            method="POST",
+        )
+        return status
+
+    def request_response(self, path: str, *, method: str = "GET", data: bytes | None = None) -> tuple[int, bytes]:
+        request = Request(
+            self.base_url + path,
+            headers={**self.headers, "Content-Type": "application/json"},
+            data=data,
+            method=method,
+        )
+        try:
+            with urlopen(request, timeout=30) as response:
+                return response.status, response.read()
+        except HTTPError as error:
+            return error.code, error.read()
 
     def fixture_item(self) -> dict:
         query = urlencode({"UserId": self.user_id, "Recursive": "true", "Limit": "1000"})
@@ -141,9 +185,62 @@ class JellyfinApi:
         require(len(matches) == 1, "Expected exactly one scanned Environment Fixture in the isolated libraries.")
         return matches[0]
 
+    def named_library_item(self, name: str) -> dict:
+        query = urlencode({"UserId": self.user_id, "Recursive": "true", "Limit": "1000", "Fields": "Path"})
+        result = request_json(self.base_url + "/Items?" + query, headers=self.headers, timeout=20)
+        matches = [item for item in result.get("Items", []) if item.get("Name") == name]
+        require(len(matches) == 1, f"Expected exactly one isolated library item named {name!r}.")
+        return matches[0]
+
+    def item_details(self, item_id: str) -> dict:
+        query = urlencode({"UserId": self.user_id, "Fields": "MediaStreams,Path"})
+        return request_json(self.base_url + f"/Items/{item_id}?" + query, headers=self.headers, timeout=20)
+
+    def force_full_refresh(self, item_id: str) -> tuple[int, bytes]:
+        query = urlencode({
+            "metadataRefreshMode": "FullRefresh",
+            "imageRefreshMode": "None",
+            "replaceAllMetadata": "false",
+        })
+        return self.request_response(f"/Items/{item_id}/Refresh?{query}", method="POST")
+
+    def wait_for_item_refresh(self, item_id: str, previous_etag: str | None, timeout: int = 90) -> tuple[dict, int]:
+        started = time.monotonic()
+        deadline = started + timeout
+        while time.monotonic() < deadline:
+            details = self.item_details(item_id)
+            refreshed = details.get("Etag")
+            if refreshed and refreshed != previous_etag:
+                return details, int((time.monotonic() - started) * 1000)
+            time.sleep(0.25)
+        raise RuntimeError("The isolated Jellyfin item did not persist its queued FullRefresh before the timeout.")
+
     def playback_info(self, item_id: str) -> tuple[int, dict]:
         query = urlencode({"UserId": self.user_id})
         request = Request(self.base_url + f"/Items/{item_id}/PlaybackInfo?{query}", headers=self.headers)
+        try:
+            with urlopen(request, timeout=75) as response:
+                return response.status, json.load(response)
+        except HTTPError as error:
+            return error.code, {}
+
+    def get_video_stream(self, item_id: str) -> tuple[int, bytes]:
+        query = urlencode({"static": "true"})
+        request = Request(self.base_url + f"/Videos/{item_id}/stream?" + query, headers=self.headers)
+        try:
+            with urlopen(request, timeout=75) as response:
+                return response.status, response.read()
+        except HTTPError as error:
+            return error.code, error.read()
+
+    def post_playback_info(self, item_id: str, payload: dict) -> tuple[int, dict]:
+        query = urlencode({"UserId": self.user_id})
+        request = Request(
+            self.base_url + f"/Items/{item_id}/PlaybackInfo?{query}",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={**self.headers, "Content-Type": "application/json"},
+            method="POST",
+        )
         try:
             with urlopen(request, timeout=75) as response:
                 return response.status, json.load(response)
@@ -301,6 +398,130 @@ def probe_calls(event: str | None) -> int | None:
     return int(match.group(1)) if match else None
 
 
+def encoder_calls_total(event: str | None) -> int | None:
+    if event is None:
+        return None
+    match = re.search(r"Jellyfin GetMediaInfo calls observed\s+(\d+)", event)
+    return int(match.group(1)) if match else None
+
+
+def media_request_counts(container: str) -> dict[str, int]:
+    logs = run(["docker", "logs", "--tail", "5000", container], timeout=20)
+    require(logs.returncode == 0, "Could not read the isolated synthetic media service counters.")
+    lines = (logs.stdout + logs.stderr).splitlines()
+    return {
+        "fixture": sum("MEDIA_REQUEST GET fixture.mp4" in line for line in lines),
+        "fixture_alt": sum("MEDIA_REQUEST GET fixture-alt.mp4" in line for line in lines),
+        "slow_requests_started": sum("SLOW_MEDIA_REQUEST_STARTED " in line for line in lines),
+    }
+
+
+def counter_delta(before: dict[str, int], after: dict[str, int]) -> dict[str, int]:
+    return {key: after.get(key, 0) - before.get(key, 0) for key in after}
+
+
+def wait_for_slow_media_request(container: str, request_id: str, timeout: int = 30) -> None:
+    marker = "SLOW_MEDIA_REQUEST_STARTED " + request_id
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        logs = run(["docker", "logs", "--tail", "200", container], timeout=15)
+        require(logs.returncode == 0, "Could not observe the isolated delayed media request.")
+        if marker in logs.stdout + logs.stderr:
+            return
+        time.sleep(0.1)
+    raise RuntimeError("The isolated media service did not reach the delayed probe request.")
+
+
+def live_tv_delegation_check(api: JellyfinApi, container: str) -> dict[str, object]:
+    media_directory = ROOT / "artifacts" / "dev-env" / "media"
+    playlist_name = "strm-probe-live-" + uuid.uuid4().hex[:10] + ".m3u"
+    playlist_path = media_directory / playlist_name
+    channel_name = "STRM Probe Live " + playlist_name.split("-")[-1].split(".")[0]
+    tuner_id: str | None = None
+    live_stream_id: str | None = None
+    result: dict[str, object] = {"status": "FAIL"}
+    try:
+        with playlist_path.open("xb") as playlist:
+            playlist.write(
+                (
+                    "#EXTM3U\n"
+                    f'#EXTINF:-1 tvg-id="{channel_name}" tvg-name="{channel_name}",{channel_name}\n'
+                    "http://media:8080/fixture.mp4\n"
+                ).encode("utf-8")
+            )
+
+        add_status, add_body = api.request_response(
+            "/LiveTv/TunerHosts",
+            method="POST",
+            data=json.dumps({
+                "Type": "m3u",
+                "Url": "http://media:8080/" + playlist_name,
+                "FriendlyName": "Isolated STRM Probe Live TV",
+                "TunerCount": 1,
+                "AllowStreamSharing": False,
+            }).encode("utf-8"),
+        )
+        require(add_status == 200, "Could not register the temporary isolated M3U tuner.")
+        tuner_id = json.loads(add_body).get("Id")
+        require(bool(tuner_id), "The isolated M3U tuner response did not contain an identifier.")
+
+        tasks = request_json(api.base_url + "/ScheduledTasks", headers=api.headers, timeout=20)
+        refresh_task = next((task for task in tasks if task.get("Name") == "Refresh Guide"), None)
+        require(refresh_task is not None, "The isolated Jellyfin instance has no Refresh Guide task.")
+        start_status, _ = api.request_response("/ScheduledTasks/Running/" + refresh_task["Id"], method="POST")
+        require(start_status == 204, "The isolated Refresh Guide task did not start.")
+
+        query = urlencode({"UserId": api.user_id, "Limit": "100"})
+        channel: dict | None = None
+        deadline = time.monotonic() + 45
+        while time.monotonic() < deadline:
+            channel_result = request_json(api.base_url + "/LiveTv/Channels?" + query, headers=api.headers, timeout=20)
+            channel = next((item for item in channel_result.get("Items", []) if item.get("Name") == channel_name), None)
+            if channel is not None:
+                break
+            time.sleep(0.5)
+        require(channel is not None, "The isolated M3U tuner did not expose its synthetic channel.")
+
+        before_open = plugin_events(container, channel["Id"])
+        open_status, open_info = api.post_playback_info(channel["Id"], {
+            "UserId": api.user_id,
+            "AutoOpenLiveStream": True,
+        })
+        after_open = plugin_events(container, channel["Id"])
+        open_events = [safe_event(line) for line in event_delta(before_open, after_open)]
+        require(open_status == 200, "The isolated Live TV PlaybackInfo auto-open request failed.")
+        sources = open_info.get("MediaSources", [])
+        require(bool(sources), "The isolated Live TV PlaybackInfo response had no media source.")
+        live_stream_id = sources[0].get("LiveStreamId")
+        require(bool(live_stream_id), "The isolated Live TV PlaybackInfo response did not open a live stream.")
+
+        before_live_info = plugin_events(container, channel["Id"])
+        live_status, live_info = api.post_playback_info(channel["Id"], {
+            "UserId": api.user_id,
+            "LiveStreamId": live_stream_id,
+        })
+        after_live_info = plugin_events(container, channel["Id"])
+        live_events = [safe_event(line) for line in event_delta(before_live_info, after_live_info)]
+        live_result = source_result(live_info, "http://media:8080/fixture.mp4") if live_status == 200 else {}
+        require(live_status == 200, "Jellyfin did not resolve the opened isolated live stream.")
+        require(live_result.get("path_matches_manifest") and live_result.get("has_video"), "The isolated Live TV response did not retain its native media source.")
+        require(not open_events and not live_events, "The plugin emitted STRM optimization events for Live TV.")
+        result = {
+            "status": "PASS",
+            "auto_open_http_status": open_status,
+            "live_stream_http_status": live_status,
+            "returned_expected_source": True,
+            "plugin_events": 0,
+        }
+        return result
+    finally:
+        if live_stream_id:
+            api.request_response("/LiveStreams/Close?" + urlencode({"liveStreamId": live_stream_id}), method="POST")
+        if tuner_id:
+            api.request_response("/LiveTv/TunerHosts?" + urlencode({"id": tuner_id}), method="DELETE")
+        playlist_path.unlink(missing_ok=True)
+
+
 def call_playback(api: JellyfinApi, container: str, item_id: str, expected_url: str) -> dict:
     before = plugin_events(container, item_id)
     started = time.monotonic()
@@ -321,8 +542,191 @@ def call_playback(api: JellyfinApi, container: str, item_id: str, expected_url: 
         "elapsed_ms": elapsed_ms,
         **result,
         "probe_calls": probe_calls(event),
+        "encoder_calls_total": encoder_calls_total(event),
         "plugin_event": safe_event(event),
     }
+
+
+def delegated_playback(api: JellyfinApi, container: str, item_id: str) -> dict[str, object]:
+    before = plugin_events(container, item_id)
+    status, response = api.playback_info(item_id)
+    after = plugin_events(container, item_id)
+    sources = response.get("MediaSources", []) if status == 200 else []
+    source = sources[0] if sources else {}
+    stream_types = {stream.get("Type") for stream in source.get("MediaStreams", [])}
+    events = [safe_event(line) for line in event_delta(before, after)]
+    return {
+        "http_status": status,
+        "has_media_source": bool(source),
+        "has_video": "Video" in stream_types,
+        "plugin_events": events,
+        "source_path_is_local": str(source.get("Path", "")).startswith("/media/local/"),
+    }
+
+
+def ordinary_media_delegation_check(api: JellyfinApi, container: str) -> dict[str, object]:
+    item = api.named_library_item("fixture")
+    result = delegated_playback(api, container, item["Id"])
+    require(result["http_status"] == 200 and result["has_media_source"] and result["has_video"], "Ordinary local media did not return its native playback source.")
+    require(result["source_path_is_local"], "Ordinary local media did not retain its local path.")
+    require(not result["plugin_events"], "The plugin intercepted ordinary local media.")
+    return result
+
+
+def legacy_strm_delegation_check(api: JellyfinApi, container: str) -> dict[str, object]:
+    name = "Legacy Probe Control " + uuid.uuid4().hex[:10]
+    path = ROOT / "artifacts" / "dev-env" / "strm" / (name + ".strm")
+    try:
+        with path.open("xb") as fixture:
+            fixture.write(b"http://media:8080/fixture.mp4\n")
+        status, _ = api.request_response("/Library/Refresh", method="POST")
+        require(status == 204, "The isolated library scan for the legacy STRM control did not queue.")
+        deadline = time.monotonic() + 60
+        item: dict | None = None
+        while time.monotonic() < deadline:
+            try:
+                item = api.named_library_item(name)
+                break
+            except RuntimeError:
+                time.sleep(0.5)
+        require(item is not None, "The unversioned STRM control was not scanned into the isolated library.")
+        result = delegated_playback(api, container, item["Id"])
+        require(result["http_status"] == 200 and result["has_media_source"] and result["has_video"], "The legacy STRM did not return its native playback source.")
+        require(not result["plugin_events"], "The plugin intercepted an unversioned legacy STRM.")
+        return result
+    finally:
+        path.unlink(missing_ok=True)
+
+
+def manifest_race_check(api: JellyfinApi, container: str, item_id: str, current_url: str) -> dict[str, object]:
+    request_id = uuid.uuid4().hex
+    slow_url = urlunsplit((urlsplit(current_url).scheme, urlsplit(current_url).netloc, f"/slow/{request_id}/fixture.mp4", "", ""))
+    FIXTURE.write_bytes(replace_manifest_url(FIXTURE.read_bytes(), slow_url))
+    before = plugin_events(container, item_id)
+    result_holder: dict[str, object] = {}
+
+    def playback() -> None:
+        try:
+            status, response = api.playback_info(item_id)
+            result_holder.update(status=status, response=response)
+        except Exception as error:  # Retain thread failures for the owning assertion.
+            result_holder["error"] = type(error).__name__
+
+    worker = threading.Thread(target=playback, name="isolated-manifest-race", daemon=True)
+    worker.start()
+    wait_for_slow_media_request(isolated_media_container_name(), request_id)
+    FIXTURE.write_bytes(replace_manifest_url(FIXTURE.read_bytes(), current_url))
+    worker.join(timeout=90)
+    require(not worker.is_alive(), "The manifest-race PlaybackInfo request did not finish.")
+    after = plugin_events(container, item_id)
+    events = [safe_event(line) for line in event_delta(before, after) if str(uuid.UUID(item_id)) in line]
+    event = events[-1] if events else None
+    status = int(result_holder.get("status", 0))
+    require("error" not in result_holder, "The manifest-race PlaybackInfo request failed outside the HTTP response path.")
+    require(status >= 400, "PlaybackInfo accepted a STRM manifest that changed during native probing.")
+    require(event is not None and "manifest changed during native probe" in event, "The changed-manifest race did not retain the fingerprint with an explicit event.")
+    require(probe_calls(event) == 1, "The changed-manifest race did not record exactly one matching native probe call.")
+    require("fingerprint committed" not in event, "The changed-manifest race committed its fingerprint.")
+    recovered = call_playback(api, container, item_id, current_url)
+    ensure_success(recovered, current_url, 1)
+    return {
+        "http_status": status,
+        "probe_calls": probe_calls(event),
+        "fingerprint_retained": True,
+        "recovery_http_status": recovered["http_status"],
+        "recovery_probe_calls": recovered["probe_calls"],
+        "recovery_encoder_calls_total": recovered["encoder_calls_total"],
+        "event": event,
+    }
+
+
+def false_permission_stream_check(api: JellyfinApi, container: str, item_id: str, current_url: str) -> dict[str, object]:
+    changed_url = alternate_fixture_url(current_url)
+    FIXTURE.write_bytes(replace_manifest_url(FIXTURE.read_bytes(), changed_url))
+    before = plugin_events(container, item_id)
+    status, body = api.get_video_stream(item_id)
+    after = plugin_events(container, item_id)
+    events = [safe_event(line) for line in event_delta(before, after) if str(uuid.UUID(item_id)) in line]
+    require(status == 200 and bool(body), "The real Jellyfin streaming request with allowMediaProbe=false did not delegate successfully.")
+    require(not any("fingerprint committed" in event for event in events), "A false-permission stream request committed a changed STRM fingerprint.")
+    next_playback = call_playback(api, container, item_id, changed_url)
+    ensure_success(next_playback, changed_url, 1)
+    return {
+        "stream_http_status": status,
+        "stream_bytes": len(body),
+        "plugin_events": events,
+        "next_playback_probe_calls": next_playback["probe_calls"],
+        "next_playback_encoder_calls_total": next_playback["encoder_calls_total"],
+    }
+
+
+def manual_full_refresh_check(api: JellyfinApi, container: str, media_container: str, item_id: str, current_url: str, previous_total: int | None) -> tuple[dict[str, object], int | None, str]:
+    candidate_url = alternate_fixture_url(current_url)
+    FIXTURE.write_bytes(replace_manifest_url(FIXTURE.read_bytes(), candidate_url))
+    details_before = api.item_details(item_id)
+    manual_requests_before = media_request_counts(media_container)
+    started = time.monotonic()
+    status, _ = api.force_full_refresh(item_id)
+    require(status == 204, "Jellyfin rejected the manual FullRefresh request.")
+    details_after, refresh_elapsed = api.wait_for_item_refresh(item_id, details_before.get("Etag"), timeout=120)
+    manual_requests_after = media_request_counts(media_container)
+    manual_request_delta = counter_delta(manual_requests_before, manual_requests_after)
+
+    # A queued manual FullRefresh may save metadata without probing remote STRM content.
+    # The changed URL must still go through the plugin's normal native refresh on playback.
+    playback = call_playback(api, container, item_id, candidate_url)
+    ensure_success(playback, candidate_url, 1)
+    observed_total = playback.get("encoder_calls_total")
+    inferred_manual_calls = None
+    if observed_total is not None and previous_total is not None:
+        inferred_manual_calls = observed_total - previous_total - int(playback.get("probe_calls") or 0)
+        require(inferred_manual_calls >= 0, "The observed GetMediaInfo counter moved backwards during manual FullRefresh measurement.")
+    latest_total = observed_total if observed_total is not None else previous_total
+    playback_requests_after = media_request_counts(media_container)
+    playback_request_delta = counter_delta(manual_requests_after, playback_requests_after)
+    observations: list[dict[str, object]] = [{
+        "mode": "manual FullRefresh endpoint",
+        "http_status": status,
+        "elapsed_ms_until_item_etag_changed": int((time.monotonic() - started) * 1000),
+        "etag_poll_ms": refresh_elapsed,
+        "item_etag_changed": details_after.get("Etag") != details_before.get("Etag"),
+        "synthetic_media_gets_during_manual_refresh": manual_request_delta,
+        "inferred_get_media_info_calls_during_manual_refresh": inferred_manual_calls,
+        "subsequent_playback_probe_calls": playback["probe_calls"],
+        "subsequent_playback_elapsed_ms": playback["elapsed_ms"],
+        "synthetic_media_gets_during_subsequent_probe": playback_request_delta,
+    }]
+    require(playback["probe_calls"] == 1, "The native manual FullRefresh event alone was incorrectly treated as plugin fingerprint confirmation.")
+
+    # Measure repeated native FullRefresh work caused by same-SHA URL changes on PlaybackInfo.
+    url = candidate_url
+    for run_index in range(2):
+        next_url = alternate_fixture_url(url)
+        FIXTURE.write_bytes(replace_manifest_url(FIXTURE.read_bytes(), next_url))
+        requests_before = media_request_counts(media_container)
+        changed_playback = call_playback(api, container, item_id, next_url)
+        ensure_success(changed_playback, next_url, 1)
+        requests_after = media_request_counts(media_container)
+        request_delta = counter_delta(requests_before, requests_after)
+        total = changed_playback.get("encoder_calls_total")
+        inferred_calls = None
+        if total is not None and latest_total is not None:
+            inferred_calls = total - latest_total
+            require(inferred_calls >= 1, "The repeated native refresh did not increase the observed Jellyfin GetMediaInfo call count.")
+        latest_total = total if total is not None else latest_total
+        require(sum(request_delta.values()) > 0 or (inferred_calls is not None and inferred_calls > 0), "The repeated native refresh showed no synthetic-media or GetMediaInfo work.")
+        observations.append({
+            "mode": "PlaybackInfo URL-change native FullRefresh",
+            "run": run_index + 1,
+            "playback_http_status": changed_playback["http_status"],
+            "playback_probe_calls": changed_playback["probe_calls"],
+            "playback_elapsed_ms": changed_playback["elapsed_ms"],
+            "inferred_get_media_info_calls": inferred_calls,
+            "synthetic_media_gets": request_delta,
+        })
+        url = next_url
+
+    return {"status": "PASS", "runs": observations}, latest_total, url
 
 
 def ensure_success(result: dict, expected_url: str, expected_calls: int) -> None:
@@ -351,13 +755,17 @@ def main() -> int:
     api: JellyfinApi | None = None
     item_id: str | None = None
     container: str | None = None
+    media_container: str | None = None
+    plugin_disabled = False
     summary: dict[str, object] = {"fixture_restoration": "not needed"}
+    exit_code = 1
     try:
         deploy_plugin()
         container = restart_isolated_server()
         api = JellyfinApi()
         require(api.public_info().get("Version") == "12.2.0", "The active isolated Jellyfin version is not 12.2.0.")
         summary["plugin_status"] = api.plugin_status()
+        media_container = isolated_media_container_name()
         item = api.fixture_item()
         item_id = item["Id"]
         summary["fixture_item_id"] = item_id
@@ -452,11 +860,83 @@ def main() -> int:
             "The failed URL retry changed the previously saved media streams.",
         )
 
+        # Return to the last accepted fixture address before exercising independent native paths.
+        FIXTURE.write_bytes(replace_manifest_url(FIXTURE.read_bytes(), persisted_url))
+        recovered_after_failure = call_playback(api, container, item_id, persisted_url)
+        ensure_success(recovered_after_failure, persisted_url, 1)
+        summary["recovered_after_failure"] = recovered_after_failure
+
+        summary["ordinary_media_delegation"] = ordinary_media_delegation_check(api, container)
+        summary["legacy_strm_delegation"] = legacy_strm_delegation_check(api, container)
+        summary["live_tv_delegation"] = live_tv_delegation_check(api, container)
+
+        summary["false_permission_stream"] = false_permission_stream_check(api, container, item_id, persisted_url)
+        race_url = alternate_fixture_url(persisted_url)
+        summary["manifest_race"] = manifest_race_check(api, container, item_id, race_url)
+        full_refresh, _, refreshed_url = manual_full_refresh_check(
+            api,
+            container,
+            media_container,
+            item_id,
+            race_url,
+            summary["manifest_race"].get("recovery_encoder_calls_total"),
+        )
+        summary["manual_full_refresh"] = full_refresh
+
+        # Disable through Jellyfin, restart the isolated server to remove the proxy registrations,
+        # and prove the versioned STRM remains playable through the native path.
+        disable_status = api.plugin_action(False)
+        require(disable_status == 204, "Jellyfin did not accept the isolated plugin-disable request.")
+        plugin_disabled = True
+        container = restart_isolated_server()
+        api = JellyfinApi()
+        disabled_state = api.plugin_state()
+        require(disabled_state.lower() not in {"active", "0"}, "The plugin remained active after the isolated disable and restart.")
+        disabled_playback = delegated_playback(api, container, item_id)
+        require(
+            disabled_playback["http_status"] == 200
+            and disabled_playback["has_media_source"]
+            and disabled_playback["has_video"]
+            and not disabled_playback["plugin_events"],
+            "The disabled plugin did not leave Jellyfin's native versioned-STRM playback operational.",
+        )
+        summary["disabled_plugin_delegation"] = {"state": disabled_state, **disabled_playback}
+        enable_status = api.plugin_action(True)
+        require(enable_status == 204, "Jellyfin did not accept the isolated plugin-enable request.")
+        plugin_disabled = False
+        container = restart_isolated_server()
+        api = JellyfinApi()
+        summary["plugin_status_after_enable"] = api.plugin_status()
+        item = api.fixture_item()
+        item_id = item["Id"]
+        enabled_playback = call_playback(api, container, item_id, refreshed_url)
+        ensure_success(enabled_playback, refreshed_url, 0)
+        summary["enabled_plugin_after_restart"] = enabled_playback
+
         summary["status"] = "PASS"
-        return 0
+        exit_code = 0
     finally:
+        if plugin_disabled and api is not None:
+            try:
+                api.plugin_action(True)
+                plugin_disabled = False
+                container = restart_isolated_server()
+                api = JellyfinApi()
+                if item_id is not None:
+                    item = api.fixture_item()
+                    item_id = item["Id"]
+            except Exception as error:
+                summary["plugin_reenable_recovery"] = type(error).__name__
         summary["fixture_restoration"] = restore_fixture_and_sync(api, item_id, container, original)
+        if exit_code == 0 and (
+            plugin_disabled
+            or summary["fixture_restoration"] != "fixture restored and Jellyfin address synchronized"
+        ):
+            summary["status"] = "FAIL"
+            summary["error"] = "The plugin, isolated STRM fixture, or Jellyfin address could not be restored and verified."
+            exit_code = 1
         print(json.dumps(summary, ensure_ascii=False, indent=2, sort_keys=True))
+    return exit_code
 
 
 if __name__ == "__main__":

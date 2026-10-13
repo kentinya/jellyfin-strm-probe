@@ -2,6 +2,7 @@ using Jellyfin.Plugin.StrmProbeOptimizer.Interceptors;
 using Jellyfin.Plugin.StrmProbeOptimizer.Services;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.MediaEncoding;
+using MediaBrowser.Controller.Persistence;
 using MediaBrowser.Controller.Plugins;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -21,6 +22,12 @@ public sealed class ServiceRegistrator : IPluginServiceRegistrator
         var mediaEncoderRegistration = CoreServiceRegistration.ValidateCoreService(
             serviceCollection,
             typeof(IMediaEncoder));
+        var mediaStreamRepositoryRegistration = CoreServiceRegistration.ValidateCoreService(
+            serviceCollection,
+            typeof(IMediaStreamRepository));
+        var itemPersistenceRegistration = CoreServiceRegistration.ValidateCoreService(
+            serviceCollection,
+            typeof(IItemPersistenceService));
 
         serviceCollection.AddSingleton<IStrmManifestReader, StrmManifestReader>();
         serviceCollection.AddSingleton<IProbeDecisionService, ProbeDecisionService>();
@@ -29,6 +36,8 @@ public sealed class ServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<StrmPlaybackOptimizer>();
         CoreServiceRegistration.RehomeImplementation(serviceCollection, mediaEncoderRegistration);
         CoreServiceRegistration.RehomeImplementation(serviceCollection, mediaSourceRegistration);
+        CoreServiceRegistration.RehomeImplementation(serviceCollection, mediaStreamRepositoryRegistration);
+        CoreServiceRegistration.RehomeImplementation(serviceCollection, itemPersistenceRegistration);
         serviceCollection.Add(ServiceDescriptor.Describe(
             typeof(IMediaEncoder),
             provider => MediaEncoderDispatchProxy.Create((IMediaEncoder)provider.GetRequiredService(mediaEncoderRegistration.ImplementationType)),
@@ -39,6 +48,16 @@ public sealed class ServiceRegistrator : IPluginServiceRegistrator
                 (IMediaSourceManager)provider.GetRequiredService(mediaSourceRegistration.ImplementationType),
                 provider.GetRequiredService<StrmPlaybackOptimizer>()),
             mediaSourceRegistration.Lifetime));
+        serviceCollection.Add(ServiceDescriptor.Describe(
+            typeof(IMediaStreamRepository),
+            provider => ProbePersistenceDispatchProxy.Create(
+                (IMediaStreamRepository)provider.GetRequiredService(mediaStreamRepositoryRegistration.ImplementationType)),
+            mediaStreamRepositoryRegistration.Lifetime));
+        serviceCollection.Add(ServiceDescriptor.Describe(
+            typeof(IItemPersistenceService),
+            provider => ProbePersistenceDispatchProxy.Create(
+                (IItemPersistenceService)provider.GetRequiredService(itemPersistenceRegistration.ImplementationType)),
+            itemPersistenceRegistration.Lifetime));
     }
 }
 

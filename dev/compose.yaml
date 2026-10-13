@@ -20,9 +20,10 @@ services:
     user: "${JF_PROBE_UID:?}:${JF_PROBE_GID:?}"
     restart: "no"
     read_only: true
-    command: ["python", "-m", "http.server", "8080", "--bind", "0.0.0.0", "--directory", "/media"]
+    command: ["python", "/server/isolated_media_server.py", "--directory", "/media", "--port", "8080"]
     volumes:
       - ${JF_PROBE_WORK:?}/media:/media:ro
+      - ${JF_PROBE_WORK:?}/media-server:/server:ro
     networks:
       - acceptance
 networks:

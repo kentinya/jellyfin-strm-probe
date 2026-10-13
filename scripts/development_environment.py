@@ -35,11 +35,19 @@ def workspace() -> None:
         if path.is_symlink():
             raise RuntimeError("Environment directory must not be a symlink")
     WORK.mkdir(parents=True, exist_ok=True)
-    for name in ("sdk", "downloads", "config", "cache", "media", "strm", "cli", "nuget"):
+    for name in ("sdk", "downloads", "config", "cache", "media", "media-server", "strm", "cli", "nuget"):
         path = WORK / name
         if path.is_symlink():
             raise RuntimeError(f"Environment subdirectory is a symlink: {name}")
         path.mkdir(exist_ok=True)
+
+
+def stage_media_server() -> None:
+    source = ROOT / "scripts" / "isolated_media_server.py"
+    destination = WORK / "media-server" / source.name
+    source_bytes = source.read_bytes()
+    if not destination.is_file() or destination.read_bytes() != source_bytes:
+        destination.write_bytes(source_bytes)
 
 
 def sdk_env() -> dict[str, str]:
@@ -164,6 +172,7 @@ def guard_containers() -> None:
 
 def compose(action: str) -> None:
     workspace()
+    stage_media_server()
     run(*DOCKER, "info", "--format", "{{.ServerVersion}}")
     args, env = compose_args()
     guard_containers()

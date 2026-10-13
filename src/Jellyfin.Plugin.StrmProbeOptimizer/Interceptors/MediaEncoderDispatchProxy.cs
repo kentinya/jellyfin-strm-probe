@@ -8,7 +8,10 @@ namespace Jellyfin.Plugin.StrmProbeOptimizer.Interceptors;
 
 public class MediaEncoderDispatchProxy : DispatchProxy
 {
+    private static long _getMediaInfoCallCount;
     private IMediaEncoder? _native;
+
+    public static long GetMediaInfoCallCount => Interlocked.Read(ref _getMediaInfoCallCount);
 
     public static IMediaEncoder Create(IMediaEncoder native)
     {
@@ -26,8 +29,13 @@ public class MediaEncoderDispatchProxy : DispatchProxy
 
         if (targetMethod.Name != nameof(IMediaEncoder.GetMediaInfo)
             || args is not { Length: > 0 }
-            || args[0] is not MediaInfoRequest request
-            || ProbeExecutionContext.Current is not { } context)
+            || args[0] is not MediaInfoRequest request)
+        {
+            return InvokeNative(targetMethod, args);
+        }
+
+        Interlocked.Increment(ref _getMediaInfoCallCount);
+        if (ProbeExecutionContext.Current is not { } context)
         {
             return InvokeNative(targetMethod, args);
         }
