@@ -5,7 +5,7 @@
 ```text
 Task ID: 2.1
 Parent Slice: 2
-Status: FIX REQUIRED
+Status: READY FOR B REVIEW
 Task Base: 7e0240cd1cada74f142b7b0afd612943ca991a91
 Contract Checkpoint: 7e0240cd1cada74f142b7b0afd612943ca991a91
 Slice Base: 924816a84c74f5d79c107478f2d40e621cb8be8d
@@ -124,7 +124,21 @@ C# 全套包含解析／决策、真实 SQLite、源身份及播放／保存／�
 
 ## Developer Completion Report
 
-### 修正轮（响应 B FIX REQUIRED R1～R3）
+### 修正轮 2（响应 B 复审剩余 R2）
+
+- Changed Files：测试：`tests/Jellyfin.Plugin.StrmProbeOptimizer.Tests/ManifestReaderTests.cs`、`ProbeDecisionServiceTests.cs`；交接事实：本文件、`SLICE.md` 实现指针、`docs/architecture.md`、`docs/test-matrix.md`、`docs/progress.md`。未改产品源码、依赖锁、隔离脚本、Contract 或不变量。
+- Implemented：
+  - **R2（协议版本）**：新增 `ReadTreatsUnknownProtocolVersionsAsUnsupported`（`version:0`／`2`／`1-beta` → `Unsupported`）与 `ReadRejectsConflictingProtocolVersions`（`1+2`、`0+1`、`2+2` → `Invalid`），不再以 URL scheme 测试冒充 STRM 协议版本。
+  - **R2（换 URL 矩阵）**：新增 `ChangedUrlProbesForEveryHashAndSizeCombinationWhenNativeAddressMatchesTheManifest`，在历史 URL 不同、原生地址已等于当前 Manifest 的真实前提下覆盖 T09～T12 的双侧有效不同 SHA-1、仅一侧有效（两个方向）、双侧缺失、双侧非法及 Size 相同／不同／缺失；新增 `NativeAddressMismatchOutranksStoredUrlAndHashComparison`。删除名称不实的 `UrlPriorityBeatsEveryShaAndSizeCombination`。
+  - **R2（同 URL 矩阵）**：新增 `SameUrlShaValidityCombinationsCoverBothDirectionsAndSizeComparability`，覆盖同 URL 八个缺失／非法组合双向 × Size 相同／不同／缺失。
+  - **R2（索引）**：重写 `docs/test-matrix.md` 修正轮证据小节，T08～T12 与 X03／X05 逐项列出具体新旧输入、预期、证据层与缺失项，保留已有实机单侧缺哈希方向为 T12，双侧缺失实机分支如实标 NOT RUN。
+- Tests and Results：修正候选 `198f4ff2accd5bc9fcd87518a9684b9d068de103`（只改两份测试文件）。T4 门禁记录在 `.git/validation-evidence/198f4ff2accd5bc9fcd87518a9684b9d068de103/developer-fix2-t4-20261013-234000/INDEX.md`。固定 SDK 10.0.401；locked restore PASS；Release build PASS（0 warning／0 error）；solution MSTest PASS（69 passed、0 failed、0 skipped）；format verify PASS；Python unittest PASS（30 passed）；治理、`git diff --check` 与 Python compile PASS；隔离 Jellyfin 集成脚本退出 0、JSON status PASS、耗时 492 秒。新增场景均以 PASS 记录，夹具与临时媒体已清理、原 STRM 与 Jellyfin 地址已恢复。
+- Decisions：只补测试与索引，不改产品行为与合同；换 URL 矩阵以单元层直接构造输入，不新增人为取消或实机门槛。
+- Remaining In-Slice Work：Task 2.1 等待 B 复审。RO-4／RO-5 的运行中共享、全局并发、独立收尾与 RO-6 完整核心配置仍未实现。
+- Risks / Deviations：T16 远程代理联调、T10／T11 换 URL 双侧无 SHA-1 实机分支、外部代理／OpenList、其他 Jellyfin 版本、批量、运行中共享／并发与发布打包均未运行，保持 NOT RUN。测试矩阵其余行保持 NOT RUN。
+- Head SHA：`198f4ff2accd5bc9fcd87518a9684b9d068de103`。
+
+### 修正轮（响应 B FIX REQUIRED R1～R3，历史）
 
 - Changed Files：测试：`tests/Jellyfin.Plugin.StrmProbeOptimizer.Tests/ManifestReaderTests.cs`、`ProbeDecisionServiceTests.cs`、`PlaybackOptimizerTests.cs`、`SqliteStrmFingerprintRepositoryTests.cs`；隔离实机入口：`scripts/run_isolated_plugin_integration.py`；交接事实：本文件、`SLICE.md` 实现指针、`docs/architecture.md`、`docs/test-matrix.md`、`docs/progress.md`。未改产品源码、依赖锁、Contract 或不变量。
 - Implemented：
