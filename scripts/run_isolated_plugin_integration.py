@@ -150,6 +150,16 @@ class JellyfinApi:
         except HTTPError as error:
             return error.code, {}
 
+    def saved_stream_snapshot(self, item_id: str) -> dict:
+        query = urlencode({"UserId": self.user_id, "Fields": "MediaStreams"})
+        item = request_json(self.base_url + f"/Items/{item_id}?{query}", headers=self.headers, timeout=20)
+        streams = item.get("MediaStreams", [])
+        serialized = json.dumps(streams, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        return {
+            "stream_types": sorted({stream.get("Type") for stream in streams}),
+            "streams_sha256": hashlib.sha256(serialized.encode("utf-8")).hexdigest(),
+        }
+
 
 def parse_manifest(data: bytes) -> tuple[str, str | None, str | None]:
     text = data.decode("utf-8-sig")
@@ -407,6 +417,8 @@ def main() -> int:
         restart_first = call_playback(api, container, item_id, persisted_url)
         ensure_success(restart_first, persisted_url, 0)
         summary["address_after_restart"] = restart_first
+        streams_before_failure = api.saved_stream_snapshot(item_id)
+        require("Video" in streams_before_failure["stream_types"], "The accepted Jellyfin item has no saved primary stream before failure injection.")
 
         # An unreachable replacement URL must fail closed and leave the accepted baseline retryable.
         failed_url = missing_fixture_url(persisted_url)
@@ -420,11 +432,25 @@ def main() -> int:
         )
         require(failed_probe["probe_calls"] == 1, "The failed changed-URL case did not execute exactly one matching native probe.")
         summary["failed_changed_url"] = failed_probe
+        streams_after_failure = api.saved_stream_snapshot(item_id)
+        require(
+            streams_after_failure["streams_sha256"] == streams_before_failure["streams_sha256"],
+            "The failed native refresh changed the previously saved media streams.",
+        )
+        summary["failed_probe_retained_streams"] = {
+            "same_as_before_failure": True,
+            **streams_after_failure,
+        }
 
         retried_failure = call_playback(api, container, item_id, failed_url)
         require(retried_failure["http_status"] >= 400, "The failed URL unexpectedly became playable without recovery.")
         require(retried_failure["probe_calls"] == 1, "The failed URL retry did not execute exactly one matching native probe.")
         summary["failed_url_retry"] = retried_failure
+        streams_after_retry = api.saved_stream_snapshot(item_id)
+        require(
+            streams_after_retry["streams_sha256"] == streams_before_failure["streams_sha256"],
+            "The failed URL retry changed the previously saved media streams.",
+        )
 
         summary["status"] = "PASS"
         return 0
