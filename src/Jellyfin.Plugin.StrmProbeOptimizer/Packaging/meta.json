@@ -8,6 +8,10 @@
   "targetAbi": "12.2.0.0",
   "version": "0.1.0.0",
   "assemblies": [
-    "Jellyfin.Plugin.StrmProbeOptimizer.dll"
+    "Jellyfin.Plugin.StrmProbeOptimizer.dll",
+    "Microsoft.Data.Sqlite.dll",
+    "SQLitePCLRaw.batteries_v2.dll",
+    "SQLitePCLRaw.core.dll",
+    "SQLitePCLRaw.provider.e_sqlite3.dll"
   ]
 }

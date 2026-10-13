@@ -31,7 +31,7 @@ public sealed class ServiceRegistrator : IPluginServiceRegistrator
 
         serviceCollection.AddSingleton<IStrmManifestReader, StrmManifestReader>();
         serviceCollection.AddSingleton<IProbeDecisionService, ProbeDecisionService>();
-        serviceCollection.AddSingleton<IStrmFingerprintRepository, InMemoryStrmFingerprintRepository>();
+        serviceCollection.AddSingleton<IStrmFingerprintRepository, SqliteStrmFingerprintRepository>();
         serviceCollection.AddSingleton<IPlaybackSettings, PluginPlaybackSettings>();
         serviceCollection.AddSingleton<StrmPlaybackOptimizer>();
         CoreServiceRegistration.RehomeImplementation(serviceCollection, mediaEncoderRegistration);

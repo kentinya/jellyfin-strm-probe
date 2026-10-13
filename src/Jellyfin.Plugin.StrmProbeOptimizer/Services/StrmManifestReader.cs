@@ -95,6 +95,7 @@ public sealed class StrmManifestReader : IStrmManifestReader
 
         try
         {
+            var contentHash = Convert.ToHexString(SHA256.HashData(input)).ToLowerInvariant();
             if (input.StartsWith(new byte[] { 0xEF, 0xBB, 0xBF }))
             {
                 input = input[3..];
@@ -108,7 +109,7 @@ public sealed class StrmManifestReader : IStrmManifestReader
 
             foreach (var rawLine in contents.Split('\n'))
             {
-                var line = rawLine.TrimEnd('\r').Trim();
+                var line = NormalizeStrmLine(rawLine);
                 if (line.Length == 0)
                 {
                     continue;
@@ -141,7 +142,8 @@ public sealed class StrmManifestReader : IStrmManifestReader
 
             if (url is null
                 || !Uri.TryCreate(url, UriKind.Absolute, out var parsedUrl)
-                || (parsedUrl.Scheme != Uri.UriSchemeHttp && parsedUrl.Scheme != Uri.UriSchemeHttps))
+                || (parsedUrl.Scheme != Uri.UriSchemeHttp && parsedUrl.Scheme != Uri.UriSchemeHttps)
+                || string.IsNullOrEmpty(parsedUrl.Host))
             {
                 return ManifestReadResult.Invalid;
             }
@@ -152,7 +154,6 @@ public sealed class StrmManifestReader : IStrmManifestReader
                     ? size
                     : (long?)null;
             var urlHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(url))).ToLowerInvariant();
-            var contentHash = Convert.ToHexString(SHA256.HashData(input)).ToLowerInvariant();
 
             return new ManifestReadResult(
                 ManifestReadStatus.Supported,
@@ -184,6 +185,19 @@ public sealed class StrmManifestReader : IStrmManifestReader
         }
 
         return true;
+    }
+
+    public static bool IsValidSize(long? value)
+    {
+        return value is >= 0;
+    }
+
+    private static string NormalizeStrmLine(string line)
+    {
+        return line.Replace("\t", string.Empty, StringComparison.Ordinal)
+            .Replace("\r", string.Empty, StringComparison.Ordinal)
+            .Replace("\n", string.Empty, StringComparison.Ordinal)
+            .Trim();
     }
 
     private static bool TryReadMarker(string line, string prefix, ref string? value)

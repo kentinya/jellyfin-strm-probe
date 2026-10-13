@@ -61,14 +61,16 @@ public sealed class ProbeDecisionService : IProbeDecisionService
                 : new ProbeDecision(ProbeDecisionKind.RequireProbe, ProbeDecisionReason.Sha1Changed);
         }
 
-        if (previous.Size.HasValue && manifest.Size.HasValue && previous.Size.Value != manifest.Size.Value)
+        if (StrmManifestReader.IsValidSize(previous.Size)
+            && StrmManifestReader.IsValidSize(manifest.Size)
+            && previous.Size != manifest.Size)
         {
             return new ProbeDecision(ProbeDecisionKind.RequireProbe, ProbeDecisionReason.SizeChanged);
         }
 
         return new ProbeDecision(
             ProbeDecisionKind.SkipProbe,
-            previous.Size.HasValue && manifest.Size.HasValue
+            StrmManifestReader.IsValidSize(previous.Size) && StrmManifestReader.IsValidSize(manifest.Size)
                 ? ProbeDecisionReason.Unchanged
                 : ProbeDecisionReason.InsufficientFingerprint);
     }

@@ -17,16 +17,22 @@ public sealed class ProbeExecutionContext : IDisposable
     private int _hasPersistedAddress;
     private int _disposed;
 
-    private ProbeExecutionContext(Guid itemId, string expectedUrl, MediaStreamType requiredStreamType)
+    private ProbeExecutionContext(Guid projectId, Guid sourceItemId, string sourceKey, string expectedUrl, MediaStreamType requiredStreamType)
     {
-        ItemId = itemId;
+        ProjectId = projectId;
+        SourceItemId = sourceItemId;
+        SourceKey = sourceKey;
         ExpectedUrl = expectedUrl;
         RequiredStreamType = requiredStreamType;
         _previous = AmbientContext.Value;
         AmbientContext.Value = this;
     }
 
-    public Guid ItemId { get; }
+    public Guid ProjectId { get; }
+
+    public Guid SourceItemId { get; }
+
+    public string SourceKey { get; }
 
     public string ExpectedUrl { get; }
 
@@ -53,7 +59,18 @@ public sealed class ProbeExecutionContext : IDisposable
 
     public static ProbeExecutionContext Begin(Guid itemId, string expectedUrl, MediaStreamType requiredStreamType)
     {
-        return new ProbeExecutionContext(itemId, expectedUrl, requiredStreamType);
+        return Begin(itemId, itemId, itemId.ToString("N"), expectedUrl, requiredStreamType);
+    }
+
+    public static ProbeExecutionContext Begin(
+        Guid projectId,
+        Guid sourceItemId,
+        string sourceKey,
+        string expectedUrl,
+        MediaStreamType requiredStreamType)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourceKey);
+        return new ProbeExecutionContext(projectId, sourceItemId, sourceKey, expectedUrl, requiredStreamType);
     }
 
     public void MarkCall(string? requestedPath)
@@ -86,7 +103,7 @@ public sealed class ProbeExecutionContext : IDisposable
 
     public void RecordPersistedMediaStreams(Guid itemId, IReadOnlyList<MediaStream> streams)
     {
-        if (itemId != ItemId)
+        if (itemId != SourceItemId)
         {
             return;
         }
@@ -118,7 +135,7 @@ public sealed class ProbeExecutionContext : IDisposable
 
     public void RecordPersistedItem(BaseItem item)
     {
-        if (item.Id == ItemId && string.Equals(item.ShortcutPath, ExpectedUrl, StringComparison.Ordinal))
+        if (item.Id == SourceItemId && string.Equals(item.ShortcutPath, ExpectedUrl, StringComparison.Ordinal))
         {
             Interlocked.Exchange(ref _hasPersistedAddress, 1);
         }

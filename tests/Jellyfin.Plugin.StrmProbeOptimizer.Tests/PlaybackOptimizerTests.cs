@@ -4,6 +4,7 @@ using System.Text;
 using Jellyfin.Plugin.StrmProbeOptimizer.Interceptors;
 using Jellyfin.Plugin.StrmProbeOptimizer.Services;
 using MediaBrowser.Controller.Entities;
+using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Persistence;
@@ -39,7 +40,29 @@ public sealed class PlaybackOptimizerTests
         Assert.AreEqual(1, native.PlaybackCalls);
         Assert.IsFalse(native.LastAllowMediaProbe);
         Assert.AreEqual(url, result[0].Path);
-        Assert.AreEqual(manifest.UrlHash, repository.Get(item.Id, "primary")!.UrlHash);
+        Assert.AreEqual(manifest.UrlHash, repository.Get(item.Id, SourceKey(item.Id))!.UrlHash);
+    }
+
+    [TestMethod]
+    public async Task ManifestChangedDuringFinalSourceReadDoesNotReturnAStalePlaybackSource()
+    {
+        const string url = "https://media.example.invalid/video.mp4?sig=a";
+        const string changedUrl = "https://media.example.invalid/video.mp4?sig=b";
+        using var fixture = new ManifestFixture(url, ValidSha1, 42);
+        var manifest = new StrmManifestReader().Read(fixture.Path).Manifest!;
+        var repository = new InMemoryStrmFingerprintRepository();
+        var item = CreateItem(fixture.Path, url);
+        repository.TryCommit(Fingerprint(item.Id, manifest), expectedPrevious: null);
+        var native = ScriptedManager.Create();
+        native.StaticSources = [Source(url)];
+        native.OnNativeNoProbe = _ => fixture.Write(changedUrl, ValidSha1, 42);
+        var optimizer = CreateOptimizer(repository);
+
+        await AssertThrowsAsync<InvalidOperationException>(() => optimizer.GetPlaybackMediaSourcesAsync(
+            native.Interface, item, null, true, false, CancellationToken.None));
+
+        Assert.AreEqual(url, native.StaticSources[0].Path);
+        Assert.AreEqual(manifest.UrlHash, repository.Get(item.Id, SourceKey(item.Id))!.UrlHash);
     }
 
     [TestMethod]
@@ -77,11 +100,11 @@ public sealed class PlaybackOptimizerTests
 
         var result = await optimizer.GetPlaybackMediaSourcesAsync(native.Interface, item, null, true, false, CancellationToken.None);
 
-        Assert.AreEqual(1, native.PlaybackCalls);
+        Assert.AreEqual(2, native.PlaybackCalls);
         Assert.IsTrue(native.LastAllowMediaProbe);
         Assert.AreEqual(newUrl, result[0].Path);
         Assert.AreEqual(newUrl, item.ShortcutPath);
-        Assert.AreEqual(newManifest.UrlHash, repository.Get(item.Id, "primary")!.UrlHash);
+        Assert.AreEqual(newManifest.UrlHash, repository.Get(item.Id, SourceKey(item.Id))!.UrlHash);
     }
 
     [TestMethod]
@@ -109,7 +132,7 @@ public sealed class PlaybackOptimizerTests
         await AssertThrowsAsync<InvalidOperationException>(() => optimizer.GetPlaybackMediaSourcesAsync(
             native.Interface, item, null, true, false, CancellationToken.None));
 
-        Assert.AreEqual(oldFingerprint, repository.Get(item.Id, "primary"));
+        Assert.AreEqual(oldFingerprint, repository.Get(item.Id, SourceKey(item.Id)));
     }
 
     [TestMethod]
@@ -138,7 +161,7 @@ public sealed class PlaybackOptimizerTests
         await AssertThrowsAsync<InvalidOperationException>(() => optimizer.GetPlaybackMediaSourcesAsync(
             native.Interface, item, null, true, false, CancellationToken.None));
 
-        Assert.AreEqual(oldFingerprint, repository.Get(item.Id, "primary"));
+        Assert.AreEqual(oldFingerprint, repository.Get(item.Id, SourceKey(item.Id)));
     }
 
     [TestMethod]
@@ -169,7 +192,7 @@ public sealed class PlaybackOptimizerTests
             native.Interface, item, null, true, false, CancellationToken.None));
 
         Assert.AreEqual(oldUrl, item.ShortcutPath);
-        Assert.AreEqual(oldFingerprint, repository.Get(item.Id, "primary"));
+        Assert.AreEqual(oldFingerprint, repository.Get(item.Id, SourceKey(item.Id)));
     }
 
     [TestMethod]
@@ -209,7 +232,7 @@ public sealed class PlaybackOptimizerTests
         await AssertThrowsAsync<InvalidOperationException>(() => optimizer.GetPlaybackMediaSourcesAsync(
             native.Interface, item, null, true, false, CancellationToken.None));
 
-        Assert.AreEqual(oldFingerprint, repository.Get(item.Id, "primary"));
+        Assert.AreEqual(oldFingerprint, repository.Get(item.Id, SourceKey(item.Id)));
         Assert.IsTrue(native.LastAllowMediaProbe);
     }
 
@@ -281,7 +304,7 @@ public sealed class PlaybackOptimizerTests
         await AssertThrowsAsync<InvalidOperationException>(() => optimizer.GetPlaybackMediaSourcesAsync(
             native.Interface, item, null, true, false, CancellationToken.None));
 
-        Assert.AreEqual(oldFingerprint, repository.Get(item.Id, "primary"));
+        Assert.AreEqual(oldFingerprint, repository.Get(item.Id, SourceKey(item.Id)));
         Assert.IsTrue(native.LastAllowMediaProbe);
     }
 
@@ -306,10 +329,10 @@ public sealed class PlaybackOptimizerTests
         };
         var optimizer = CreateOptimizer(repository);
 
-        var result = await optimizer.GetPlaybackMediaSourcesAsync(native.Interface, item, null, true, false, CancellationToken.None);
+        await AssertThrowsAsync<InvalidOperationException>(() => optimizer.GetPlaybackMediaSourcesAsync(
+            native.Interface, item, null, true, false, CancellationToken.None));
 
-        Assert.AreEqual(url, result[0].Path);
-        Assert.AreEqual(oldFingerprint, repository.Get(item.Id, "primary"));
+        Assert.AreEqual(oldFingerprint, repository.Get(item.Id, SourceKey(item.Id)));
     }
 
     [TestMethod]
@@ -343,7 +366,7 @@ public sealed class PlaybackOptimizerTests
         cancellation.Cancel();
         await AssertThrowsAsync<TaskCanceledException>(() => pending);
 
-        Assert.AreEqual(oldFingerprint, repository.Get(item.Id, "primary"));
+        Assert.AreEqual(oldFingerprint, repository.Get(item.Id, SourceKey(item.Id)));
     }
 
     [TestMethod]
@@ -376,7 +399,7 @@ public sealed class PlaybackOptimizerTests
         await AssertThrowsAsync<InvalidOperationException>(() => optimizer.GetPlaybackMediaSourcesAsync(
             native.Interface, item, null, true, false, CancellationToken.None));
 
-        Assert.AreEqual(oldFingerprint, repository.Get(item.Id, "primary"));
+        Assert.AreEqual(oldFingerprint, repository.Get(item.Id, SourceKey(item.Id)));
     }
 
     [TestMethod]
@@ -397,7 +420,7 @@ public sealed class PlaybackOptimizerTests
         await optimizer.GetPlaybackMediaSourcesAsync(native.Interface, item, null, false, false, CancellationToken.None);
 
         Assert.AreEqual(0, native.StaticCalls);
-        Assert.IsNull(repository.Get(item.Id, "primary"));
+        Assert.IsNull(repository.Get(item.Id, SourceKey(item.Id)));
     }
 
     [TestMethod]
@@ -426,7 +449,7 @@ public sealed class PlaybackOptimizerTests
         Assert.AreEqual(0, native.StaticCalls);
         Assert.AreEqual(1, native.PlaybackCalls);
         Assert.IsTrue(native.LastAllowMediaProbe);
-        Assert.IsNull(repository.Get(item.Id, "primary"));
+        Assert.IsNull(repository.Get(item.Id, SourceKey(item.Id)));
     }
 
     [TestMethod]
@@ -454,7 +477,7 @@ public sealed class PlaybackOptimizerTests
             Assert.AreEqual(0, native.StaticCalls);
             Assert.IsTrue(native.LastAllowMediaProbe);
             Assert.AreEqual(url, result[0].Path);
-            Assert.IsNull(repository.Get(item.Id, "primary"));
+            Assert.IsNull(repository.Get(item.Id, SourceKey(item.Id)));
         }
         finally
         {
@@ -482,7 +505,7 @@ public sealed class PlaybackOptimizerTests
         Assert.AreEqual(1, native.PlaybackCalls);
         Assert.AreEqual(0, native.StaticCalls);
         Assert.IsTrue(native.LastAllowMediaProbe);
-        Assert.IsNull(repository.Get(item.Id, "primary"));
+        Assert.IsNull(repository.Get(item.Id, SourceKey(item.Id)));
     }
 
     [TestMethod]
@@ -499,6 +522,7 @@ public sealed class PlaybackOptimizerTests
         repository.TryCommit(oldFingerprint, expectedPrevious: null);
         fixture.Write(newUrl, ValidSha1, 42);
         var native = ScriptedManager.Create();
+        native.StaticSources = [Source(oldUrl)];
         native.Playback = (_, allowProbe, _, _) =>
         {
             Assert.IsFalse(allowProbe);
@@ -509,7 +533,7 @@ public sealed class PlaybackOptimizerTests
         var result = await optimizer.GetPlaybackMediaSourcesAsync(native.Interface, item, null, false, false, CancellationToken.None);
 
         Assert.AreEqual(oldUrl, result[0].Path);
-        Assert.AreEqual(oldFingerprint, repository.Get(item.Id, "primary"));
+        Assert.AreEqual(oldFingerprint, repository.Get(item.Id, SourceKey(item.Id)));
         Assert.AreEqual(0, native.StaticCalls);
     }
 
@@ -531,18 +555,217 @@ public sealed class PlaybackOptimizerTests
 
         await optimizer.GetPlaybackMediaSourcesAsync(native.Interface, item, null, true, false, CancellationToken.None);
 
-        Assert.IsNotNull(repository.Get(item.Id, "primary"));
+        Assert.IsNotNull(repository.Get(item.Id, SourceKey(item.Id)));
         Assert.AreEqual(0, native.LastAllowMediaProbe ? 1 : 0);
     }
 
-    private static StrmPlaybackOptimizer CreateOptimizer(IStrmFingerprintRepository repository)
+    [TestMethod]
+    public async Task AudioStrmRequiresAndAcceptsTheNativeAudioPrimaryStream()
+    {
+        const string url = "https://media.example.invalid/audio.mp3?sig=a";
+        using var fixture = new ManifestFixture(url, ValidSha1, 42);
+        var item = new Audio { Id = Guid.NewGuid(), Path = fixture.Path, ShortcutPath = url };
+        var audioStream = new MediaStream { Type = MediaStreamType.Audio, Codec = "aac", Channels = 2, SampleRate = 44100 };
+        var native = ScriptedManager.Create();
+        native.StaticSources = [new MediaSourceInfo
+        {
+            Path = url,
+            MediaStreams = [new MediaStream { Type = MediaStreamType.Video }]
+        }];
+        native.Playback = (sourceItem, allowProbe, _, _) =>
+        {
+            Assert.IsTrue(allowProbe);
+            var result = new MediaInfo { MediaStreams = [audioStream] };
+            ProbeExecutionContext.Current!.MarkCall(url);
+            ProbeExecutionContext.Current.RecordResult(url, result);
+            var streamRepository = ProbePersistenceDispatchProxy.Create(NativePersistence.Create<IMediaStreamRepository>());
+            streamRepository.SaveMediaStreams(sourceItem.Id, result.MediaStreams, CancellationToken.None);
+            native.StaticSources = [Source(url, audioStream)];
+            return Task.FromResult<IReadOnlyList<MediaSourceInfo>>([Source(url, audioStream)]);
+        };
+        var repository = new InMemoryStrmFingerprintRepository();
+        var optimizer = CreateOptimizer(repository);
+
+        var resultSources = await optimizer.GetPlaybackMediaSourcesAsync(native.Interface, item, null, true, false, CancellationToken.None);
+
+        Assert.AreEqual(2, native.PlaybackCalls);
+        Assert.IsTrue(native.LastAllowMediaProbe);
+        Assert.IsTrue(resultSources.Single().MediaStreams.Any(stream => stream.Type == MediaStreamType.Audio));
+        Assert.IsNotNull(repository.Get(item.Id, SourceKey(item.Id)));
+    }
+
+    [TestMethod]
+    public async Task AlternateVersionUsesItsOwnStrmProbeAndStableProjectSourceIdentity()
+    {
+        const string primaryUrl = "https://media.example.invalid/primary.mp4?sig=primary";
+        const string alternateOldUrl = "https://media.example.invalid/alternate.mp4?sig=old";
+        const string alternateNewUrl = "https://media.example.invalid/alternate.mp4?sig=new";
+        using var primaryFixture = new ManifestFixture(primaryUrl, ValidSha1, 42);
+        using var alternateFixture = new ManifestFixture(alternateOldUrl, ValidSha1, 42);
+        var primary = CreateItem(primaryFixture.Path, primaryUrl);
+        var alternate = CreateItem(alternateFixture.Path, alternateOldUrl);
+        alternate.PrimaryVersionId = primary.Id;
+        var reader = new StrmManifestReader();
+        var repository = new InMemoryStrmFingerprintRepository();
+        var primaryBaseline = Fingerprint(primary.Id, primary.Id, reader.Read(primaryFixture.Path).Manifest!);
+        var alternateBaseline = Fingerprint(primary.Id, alternate.Id, reader.Read(alternateFixture.Path).Manifest!);
+        repository.TryCommit(primaryBaseline, expectedPrevious: null);
+        repository.TryCommit(alternateBaseline, expectedPrevious: null);
+
+        alternateFixture.Write(alternateNewUrl, ValidSha1, 42);
+        var alternateManifest = reader.Read(alternateFixture.Path).Manifest!;
+        var native = ScriptedManager.Create();
+        var streamRepository = ProbePersistenceDispatchProxy.Create(NativePersistence.Create<IMediaStreamRepository>());
+        var itemPersistence = ProbePersistenceDispatchProxy.Create(NativePersistence.Create<IItemPersistenceService>());
+        native.StaticSources = [SourceFor(alternate.Id, alternateOldUrl), SourceFor(primary.Id, primaryUrl)];
+        native.Playback = (sourceItem, allowProbe, _, _) =>
+        {
+            Assert.IsTrue(allowProbe);
+            Assert.AreEqual(alternate.Id, sourceItem.Id, "Only the changed alternate version should be probed.");
+            var result = MediaInfoWithVideo("h264", 1920, 1080);
+            ProbeExecutionContext.Current!.MarkCall(alternateNewUrl);
+            ProbeExecutionContext.Current.RecordResult(alternateNewUrl, result);
+            streamRepository.SaveMediaStreams(alternate.Id, result.MediaStreams, CancellationToken.None);
+            alternate.ShortcutPath = alternateNewUrl;
+            itemPersistence.SaveItems([alternate], CancellationToken.None);
+            native.StaticSources = [
+                SourceFor(alternate.Id, alternateNewUrl, result.MediaStreams[0]),
+                SourceFor(primary.Id, primaryUrl)
+            ];
+            return Task.FromResult<IReadOnlyList<MediaSourceInfo>>(native.StaticSources);
+        };
+        var libraryManager = ItemLookup.Create(primary, alternate);
+        var optimizer = CreateOptimizer(repository, libraryManager.Interface);
+
+        var primaryEntry = await optimizer.GetPlaybackMediaSourcesAsync(native.Interface, primary, null, true, false, CancellationToken.None);
+
+        Assert.AreEqual(2, primaryEntry.Count);
+        Assert.AreEqual(2, native.PlaybackCalls);
+        Assert.AreEqual(alternateNewUrl, primaryEntry.Single(source => source.Id == alternate.Id.ToString("N")).Path);
+        Assert.AreEqual(primaryUrl, primaryEntry.Single(source => source.Id == primary.Id.ToString("N")).Path);
+        Assert.AreEqual(alternateManifest.UrlHash, repository.Get(primary.Id, SourceKey(alternate.Id))!.UrlHash);
+        Assert.AreEqual(primaryBaseline, repository.Get(primary.Id, SourceKey(primary.Id)));
+
+        // The same source ID remains the key when Jellyfin is entered through the alternate item and returns versions in another order.
+        native.StaticSources = [SourceFor(primary.Id, primaryUrl), SourceFor(alternate.Id, alternateNewUrl, MediaInfoWithVideo().MediaStreams[0])];
+        var directAlternateEntry = await optimizer.GetPlaybackMediaSourcesAsync(native.Interface, alternate, null, true, false, CancellationToken.None);
+        var selectedAlternate = directAlternateEntry.Single(source => source.Id == alternate.Id.ToString("N"));
+
+        Assert.AreEqual(alternateNewUrl, selectedAlternate.Path);
+        Assert.AreEqual(ProbeDecisionKind.SkipProbe, DecisionKind(reader.Read(alternateFixture.Path).Manifest!, repository.Get(primary.Id, SourceKey(alternate.Id))));
+        Assert.AreEqual(3, native.PlaybackCalls);
+    }
+
+    [TestMethod]
+    public async Task MixedLegacySourceRetainsItsNativeProbeWhileSupportedSourceIsSkipped()
+    {
+        const string supportedUrl = "https://media.example.invalid/supported.mp4?sig=a";
+        const string legacyUrl = "https://media.example.invalid/legacy.mp4?sig=b";
+        using var supportedFixture = new ManifestFixture(supportedUrl, ValidSha1, 42);
+        var supported = CreateItem(supportedFixture.Path, supportedUrl);
+        var legacyPath = Path.Combine(Path.GetTempPath(), $"strm-probe-{Guid.NewGuid():N}.strm");
+        File.WriteAllText(legacyPath, legacyUrl + "\n", Encoding.UTF8);
+        var legacy = CreateItem(legacyPath, legacyUrl);
+        legacy.PrimaryVersionId = supported.Id;
+        var repository = new InMemoryStrmFingerprintRepository();
+        var baseline = Fingerprint(supported.Id, supported.Id, new StrmManifestReader().Read(supportedFixture.Path).Manifest!);
+        repository.TryCommit(baseline, expectedPrevious: null);
+        var native = ScriptedManager.Create();
+        native.StaticSources = [SourceFor(supported.Id, supportedUrl), SourceFor(legacy.Id, legacyUrl)];
+        var delegatedIds = new List<Guid>();
+        native.Playback = (sourceItem, allowProbe, _, _) =>
+        {
+            if (allowProbe)
+            {
+                delegatedIds.Add(sourceItem.Id);
+            }
+
+            return Task.FromResult<IReadOnlyList<MediaSourceInfo>>(native.StaticSources);
+        };
+        var optimizer = CreateOptimizer(repository, ItemLookup.Create(supported, legacy).Interface);
+
+        try
+        {
+            var result = await optimizer.GetPlaybackMediaSourcesAsync(native.Interface, supported, null, true, false, CancellationToken.None);
+
+            Assert.AreEqual(2, result.Count);
+            CollectionAssert.AreEqual(new[] { legacy.Id }, delegatedIds);
+            Assert.AreEqual(baseline, repository.Get(supported.Id, SourceKey(supported.Id)));
+        }
+        finally
+        {
+            File.Delete(legacyPath);
+        }
+    }
+
+    [TestMethod]
+    public async Task MixedOrdinarySourceRetainsItsNativeProbeWhileSupportedSourceIsSkipped()
+    {
+        const string supportedUrl = "https://media.example.invalid/supported.mp4?sig=a";
+        const string ordinaryUrl = "https://media.example.invalid/ordinary.mp4?sig=b";
+        using var supportedFixture = new ManifestFixture(supportedUrl, ValidSha1, 42);
+        var supported = CreateItem(supportedFixture.Path, supportedUrl);
+        var ordinary = new Video { Id = Guid.NewGuid(), Path = "/media/ordinary.mp4", ShortcutPath = ordinaryUrl };
+        ordinary.PrimaryVersionId = supported.Id;
+        var repository = new InMemoryStrmFingerprintRepository();
+        var baseline = Fingerprint(supported.Id, new StrmManifestReader().Read(supportedFixture.Path).Manifest!);
+        repository.TryCommit(baseline, expectedPrevious: null);
+        var native = ScriptedManager.Create();
+        native.StaticSources = [SourceFor(supported.Id, supportedUrl), SourceFor(ordinary.Id, ordinaryUrl)];
+        var delegatedIds = new List<Guid>();
+        native.Playback = (sourceItem, allowProbe, _, _) =>
+        {
+            if (allowProbe)
+            {
+                delegatedIds.Add(sourceItem.Id);
+            }
+
+            return Task.FromResult<IReadOnlyList<MediaSourceInfo>>(native.StaticSources);
+        };
+        var optimizer = CreateOptimizer(repository, ItemLookup.Create(supported, ordinary).Interface);
+
+        var result = await optimizer.GetPlaybackMediaSourcesAsync(native.Interface, supported, null, true, false, CancellationToken.None);
+
+        Assert.AreEqual(2, result.Count);
+        CollectionAssert.AreEqual(new[] { ordinary.Id }, delegatedIds);
+        Assert.AreEqual(baseline, repository.Get(supported.Id, SourceKey(supported.Id)));
+    }
+
+    [TestMethod]
+    public async Task UnresolvableVisibleSourceDelegatesTheWholeRequestToJellyfin()
+    {
+        const string url = "https://media.example.invalid/video.mp4?sig=a";
+        using var fixture = new ManifestFixture(url, ValidSha1, 42);
+        var item = CreateItem(fixture.Path, url);
+        var unknownSourceId = Guid.NewGuid();
+        var native = ScriptedManager.Create();
+        native.StaticSources = [SourceFor(item.Id, url), SourceFor(unknownSourceId, "https://media.example.invalid/unknown.mp4")];
+        var delegatedItems = new List<Guid>();
+        native.Playback = (delegatedItem, allowProbe, _, _) =>
+        {
+            Assert.IsTrue(allowProbe);
+            delegatedItems.Add(delegatedItem.Id);
+            return Task.FromResult<IReadOnlyList<MediaSourceInfo>>(native.StaticSources);
+        };
+        var repository = new InMemoryStrmFingerprintRepository();
+        var optimizer = CreateOptimizer(repository, ItemLookup.Create(item).Interface);
+
+        var result = await optimizer.GetPlaybackMediaSourcesAsync(native.Interface, item, null, true, false, CancellationToken.None);
+
+        CollectionAssert.AreEqual(new[] { item.Id }, delegatedItems);
+        Assert.AreEqual(2, result.Count);
+        Assert.IsNull(repository.Get(item.Id, SourceKey(item.Id)));
+    }
+
+    private static StrmPlaybackOptimizer CreateOptimizer(IStrmFingerprintRepository repository, ILibraryManager? libraryManager = null)
     {
         return new StrmPlaybackOptimizer(
             new StrmManifestReader(),
             new ProbeDecisionService(),
             repository,
             new PlaybackSettings(true),
-            NullLogger<StrmPlaybackOptimizer>.Instance);
+            NullLogger<StrmPlaybackOptimizer>.Instance,
+            libraryManager);
     }
 
     private static Video CreateItem(string path, string url)
@@ -559,6 +782,16 @@ public sealed class PlaybackOptimizerTests
         };
     }
 
+    private static MediaSourceInfo SourceFor(Guid sourceId, string url, MediaStream? videoStream = null)
+    {
+        return new MediaSourceInfo
+        {
+            Id = sourceId.ToString("N"),
+            Path = url,
+            MediaStreams = [videoStream ?? new MediaStream { Type = MediaStreamType.Video }]
+        };
+    }
+
     private static MediaInfo MediaInfoWithVideo(string? codec = null, int? width = null, int? height = null)
     {
         return new MediaInfo
@@ -569,7 +802,22 @@ public sealed class PlaybackOptimizerTests
 
     private static StrmFingerprint Fingerprint(Guid itemId, StrmManifest manifest)
     {
-        return new StrmFingerprint(itemId, "primary", manifest.UrlHash, manifest.Sha1, manifest.Size);
+        return new StrmFingerprint(itemId, SourceKey(itemId), manifest.UrlHash, manifest.Sha1, manifest.Size);
+    }
+
+    private static StrmFingerprint Fingerprint(Guid projectId, Guid sourceId, StrmManifest manifest)
+    {
+        return new StrmFingerprint(projectId, SourceKey(sourceId), manifest.UrlHash, manifest.Sha1, manifest.Size);
+    }
+
+    private static ProbeDecisionKind DecisionKind(StrmManifest manifest, StrmFingerprint? previous)
+    {
+        return new ProbeDecisionService().Decide(manifest, previous, hasPrimaryStream: true, nativeUrl: manifest.Url).Kind;
+    }
+
+    private static string SourceKey(Guid sourceId)
+    {
+        return sourceId.ToString("N");
     }
 
     private static async Task<TException> AssertThrowsAsync<TException>(Func<Task> action)
@@ -700,6 +948,8 @@ public sealed class PlaybackOptimizerTests
 
         public bool LastAllowMediaProbe { get; private set; }
 
+        public Action<BaseItem>? OnNativeNoProbe { get; set; }
+
         public IReadOnlyList<MediaSourceInfo> StaticSources { get; set; } = [];
 
         public Func<BaseItem, bool, bool, CancellationToken, Task<IReadOnlyList<MediaSourceInfo>>>? Playback
@@ -726,7 +976,7 @@ public sealed class PlaybackOptimizerTests
             if (targetMethod.Name == nameof(IMediaSourceManager.GetStaticMediaSources))
             {
                 StaticCalls++;
-                return StaticSources;
+                return EnsureSingleSourceId((BaseItem)args![0]!, StaticSources);
             }
 
             if (targetMethod.Name == nameof(IMediaSourceManager.GetPlaybackMediaSources) && args is { Length: 5 })
@@ -734,9 +984,17 @@ public sealed class PlaybackOptimizerTests
                 PlaybackCalls++;
                 var item = (BaseItem)args[0]!;
                 var allowProbe = (bool)args[2]!;
-                LastAllowMediaProbe = allowProbe;
-                return _playback?.Invoke(item, allowProbe, (bool)args[3]!, (CancellationToken)args[4]!)
-                    ?? Task.FromResult(StaticSources);
+                LastAllowMediaProbe |= allowProbe;
+                if (allowProbe)
+                {
+                    var task = _playback?.Invoke(item, allowProbe, (bool)args[3]!, (CancellationToken)args[4]!)
+                        ?? Task.FromResult(StaticSources);
+                    return EnsureSingleSourceIdAsync(item, task);
+                }
+
+                OnNativeNoProbe?.Invoke(item);
+                var noProbeTask = Task.FromResult(StaticSources);
+                return EnsureSingleSourceIdAsync(item, noProbeTask);
             }
 
             return DefaultReturn(targetMethod.ReturnType);
@@ -762,6 +1020,57 @@ public sealed class PlaybackOptimizerTests
             }
 
             return returnType.IsValueType ? Activator.CreateInstance(returnType) : null;
+        }
+
+        private static IReadOnlyList<MediaSourceInfo> EnsureSingleSourceId(BaseItem item, IReadOnlyList<MediaSourceInfo> sources)
+        {
+            if (sources.Count == 1 && string.IsNullOrEmpty(sources[0].Id))
+            {
+                sources[0].Id = item.Id.ToString("N");
+            }
+
+            return sources;
+        }
+
+        private static async Task<IReadOnlyList<MediaSourceInfo>> EnsureSingleSourceIdAsync(
+            BaseItem item,
+            Task<IReadOnlyList<MediaSourceInfo>> sourcesTask)
+        {
+            var sources = await sourcesTask.ConfigureAwait(false);
+            return EnsureSingleSourceId(item, sources);
+        }
+    }
+
+    public class ItemLookup : DispatchProxy
+    {
+        private IReadOnlyDictionary<Guid, BaseItem> _items = new Dictionary<Guid, BaseItem>();
+
+        public ILibraryManager Interface { get; private set; } = null!;
+
+        public static ItemLookup Create(params BaseItem[] items)
+        {
+            var proxy = DispatchProxy.Create<ILibraryManager, ItemLookup>();
+            var lookup = (ItemLookup)(object)proxy;
+            lookup.Interface = proxy;
+            lookup._items = items.ToDictionary(item => item.Id);
+            return lookup;
+        }
+
+        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
+        {
+            if (targetMethod?.Name.StartsWith(nameof(ILibraryManager.GetItemById), StringComparison.Ordinal) == true
+                && args is { Length: > 0 }
+                && args[0] is Guid itemId
+                && _items.TryGetValue(itemId, out var item))
+            {
+                return item;
+            }
+
+            return targetMethod?.ReturnType == typeof(void)
+                ? null
+                : targetMethod?.ReturnType.IsValueType == true
+                    ? Activator.CreateInstance(targetMethod.ReturnType)
+                    : null;
         }
     }
 }

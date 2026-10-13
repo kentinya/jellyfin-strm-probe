@@ -8,6 +8,7 @@ import hashlib
 import json
 import re
 import shutil
+import sqlite3
 import subprocess
 import sys
 import threading
@@ -28,6 +29,8 @@ PLUGIN_METADATA = json.loads(PLUGIN_META.read_text(encoding="utf-8"))
 PLUGIN_ID = PLUGIN_METADATA["guid"]
 PLUGIN_VERSION = PLUGIN_METADATA["version"]
 PLUGIN_FOLDER_NAME = f"Jellyfin.Plugin.StrmProbeOptimizer_{PLUGIN_VERSION}"
+PLUGIN_DATA_DIRECTORY = ROOT / "artifacts" / "dev-env" / "config" / "data" / "plugins" / uuid.UUID(PLUGIN_ID).hex
+FINGERPRINT_DATABASE = PLUGIN_DATA_DIRECTORY / "strm-fingerprints.db"
 FIXTURE = ROOT / "artifacts" / "dev-env" / "strm" / "Environment Fixture.strm"
 PLUGIN_LOGGER = "Jellyfin.Plugin.StrmProbeOptimizer.Services.StrmPlaybackOptimizer"
 MAX_WAIT_SECONDS = 90
@@ -42,7 +45,7 @@ def require(condition: bool, message: str) -> None:
         raise RuntimeError(message)
 
 
-def deploy_plugin() -> None:
+def deploy_plugin() -> dict[str, object]:
     require(PLUGIN_SOURCE.is_file(), "Release plugin assembly is missing; build the pinned solution first.")
     require(PLUGIN_META.is_file(), "Jellyfin plugin meta.json is missing.")
     plugin_root = ROOT / "artifacts" / "dev-env" / "config" / "plugins"
@@ -53,8 +56,61 @@ def deploy_plugin() -> None:
             parsed = json.loads(existing_meta.read_text(encoding="utf-8"))
             require(parsed.get("guid") == "b061643e-d17d-4c6e-8ba2-6b57e286bd20", "Refusing to replace an unrelated plugin folder.")
     destination.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(PLUGIN_SOURCE, destination / PLUGIN_SOURCE.name)
+    managed_files: list[str] = []
+    for source in sorted(PLUGIN_BUILD.glob("*.dll")):
+        shutil.copy2(source, destination / source.name)
+        managed_files.append(source.name)
+    deps_file = PLUGIN_BUILD / (PLUGIN_SOURCE.stem + ".deps.json")
+    require(deps_file.is_file(), "The plugin dependency manifest is missing from the build output.")
+    shutil.copy2(deps_file, destination / deps_file.name)
+    managed_files.append(deps_file.name)
+    deps_data = json.loads(deps_file.read_text(encoding="utf-8"))
+    runtime_target = deps_data.get("runtimeTarget", {}).get("name")
+    runtime_libraries = deps_data.get("targets", {}).get(runtime_target, {})
+    runtime_asset_paths: list[str] = []
+    dependency_libraries = deps_data.get("libraries", {})
+    for library_name, library in runtime_libraries.items():
+        library_metadata = dependency_libraries.get(library_name, {})
+        package_path = Path(library_metadata.get("path", "")) if library_metadata.get("type") == "package" else Path()
+        assets = list(library.get("runtime", {}))
+        assets.extend(
+            asset_path
+            for asset_path, metadata in library.get("runtimeTargets", {}).items()
+            if metadata.get("rid") == "linux-x64" and metadata.get("assetType") == "native"
+        )
+        for asset_path in assets:
+            relative_asset = Path(asset_path)
+            require(not relative_asset.is_absolute() and ".." not in relative_asset.parts, "The plugin dependency manifest contains an unsafe runtime asset path.")
+            if relative_asset.suffix.lower() != ".dll" and not (relative_asset.suffix.lower() == ".so" and "linux-x64" in relative_asset.parts):
+                continue
+            source = PLUGIN_BUILD / relative_asset.name
+            if not source.is_file():
+                continue
+            target = destination / package_path / relative_asset
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target)
+            runtime_asset_paths.append((package_path / relative_asset).as_posix())
+
+    native_source = PLUGIN_BUILD / "runtimes" / "linux-x64" / "native"
+    native_files: list[dict[str, str]] = []
+    if native_source.is_dir():
+        native_destination = destination / "runtimes" / "linux-x64" / "native"
+        native_destination.mkdir(parents=True, exist_ok=True)
+        for source in sorted(native_source.iterdir()):
+            if source.is_file():
+                target = native_destination / source.name
+                shutil.copy2(source, target)
+                native_files.append({
+                    "file": source.name,
+                    "sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
+                })
+    require(any(entry["file"] == "libe_sqlite3.so" for entry in native_files), "The pinned Linux SQLite runtime is missing from plugin output.")
     shutil.copy2(PLUGIN_META, destination / "meta.json")
+    return {
+        "managed_files": managed_files,
+        "runtime_asset_paths": sorted(set(runtime_asset_paths)),
+        "native_files": native_files,
+    }
 
 
 def isolated_container_name() -> str:
@@ -88,13 +144,23 @@ def restart_isolated_server() -> str:
     require(start.returncode == 0, "The isolated Jellyfin start command failed.")
     container = isolated_container_name()
     deadline = time.monotonic() + MAX_WAIT_SECONDS
+    observed_version: str | None = None
+    last_public_info_error: OSError | json.JSONDecodeError | None = None
     while time.monotonic() < deadline:
         health = run(["docker", "inspect", "--format", "{{.State.Health.Status}}", container], timeout=15)
         if health.returncode == 0 and health.stdout.strip() == "healthy":
-            public_info = request_json("http://127.0.0.1:18096/System/Info/Public", timeout=10)
-            require(public_info.get("Version") == "12.2.0", "The isolated server version changed from the pinned 12.2.0 target.")
-            return container
+            try:
+                public_info = request_json("http://127.0.0.1:18096/System/Info/Public", timeout=10)
+                observed_version = public_info.get("Version")
+                if observed_version == "12.2.0":
+                    return container
+            except (OSError, json.JSONDecodeError) as error:
+                last_public_info_error = error
         time.sleep(1)
+    if observed_version is not None:
+        raise RuntimeError(f"The isolated server did not report pinned version 12.2.0 before timeout; last observed {observed_version!r}.")
+    if last_public_info_error is not None:
+        raise RuntimeError(f"The isolated Jellyfin container became healthy but its public API did not settle: {type(last_public_info_error).__name__}.")
     raise RuntimeError("The isolated Jellyfin container did not become healthy.")
 
 
@@ -184,6 +250,38 @@ class JellyfinApi:
                     break
         require(len(matches) == 1, "Expected exactly one scanned Environment Fixture in the isolated libraries.")
         return matches[0]
+
+    def refresh_library(self) -> None:
+        status, _ = self.request_response("/Library/Refresh", method="POST")
+        require(status == 204, "The isolated library scan did not queue.")
+
+    def wait_for_named_library_item(self, name: str, timeout: int = 60) -> dict:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            try:
+                return self.named_library_item(name)
+            except RuntimeError:
+                time.sleep(0.5)
+        raise RuntimeError(f"The isolated library did not scan the temporary item named {name!r}.")
+
+    def wait_for_named_library_item_absent(self, name: str, timeout: int = 60) -> None:
+        query = urlencode({"UserId": self.user_id, "Recursive": "true", "Limit": "1000", "Fields": "Path"})
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            result = request_json(self.base_url + "/Items?" + query, headers=self.headers, timeout=20)
+            if not any(item.get("Name") == name for item in result.get("Items", [])):
+                return
+            time.sleep(0.5)
+        raise RuntimeError(f"The isolated library still contains the removed temporary item {name!r}.")
+
+    def merge_versions(self, item_ids: list[str]) -> int:
+        query = urlencode({"ids": ",".join(item_ids)})
+        status, _ = self.request_response("/Videos/MergeVersions?" + query, method="POST")
+        return status
+
+    def delete_alternate_sources(self, item_id: str) -> int:
+        status, _ = self.request_response(f"/Videos/{item_id}/AlternateSources", method="DELETE")
+        return status
 
     def named_library_item(self, name: str) -> dict:
         query = urlencode({"UserId": self.user_id, "Recursive": "true", "Limit": "1000", "Fields": "Path"})
@@ -294,7 +392,7 @@ def replace_manifest_url(data: bytes, new_url: str) -> bytes:
     return prefix + "".join(updated).encode("utf-8")
 
 
-def write_versioned_fixture(data: bytes, url: str, sha1_value: str, size_value: int) -> bytes:
+def write_versioned_fixture(data: bytes, url: str, sha1_value: str | None, size_value: int) -> bytes:
     had_bom = data.startswith(b"\xef\xbb\xbf")
     lines = data.decode("utf-8-sig").splitlines()
     result: list[str] = []
@@ -308,7 +406,7 @@ def write_versioned_fixture(data: bytes, url: str, sha1_value: str, size_value: 
             has_version = True
             result.append("# strm-probe-version:1")
         elif stripped.startswith("# strm-probe-sha1:"):
-            if not has_sha1:
+            if not has_sha1 and sha1_value is not None:
                 result.append("# strm-probe-sha1:" + sha1_value)
                 has_sha1 = True
         elif stripped.startswith("# strm-probe-size:"):
@@ -323,7 +421,7 @@ def write_versioned_fixture(data: bytes, url: str, sha1_value: str, size_value: 
     require(replaced_url, "The isolated STRM fixture URL could not be replaced.")
     if not has_version:
         result.insert(0, "# strm-probe-version:1")
-    if not has_sha1:
+    if not has_sha1 and sha1_value is not None:
         result.insert(1, "# strm-probe-sha1:" + sha1_value)
     if not has_size:
         result.insert(2, "# strm-probe-size:" + str(size_value))
@@ -365,12 +463,60 @@ def source_result(response: dict, expected_url: str) -> dict:
     return {"path_matches_manifest": False, "path_sha256": None, "has_video": False, "has_audio": False}
 
 
-def plugin_events(container: str, item_id: str) -> list[str]:
-    canonical_id = str(uuid.UUID(item_id))
+def source_for_id(response: dict, item_id: str) -> dict | None:
+    expected_id = uuid.UUID(item_id).hex
+    return next(
+        (source for source in response.get("MediaSources", [])
+         if source.get("Id") and uuid.UUID(source["Id"]).hex == expected_id),
+        None,
+    )
+
+
+def source_path_hash(source: dict | None) -> str | None:
+    path = (source or {}).get("Path")
+    return hashlib.sha256(path.encode("utf-8")).hexdigest() if path else None
+
+
+def fingerprint_row(item_id: str, source_id: str) -> dict[str, object] | None:
+    require(FINGERPRINT_DATABASE.is_file(), "The plugin fingerprint database is missing from the isolated Jellyfin DataPath.")
+    database_uri = FINGERPRINT_DATABASE.as_posix() + "?mode=ro"
+    with sqlite3.connect("file:" + database_uri, uri=True, timeout=10) as connection:
+        connection.row_factory = sqlite3.Row
+        row = connection.execute(
+            "SELECT item_id, source_key, url_hash, sha1, file_size FROM strm_fingerprint WHERE item_id = ? AND source_key = ?",
+            (uuid.UUID(item_id).hex, uuid.UUID(source_id).hex),
+        ).fetchone()
+    return dict(row) if row is not None else None
+
+
+def temporary_versioned_fixture(name: str, url: str, sha1_value: str, size_value: int) -> Path:
+    path = ROOT / "artifacts" / "dev-env" / "strm" / (name + ".strm")
+    source = FIXTURE.read_bytes()
+    with path.open("xb") as fixture:
+        fixture.write(write_versioned_fixture(source, url, sha1_value, size_value))
+    return path
+
+
+def expected_url_hash(url: str) -> str:
+    return hashlib.sha256(url.encode("utf-8")).hexdigest()
+
+
+def unique_query_url(url: str, key: str) -> str:
+    parts = urlsplit(url)
+    query = urlencode({"strm_probe_case": key})
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, query, ""))
+
+
+def plugin_events_for_ids(container: str, item_ids: list[str]) -> list[str]:
+    canonical_ids = [str(uuid.UUID(item_id)) for item_id in item_ids]
     logs = run(["docker", "logs", "--tail", "1000", container], timeout=20)
     require(logs.returncode == 0, "Could not read isolated Jellyfin container logs.")
     output = logs.stdout + logs.stderr
-    return [line for line in output.splitlines() if PLUGIN_LOGGER in line and canonical_id in line]
+    return [line for line in output.splitlines() if PLUGIN_LOGGER in line and any(item_id in line for item_id in canonical_ids)]
+
+
+def plugin_events(container: str, item_id: str) -> list[str]:
+    return plugin_events_for_ids(container, [item_id])
 
 
 def event_delta(before: list[str], after: list[str]) -> list[str]:
@@ -522,14 +668,29 @@ def live_tv_delegation_check(api: JellyfinApi, container: str) -> dict[str, obje
         playlist_path.unlink(missing_ok=True)
 
 
-def call_playback(api: JellyfinApi, container: str, item_id: str, expected_url: str) -> dict:
-    before = plugin_events(container, item_id)
+def call_playback(
+    api: JellyfinApi,
+    container: str,
+    item_id: str,
+    expected_url: str,
+    *,
+    event_item_ids: list[str] | None = None,
+    selected_media_source_id: str | None = None,
+) -> dict:
+    event_ids = event_item_ids or [item_id]
+    before = plugin_events_for_ids(container, event_ids)
     started = time.monotonic()
-    status, response = api.playback_info(item_id)
+    if selected_media_source_id is None:
+        status, response = api.playback_info(item_id)
+    else:
+        status, response = api.post_playback_info(item_id, {
+            "UserId": api.user_id,
+            "MediaSourceId": selected_media_source_id,
+        })
     elapsed_ms = int((time.monotonic() - started) * 1000)
-    after = plugin_events(container, item_id)
+    after = plugin_events_for_ids(container, event_ids)
     events = event_delta(before, after)
-    matching = [line for line in events if str(uuid.UUID(item_id)) in line]
+    matching = [line for line in events if any(str(uuid.UUID(value)) in line for value in event_ids)]
     event = matching[-1] if matching else None
     result = source_result(response, expected_url) if status == 200 else {
         "path_matches_manifest": False,
@@ -544,10 +705,22 @@ def call_playback(api: JellyfinApi, container: str, item_id: str, expected_url: 
         "probe_calls": probe_calls(event),
         "encoder_calls_total": encoder_calls_total(event),
         "plugin_event": safe_event(event),
+        "plugin_events": [safe_event(line) for line in matching],
+        "media_source_ids": [uuid.UUID(source["Id"]).hex for source in response.get("MediaSources", []) if source.get("Id")],
+        "media_sources": [
+            {
+                "id": uuid.UUID(source["Id"]).hex,
+                "type": source.get("Type"),
+                "path_sha256": source_path_hash(source),
+                "stream_types": sorted({stream.get("Type") for stream in source.get("MediaStreams", [])}),
+            }
+            for source in response.get("MediaSources", [])
+            if source.get("Id")
+        ],
     }
 
 
-def delegated_playback(api: JellyfinApi, container: str, item_id: str) -> dict[str, object]:
+def delegated_playback(api: JellyfinApi, container: str, item_id: str, expected_url: str | None = None) -> dict[str, object]:
     before = plugin_events(container, item_id)
     status, response = api.playback_info(item_id)
     after = plugin_events(container, item_id)
@@ -559,6 +732,8 @@ def delegated_playback(api: JellyfinApi, container: str, item_id: str) -> dict[s
         "http_status": status,
         "has_media_source": bool(source),
         "has_video": "Video" in stream_types,
+        "path_matches_manifest": source_result(response, expected_url).get("path_matches_manifest") if expected_url is not None and status == 200 else None,
+        "path_sha256": source_result(response, expected_url).get("path_sha256") if expected_url is not None and status == 200 else None,
         "plugin_events": events,
         "source_path_is_local": str(source.get("Path", "")).startswith("/media/local/"),
     }
@@ -729,6 +904,304 @@ def manual_full_refresh_check(api: JellyfinApi, container: str, media_container:
     return {"status": "PASS", "runs": observations}, latest_total, url
 
 
+def source_summary(result: dict, item_id: str) -> dict | None:
+    expected_id = uuid.UUID(item_id).hex
+    return next((source for source in result.get("media_sources", []) if source.get("id") == expected_id), None)
+
+
+def source_event(result: dict, item_id: str) -> str | None:
+    source_key = uuid.UUID(item_id).hex
+    return next((event for event in result.get("plugin_events", []) if f"source {source_key}" in str(event)), None)
+
+
+def multiversion_and_sqlite_failure_check(
+    api: JellyfinApi,
+    container: str,
+    primary_item_id: str,
+    primary_url: str,
+    media_sha1: str,
+    media_size: int,
+    alternate_fixture_path: Path,
+) -> tuple[dict[str, object], JellyfinApi, str, str]:
+    alternate_name = alternate_fixture_path.stem
+    alternate_url = alternate_fixture_url(primary_url)
+    with alternate_fixture_path.open("xb") as alternate_fixture:
+        alternate_fixture.write(write_versioned_fixture(FIXTURE.read_bytes(), alternate_url, media_sha1, media_size))
+    api.refresh_library()
+    alternate_item = api.wait_for_named_library_item(alternate_name)
+    alternate_item_id = alternate_item["Id"]
+    merge_status = api.merge_versions([primary_item_id, alternate_item_id])
+    require(merge_status == 204, "Jellyfin did not merge the two isolated STRM videos into native alternate versions.")
+
+    primary_id_hex = uuid.UUID(primary_item_id).hex
+    alternate_id_hex = uuid.UUID(alternate_item_id).hex
+    initial = call_playback(
+        api,
+        container,
+        primary_item_id,
+        primary_url,
+        event_item_ids=[primary_item_id, alternate_item_id],
+    )
+    require(initial["http_status"] == 200 and initial["path_matches_manifest"] and initial["has_video"], "The primary entry did not return its own usable source after the native version merge.")
+    require(set(initial["media_source_ids"]) == {primary_id_hex, alternate_id_hex}, "The primary entry did not expose exactly the two natively linked versions.")
+    require(initial["media_source_ids"][0] == primary_id_hex, "The original fixture entry was not first in Jellyfin's ordered media-source response.")
+    project_candidates = [
+        candidate_id
+        for candidate_id in (primary_item_id, alternate_item_id)
+        if fingerprint_row(candidate_id, primary_item_id) is not None
+        and fingerprint_row(candidate_id, alternate_item_id) is not None
+    ]
+    require(len(project_candidates) == 1, "The two native source keys did not resolve to one canonical project identity in SQLite.")
+    canonical_project_id = project_candidates[0]
+    canonical_project_hex = uuid.UUID(canonical_project_id).hex
+    canonical_initial_url = alternate_url if canonical_project_id == alternate_item_id else primary_url
+    secondary_version_id = alternate_item_id if canonical_project_id == primary_item_id else primary_item_id
+    secondary_version_url = alternate_url if secondary_version_id == alternate_item_id else primary_url
+    primary_source = source_summary(initial, primary_item_id)
+    alternate_source = source_summary(initial, alternate_item_id)
+    require(primary_source and "Video" in primary_source["stream_types"], "The primary version lost its saved video stream.")
+    require(alternate_source and alternate_source["path_sha256"] == expected_url_hash(alternate_url) and "Video" in alternate_source["stream_types"], "The alternate version did not return its own probed address and primary stream.")
+    primary_before = fingerprint_row(canonical_project_id, primary_item_id)
+    alternate_before = fingerprint_row(canonical_project_id, alternate_item_id)
+    require(primary_before and alternate_before, "The two natively linked versions did not receive independent SQLite rows.")
+    require(primary_before["url_hash"] == expected_url_hash(primary_url), "The primary version row does not identify the primary STRM URL.")
+    require(alternate_before["url_hash"] == expected_url_hash(alternate_url), "The alternate version row does not identify the alternate STRM URL.")
+    require(primary_before["item_id"] == canonical_project_hex and alternate_before["item_id"] == canonical_project_hex, "The linked versions did not share the canonical project identity in SQLite.")
+    require(primary_before["source_key"] == primary_id_hex and alternate_before["source_key"] == alternate_id_hex, "The linked versions did not retain their distinct native source keys.")
+    streams_primary_before = api.saved_stream_snapshot(primary_item_id)
+    streams_alternate_before = api.saved_stream_snapshot(alternate_item_id)
+
+    selected = call_playback(
+        api,
+        container,
+        canonical_project_id,
+        secondary_version_url,
+        event_item_ids=[primary_item_id, alternate_item_id],
+        selected_media_source_id=secondary_version_id,
+    )
+    require(selected["http_status"] == 200 and source_summary(selected, secondary_version_id) is not None, "PlaybackInfo MediaSourceId selection did not retain the requested alternate source.")
+    require(source_summary(selected, secondary_version_id)["path_sha256"] == expected_url_hash(secondary_version_url), "PlaybackInfo MediaSourceId selection returned a different source address.")
+
+    direct = call_playback(
+        api,
+        container,
+        secondary_version_id,
+        secondary_version_url,
+        event_item_ids=[primary_item_id, alternate_item_id],
+    )
+    require(direct["http_status"] == 200 and direct["path_matches_manifest"] and direct["has_video"], "The direct alternate-version entry did not return its own usable source.")
+    require(direct["media_source_ids"] and direct["media_source_ids"][0] == uuid.UUID(secondary_version_id).hex, "The direct alternate entry did not exercise the native alternate-first response order.")
+
+    changed_alternate_url = unique_query_url(alternate_url, "alternate-change-" + uuid.uuid4().hex[:10])
+    alternate_fixture_path.write_bytes(write_versioned_fixture(alternate_fixture_path.read_bytes(), changed_alternate_url, media_sha1, media_size))
+    changed_project_url = changed_alternate_url if canonical_project_id == alternate_item_id else primary_url
+    changed = call_playback(
+        api,
+        container,
+        canonical_project_id,
+        changed_project_url,
+        event_item_ids=[primary_item_id, alternate_item_id],
+    )
+    require(changed["http_status"] == 200 and changed["path_matches_manifest"], "Changing one linked STRM version prevented the primary entry from returning.")
+    require(changed["media_source_ids"] and changed["media_source_ids"][0] == canonical_project_hex, "The canonical project entry did not place its primary version first.")
+    changed_alternate_source = source_summary(changed, alternate_item_id)
+    unchanged_primary_source = source_summary(changed, primary_item_id)
+    require(changed_alternate_source and changed_alternate_source["path_sha256"] == expected_url_hash(changed_alternate_url), "The changed alternate URL was not returned for its source ID.")
+    require(unchanged_primary_source and unchanged_primary_source["path_sha256"] == expected_url_hash(primary_url), "Changing the alternate version rewrote the primary address.")
+    alternate_event = source_event(changed, alternate_item_id)
+    primary_event = source_event(changed, primary_item_id)
+    require(alternate_event is not None and probe_calls(alternate_event) == 1 and "fingerprint committed" in alternate_event, "The URL change did not probe and commit only the alternate source.")
+    require(primary_event is not None and probe_calls(primary_event) == 0, "The unchanged primary source was probed while only the alternate URL changed.")
+    primary_after = fingerprint_row(canonical_project_id, primary_item_id)
+    alternate_after_url_only = fingerprint_row(canonical_project_id, alternate_item_id)
+    require(primary_after == primary_before, "Changing the alternate version changed the primary fingerprint row.")
+    require(alternate_after_url_only and alternate_after_url_only["url_hash"] == expected_url_hash(changed_alternate_url), "The changed alternate fingerprint was not committed under its stable source identity.")
+    require(alternate_after_url_only["sha1"] == alternate_before["sha1"] and alternate_after_url_only["file_size"] == alternate_before["file_size"], "The alternate URL-only change changed its media content fingerprint.")
+
+    no_sha_url = unique_query_url(changed_alternate_url, "alternate-no-sha-" + uuid.uuid4().hex[:10])
+    alternate_fixture_path.write_bytes(write_versioned_fixture(alternate_fixture_path.read_bytes(), no_sha_url, None, media_size))
+    require(parse_manifest(alternate_fixture_path.read_bytes())[1] is None, "The alternate-version missing-SHA case still contains a SHA-1 marker.")
+    no_sha_playback = call_playback(
+        api,
+        container,
+        canonical_project_id,
+        no_sha_url if canonical_project_id == alternate_item_id else primary_url,
+        event_item_ids=[primary_item_id, alternate_item_id],
+    )
+    no_sha_alternate_source = source_summary(no_sha_playback, alternate_item_id)
+    require(no_sha_playback["http_status"] == 200 and no_sha_alternate_source and no_sha_alternate_source["path_sha256"] == expected_url_hash(no_sha_url), "The alternate version without SHA-1 did not return its current address and source.")
+    no_sha_event = source_event(no_sha_playback, alternate_item_id)
+    require(no_sha_event is not None and probe_calls(no_sha_event) == 1 and "fingerprint committed" in no_sha_event, "Changing an alternate URL without a comparable SHA-1 did not perform and commit a native probe.")
+    alternate_after = fingerprint_row(canonical_project_id, alternate_item_id)
+    require(alternate_after and alternate_after["url_hash"] == expected_url_hash(no_sha_url), "The no-SHA alternate URL was not committed under its stable source identity.")
+    require(alternate_after["sha1"] is None and alternate_after["file_size"] == media_size, "The accepted alternate source inherited a SHA-1 from another version or lost its valid Size.")
+    require(fingerprint_row(canonical_project_id, primary_item_id) == primary_before, "Accepting the no-SHA alternate changed the independent primary fingerprint.")
+
+    streams_primary_after = api.saved_stream_snapshot(primary_item_id)
+    streams_alternate_after = api.saved_stream_snapshot(alternate_item_id)
+    require(streams_primary_after == streams_primary_before, "Updating the alternate source changed the primary item's saved streams.")
+    require("Video" in streams_alternate_after["stream_types"], "The changed alternate source has no saved primary stream.")
+    canonical_url_after_alternate_change = no_sha_url if canonical_project_id == alternate_item_id else primary_url
+
+    direct_changed = call_playback(
+        api,
+        container,
+        secondary_version_id,
+        no_sha_url if secondary_version_id == alternate_item_id else primary_url,
+        event_item_ids=[primary_item_id, alternate_item_id],
+    )
+    secondary_after_url = no_sha_url if secondary_version_id == alternate_item_id else primary_url
+    require(direct_changed["http_status"] == 200 and direct_changed["path_matches_manifest"], "The direct alternate entry lost its updated address.")
+    require(direct_changed["media_source_ids"] and direct_changed["media_source_ids"][0] == uuid.UUID(secondary_version_id).hex, "The direct alternate entry no longer places its own source first.")
+
+    container = restart_isolated_server()
+    api = JellyfinApi()
+    restarted_root_url = canonical_url_after_alternate_change
+    restarted = call_playback(
+        api,
+        container,
+        canonical_project_id,
+        restarted_root_url,
+        event_item_ids=[primary_item_id, alternate_item_id],
+    )
+    require(restarted["http_status"] == 200 and set(restarted["media_source_ids"]) == {primary_id_hex, alternate_id_hex}, "The linked source set changed after Jellyfin restarted.")
+    require(restarted["media_source_ids"][0] == canonical_project_hex, "The canonical project source order changed after Jellyfin restarted.")
+    require(source_summary(restarted, canonical_project_id)["path_sha256"] == expected_url_hash(restarted_root_url), "The canonical project's saved address changed after restart.")
+    require(source_summary(restarted, alternate_item_id)["path_sha256"] == expected_url_hash(no_sha_url), "The changed alternate address was not restored after restart.")
+    for source_id in (primary_item_id, alternate_item_id):
+        source_reuse = source_event(restarted, source_id)
+        require(source_reuse is not None and probe_calls(source_reuse) == 0, "A persisted version source was re-probed after restart.")
+    require(fingerprint_row(canonical_project_id, primary_item_id) == primary_after, "The primary source key changed after Jellyfin restarted.")
+    require(fingerprint_row(canonical_project_id, alternate_item_id) == alternate_after, "The alternate source key or row changed after Jellyfin restarted.")
+    direct_restarted = call_playback(
+        api,
+        container,
+        secondary_version_id,
+        secondary_after_url,
+        event_item_ids=[primary_item_id, alternate_item_id],
+    )
+    require(direct_restarted["http_status"] == 200 and direct_restarted["path_matches_manifest"], "The direct version entry lost its address after restart.")
+    require(direct_restarted["media_source_ids"] and direct_restarted["media_source_ids"][0] == uuid.UUID(secondary_version_id).hex, "The direct version ordering changed after restart.")
+    direct_restarted_events = [source_event(direct_restarted, source_id) for source_id in (primary_item_id, alternate_item_id)]
+    require(all(event is not None and probe_calls(event) == 0 for event in direct_restarted_events), "Direct-version playback re-probed a persisted source after restart.")
+    selected_restarted = call_playback(
+        api,
+        container,
+        canonical_project_id,
+        secondary_version_url if secondary_version_id == primary_item_id else no_sha_url,
+        event_item_ids=[primary_item_id, alternate_item_id],
+        selected_media_source_id=secondary_version_id,
+    )
+    require(selected_restarted["http_status"] == 200 and source_summary(selected_restarted, secondary_version_id) is not None, "MediaSourceId selection failed after restart.")
+    selected_restarted_events = [source_event(selected_restarted, source_id) for source_id in (primary_item_id, alternate_item_id)]
+    require(all(event is not None and probe_calls(event) == 0 for event in selected_restarted_events), "MediaSourceId selection re-probed a persisted source after restart.")
+
+    database_backup = FINGERPRINT_DATABASE.read_bytes()
+    require(not Path(str(FINGERPRINT_DATABASE) + "-wal").exists(), "The isolated fingerprint database still has a WAL sidecar; refusing an unsafe database snapshot.")
+    require(not Path(str(FINGERPRINT_DATABASE) + "-journal").exists(), "The isolated fingerprint database still has a journal sidecar; refusing an unsafe database snapshot.")
+    trigger_name = "block_fingerprint_update_" + uuid.uuid4().hex[:10]
+    failed_write_url = unique_query_url(changed_alternate_url, "sqlite-write-failure-" + uuid.uuid4().hex[:10])
+    write_failed: dict[str, object] | None = None
+    failure_summary: dict[str, object] = {}
+    restored_api = api
+    restored_container = container
+    try:
+        alternate_fixture_path.write_bytes(write_versioned_fixture(alternate_fixture_path.read_bytes(), failed_write_url, media_sha1, media_size))
+        with sqlite3.connect(FINGERPRINT_DATABASE, timeout=10) as connection:
+            connection.execute(
+                f"CREATE TRIGGER {trigger_name} BEFORE UPDATE ON strm_fingerprint "
+                f"WHEN OLD.item_id = '{canonical_project_hex}' AND OLD.source_key = '{alternate_id_hex}' "
+                "BEGIN SELECT RAISE(ABORT, 'isolated write-failure validation'); END"
+            )
+
+        write_failed = call_playback(
+            api,
+            container,
+            canonical_project_id,
+            restarted_root_url,
+            event_item_ids=[primary_item_id, alternate_item_id],
+        )
+        require(write_failed["http_status"] == 200 and write_failed["path_matches_manifest"], "A SQLite history write failure made the already persisted Jellyfin source unusable.")
+        failure_events = [str(event) for event in write_failed["plugin_events"]]
+        require(any("SqliteException" in event and "optimization disabled until restart" in event for event in failure_events), "The SQLite write failure did not disable optimization until restart with a redacted failure category.")
+        require(not any("fingerprint committed" in event for event in failure_events), "A failed SQLite transaction was reported as a committed fingerprint.")
+        unchanged_after_write_failure = fingerprint_row(canonical_project_id, alternate_item_id)
+        require(unchanged_after_write_failure == alternate_after, "The rejected SQLite update changed the trusted alternate baseline.")
+        followup_native = call_playback(
+            api,
+            container,
+            canonical_project_id,
+            restarted_root_url,
+            event_item_ids=[primary_item_id, alternate_item_id],
+        )
+        require(followup_native["http_status"] == 200 and followup_native["path_matches_manifest"], "Jellyfin native playback did not recover after the plugin latched the SQLite failure.")
+        require(not followup_native["plugin_events"], "The plugin continued making fingerprint decisions after the SQLite store was marked unavailable.")
+        require(fingerprint_row(canonical_project_id, alternate_item_id) == alternate_after, "Native fallback after a SQLite write failure changed the trusted alternate baseline.")
+        failure_summary = {
+            "playback_http_status": write_failed["http_status"],
+            "native_probe_calls": probe_calls(source_event(write_failed, alternate_item_id)),
+            "fingerprint_unchanged": unchanged_after_write_failure,
+            "plugin_events": failure_events,
+            "native_followup": followup_native,
+        }
+    finally:
+        stop = run([sys.executable, str(ENVIRONMENT), "stop"], timeout=120)
+        require(stop.returncode == 0, "The isolated Jellyfin server did not stop before restoring the SQLite database snapshot.")
+        FINGERPRINT_DATABASE.write_bytes(database_backup)
+        restored_container = restart_isolated_server()
+        restored_api = JellyfinApi()
+
+    recovered_after_store_failure = call_playback(
+        restored_api,
+        restored_container,
+        canonical_project_id,
+        restarted_root_url,
+        event_item_ids=[primary_item_id, alternate_item_id],
+    )
+    require(
+        recovered_after_store_failure["http_status"] == 200
+        and recovered_after_store_failure["path_matches_manifest"]
+        and probe_calls(source_event(recovered_after_store_failure, alternate_item_id)) == 1,
+        "After restoring the real SQLite file and restarting, the new alternate URL was not rechecked.",
+    )
+    recovered_alternate = fingerprint_row(canonical_project_id, alternate_item_id)
+    require(recovered_alternate and recovered_alternate["url_hash"] == expected_url_hash(failed_write_url), "The recovered SQLite store did not commit the alternate URL after restart.")
+    require(fingerprint_row(canonical_project_id, primary_item_id) == primary_before, "The SQLite recovery changed the independent primary fingerprint.")
+
+    return {
+        "merge_http_status": merge_status,
+        "canonical_project_item_id": canonical_project_id,
+        "fixture_source_id": primary_item_id,
+        "alternate_source_id": alternate_item_id,
+        "primary_entry_before_change": initial,
+        "selected_media_source_id": selected,
+        "direct_alternate_entry_before_change": direct,
+        "primary_fingerprint_before_change": primary_before,
+        "alternate_fingerprint_before_change": alternate_before,
+        "alternate_only_url_change": {
+            "playback": changed,
+            "primary_fingerprint_unchanged": primary_after,
+            "alternate_fingerprint_updated": alternate_after_url_only,
+            "primary_saved_streams_unchanged": streams_primary_after == streams_primary_before,
+            "alternate_saved_video_stream": "Video" in streams_alternate_after["stream_types"],
+        },
+        "alternate_url_change_without_sha": {
+            "playback": no_sha_playback,
+            "fingerprint_before": alternate_after_url_only,
+            "fingerprint_after": alternate_after,
+        },
+        "direct_alternate_entry_after_change": direct_changed,
+        "primary_and_direct_version_after_restart": {
+            "canonical_entry": restarted,
+            "direct_secondary_entry": direct_restarted,
+        },
+        "sqlite_write_failure": failure_summary,
+        "sqlite_recovery_after_restart": recovered_after_store_failure,
+        "alternate_fingerprint_after_sqlite_recovery": recovered_alternate,
+        "primary_identity_after_sqlite_recovery": fingerprint_row(canonical_project_id, primary_item_id),
+    }, restored_api, restored_container, alternate_item_id
+
+
 def ensure_success(result: dict, expected_url: str, expected_calls: int) -> None:
     require(result["http_status"] == 200, "Isolated PlaybackInfo did not return HTTP 200.")
     require(result["path_matches_manifest"], "PlaybackInfo did not return the current STRM address.")
@@ -757,10 +1230,15 @@ def main() -> int:
     container: str | None = None
     media_container: str | None = None
     plugin_disabled = False
+    first_trust_path: Path | None = None
+    no_stream_path: Path | None = None
+    alternate_version_path: Path | None = None
+    alternate_version_id: str | None = None
+    linked_primary_id: str | None = None
     summary: dict[str, object] = {"fixture_restoration": "not needed"}
     exit_code = 1
     try:
-        deploy_plugin()
+        summary["deployment"] = deploy_plugin()
         container = restart_isolated_server()
         api = JellyfinApi()
         require(api.public_info().get("Version") == "12.2.0", "The active isolated Jellyfin version is not 12.2.0.")
@@ -779,12 +1257,73 @@ def main() -> int:
         current_size = str(len(media_a))
         FIXTURE.write_bytes(write_versioned_fixture(FIXTURE.read_bytes(), current_url, current_sha1, int(current_size)))
 
-        # A warm-up lets Jellyfin establish the current URL and stream in its native library.
-        warmup = call_playback(api, container, item_id, current_url)
-        require(warmup["http_status"] == 200 and warmup["path_matches_manifest"] and warmup["has_video"], "The isolated fixture could not be warmed through Jellyfin PlaybackInfo.")
-        summary["warmup"] = warmup
+        # Create a fresh project, let Jellyfin save its stream with the plugin disabled, then verify the first active request trusts it.
+        first_trust_name = "First Trust Control " + uuid.uuid4().hex[:10]
+        first_trust_path = temporary_versioned_fixture(first_trust_name, current_url, current_sha1, len(media_a))
+        api.refresh_library()
+        first_trust_item = api.wait_for_named_library_item(first_trust_name)
+        first_trust_item_id = first_trust_item["Id"]
+        container = restart_isolated_server()
+        api = JellyfinApi()
+        first_trust_disable = api.plugin_action(False)
+        require(first_trust_disable == 204, "Jellyfin did not accept the isolated first-trust plugin-disable request.")
+        plugin_disabled = True
+        container = restart_isolated_server()
+        api = JellyfinApi()
+        disabled_first_trust = delegated_playback(api, container, first_trust_item_id, current_url)
+        first_trust_native_streams = api.saved_stream_snapshot(first_trust_item_id)
+        require(
+            disabled_first_trust["http_status"] == 200
+            and disabled_first_trust["path_matches_manifest"]
+            and disabled_first_trust["has_video"]
+            and not disabled_first_trust["plugin_events"]
+            and "Video" in first_trust_native_streams["stream_types"],
+            "Native playback did not save the fresh item's matching primary stream while the plugin was disabled.",
+        )
+        first_trust_enable = api.plugin_action(True)
+        require(first_trust_enable == 204, "Jellyfin did not accept the isolated first-trust plugin-enable request.")
+        plugin_disabled = False
+        container = restart_isolated_server()
+        api = JellyfinApi()
+        summary["plugin_status_after_restart"] = api.plugin_status()
+        first_trust = call_playback(api, container, first_trust_item_id, current_url)
+        ensure_success(first_trust, current_url, 0)
+        require(first_trust["plugin_event"] is not None and "FirstTrust" in str(first_trust["plugin_event"]), "The fresh native-saved item was not accepted through FirstTrust.")
+        summary["first_trust"] = {
+            **first_trust,
+            "native_saved_primary_before_enable": True,
+            "native_url_matched_manifest": disabled_first_trust["path_matches_manifest"],
+        }
+        first_trust_repeat = call_playback(api, container, first_trust_item_id, current_url)
+        ensure_success(first_trust_repeat, current_url, 0)
+        require("FirstTrust" not in str(first_trust_repeat["plugin_event"]), "FirstTrust repeated after the fresh item's fingerprint had been persisted.")
+        summary["first_trust_repeat"] = first_trust_repeat
 
-        # Reset the prototype repository so the first measured request exercises first trust.
+        no_stream_name = "Missing Primary Stream Control " + uuid.uuid4().hex[:10]
+        no_stream_url = missing_fixture_url(current_url)
+        no_stream_path = temporary_versioned_fixture(no_stream_name, no_stream_url, current_sha1, len(media_a))
+        api.refresh_library()
+        no_stream_item = api.wait_for_named_library_item(no_stream_name)
+        no_stream_id = no_stream_item["Id"]
+        missing_primary = call_playback(api, container, no_stream_id, no_stream_url)
+        require(missing_primary["http_status"] >= 400, "A STRM with no saved primary stream unexpectedly succeeded against a missing media URL.")
+        require(missing_primary["probe_calls"] == 1, "A STRM without a primary stream did not reach one native probe attempt.")
+        require(fingerprint_row(no_stream_id, no_stream_id) is None, "A failed first probe created a trusted SQLite fingerprint without a saved primary stream.")
+        summary["first_play_without_primary_stream"] = missing_primary
+
+        # The main fixture's history now survives restart and must be reused without a new trust handoff.
+        api = JellyfinApi()
+        item = api.fixture_item()
+        item_id = item["Id"]
+        warmup = call_playback(api, container, item_id, current_url)
+        require(
+            warmup["http_status"] == 200
+            and warmup["path_matches_manifest"]
+            and warmup["has_video"]
+            and warmup["probe_calls"] in {0, 1},
+            "The isolated fixture could not establish a valid saved native source and fingerprint.",
+        )
+        summary["warmup"] = warmup
         container = restart_isolated_server()
         api = JellyfinApi()
         summary["plugin_status_after_restart"] = api.plugin_status()
@@ -792,15 +1331,34 @@ def main() -> int:
         item_id = item["Id"]
         current_url, current_sha1, current_size = parse_manifest(FIXTURE.read_bytes())
         require(current_sha1 == hashlib.sha1(media_a).hexdigest() and current_size == str(len(media_a)), "The fixture content fingerprint changed during server restart.")
-
-        first_trust = call_playback(api, container, item_id, current_url)
-        ensure_success(first_trust, current_url, 0)
-        require(first_trust["plugin_event"] is not None and "FirstTrust" in str(first_trust["plugin_event"]), "The first request did not record a trust handoff.")
-        summary["first_trust"] = first_trust
+        restart_first = call_playback(api, container, item_id, current_url)
+        ensure_success(restart_first, current_url, 0)
+        require("FirstTrust" not in str(restart_first["plugin_event"]), "The persisted main-fixture fingerprint was discarded on restart.")
+        summary["fingerprint_reused_after_restart"] = restart_first
 
         unchanged_repeat = call_playback(api, container, item_id, current_url)
         ensure_success(unchanged_repeat, current_url, 0)
         summary["unchanged_repeat"] = unchanged_repeat
+
+        baseline_with_sha = fingerprint_row(item_id, item_id)
+        require(baseline_with_sha and baseline_with_sha["sha1"] == current_sha1, "The accepted baseline is missing its initial media SHA-1.")
+        FIXTURE.write_bytes(write_versioned_fixture(FIXTURE.read_bytes(), current_url, None, len(media_a)))
+        require(parse_manifest(FIXTURE.read_bytes())[1] is None, "The temporary missing-SHA case still contains a SHA-1 marker.")
+        temporarily_missing_sha = call_playback(api, container, item_id, current_url)
+        ensure_success(temporarily_missing_sha, current_url, 0)
+        retained_while_sha_missing = fingerprint_row(item_id, item_id)
+        require(retained_while_sha_missing == baseline_with_sha, "A temporary missing SHA-1 overwrote the valid historical content identity.")
+
+        FIXTURE.write_bytes(write_versioned_fixture(FIXTURE.read_bytes(), current_url, current_sha1, len(media_a)))
+        restored_sha = call_playback(api, container, item_id, current_url)
+        ensure_success(restored_sha, current_url, 0)
+        require(fingerprint_row(item_id, item_id) == baseline_with_sha, "Restoring the same SHA-1 changed the trusted baseline.")
+        summary["temporary_missing_sha_preserves_history"] = {
+            "missing_sha_playback": temporarily_missing_sha,
+            "restored_sha_playback": restored_sha,
+            "fingerprint_before": baseline_with_sha,
+            "fingerprint_while_missing": retained_while_sha_missing,
+        }
 
         changed_url = alternate_fixture_url(current_url)
         FIXTURE.write_bytes(replace_manifest_url(FIXTURE.read_bytes(), changed_url))
@@ -835,7 +1393,7 @@ def main() -> int:
         require(failed_probe["http_status"] >= 400, "An unprobeable changed URL did not fail closed in PlaybackInfo.")
         require(
             failed_probe["plugin_event"] is not None
-            and ("fingerprint retained" in str(failed_probe["plugin_event"]) or "Native probe not accepted" in str(failed_probe["plugin_event"])),
+            and ("fingerprint retained" in str(failed_probe["plugin_event"]) or "not accepted" in str(failed_probe["plugin_event"])),
             "The failed native refresh did not leave a retained-baseline event.",
         )
         require(failed_probe["probe_calls"] == 1, "The failed changed-URL case did not execute exactly one matching native probe.")
@@ -860,11 +1418,49 @@ def main() -> int:
             "The failed URL retry changed the previously saved media streams.",
         )
 
-        # Return to the last accepted fixture address before exercising independent native paths.
-        FIXTURE.write_bytes(replace_manifest_url(FIXTURE.read_bytes(), persisted_url))
-        recovered_after_failure = call_playback(api, container, item_id, persisted_url)
-        ensure_success(recovered_after_failure, persisted_url, 1)
+        retained_fingerprint = fingerprint_row(item_id, item_id)
+        require(
+            retained_fingerprint is not None
+            and retained_fingerprint["url_hash"] == expected_url_hash(persisted_url),
+            "The failed changed URL overwrote the accepted SQLite fingerprint before restart.",
+        )
+        summary["failed_url_fingerprint_before_restart"] = retained_fingerprint
+
+        # Keep the rejected URL on disk across restart; prove the old baseline survives before repairing to a third URL.
+        container = restart_isolated_server()
+        api = JellyfinApi()
+        summary["plugin_status_after_failed_url_restart"] = api.plugin_status()
+        item = api.fixture_item()
+        item_id = item["Id"]
+        failed_after_restart = call_playback(api, container, item_id, failed_url)
+        require(failed_after_restart["http_status"] >= 400, "The failed URL was trusted after Jellyfin restarted.")
+        require(failed_after_restart["probe_calls"] == 1, "The failed URL did not execute one native retry after Jellyfin restarted.")
+        retained_after_restart = fingerprint_row(item_id, item_id)
+        require(retained_after_restart == retained_fingerprint, "The failed URL changed the persisted SQLite baseline across restart.")
+        summary["failed_url_after_restart"] = {
+            **failed_after_restart,
+            "old_fingerprint_retained": retained_after_restart,
+        }
+
+        recovered_url = unique_query_url(persisted_url, "recovery-" + uuid.uuid4().hex[:12])
+        FIXTURE.write_bytes(write_versioned_fixture(FIXTURE.read_bytes(), recovered_url, current_sha1, len(media_a)))
+        recovered_after_failure = call_playback(api, container, item_id, recovered_url)
+        ensure_success(recovered_after_failure, recovered_url, 1)
+        require(
+            recovered_after_failure["plugin_event"] is not None
+            and "fingerprint committed" in str(recovered_after_failure["plugin_event"]),
+            "A repaired, new URL was not probed and committed after the persisted failure.",
+        )
+        recovered_fingerprint = fingerprint_row(item_id, item_id)
+        require(
+            recovered_fingerprint is not None
+            and recovered_fingerprint["url_hash"] == expected_url_hash(recovered_url)
+            and recovered_fingerprint["url_hash"] != retained_fingerprint["url_hash"],
+            "The repaired URL did not replace the retained fingerprint with its new accepted identity.",
+        )
+        persisted_url = recovered_url
         summary["recovered_after_failure"] = recovered_after_failure
+        summary["recovered_fingerprint"] = recovered_fingerprint
 
         summary["ordinary_media_delegation"] = ordinary_media_delegation_check(api, container)
         summary["legacy_strm_delegation"] = legacy_strm_delegation_check(api, container)
@@ -882,6 +1478,23 @@ def main() -> int:
             summary["manifest_race"].get("recovery_encoder_calls_total"),
         )
         summary["manual_full_refresh"] = full_refresh
+
+        primary_for_versions, _, _ = parse_manifest(FIXTURE.read_bytes())
+        require(primary_for_versions == refreshed_url, "The main STRM fixture changed unexpectedly before the native multi-version test.")
+        alternate_version_path = ROOT / "artifacts" / "dev-env" / "strm" / (
+            "Alternate Version Control " + uuid.uuid4().hex[:10] + ".strm"
+        )
+        linked_primary_id = item_id
+        multiversion_summary, api, container, alternate_version_id = multiversion_and_sqlite_failure_check(
+            api,
+            container,
+            item_id,
+            primary_for_versions,
+            current_sha1,
+            len(media_a),
+            alternate_version_path,
+        )
+        summary["native_multiversion_and_sqlite_recovery"] = multiversion_summary
 
         # Disable through Jellyfin, restart the isolated server to remove the proxy registrations,
         # and prove the versioned STRM remains playable through the native path.
@@ -927,9 +1540,41 @@ def main() -> int:
                     item_id = item["Id"]
             except Exception as error:
                 summary["plugin_reenable_recovery"] = type(error).__name__
+        temporary_cleanup_ok = True
+        try:
+            if api is not None and container is not None:
+                api = JellyfinApi()
+                if linked_primary_id is not None:
+                    unlink_status = api.delete_alternate_sources(linked_primary_id)
+                    require(unlink_status == 204, "The isolated multi-version relationship could not be removed during cleanup.")
+                removed_names: list[str] = []
+                for temporary_path in (alternate_version_path, first_trust_path, no_stream_path):
+                    if temporary_path is not None:
+                        removed_names.append(temporary_path.stem)
+                        temporary_path.unlink(missing_ok=True)
+                if removed_names:
+                    api.refresh_library()
+                    for name in removed_names:
+                        api.wait_for_named_library_item_absent(name)
+                summary["temporary_fixture_cleanup"] = {
+                    "status": "PASS",
+                    "alternate_versions_unlinked": linked_primary_id is not None,
+                    "temporary_strm_files_removed": len(removed_names),
+                    "library_items_absent": True,
+                }
+            else:
+                for temporary_path in (alternate_version_path, first_trust_path, no_stream_path):
+                    if temporary_path is not None:
+                        temporary_path.unlink(missing_ok=True)
+                summary["temporary_fixture_cleanup"] = {"status": "PARTIAL", "reason": "Jellyfin API was not available to verify the temporary library items."}
+                temporary_cleanup_ok = False
+        except Exception as error:
+            summary["temporary_fixture_cleanup"] = {"status": "FAIL", "error": type(error).__name__}
+            temporary_cleanup_ok = False
         summary["fixture_restoration"] = restore_fixture_and_sync(api, item_id, container, original)
         if exit_code == 0 and (
             plugin_disabled
+            or not temporary_cleanup_ok
             or summary["fixture_restoration"] != "fixture restored and Jellyfin address synchronized"
         ):
             summary["status"] = "FAIL"

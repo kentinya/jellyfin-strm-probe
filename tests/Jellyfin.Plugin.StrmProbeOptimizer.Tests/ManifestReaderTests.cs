@@ -34,6 +34,31 @@ public sealed class ManifestReaderTests
     }
 
     [TestMethod]
+    public void ContentHashIncludesBomBytesWhileParsingTheSameManifest()
+    {
+        const string contents = "# strm-probe-version:1\nhttps://media.example.invalid/video.mp4\n";
+        var withBom = Path.Combine(Path.GetTempPath(), $"strm-probe-{Guid.NewGuid():N}.strm");
+        var withoutBom = WriteFixture(contents);
+        File.WriteAllText(withBom, contents, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+
+        try
+        {
+            var bomResult = _reader.Read(withBom);
+            var plainResult = _reader.Read(withoutBom);
+
+            Assert.AreEqual(ManifestReadStatus.Supported, bomResult.Status);
+            Assert.AreEqual(ManifestReadStatus.Supported, plainResult.Status);
+            Assert.AreEqual(plainResult.Manifest?.Url, bomResult.Manifest?.Url);
+            Assert.AreNotEqual(plainResult.Manifest?.ContentHash, bomResult.Manifest?.ContentHash);
+        }
+        finally
+        {
+            File.Delete(withBom);
+            File.Delete(withoutBom);
+        }
+    }
+
+    [TestMethod]
     public void ReadTreatsMissingProtocolAsUnsupported()
     {
         var path = WriteFixture("https://media.example.invalid/video.mp4\n");
@@ -61,6 +86,76 @@ public sealed class ManifestReaderTests
         {
             File.Delete(conflicting);
             File.Delete(relative);
+        }
+    }
+
+    [TestMethod]
+    public void ReadUsesJellyfinStrmLineNormalizationBeforeSelectingTheFirstAddress()
+    {
+        const string url = "https://media.example.invalid/video.mp4?token=one";
+        var path = WriteFixture("# strm-probe-version:1\r\n\t" + url.Replace("media", "me\tdia", StringComparison.Ordinal) + "\r\nhttps://other.example.invalid/later.mp4\r\n");
+        try
+        {
+            var result = _reader.Read(path);
+
+            Assert.AreEqual(ManifestReadStatus.Supported, result.Status);
+            Assert.AreEqual(url, result.Manifest?.Url);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [TestMethod]
+    public void ReadDoesNotSkipAnInvalidFirstAddressToFindALaterValidOne()
+    {
+        var path = WriteFixture("# strm-probe-version:1\nftp://media.example.invalid/first.mp4\nhttps://media.example.invalid/later.mp4\n");
+        try
+        {
+            Assert.AreEqual(ManifestReadStatus.Invalid, _reader.Read(path).Status);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [TestMethod]
+    public void ReadRejectsInvalidUtf8AndDuplicateOptionalMarkers()
+    {
+        var invalidEncoding = Path.Combine(Path.GetTempPath(), $"strm-probe-{Guid.NewGuid():N}.strm");
+        var duplicateMarker = WriteFixture("# strm-probe-version:1\n# strm-probe-size:0\n# strm-probe-size:1\nhttps://media.example.invalid/video.mp4\n");
+        File.WriteAllBytes(invalidEncoding, [0x23, 0x20, 0xff]);
+        try
+        {
+            Assert.AreEqual(ManifestReadStatus.Invalid, _reader.Read(invalidEncoding).Status);
+            Assert.AreEqual(ManifestReadStatus.Invalid, _reader.Read(duplicateMarker).Status);
+        }
+        finally
+        {
+            File.Delete(invalidEncoding);
+            File.Delete(duplicateMarker);
+        }
+    }
+
+    [TestMethod]
+    public void ReadTreatsMissingEmptyAndOverflowingSizesAsUnavailable()
+    {
+        var missing = WriteFixture("# strm-probe-version:1\nhttps://media.example.invalid/video.mp4\n");
+        var empty = WriteFixture("# strm-probe-version:1\n# strm-probe-size:\nhttps://media.example.invalid/video.mp4\n");
+        var overflow = WriteFixture("# strm-probe-version:1\n# strm-probe-size:9223372036854775808\nhttps://media.example.invalid/video.mp4\n");
+        try
+        {
+            Assert.IsNull(_reader.Read(missing).Manifest?.Size);
+            Assert.IsNull(_reader.Read(empty).Manifest?.Size);
+            Assert.IsNull(_reader.Read(overflow).Manifest?.Size);
+        }
+        finally
+        {
+            File.Delete(missing);
+            File.Delete(empty);
+            File.Delete(overflow);
         }
     }
 

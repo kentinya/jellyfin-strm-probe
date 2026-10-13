@@ -25,6 +25,19 @@ public sealed class ProbeDecisionServiceTests
     }
 
     [TestMethod]
+    public void HistoricalUrlChangeRequiresProbeWhenNativeAddressAlreadyMatchesCurrentManifest()
+    {
+        var previous = Fingerprint(CurrentUrl, ValidSha1, 24);
+        var currentUrl = "https://media.example.invalid/video.mp4?sig=b";
+        var manifest = Manifest(currentUrl, ValidSha1, 24);
+
+        var decision = _service.Decide(manifest, previous, hasPrimaryStream: true, nativeUrl: currentUrl);
+
+        Assert.AreEqual(ProbeDecisionKind.RequireProbe, decision.Kind);
+        Assert.AreEqual(ProbeDecisionReason.UrlChanged, decision.Reason);
+    }
+
+    [TestMethod]
     public void SameUrlAndShaSkipsRegardlessOfSizeDifference()
     {
         var previous = Fingerprint(CurrentUrl, ValidSha1, 24);
@@ -53,6 +66,28 @@ public sealed class ProbeDecisionServiceTests
         Assert.AreEqual(ProbeDecisionKind.RequireProbe, _service.Decide(Manifest(CurrentUrl, null, 25), previous, true, CurrentUrl).Kind);
         Assert.AreEqual(ProbeDecisionKind.SkipProbe, _service.Decide(Manifest(CurrentUrl, null, 24), previous, true, CurrentUrl).Kind);
         Assert.AreEqual(ProbeDecisionKind.SkipProbe, _service.Decide(Manifest(CurrentUrl, null, null), previous, true, CurrentUrl).Kind);
+    }
+
+    [TestMethod]
+    public void InvalidHistoricalSizesAreNotComparedAsValidValues()
+    {
+        var negativePrevious = Fingerprint(CurrentUrl, sha1: null, size: -1);
+        var negativeCurrent = Manifest(CurrentUrl, sha1: null, size: -2);
+        var zeroPrevious = Fingerprint(CurrentUrl, sha1: null, size: 0);
+
+        Assert.AreEqual(ProbeDecisionReason.InsufficientFingerprint, _service.Decide(negativeCurrent, negativePrevious, true, CurrentUrl).Reason);
+        Assert.AreEqual(ProbeDecisionReason.InsufficientFingerprint, _service.Decide(Manifest(CurrentUrl, null, 0), negativePrevious, true, CurrentUrl).Reason);
+        Assert.AreEqual(ProbeDecisionKind.RequireProbe, _service.Decide(Manifest(CurrentUrl, null, 1), zeroPrevious, true, CurrentUrl).Kind);
+        Assert.AreEqual(ProbeDecisionKind.SkipProbe, _service.Decide(Manifest(CurrentUrl, null, 0), zeroPrevious, true, CurrentUrl).Kind);
+    }
+
+    [TestMethod]
+    public void SizeIsUsedWhenOnlyOneSideHasAValidSha1()
+    {
+        var previous = Fingerprint(CurrentUrl, sha1: "invalid", size: 24);
+
+        Assert.AreEqual(ProbeDecisionKind.RequireProbe, _service.Decide(Manifest(CurrentUrl, ValidSha1, 25), previous, true, CurrentUrl).Kind);
+        Assert.AreEqual(ProbeDecisionKind.SkipProbe, _service.Decide(Manifest(CurrentUrl, ValidSha1, 24), previous, true, CurrentUrl).Kind);
     }
 
     [TestMethod]
