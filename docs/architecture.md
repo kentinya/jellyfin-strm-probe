@@ -2,20 +2,22 @@
 
 ## CURRENT
 
-V4.2 取代 V3.0 作为当前开发基准，旧原文与合同留在 Git 历史。仓库已包含 Task 1.1 的最小 C# 插件原型和测试；仍没有 SQLite schema、配置页、批量任务或发布包。
+V4.2 取代 V3.0 作为当前开发基准，旧原文与合同留在 Git 历史。仓库保留 Slice 1 已接受的 Task 1.1 原型，并有 Task 2.1 实施候选 `b99bc00b08fd3a8cad32076a220c5219fcc78ab7` 等待 B 审查。该候选包含 SQLite 指纹存储和真实媒体源映射；它尚不是 B 接受结果。完整配置页、批量任务、共享协调和发布包尚未实现。
 
 原型固定 Jellyfin `12.2.0`、Controller／Model `12.2.0`、`net10.0` 和 SDK `10.0.401`。它在隔离实例中已加载并验证 STRM 播放接入、未变化复用、同 SHA-1／Size 地址变化时原生探测、新地址重启后可用，以及失败后重试。实际命令与限制见 [Closure Packet](progress.md#slice-1-closed)、[兼容性与接入验证](compatibility.md) 和 [环境交接](development-environment.md)。这些证据支持 Slice 1 核心原型关闭；完整产品与多版本兼容仍未验证。
 
 B 已独立审查修正候选 `2b1e1b5bcf77b06997fabed5a31147838db16b47` 并裁定 Task 1.1 PASS；保存关联、指定真实对照、Manifest 竞态和 FullRefresh 附带工作均已有独立证据。单独 Slice Final 与 A 完整范围审查均已完成，Slice 1 为 PASS / CLOSED；见 [A 最终审查快照](progress.md#slice-1-closed)。
 
-Slice 2 合同现为 ACTIVE，Base 是上述真实关闭提交 `924816a84c74f5d79c107478f2d40e621cb8be8d`，Implementation Head 为 NOT SET；B 已规划 [Task 2.1](../TASK.md)（PLANNED），尚未实施。正式 SQLite、多源映射、共用协调和核心配置属于当前合同的 TARGET，尚未改变以下实现事实。
+Slice 2 合同现为 ACTIVE，Base 是上述真实关闭提交 `924816a84c74f5d79c107478f2d40e621cb8be8d`，当前 Implementation Head 指向 Task 2.1 候选 `b99bc00b08fd3a8cad32076a220c5219fcc78ab7`；[Task 2.1](../TASK.md) 已交 B 独立审查。候选新增项目／实际源身份映射、SQLite 五字段最小表与条件提交、持久化运行依赖，并通过 T4 单元和隔离实机门禁；Task 的验收条件仍由 B 对照合同审查。共用协调、全局并发和核心配置仍是后续目标设计。
 
-### 已实现的 Task 1.1 原型边界
+Task 2.1 候选按原生所属项目 ID 与真实 `MediaSourceInfo.Id` 关联 STRM 和指纹；SQLite 只保存项目 ID、源键、URL 哈希、SHA-1 与有效 Size。隔离实例验证了多版本源选择、保存地址／主流、跨重启复用，以及写入失败和只读数据库故障后的委托与修复重试；依赖部署复制了 SQLite 托管程序集与原生库并确认加载。精确输入身份、命令和场景结果见 [Task 2.1 Developer Completion Report](../TASK.md#developer-completion-report) 及其本机证据索引。B 审查前不将这些 Task 场景扩大解释为全矩阵或 Slice 通过。
+
+### Slice 1 关闭时的 Task 1.1 原型边界
 
 - `ServiceRegistrator` 在 Jellyfin 核心服务注册后包装唯一的 `IMediaSourceManager`、`IMediaEncoder`、`IMediaStreamRepository` 与 `IItemPersistenceService` 实例；未匹配方法委托给对应原生实现。单元测试核对核心注册和生命周期，隔离实例验证实际插件启动、禁用、恢复与加载。
 - `StrmManifestReader` 有界只读解析版本化 STRM；`ProbeDecisionService` 实现该原型所需的 URL／SHA-1／Size 决策。`StrmPlaybackOptimizer` 只接管允许探测的受支持 `.strm`；其他请求保留 Jellyfin 原始权限并委托原生路径。
 - `ProbeExecutionContext` 记录本次请求 URL 的编码器主流身份；保存代理只在原生 `SaveMediaStreams`／`SaveItems` 成功返回后记录对应主流和地址。接入层再核对 Jellyfin 返回源、已保存主流、最新地址及未变化的 STRM，满足条件后才提交进程内指纹。单元测试覆盖旧流仍在和原生保存抛错；隔离实例观察到真实成功保存与返回流相符。隔离实例没有对 Jellyfin 内部数据库注入保存故障，B 已核对固定源码事务边界、独立保存失败 harness 与实际成功保存／重启证据；该结果不宣称实机数据库故障注入。
-- 原型仓库使用进程内条件提交；重启后需要首次信任接管。正式 SQLite、同源并发协调、批量任务、配置 UI、完整决策矩阵和跨版本兼容仍是目标设计或后续 Slice 工作。
+- Slice 1 关闭时的原型使用进程内条件提交；重启后需要首次信任接管。Task 2.1 候选新增 SQLite 持久化和真实源身份。当前代码仍未实现同源并发协调、批量任务、完整配置 UI、全产品矩阵或跨 Jellyfin 版本承诺。
 - 隔离实测覆盖普通文件、旧 STRM、Live TV、禁用插件、false 权限的实际流请求、手动 FullRefresh 和探测期间 STRM 变化。固定版本的 PlaybackInfo 固定传 `allowMediaProbe=true`；可取消的媒体流入口传 `false`，故 false 实测通过真实流 API，不能宣称为 PlaybackInfo 的 false 参数测试。提交后地址变化连续三次观察到匹配探测、`GetMediaInfo` 调用和本地媒体 GET；手动 FullRefresh 更新条目 ETag，但未运行这些探测，后续地址变化仍触发探测。精确证据和性能限制见 [兼容性记录](compatibility.md)。
 
 ### 播放与任务执行上下文

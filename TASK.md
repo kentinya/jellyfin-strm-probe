@@ -5,7 +5,7 @@
 ```text
 Task ID: 2.1
 Parent Slice: 2
-Status: PLANNED
+Status: READY FOR B REVIEW
 Task Base: 7e0240cd1cada74f142b7b0afd612943ca991a91
 Contract Checkpoint: 7e0240cd1cada74f142b7b0afd612943ca991a91
 Slice Base: 924816a84c74f5d79c107478f2d40e621cb8be8d
@@ -124,13 +124,13 @@ C# 全套包含解析／决策、真实 SQLite、源身份及播放／保存／�
 
 ## Developer Completion Report
 
-- Changed Files：NOT SET。
-- Implemented：NOT RUN；当前只有 B 计划，无新产品实现。
-- Tests and Results：NOT RUN；后续填写索引、候选／输入身份、精确命令、计数／耗时、首败／重跑、复用及缺失门槛。
-- Decisions：NOT SET。
-- Remaining In-Slice Work：本 Task 全部验收，另有 RO-4／RO-5 运行中共享／全局上限／正常收尾及 RO-6 完整核心配置；每次 PASS 重新对账全部 RO／Surfaces。
-- Risks / Deviations：源映射、新增 SQLite 依赖尚未实证；不可用如实 BLOCKED／NOT RUN，不以回退替代多版本验收。
-- Head SHA：NOT SET。
+- Changed Files：插件实现与依赖：`src/Jellyfin.Plugin.StrmProbeOptimizer/Jellyfin.Plugin.StrmProbeOptimizer.csproj`、`Packaging/meta.json`、`ServiceRegistrator.cs`、`Services/ProbeDecisionService.cs`、`Services/ProbeExecutionContext.cs`、新增 `Services/SqliteStrmFingerprintRepository.cs`、`Services/StrmManifestReader.cs`、`Services/StrmPlaybackOptimizer.cs`、`packages.lock.json`；测试：`tests/Jellyfin.Plugin.StrmProbeOptimizer.Tests/ManifestReaderTests.cs`、`PlaybackOptimizerTests.cs`、`ProbeDecisionServiceTests.cs`、新增 `SqliteStrmFingerprintRepositoryTests.cs`、测试项目 `packages.lock.json`；隔离实机入口：`scripts/run_isolated_plugin_integration.py`；交接事实：本文件、`SLICE.md` 实现指针、`docs/architecture.md`、`docs/test-matrix.md`。
+- Implemented：按实际 Jellyfin 项目／媒体源关联播放检查；新增五字段 SQLite 指纹表、按项目＋源主键的版本初始化及条件事务提交；扩展输入规范化、决策校验和播放提交核对；部署并验证 SQLite 托管／原生运行依赖。隔离实机覆盖首次信任和重启复用、相同内容换 URL、失败保留／恢复、Manifest 竞态、多版本源选择、状态库写入失败及不可写故障／重启恢复，并保留旧 STRM、普通媒体、直播、false 流权限、插件启停和 FullRefresh 场景。代码实现候选为 `b99bc00b08fd3a8cad32076a220c5219fcc78ab7`，等待 B 独立审查；AC 勾选和 B 决定保持未完成。
+- Tests and Results：候选 T4 门禁记录在 `.git/validation-evidence/b99bc00b08fd3a8cad32076a220c5219fcc78ab7/developer-final-t4-20261013-02/INDEX.md`。固定 SDK 10.0.401；locked restore PASS；Release build PASS（0 warning／0 error）；solution MSTest PASS（51 passed、0 failed、0 skipped）；format verify PASS；Python unittest PASS（30 passed）；治理、`git diff --check` 与 Python compile PASS；最终隔离 Jellyfin 集成脚本退出 0、JSON status PASS。隔离实例已确认临时 STRM 移除／库条目不存在、版本关系解除、原 STRM 恢复且 Jellyfin 地址同步；仅使用仓库专用隔离实例和临时夹具，未改生产 Jellyfin 或媒体。先前反馈运行失败及后续最终复验均保留在证据索引中。
+- Decisions：不新增共享协调器、全局并发配置、批量任务或完整配置页；保留 SQLite 失败时停止优化并按原生权限委托的路径。最终隔离脚本新增真实不可写 SQLite 验证，使用文件系统不可变属性（`chattr +i`）触发 SQLite 写失败，并在重启恢复前清除属性。没有把整份 T01～T28／B01～B12 矩阵或完整 Slice 结果标记为通过。
+- Remaining In-Slice Work：Task 2.1 等待 B 审查。Slice 2 的运行中共享／全局并发／收尾与 RO-6 完整核心配置尚未由本 Task 实现或验收；完整 Slice 审查仍待后续授权工作。
+- Risks / Deviations：本 Task 的实际媒体源、多版本与 SQLite 故障链路有隔离 Jellyfin 证据；音频必要主流由原生适配控制测试覆盖，隔离实机夹具是含音频和视频的媒体，未验证独立音频-only STRM。未运行外部代理／OpenList 联调、其他 Jellyfin 版本、批量、运行中共享／并发门槛、完整产品矩阵或发布打包。测试矩阵各行继续保持 NOT RUN，等待 B 独立审查后按完整行范围核对。
+- Head SHA：`b99bc00b08fd3a8cad32076a220c5219fcc78ab7`。
 
 若产生少量可复用经验，提供候选供 A 收尾合并，不记流水账；本轮规划没有新增收尾经验。
 
@@ -139,8 +139,8 @@ C# 全套包含解析／决策、真实 SQLite、源身份及播放／保存／�
 ```text
 Reviewed: NOT SET
 Decision: PENDING
-Slice Required Outcomes all satisfied: NO — 尚无 Slice 2 实现或新验收
-Next: DEVELOPER IMPLEMENTS TASK 2.1
+Slice Required Outcomes all satisfied: PENDING — B 在审查时核对；Task 2.1 不关闭 Slice 2
+Next: B REVIEWS TASK 2.1
 ```
 
 待审占位不是 PASS。Developer 提交 READY FOR B REVIEW 后，B 根据真实提交和证据判 PASS 或 FIX REQUIRED；修正通常留在本 Task。PASS 后核对所有 RO／Surfaces，决定 NEXT TASK 或 SLICE READY FOR A REVIEW；只有 A 可以关闭 Slice。

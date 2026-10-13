@@ -83,7 +83,13 @@ A 实质范围调整保留矩阵 ID 与历史结果，但移除当前 Slice 1 �
 
 ## 执行与对账
 
-Slice 2 现已 ACTIVE，当前 Implementation Head 为 NOT SET，尚无新产品矩阵验收。其修订合同覆盖 T01～T28 的核心播放／指纹部分及 B01／B02、X01～X10 的相应核心边界；T24 的批量部分、B07 的批量停止收尾、完整配置页、原生任务及大规模部分继续在 Slice 3／4。表中 NOT RUN 保持原事实，实施后按单元、真实 Jellyfin 和延期部分分别对账，不能提前把整行全部写成 PASS。
+Slice 2 现已 ACTIVE，Implementation Head 指向等待 B 审查的 Task 2.1 候选 `b99bc00b08fd3a8cad32076a220c5219fcc78ab7`。尚无完整产品矩阵验收；表中各行 NOT RUN 保持原事实。Task 2.1 的部分单元及隔离 Jellyfin 证据见下方说明和 [Developer Completion Report](../TASK.md#developer-completion-report)，不把部分场景升级为整行 PASS。T24 的批量部分、B07 的批量停止收尾、共享／并发、完整配置页、原生任务及大规模部分继续留在后续 Slice 范围。
+
+## Task 2.1 实施证据（等待 B 审查）
+
+候选 `b99bc00b08fd3a8cad32076a220c5219fcc78ab7` 的 T4 执行记录保存在 `.git/validation-evidence/b99bc00b08fd3a8cad32076a220c5219fcc78ab7/developer-final-t4-20261013-02/INDEX.md`。单元测试和隔离 Jellyfin 分别报告：C# 全套 51/51、Python 全套 30/30；真实实例验证首次信任／持久化重启复用、同内容换 URL、多版本源和主流关联、失败重试及 Manifest 竞态、SQLite 写入／只读故障与重启恢复，以及普通／旧 STRM、直播、false 流权限、禁用插件和 FullRefresh。临时条目和多版本关系已清理，原 STRM 与 Jellyfin 地址已恢复。
+
+这些证据支持 B 对 Task 2.1 实施候选的审查，不替代逐行完整矩阵对账。T01～T28、B01～B12 与 X01～X10 状态仍按上表记录；没有运行外部代理／OpenList、批量任务、运行中共享／全局并发、其他 Jellyfin 版本或完整发布门槛。
 
 按开发流程保留源码／工作区身份、精确命令、版本、隔离配置、耗时、日志及原生 ffprobe 计数。所有哈希／地址／媒体使用假数据。区分单元、真实 Jellyfin、压力夹具与外部代理；十万条模拟枚举不冒充十万条真实库通过。
 
