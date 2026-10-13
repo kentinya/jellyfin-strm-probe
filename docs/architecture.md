@@ -6,13 +6,13 @@ V4.2 取代 V3.0 作为当前开发基准，旧原文与合同留在 Git 历史�
 
 原型固定 Jellyfin `12.2.0`、Controller／Model `12.2.0`、`net10.0` 和 SDK `10.0.401`。它在隔离实例中已加载并验证 STRM 播放接入、未变化复用、同 SHA-1／Size 地址变化时原生探测、新地址重启后可用，以及失败后重试。实际命令与限制见 [Task 1.1](../TASK.md)、[兼容性与接入验证](compatibility.md) 和 [环境交接](development-environment.md)。这些是 Task 原型的分项证据，不代表 Slice 1 完成或多版本兼容。
 
-B 已独立复现上述正常与不可达失败路径，Task 仍为 FIX REQUIRED。本次保存判断只检查返回主流／地址和内存 `ShortcutPath`，无法排除成功编码器结果之后保存失败而旧流仍在；提交前取消也缺少保护。两者独立行为复现均失败，详见 [当前 B Review](../TASK.md#current-b-review-result)。下述原型机制描述其实现意图，可靠提交目标仍未通过。
+B 已独立复现上述正常与不可达失败路径，Task 仍为 FIX REQUIRED。本次保存判断只检查返回主流／地址和内存 `ShortcutPath`，无法排除成功编码器结果之后保存失败而旧流仍在。保存关联复现失败；提交前取消的假对象复现也失败，但已按 A RESCOPE 退出当前播放 Task 的防御性验收范围，详见 [当前 B Review](../TASK.md#current-b-review-result)。下述原型机制描述其实现意图，可靠提交目标仍未通过。
 
 ### 已实现的 Task 1.1 原型边界
 
 - `ServiceRegistrator` 在 Jellyfin 核心服务注册后包装唯一的 `IMediaSourceManager` 与 `IMediaEncoder` 实例；未匹配播放方法完整反射委托。单元测试核对委托和原生实例生命周期，隔离实例验证插件启动、停止与加载。
 - `StrmManifestReader` 有界只读解析版本化 STRM；`ProbeDecisionService` 实现该原型所需的 URL／SHA-1／Size 决策。`StrmPlaybackOptimizer` 只接管允许探测的受支持 `.strm`；其他请求保留 Jellyfin 原始权限并委托原生路径。
-- `ProbeExecutionContext` 记录本次正确 URL 的 `IMediaEncoder.GetMediaInfo` 调用及是否返回主流；接入层检查返回地址／主流、内存 `ShortcutPath` 和 STRM 内容，再条件提交内存指纹。原生抛出失败／取消、地址未更新及 Manifest 竞态有保留基线分支；本次新主流保存关联和原生正常返回后的取消保护仍须修正。
+- `ProbeExecutionContext` 记录本次正确 URL 的 `IMediaEncoder.GetMediaInfo` 调用及是否返回主流；接入层检查返回地址／主流、内存 `ShortcutPath` 和 STRM 内容，再条件提交内存指纹。原生抛出失败／取消、地址未更新及 Manifest 竞态有保留基线分支；本次新主流保存关联仍须修正；原生正常返回后的额外取消保护已退出当前播放范围，原生取消异常分支与已有回归保留。
 - 原型仓库使用进程内条件提交；重启后需要首次信任接管。正式 SQLite、同源并发协调、批量任务、配置 UI、完整决策矩阵和跨版本兼容仍是目标设计或后续 Slice 工作。
 - Jellyfin 12.2 PlaybackInfo 对 `GetPlaybackMediaSources` 传入 `allowMediaProbe=true` 与 `CancellationToken.None`。可取消的媒体流取源调用传入 `false`，因此不会进入主动探测分支。探测期间取消的控制逻辑有单元测试；此 API 组合没有可实测的请求取消路径。
 
@@ -20,7 +20,7 @@ B 已独立复现上述正常与不可达失败路径，Task 仍为 FIX REQUIRED
 
 播放接入保留原调用的 token 与探测权限。获取 PlaybackInfo 并不保证实际探测；插件未变化复用分支会使用原生不探测取源。当前 PlaybackInfo 传 `CancellationToken.None`，客户端退出及停止播放不连接到本次探测取消；不新增 `RequestAborted` 关联或 PlaybackStopped 事件取消器。客户端退出后，执行仍成功且结果已保存、Manifest 一致时，可继续按条件提交。
 
-批量尚未实现；目标执行上下文由原生计划任务提供可取消 token，停止与共享等待者语义见下方协调设计。执行本身收到取消时，探测中及结果返回到提交前均需保留旧基线。固定版本依据及验收入口区分见 [兼容性](compatibility.md#播放与批量取消语义)。
+批量尚未实现；目标执行上下文由原生计划任务提供可取消 token，停止与共享等待者语义见下方协调设计。Slice 2 的可取消共享执行须验证探测中及结果返回到提交前取消时的基线保护。Slice 1 的当前播放不要求额外取消检查或人为注入取消验收，原生取消异常仍保留基线并传播。固定版本依据及验收入口区分见 [兼容性](compatibility.md#播放与批量取消语义)。
 
 ## TARGET
 
