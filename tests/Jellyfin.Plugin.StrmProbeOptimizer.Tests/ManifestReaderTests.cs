@@ -283,6 +283,46 @@ public sealed class ManifestReaderTests
     }
 
     [TestMethod]
+    public void ReadTreatsUnknownProtocolVersionsAsUnsupported()
+    {
+        var versionTwo = WriteFixture("# strm-probe-version:2\nhttps://media.example.invalid/video.mp4\n");
+        var versionZero = WriteFixture("# strm-probe-version:0\nhttps://media.example.invalid/video.mp4\n");
+        var versionSuffix = WriteFixture("# strm-probe-version:1-beta\nhttps://media.example.invalid/video.mp4\n");
+        try
+        {
+            Assert.AreEqual(ManifestReadStatus.Unsupported, _reader.Read(versionTwo).Status);
+            Assert.AreEqual(ManifestReadStatus.Unsupported, _reader.Read(versionZero).Status);
+            Assert.AreEqual(ManifestReadStatus.Unsupported, _reader.Read(versionSuffix).Status);
+        }
+        finally
+        {
+            File.Delete(versionTwo);
+            File.Delete(versionZero);
+            File.Delete(versionSuffix);
+        }
+    }
+
+    [TestMethod]
+    public void ReadRejectsConflictingProtocolVersions()
+    {
+        var oneThenTwo = WriteFixture("# strm-probe-version:1\n# strm-probe-version:2\nhttps://media.example.invalid/video.mp4\n");
+        var zeroThenOne = WriteFixture("# strm-probe-version:0\n# strm-probe-version:1\nhttps://media.example.invalid/video.mp4\n");
+        var twoThenTwo = WriteFixture("# strm-probe-version:2\n# strm-probe-version:2\nhttps://media.example.invalid/video.mp4\n");
+        try
+        {
+            Assert.AreEqual(ManifestReadStatus.Invalid, _reader.Read(oneThenTwo).Status);
+            Assert.AreEqual(ManifestReadStatus.Invalid, _reader.Read(zeroThenOne).Status);
+            Assert.AreEqual(ManifestReadStatus.Invalid, _reader.Read(twoThenTwo).Status);
+        }
+        finally
+        {
+            File.Delete(oneThenTwo);
+            File.Delete(zeroThenOne);
+            File.Delete(twoThenTwo);
+        }
+    }
+
+    [TestMethod]
     public void ContentHashIgnoresModifiedTimeRewriteAndSameContentReplay()
     {
         const string contents = "# strm-probe-version:1\n# strm-probe-sha1:0123456789abcdef0123456789abcdef01234567\n# strm-probe-size:42\nhttps://media.example.invalid/video.mp4\n";
