@@ -1,15 +1,15 @@
 # Task 1.1 — V4.2 核心接入原型与可靠指纹提交验证
 
-Task 1.1 已由用户激活。前轮的环境阻塞已由 A 补齐并由 B 解除；Developer 已交付最小插件原型，报告见下方 “Developer Completion Report: Task 1.1 implementation”。B 独立审查判定 **FIX REQUIRED**：本次结果与保存的关联、提交前取消保护及指定真实对照尚未满足。A 已提交播放／批量取消语义澄清，B 核对后决定继续原 Task；取消验收指原生执行收到取消时的保护，客户端退出不单独否决有效成功提交。
+Task 1.1 已由用户激活。前轮的环境阻塞已由 A 补齐并由 B 解除；Developer 已交付最小插件原型，报告见下方 “Developer Completion Report: Task 1.1 implementation”。B 独立审查判定 **FIX REQUIRED**：本次结果与保存的关联及指定真实对照尚未满足。A 按用户要求实质调整当前播放取消范围，B 决定 ADJUST 原 Task：不要求成功返回后的额外取消检查和人为注入取消验收；原生取消异常保留基线并传播。BR-2 的历史 FAIL 保留，退出当前阻塞范围。
 
-未移动 Base、未重规划、未降低 T4 门槛。Developer 不签发 B PASS，不更新 Slice Implementation Head，也不关闭 Slice。
+未移动 Base、未新建 Task，T4 等级与四阶段流程保留；按新合同调整取消验收范围。Developer 不签发 B PASS，不更新 Slice Implementation Head，也不关闭 Slice。
 
 ```text
 Task ID: 1.1
 Parent Slice: 1
 Status: FIX REQUIRED
 Task Base: b69a930495c762fe546f8970891a2c955766b28c
-Contract Checkpoint: 0c2315ffa735694f4cae5a21771af9cc95c33488
+Contract Checkpoint: 4c749d7cce0f48b5c8146755db43837960e79f4f
 Original V4.2 Contract Checkpoint: 4a8536860fafaf25f7a1e573fef19255ca3d07c3
 Superseded Plan: 4b1d0468c1e43e6e9034ef98e99b6cc44ea59485
 Difficulty: High
@@ -25,11 +25,19 @@ Decision: REPLAN。原 Task 1.1 是未实施计划，保留 ID／Task Base 供�
 
 ### B 对 A 取消语义澄清的接续决定（2026-10-13）
 
+历史决定；取消防御及注入验收部分已由下方 ADJUST 替代。
+
 Decision: CONTINUE。已在 A 合同提交 `0c2315ffa735694f4cae5a21771af9cc95c33488` 后运行治理检查，并核对 Required Outcomes／Surfaces、实际原型、既有失败复现和 Task 边界。澄清只明确取消对象和原生入口，Task 1.1 的 ID、Task Base、Goal、Scope、Difficulty、T4 与四阶段门槛保留，不重新规划。审查过的旧合同与实现 SHA 仍按原记录追溯。
 
 播放接入保留原调用 token／权限；当前 PlaybackInfo 不传客户端取消，不新增停止播放事件或 `RequestAborted` 到探测的关联。未变化且已有主流仍跳过，启动 PlaybackInfo 不等于实际探测。客户端退出后，本次执行若成功、结果已保存且 Manifest 一致，仍可提交；执行本身收到取消时必须保留旧基线。真实取消验证在带可取消 token 的隔离 Jellyfin 原生执行链进行，并标明入口，不能声称验证了公共客户端取消。批量任务及通用共享协调仍延期。
 
 BR-1 保存关联、BR-2 执行取消提交保护及 BR-3 缺失真实对照继续阻塞，状态保持 FIX REQUIRED。本轮仅合同与文档同步，未修改产品源码、重跑产品验收或签发 Task／Slice PASS。
+
+### B 对 A 播放取消 RESCOPE 的调整决定（2026-10-13）
+
+Decision: ADJUST。已在 A 合同提交 `4c749d7cce0f48b5c8146755db43837960e79f4f` 后运行治理检查 PASS，核对真实调用入口、原型与历史审查证据。Task ID、Base、Goal、Difficulty、T4 与四阶段流程保留；Scope／AC-4／最终测试计划按新合同移除当前播放成功返回后的额外取消防御及人为注入取消门槛。原 token／权限委托、取消异常处理与全部已有回归保留；新的可取消共享执行与批量停止分别在 Slice 2／3 验证。
+
+BR-2 的假对象 FAIL 不是实现修复或 PASS，而是本场景不再属于当前合同阻塞；BR-3 仅移除注入取消缺口，其余指定真实对照、竞态及 FullRefresh 观察继续要求。BR-1 保存关联与 BR-3 继续阻塞，Task 仍 FIX REQUIRED；所有 RO／Surfaces 尚未满足，不创建下一 Task、不交 Closure Packet。本次没有产品源码修改或产品验收运行。
 
 ## Goal
 
@@ -45,8 +53,8 @@ BR-1 保存关联、BR-2 执行取消提交保护及 BR-3 缺失真实对照继�
 - 创建真实 solution、最小插件和必要测试项目；未来实际创建后补入准确 restore／build／test／format 命令，不虚构不存在的命令路径。
 - 验证 Plugin／ServiceRegistrator 和候选 IMediaSourceManager 接入，完整委托、原生实例与释放所有权、启动／关闭、普通媒体／直播。
 - 用手写版本化 STRM 和假／本地媒体服务，验证未变化跳过、必要主流缺失／指纹变化主动原生探测、URL 改变且 SHA-1 相同也实际探测。
-- 验证 NativeProbeExecutor 能关联本次结果和原生保存，建立最小指纹提交原型；覆盖失败后旧流仍在、取消、Manifest 再变及保存失败，不增加持久化独立状态机。
-- 播放沿用原生取消上下文；取消保护及真实验证针对执行本身收到取消信号，不新增客户端退出／停止播放取消探测的机制，客户端退出不单独阻止符合全部成功条件的提交。
+- 验证 NativeProbeExecutor 能关联本次结果和原生保存，建立最小指纹提交原型；覆盖失败后旧流仍在、原生取消异常、Manifest 再变及保存失败，不增加持久化独立状态机。
+- 播放沿用原 token／权限；原生抛出取消异常时不提交并传播。不新增成功返回后的取消检查，不要求人为注入取消单元／实机验收；客户端退出不单独阻止符合全部成功条件的提交。已有取消异常回归保留。
 - 证明 URL 变化后原生保存地址／有效主流，当次与重启正确；覆盖 allowMediaProbe=false 及回退权限。
 - 核实目标版本的任务接口、注册方式、取消／进度及默认触发规则，记录 Slice 3 可行性；本 Task 不实现批量任务。
 - 保存实际计数、日志、构建／加载证据、FullRefresh 附带开销与继续／调整结论。
@@ -58,7 +66,7 @@ BR-1 保存关联、BR-2 执行取消提交保护及 BR-3 缺失真实对照继�
 - [ ] RO-1／AC-1：目标版本与依赖准确，真实原型可构建／加载／正常启停。
 - [ ] RO-2／AC-2：全接口委托、原生实例唯一、无循环／重复释放；普通媒体、直播、旧 STRM、禁用与原生刷新对照正常。
 - [ ] RO-2／AC-3：未变化且已有主流的第二次播放实际 ffprobe 零增量；变化时确有新增执行。
-- [ ] RO-3／AC-4：本次成功、旧流保留的失败、执行取消、文件再变与保存失败可靠区分；变化指纹仅在有效结果已保存且版本一致后提交，无法证明则报告阻塞。客户端退出不单独否决有效成功提交。
+- [ ] RO-3／AC-4：本次成功、旧流保留的失败、原生取消异常、文件再变与保存失败可靠区分；变化指纹仅在有效结果已保存且版本一致后提交，无法证明则报告阻塞。客户端退出不单独否决有效成功提交。
 - [ ] RO-4／AC-5：URL 改变且 SHA-1 相同实际探测，当次和重启均新 URL／有效主流，不以仅更新路径代替。
 - [ ] RO-4／AC-6：allowMediaProbe=false 所有分支不主动探测、不提交变化基线；保存失败不把旧地址伪报为新地址；无独立状态机。
 - [ ] RO-5／AC-7：固定源码接口定位、脱敏原始证据、额外开销、未完成项与继续／调整结论真实；不把调研当成任务实机验收。
@@ -92,7 +100,7 @@ python3 scripts/run_isolated_plugin_integration.py
 |---|---|---|
 | 构建／加载／启停、普通／直播／旧 STRM／禁用完整委托 | T23、T24、T26、X02 | AC-1、AC-2 |
 | 未变化跳过与主动探测 | T01～T04、T08、X07 | AC-3 |
-| 真成功、失败旧流仍在、带可取消 token 的真实原生执行取消、Manifest 再变、原生保存失败 | T17、T18、X04、X07、X08 | AC-4 |
+| 真成功、失败旧流仍在、Manifest 再变、原生保存失败；原生取消异常保留已有回归 | T17、T18、X04、X07、X08 | AC-4 |
 | 同 SHA-1 换 URL 必探测，新地址当次及重启 | T08、T22、X04 | AC-5 |
 | 原生手动刷新、allowMediaProbe=false 全分支、不建状态机 | T21、T28、X06 | AC-6 |
 | 证据、FullRefresh 开销、任务接口源码定位与继续结论 | X07、源码调研记录 | AC-7 |
@@ -105,7 +113,7 @@ T19 在本 Task 验证原型结果／地址重启，不宣称完成 Slice 2 的�
 
 其他构建／回归证据只有在输入匹配、原始产物可读时明确复用；缺失、矛盾或不可关联时重跑。核对任务接口调研，不将其作为原生计划任务已运行的证明。
 
-按 A 澄清区分上下文：公共 PlaybackInfo 的原生不可取消入口事实单独记录；执行取消则在带 token 的真实隔离原生链验证探测中与提交前的基线保护。客户端退出不视为执行取消，不能为制造场景提高 `allowMediaProbe=false` 权限或添加客户端事件关联。
+按 A RESCOPE 区分上下文：公共 PlaybackInfo 的原生不可取消入口事实单独记录；不要求成功返回后的额外取消检查与人为注入取消实机验收。原 token／权限、原生取消异常保护和全部已有回归保留。可取消共享执行／批量停止在后续 Slice 验证，不提高 false 权限或添加客户端事件关联。
 
 ### 证据与重跑规则
 
@@ -282,14 +290,15 @@ Next: Developer resumes Task 1.1 as IN PROGRESS
 Reviewed: b69a930495c762fe546f8970891a2c955766b28c..153c0d31a699ff15047b6a2e274237497476ec76
 Report Checkpoint: e005dbdcbd76fe983710721f106a5ccc02eff63f
 Reviewed Contract Checkpoint: 4a8536860fafaf25f7a1e573fef19255ca3d07c3
-Current Contract Checkpoint: 0c2315ffa735694f4cae5a21771af9cc95c33488
+Current Contract Checkpoint: 4c749d7cce0f48b5c8146755db43837960e79f4f
 Implementation SHA: 153c0d31a699ff15047b6a2e274237497476ec76
 Decision: FIX REQUIRED
 Task status: FIX REQUIRED
 P0 Blockers: NONE FOUND
-P1 Blockers: BR-1, BR-2, BR-3
+P1 Blockers: BR-1, BR-3
+Historical finding outside current playback scope: BR-2 (FAIL retained; not fixed or PASS)
 Slice Required Outcomes all satisfied: NO
-Next: Developer corrects Task 1.1; native-execution cancellation verification remains required
+Next: Developer corrects BR-1 and completes remaining BR-3 in Task 1.1 under adjusted contract
 ```
 
 ### 审查范围、身份与证据（2026-10-13）
@@ -313,12 +322,13 @@ B 本机原始证据：`.git/validation-evidence/e005dbdcbd76fe983710721f106a5cc
 | ID | 位置／复现与影响 | 同 Task 修正及验收 |
 |---|---|---|
 | BR-1 | `StrmPlaybackOptimizer.cs:167–183` 把“返回主流＋返回 URL＋内存 ShortcutPath”命名为已保存结果；`ProbeExecutionContext` 只保留是否曾有主流的布尔值。B 独立假对象复现：本次编码器返回 H.264/1920，原生返回仍是旧 MPEG-2/640 主流、地址已变，代码提交新指纹并返回旧流；后续请求 `allowMediaProbe=false` 跳过探测。固定源码中 `FetchShortcutInfo` 先改内存路径，`SaveMediaStreams` 可失败且 `RunCustomProvider` 捕获异常继续刷新，因此该判断没有排除真实保存失败。违反 RO-3／RO-4、AC-4／AC-5 和 REQ-PROBE-002；假对象复现不宣称已注入真实数据库故障。 | 建立与本次结果关联的原生保存成功证据，明确区分媒体流保存和地址持久化；无法证明时保留基线并明确失败／恢复。覆盖本次成功但流保存失败、返回旧流、新地址只在内存更新等分支；随后请求必须重试，不得因误提交跳过。补可核验的隔离原生保存链路证据，不能仅将现有布尔变量改名或检查主流存在。 |
-| BR-2 | `StrmPlaybackOptimizer.cs:164–183` 原生调用正常返回后未在提交前检查取消。B 独立复现：原生成功结果／新地址返回前取消调用 token，代码仍提交新指纹，随后请求跳过；现有取消单测只覆盖原生抛出取消异常。违反 RO-3、AC-4 和失败／取消不覆盖基线的不变量。 | 在接入提交边界处理已经发生的取消，覆盖原生忽略 token 正常返回，以及结果返回至提交期间取消；保留旧基线、传播明确取消。这是接入层收到取消后的行为问题，未声称当前公共 PlaybackInfo 会传入客户端取消。 |
-| BR-3 | Task 指定真实对照仍有缺口：普通媒体／直播／旧 STRM／禁用、手动强制刷新、false 权限，以及探测期间 Manifest 再变仅有部分单元证据；FullRefresh 额外提供器工作未作可复现观察。真实原生探测执行取消验证尚未完成。涉及 AC-2／AC-4／AC-6／AC-7 与 Slice Final 的明示门槛。 | 补当前合同指定的真实对照、实际计数、保存结果和竞态证据；记录 FullRefresh 实际附带工作与限制，不要求另做大规模性能基准。取消验证可在隔离真实 Jellyfin 原生调用链传入可取消 token，并准确标注调用入口；不要求客户端取消 PlaybackInfo，不把假对象验证改写成真实验收。 |
+| BR-3 | Task 指定真实对照仍有缺口：普通媒体／直播／旧 STRM／禁用、手动强制刷新、false 权限，以及探测期间 Manifest 再变仅有部分单元证据；FullRefresh 额外提供器工作未作可复现观察。原人为注入取消验证 NOT RUN 保留历史，按 RESCOPE 不再阻塞。其余缺口涉及 AC-2／AC-4／AC-6／AC-7 与 Slice Final 的明示门槛。 | 补当前合同指定的真实对照、实际计数、保存结果和竞态证据；记录 FullRefresh 实际附带工作与限制，不要求另做大规模性能基准。不要求人为注入取消验收；保留原生取消异常处理和已有回归。不得将历史取消 FAIL／NOT RUN 改成 PASS。 |
 
-两个行为复现均为 **FAIL**，独立 harness 退出 0 仅表示完成复现。原型源码未改，harness 位于证据目录；保留初次运行、一次下一请求检查的 harness 空引用失败及修正后的重跑，未将 harness 错误计为产品失败。
+历史两个行为复现均为 **FAIL**；BR-1 仍阻塞，BR-2 已因 A RESCOPE 退出当前范围，独立 harness 退出 0 仅表示完成复现。原型源码未改，harness 位于证据目录；保留初次运行、一次下一请求检查的 harness 空引用失败及修正后的重跑，未将 harness 错误计为产品失败。
 
-### A 已提交的取消语义澄清与 B 接续
+### 历史 BR-2 与 A 取消语义澄清
+
+BR-2 原记录：`StrmPlaybackOptimizer.cs:164–183` 在原生正常返回后没有提交前取消检查。假对象主动取消调用 token 后仍提交指纹，复现 FAIL；前合同曾要求修正。A 最新 RESCOPE 移除了当前播放的该防御性场景，B 不再要求本 Task 修复或真实注入取消验收；原日志、实现 SHA 与结果不变。Slice 2 可取消共享执行须按自己的合同验证该提交边界。以下前次接续说明保留为历史，其取消门槛已被新决定替代。
 
 固定源码 `Jellyfin.Api/Helpers/MediaInfoHelper.cs:148` 的 PlaybackInfo 取源传 `true` 与 `CancellationToken.None`；`StreamingHelpers.cs:129` 的可取消取源传 `false`。当前 PlaybackInfo 探测链不接收客户端取消信号；客户端即使断开连接，也不能据此认定这次原生探测会被取消。不得提高 false 权限。
 
@@ -334,10 +344,10 @@ A 已在当前 Contract Checkpoint 明确：客户端退出后，原生执行如
 |---|---|---|
 | RO-1 | 固定版本／SDK／包锁，真实 solution、加载／重启、构建证据 | 整体镜像源码溯源限制保持披露；该项证据不代表整体 Task PASS |
 | RO-2 | 单一注册／生命周期控制与全接口转发单测，真实跳过／主动探测 | AC-2 原生普通／直播等指定真实对照 |
-| RO-3 | 正常成功、不可达失败保流重试；现有单元失败／取消／竞态对照 | BR-1、BR-2；真实竞态／原生执行取消门槛 |
+| RO-3 | 正常成功、不可达失败保流重试；现有单元失败／取消／竞态对照 | BR-1；真实竞态与保存关联；BR-2 退出当前范围 |
 | RO-4 | 同 SHA 地址变化的当次／重启新地址与主流 | BR-1 保存成功关联；false 权限／手动刷新真实对照 |
 | RO-5 | 版本、接口、原始证据、限制和本次 FIX REQUIRED 结论 | 附带刷新工作的可复现观察；不批准继续 Slice 2／3 |
 
-Required Surfaces 中项目／入口、隔离加载／PlaybackInfo、正常与不可达探测及重启、任务接口调研已有证据；“可重复的可靠指纹提交条件”仍不满足。保留同一 Task 的 ID、Base、Goal、Scope、Difficulty 和 T4；不新建按测试或字段拆分的 Task，不运行 Slice Final，不交 A 最终关闭包。
+Required Surfaces 中项目／入口、隔离加载／PlaybackInfo、正常与不可达探测及重启、任务接口调研已有证据；“可重复的可靠指纹提交条件”仍不满足。保留同一 Task 的 ID、Base、Goal、Difficulty 和 T4；Scope／验收与测试计划已按 A RESCOPE 调整；不新建按测试或字段拆分的 Task，不运行 Slice Final，不交 A 最终关闭包。
 
-Developer 应在原 Task 1.1 修正 BR-1／BR-2 并补 BR-3 可执行证据，完成修正候选全部 T4 门槛，提交新 SHA 和首次失败／重跑日志，再交 B。无需因客户端 PlaybackInfo 无取消信号等待 A 修改合同。收尾经验候选：原生提供器会捕获保存异常时，要以本次结果关联及保存边界取证；取消验证同时覆盖异常返回与正常返回后的提交边界。Slice 收尾时再合并到角色经验，当前不记录开发流水账。
+Developer 应在原 Task 1.1 修正 BR-1 并补调整后的 BR-3 可执行证据，完成修正候选全部 T4 门槛，提交新 SHA 和首次失败／重跑日志，再交 B。A 已修改合同，当前不要求播放链成功返回后的额外取消防御或人为注入取消验收。收尾经验候选：原生提供器会捕获保存异常时，要以本次结果关联及保存边界取证；取消验收先核对真实入口与信号来源，人工注入不能证明正常播放可达。Slice 收尾时再合并到角色经验，当前不记录开发流水账。

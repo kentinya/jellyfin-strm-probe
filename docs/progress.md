@@ -19,3 +19,5 @@
 V4.2 初始合同检查点为 `4a8536860fafaf25f7a1e573fef19255ca3d07c3`；A 的播放／批量取消语义澄清检查点为 `0c2315ffa735694f4cae5a21771af9cc95c33488`。Task 保留原 ID／Base 并继续 FIX REQUIRED，当前合同身份见 [TASK.md](../TASK.md)。初始重规划核验：治理、24 项工具回归、Python 语法、本地 Markdown 链接与差异空白检查通过；不代表本次新增产品验收。
 
 被替代规划快照为 `4b1d0468c1e43e6e9034ef98e99b6cc44ea59485`，不是产品 Implementation Head。开发合同与后继 Task 使用真实 Git 检查点，不填虚构 SHA。
+
+A 播放取消范围调整检查点为 `4c749d7cce0f48b5c8146755db43837960e79f4f`：当前 Slice 1 不要求成功返回后的额外取消防御与人为注入取消验收，原生取消异常处理及已有回归保留；可取消共享执行／批量停止分别归 Slice 2／3。B ADJUST 原 Task，BR-2 历史 FAIL 保留且退出当前阻塞，BR-1 与调整后的 BR-3 继续阻塞；Task 仍 FIX REQUIRED，无产品验收 PASS。
