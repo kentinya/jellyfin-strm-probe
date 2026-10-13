@@ -21,11 +21,12 @@ Slice 1 交付固定 Jellyfin 12.2.0 的最小核心原型：未变化零探测�
 
 - 开发基准：V4.2；V3.0 原文／旧合同保留在 Git 历史。
 - 当前 Slice：2，ACTIVE；真实 Base 为 Slice 1 关闭提交 `924816a84c74f5d79c107478f2d40e621cb8be8d`，Implementation Head 为 `198f4ff2accd5bc9fcd87518a9684b9d068de103`；完整合同见 [SLICE.md](../SLICE.md)。
-- 当前 Task：[Task 2.2](../TASK.md)，PLANNED／High／T4；Task Base 为 `13cb8bdac319fcf0b3e7500661bae1c7455077b0`，Contract Checkpoint 为 `7e0240cd1cada74f142b7b0afd612943ca991a91`。目标为运行中探测协调、正常收尾与核心配置；未实施、未验收。
+- 当前 Task：[Task 2.2](../TASK.md)，READY FOR B REVIEW／High／T4；Task Base 为 `13cb8bdac319fcf0b3e7500661bae1c7455077b0`，Contract Checkpoint 为 `7e0240cd1cada74f142b7b0afd612943ca991a91`。候选 `d651950950d6d3ad2be4322ddf8f0afb658c7755` 已实现运行中探测协调、正常收尾与核心配置；T4 门槛与默认实机均 PASS，未验收。
+- Task 2.2 候选本机证据：`.git/validation-evidence/d651950950d6d3ad2be4322ddf8f0afb658c7755/developer-t4-20261014-0203/INDEX.md`；C# 91/91、聚焦 60/60、Python 30/30、默认实机 JSON PASS。
 - 已接受 Task 2.1：B PASS，实现 `198f4ff2accd5bc9fcd87518a9684b9d068de103`，Task Base `7e0240cd1cada74f142b7b0afd612943ca991a91`；完整计划／完成报告／B 决定通过 `git show 13cb8bdac319fcf0b3e7500661bae1c7455077b0:TASK.md` 读取。本机独立证据 `.git/validation-evidence/198f4ff2accd5bc9fcd87518a9684b9d068de103/b-rereview-20261014-03/INDEX.md`；历史 FIX REQUIRED／FAIL／NOT RUN 保留。
-- Slice 2 已接受解析／决策、SQLite、实际多版本身份与持久化播放／恢复闭环；RO-4／RO-5 的运行中共享、全局并发与正常收尾，以及 RO-6 核心配置／诊断尚未实现。完整 Required Outcomes／Surfaces 未满足，Slice Final 为 NOT RUN，不提交 Closure Packet 或关闭 Slice。
+- Slice 2 已接受解析／决策、SQLite、实际多版本身份与持久化播放／恢复闭环；RO-4／RO-5 的运行中共享、全局并发与正常收尾，以及 RO-6 核心配置／诊断已由 Task 2.2 候选实现并完成 T4 门槛，待 B 独立审查。完整 Required Outcomes／Surfaces 未满足，Slice Final 为 NOT RUN，不提交 Closure Packet 或关闭 Slice。
 - Slice 3／4：PLANNED；原生批量与完整配置页、大规模／扫描、外部代理及发布仍未完成。
 - 合同修订：A 按用户“批量停止只撤销未开始工作、只共享已实际开始探测”提交 [Material Contract Change](../SLICE.md#a-停止与共享边界修订2026-10-13)，替代 `ac2fcead73664cfdaf66f62954ec6b11fb303168` 的人为执行取消约定，Base／ID 不变；原生取消异常保护及历史结果保留。
-- 下一动作：Developer 按 Task 2.2 实施；通过 B 审查后重新核对全部 Required Outcomes／Surfaces，满足时单独运行 Slice Final 并提交 Closure Packet 给 A，不再为非阻塞改进新建 Task。
+- 下一动作：B 独立审查 Task 2.2 真实 `Task Base..Developer Head` 与原始产物；通过后重新核对全部 Required Outcomes／Surfaces，满足时单独运行 Slice Final 并提交 Closure Packet 给 A。
 
-NEXT ACTION: DEVELOPER IMPLEMENTS TASK 2.2
+NEXT ACTION: B REVIEWS TASK 2.2

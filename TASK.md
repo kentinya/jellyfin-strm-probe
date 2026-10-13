@@ -5,7 +5,7 @@
 ```text
 Task ID: 2.2
 Parent Slice: 2
-Status: PLANNED
+Status: READY FOR B REVIEW
 Task Base: 13cb8bdac319fcf0b3e7500661bae1c7455077b0
 Contract Checkpoint: 7e0240cd1cada74f142b7b0afd612943ca991a91
 Slice Base: 924816a84c74f5d79c107478f2d40e621cb8be8d
@@ -102,13 +102,13 @@ python3 scripts/run_isolated_plugin_integration.py
 
 ## Developer Completion Report
 
-- Changed Files：NOT IMPLEMENTED。
-- Implemented：NOT IMPLEMENTED。
-- Tests and Results：NOT RUN；填写实际候选、原始证据、命令／计数／耗时、首败／重跑和缺失门槛。
-- Decisions：按本计划实施；合同问题交 B／A，不自行删减门槛。
-- Remaining In-Slice Work：RO-4／RO-5 和 RO-6 核心配置／诊断待本 Task；随后全 Slice 对账与单独 Slice Final。
-- Risks / Deviations：共享异步上下文、实际开始竞态、调用者授权、配置保存失败与许可释放均待验证。
-- Head SHA：NOT SET。
+- Changed Files：`src/Jellyfin.Plugin.StrmProbeOptimizer/Plugin.cs`、`PluginConfiguration.cs`、`Services/IPlaybackSettings.cs`、`Services/ProbeCoordinator.cs`（新增）、`Services/StrmPlaybackOptimizer.cs`；`tests/Jellyfin.Plugin.StrmProbeOptimizer.Tests/ProbeCoordinatorTests.cs`（新增）、`ConfigurationTests.cs`（新增）、`PlaybackOptimizerTests.cs`、`MediaSourceManagerProxyTests.cs`；`scripts/run_isolated_plugin_integration.py`。`ServiceRegistrator.cs` 最终未改（曾试加早建 `ProbeCoordinator` 注册，因启动顺序问题回退）。
+- Implemented：新增进程内 `ProbeCoordinator`，以项目 ID＋source key 只登记已实际进入匹配原生调用且仍在执行的工作；`AcquireAsync` 先取全局许可再判断是否已有同源运行中探测，排队／等待许可不算开始，`TryMarkStarted` 是接入层实际开始信号，`TryMarkStarted` 失败即释放多余许可并加入已有执行；`Complete`／`Fail` 先移除登记再释放许可，完成／失败／取消／校验失败均释放，完成项不被后续请求复用。`StrmPlaybackOptimizer` 在获得执行机会时重读当前 Manifest／指纹，加入者只等待共享结果、随后按自身原生权限重新取源并重查，不串用他人的 `MediaSourceInfo`；等待者取消只结束其等待，不取消已开始执行；同版本共享失败原样上抛，不同版本则重新判断。全局池惰性创建、读取插件启动时捕获的并发值（默认 2，合法 1～8），规避 Jellyfin 先解析 `IMediaSourceManager` 后创建插件实例导致的过早构造。`PluginConfiguration` 新增 `Enabled`（默认 true）、`MaxConcurrentProbes`（默认 2）、`DetailedLog`（默认 false），保留 `PlaybackAutoCheck`；`Plugin.UpdateConfiguration` 先校验再持久化、成功后才发布内存值，非法值抛 `ArgumentException` 且不落盘不生效，持久化失败保留旧有效配置；启动读到已存非法并发时记录诊断并退回默认 2。`IPlaybackSettings` 暴露实时启用／播放检查／详细日志与启动并发。日志区分开始／加入（带运行数与许可数）、复用、真实成功提交、失败与库不可用，脱敏。
+- Tests and Results：候选 `d651950950d6d3ad2be4322ddf8f0afb658c7755`，本机证据 `.git/validation-evidence/d651950950d6d3ad2be4322ddf8f0afb658c7755/developer-t4-20261014-0203/INDEX.md`。最终门槛：locked restore、Release build（0 警告 0 错误）、全套 C# 91/91、format verify、Python 30/30、governance、`git diff --check` 全部 exit 0；聚焦筛选 60/60；默认实机脚本 JSON `status=PASS`（含同源共享、默认 2／配置 1 上限、配置 API 拒绝／保存／读回／重启、既有 Task 2.1 场景与清理恢复）。计数取自实际开始事件与慢速媒体标记，非 HTTP 返回或任务数。
+- Decisions：`ServiceRegistrator` 不再早建全局池，改为在 `StrmPlaybackOptimizer` 内惰性创建并消费 `IPlaybackSettings.MaxConcurrentProbes`；非整数／错误类型配置由 Jellyfin JSON 反序列化拒绝（HTTP 500），插件级越界值由 `UpdateConfiguration` 拒绝（HTTP 400），二者都不改变有效配置与文件，如实记录未统一状态码。
+- Remaining In-Slice Work：RO-4／RO-5 与 RO-6 核心配置／诊断已在本候选实现并验证；待 B 独立审查后重新对账全部 RO／Required Surfaces，满足时运行单独 Slice Final 并交 A。
+- Risks / Deviations：启动顺序导致全局池若在插件注册前创建会读到默认 2，已用惰性创建规避并有实机重启生效证据；非整数／错误类型拒绝状态码为 500 而非 400，属 Jellyfin 反序列化层，未做插件内统一。
+- Head SHA：`d651950950d6d3ad2be4322ddf8f0afb658c7755`。
 
 经验候选供 A 收尾：合同矩阵应索引到具体新旧输入和原始产物，不能以测试名称／总数或脚本 PASS 推断缺失分支；本轮不另写开发流水账。
 

@@ -4,7 +4,7 @@
 
 项目：`Jellyfin.Plugin.StrmProbeOptimizer`，C# 插件。SQLite 仅保存最小历史指纹，媒体流继续保存在 Jellyfin 原生库，不维护独立探测状态机。
 
-**Slice 1 核心原型已由 A 最终审查 PASS / CLOSED，完整产品尚未交付。** [最终审查](docs/progress.md#slice-1-closed) 与 [Closure Packet](docs/progress.md#slice-1-closed) 记录构建、加载、探测／保存、失败恢复和重启证据。固定 SDK `10.0.401`、Jellyfin `12.2.0`、源码／依赖与镜像 digest 见 [开发环境](docs/development-environment.md)。ACTIVE 的 [Slice 2](SLICE.md) 已完成 B 接受的 SQLite／真实媒体源持久播放闭环；共享并发、正常收尾和核心配置尚未实现；完整配置页、批量任务、发布包与外部代理联调仍延期。
+**Slice 1 核心原型已由 A 最终审查 PASS / CLOSED，完整产品尚未交付。** [最终审查](docs/progress.md#slice-1-closed) 与 [Closure Packet](docs/progress.md#slice-1-closed) 记录构建、加载、探测／保存、失败恢复和重启证据。固定 SDK `10.0.401`、Jellyfin `12.2.0`、源码／依赖与镜像 digest 见 [开发环境](docs/development-environment.md)。ACTIVE 的 [Slice 2](SLICE.md) 已完成 B 接受的 SQLite／真实媒体源持久播放闭环；运行中探测共享、全局并发上限与核心配置（`Enabled`／`PlaybackAutoCheck`／`MaxConcurrentProbes`／`DetailedLog`）已由 [Task 2.2](TASK.md) 候选实现并完成 T4 门槛，待 B 独立审查；[核心配置操作说明](docs/core-configuration.md) 可用；完整配置页、批量任务、发布包与外部代理联调仍延期。
 
 ## 开发基准与范围
 
