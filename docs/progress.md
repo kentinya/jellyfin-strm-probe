@@ -21,10 +21,10 @@ Slice 1 交付固定 Jellyfin 12.2.0 的最小核心原型：未变化零探测�
 
 - 开发基准：V4.2；V3.0 原文／旧合同保留在 Git 历史。
 - 当前 Slice：2，ACTIVE；真实 Base 为 Slice 1 关闭提交 `924816a84c74f5d79c107478f2d40e621cb8be8d`，Implementation Head 为 `3488e6b1df48d4c142595d27694a792bb32f0aad`；完整合同见 [SLICE.md](../SLICE.md)。
-- 当前 Task：[Task 2.1](../TASK.md)，READY FOR B REVIEW／High／T4；Task Base 与 Contract Checkpoint 为 `7e0240cd1cada74f142b7b0afd612943ca991a91`。首轮交 B 审查得到 FIX REQUIRED（R1～R3 证据缺口），Developer 已在同一 Task 提交修正候选 `3488e6b1df48d4c142595d27694a792bb32f0aad` 并重交审查。
-- 当前实现仍是已关闭的 Slice 1 原型；Slice 2 的正式 SQLite、稳定多源、运行中共享／全局并发和正常收尾尚未交付，新验收 NOT RUN。
+- 当前 Task：[Task 2.1](../TASK.md)，FIX REQUIRED／High／T4；Task Base 与 Contract Checkpoint 为 `7e0240cd1cada74f142b7b0afd612943ca991a91`。B 已复审修正候选 `3488e6b1df48d4c142595d27694a792bb32f0aad`，剩余 R2 完整协议／决策矩阵及实际输入索引，继续同一 Task 修正；详细决定与证据见 TASK.md。
+- Slice 2 候选已实现 SQLite 与真实多版本源身份，并有独立分项验证，尚未取得 Task PASS；运行中共享／全局并发、正常收尾和完整核心配置未实现，完整 Slice Final 为 NOT RUN。
 - Slice 3／4：PLANNED；原生批量与完整配置页、大规模／扫描、外部代理及发布仍未完成。
 - 合同修订：A 按用户“批量停止只撤销未开始工作、只共享已实际开始探测”提交 [Material Contract Change](../SLICE.md#a-停止与共享边界修订2026-10-13)，替代 `ac2fcead73664cfdaf66f62954ec6b11fb303168` 的人为执行取消约定，Base／ID 不变；原生取消异常保护及历史结果保留。
-- 下一动作：B 在 Task 2.1 修正候选 `3488e6b1df48d4c142595d27694a792bb32f0aad` 上独立复审；PASS 后重新对账全部 RO／Surfaces。共享／全局并发／正常收尾及完整核心配置仍是后续连贯工作，不提前激活其他 Task。
+- 下一动作：Developer 在 Task 2.1 内补齐剩余 R2，按原 T4 门槛验证并重交 B；PASS 后重新对账全部 RO／Surfaces。共享／全局并发／正常收尾及完整核心配置仍是后续连贯工作，不提前激活其他 Task。
 
-NEXT ACTION: B REVIEWS TASK 2.1 CORRECTED CANDIDATE
+NEXT ACTION: DEVELOPER COMPLETES TASK 2.1 R2 AND RESUBMITS

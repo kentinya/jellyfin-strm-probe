@@ -5,7 +5,7 @@
 ```text
 Task ID: 2.1
 Parent Slice: 2
-Status: READY FOR B REVIEW
+Status: FIX REQUIRED
 Task Base: 7e0240cd1cada74f142b7b0afd612943ca991a91
 Contract Checkpoint: 7e0240cd1cada74f142b7b0afd612943ca991a91
 Slice Base: 924816a84c74f5d79c107478f2d40e621cb8be8d
@@ -150,6 +150,48 @@ C# 全套包含解析／决策、真实 SQLite、源身份及播放／保存／�
 若产生少量可复用经验，提供候选供 A 收尾合并，不记流水账；本轮规划没有新增收尾经验。
 
 ## B Review Result
+
+```text
+Reviewed: 7e0240cd1cada74f142b7b0afd612943ca991a91..3488e6b1df48d4c142595d27694a792bb32f0aad
+Documentation Handoff: 6a385f16a47f50db79f81b2fc6428c307d34c044
+Decision: FIX REQUIRED
+Slice Required Outcomes all satisfied: NO
+Next: DEVELOPER COMPLETES R2 IN TASK 2.1 AND RESUBMITS FOR B REVIEW
+```
+
+### B 修正候选复审（2026-10-13）
+
+开始时 `main` 工作区干净，无已有用户改动；完成必读清单，规划／审查前治理 PASS。审查完整 Task Base..修正 Head，以及首轮实现后的修正差异；交接提交只修改五份文档，产品源码、测试／工具、锁与运行输入未变。**继续同一 Task 修正**，保留 ID、Base、Goal、Scope、T4 和全部原验收／测试门槛；已提交 Contract 可满足，无须交 A 修改合同。
+
+本机独立证据索引：`.git/validation-evidence/3488e6b1df48d4c142595d27694a792bb32f0aad/b-rereview-20261013-02/INDEX.md`。B 独立播放／Fingerprint／Reader／Decision 聚焦运行 61 passed、0 failed、0 skipped；使用真实 SQLite 的同元数据保存失败 harness 再次验证流保存失败、地址仅内存更新、项目保存失败，每项连续两次允许请求均拒绝并保留旧基线，false 权限不升级。原生固定源码的地址读取、源 ID／用户过滤及保存事务边界重新核对。该 harness 是原生适配控制验证，不是 Jellyfin 内部数据库故障实测。
+
+Developer 新候选的 locked restore、Release build（0 warning／0 error）、C# 全套 65 项、format、Python 30 项和隔离实机原始产物已核对；输入匹配，可复用它们的已执行门槛。B 独立默认实机复验退出 0、JSON PASS，耗时 499.198 秒：同 URL 实际内容变化与无可比哈希 Size 变化分别新增 1 次探测，mtime／重写／删除重放各 0 次；保持失败 Manifest／URL 跨重启后修复同一目标，重试新增 1 次探测并提交；既有多版本、SQLite 不可写／重启恢复及原生委托链均通过。三个临时 STRM、版本关系和一个临时媒体已清理，原夹具／媒体哈希及原生地址恢复，SQLite 不可变标志已清除，隔离实例 healthy。**首轮 R1、R3 的指定修正已满足，只有 R2 仍阻塞 Task PASS。** 这些门槛的 PASS 不能覆盖脚本／测试未实际包含的场景。
+
+### 唯一剩余 P1 阻塞：R2 — 完整矩阵及真实索引（AC-T1／AC-T7）
+
+R2 已补齐缺失／空文件、非法 SHA-1 长度／字符、Size 边界和 mtime／重写／重放，但仍未满足原要求的完整协议／双侧哈希／URL 优先覆盖。以下是必要验收证据缺口，不据此宣称产品逻辑错误：
+
+1. `ManifestReaderTests.cs` 全部版本标记仍为 `version:1`，没有未知版本（例如 `2`）及不同版本冲突（`1`／`2`）的实际输入。`ReadRejectsUnsupportedSchemesWithoutSkippingToALaterAddress` 测的是 URL scheme，不是 STRM 协议版本；重复两个 `version:1` 只能证明同值重复拒绝。补齐未知／冲突版本回归并核对安全委托、无新指纹。
+2. `ProbeDecisionServiceTests.cs:112` 的 `UrlPriorityBeatsEveryShaAndSizeCombination` 只构造双侧相同有效 SHA-1、Size 24；没有名称所称的组合。补齐 T09～T12 的实际输入，尤其在原生地址已经等于当前 Manifest、历史 URL 不同时，SHA-1 不同、双侧缺失／Size 相同或不同、仅一侧有效仍为 RequireProbe；同 URL 的双侧有效／缺失／非法组合须覆盖两侧方向和可比／不可比 Size。可用一个参数化矩阵，不按字段另拆 Task。
+3. 修正 `docs/test-matrix.md` 的错配：T09 的 `alternate_only_url_change` 和 `same_failed_url_repaired` 保持有效 SHA-1 相同，`UrlChangeRequiresProbeEvenWhenShaAndSizeMatch` 亦是相同；T10 的 `alternate_url_change_without_sha` 为旧侧有效、新侧缺失，不能充当双侧无 SHA-1 的独立回归；T11 引用的 URL 测试只有相同有效 SHA-1／Size；T12 引用的两个单元用例 URL 没有变化。已有实机单侧缺哈希换 URL 证据可归入 T12 的对应方向，保留其真实 PASS；缺失分支写 NOT RUN。未知版本不能用 URL scheme 测试冒充。索引写清具体新旧输入、预期、证据层和实际用例，不用名称或总测试数证明覆盖。
+
+完成上述修正后按原计划在新候选重跑全部 T4 门槛，交 B 复审；不新增取消机制／实机门槛，也不要求外部代理联调来补这些逻辑／文件分支。Developer 已披露第一次扩展实机运行的 stdout 被覆盖，只剩失败说明；该原始产物为缺失，不能补造或声称已保留。后续每次运行使用独立目录，保留首败与重跑。当前匹配成功运行可用于其实际覆盖场景。
+
+### 本轮 Slice Required Outcomes／Surfaces 核对
+
+| 项目 | 当前事实与剩余义务 |
+|---|---|
+| RO-1／解析与决策 | 已有主体实现及文件／实机变化回归；R2 仍阻塞完整协议／矩阵和逐项索引验收。 |
+| RO-2／SQLite | 最小 schema、原子条件提交、过期／插入竞争、损坏保护、真实重启及失败基线已有证据；本轮读故障控制回归通过。 |
+| RO-3／共用检查与原生链 | 本次成功／保存关联、同内容换 URL、同 URL 内容／Size 变化及失败目标修复有证据；入口存在，Task 仍待 R2。 |
+| RO-4／身份与协调 | 多版本真实身份已有证据；ProbeCoordinator、只共享实际运行、全局上限及配置 1／8 未实现。 |
+| RO-5／正常收尾 | 原生取消异常保护保留；已开始执行无人等待仍收尾、实际开始边界、资源释放及完成重查待协调器实施。 |
+| RO-6／核心配置与诊断 | 状态库读／写故障、损坏／不可写与重启恢复已有分层证据；Enabled／DetailedLog／并发保存反馈、操作说明仍未实现。 |
+| Required Surfaces／最终证据 | 原生链、SQLite、源身份与共用源检查入口存在；协调／配置 surfaces 与完整矩阵、单独 Slice Final 未完成。 |
+
+Slice 2 保持 ACTIVE，不创建 Task 2.2，不提交 Closure Packet，不代替 A 作最终审查。下一连贯单元仍待 Task 2.1 PASS 后重新核对。经验候选沿用首轮“合同逐项映射到实际输入与原始产物”，本轮不另写开发流水账。
+
+### 首轮审查历史（以下范围与结论不代表本轮候选）
 
 ```text
 Reviewed: 7e0240cd1cada74f142b7b0afd612943ca991a91..b99bc00b08fd3a8cad32076a220c5219fcc78ab7
