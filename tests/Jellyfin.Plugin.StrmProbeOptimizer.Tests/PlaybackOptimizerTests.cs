@@ -133,6 +133,37 @@ public sealed class PlaybackOptimizerTests
     }
 
     [TestMethod]
+    public async Task SuccessfulProbeWithoutSavedNewAddressDoesNotCommitOrReturnTheOldAddress()
+    {
+        const string oldUrl = "https://media.example.invalid/video.mp4?sig=old";
+        const string newUrl = "https://media.example.invalid/video.mp4?sig=new";
+        using var fixture = new ManifestFixture(oldUrl, ValidSha1, 42);
+        var reader = new StrmManifestReader();
+        var oldManifest = reader.Read(fixture.Path).Manifest!;
+        var repository = new InMemoryStrmFingerprintRepository();
+        var item = CreateItem(fixture.Path, oldUrl);
+        var oldFingerprint = Fingerprint(item.Id, oldManifest);
+        repository.TryCommit(oldFingerprint, expectedPrevious: null);
+        fixture.Write(newUrl, ValidSha1, 42);
+        var native = ScriptedManager.Create();
+        native.StaticSources = [Source(oldUrl)];
+        native.Playback = (_, allowProbe, _, _) =>
+        {
+            Assert.IsTrue(allowProbe);
+            ProbeExecutionContext.Current!.MarkCall(newUrl);
+            ProbeExecutionContext.Current.RecordResult(newUrl, MediaInfoWithVideo());
+            return Task.FromResult<IReadOnlyList<MediaSourceInfo>>([Source(oldUrl)]);
+        };
+        var optimizer = CreateOptimizer(repository);
+
+        await AssertThrowsAsync<InvalidOperationException>(() => optimizer.GetPlaybackMediaSourcesAsync(
+            native.Interface, item, null, true, false, CancellationToken.None));
+
+        Assert.AreEqual(oldUrl, item.ShortcutPath);
+        Assert.AreEqual(oldFingerprint, repository.Get(item.Id, "primary"));
+    }
+
+    [TestMethod]
     public async Task FailedSameUrlProbeKeepsTheOldSavedStreamAndFingerprint()
     {
         const string url = "https://media.example.invalid/video.mp4?sig=stable";
