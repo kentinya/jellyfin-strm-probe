@@ -6,19 +6,18 @@ V4.2 是当前开发基准，V3.0 原文与合同留在 Git 历史。Slice 1 原
 
 Slice 2 为 ACTIVE，Base 固定为 `924816a84c74f5d79c107478f2d40e621cb8be8d`，Implementation Head 为 `198f4ff2accd5bc9fcd87518a9684b9d068de103`。Task 2.1 已经 B 独立复审 PASS：完成只读解析／完整逻辑矩阵、实际项目／媒体源映射、SQLite 最小指纹、共用源检查／可靠提交及失败重启恢复。
 
-Task 2.2 候选 `d651950950d6d3ad2be4322ddf8f0afb658c7755` 已由 Developer 实现并完成 T4 门槛，现为 READY FOR B REVIEW，尚未验收；SLICE 合同冻结，Implementation Head 仍指向已接受检查点，B 通过后再记录新实现检查点。本候选新增进程内 `ProbeCoordinator`（只共享已实际开始且仍在执行的探测、排队不共享、全局许可默认 2／可存 1～8、各结束路径释放、完成后移除）、`StrmPlaybackOptimizer` 的共享加入／重读／独立收尾与 `Enabled`／`PlaybackAutoCheck`／`DetailedLog` 核心配置，以及惰性创建并消费启动并发值的许可池。完整配置页、原生批量与发布仍是后续目标。
+Task 2.2 候选 `d651950950d6d3ad2be4322ddf8f0afb658c7755` 经 B 独立审查为 **FIX REQUIRED**。指定聚焦 C# 60/60 通过，但边界／配置控制对照复现：原生匹配探测尚未开始就登记共享；排队取得许可后仍用旧 Manifest／基线且不重读启停；配置中途写入失败破坏旧文件；非法配置诊断输出私有路径。还缺原计划的边界上限、零等待者、不同调用者及配置／外部刷新对照证据。修正在同一 Task 内进行，完整结果见 [B Review Result](../TASK.md#b-review-result)；SLICE 合同与已接受 Implementation Head 保持不变。完整配置页、原生批量与发布仍延期。
 
 已接受的 Task 2.1 按原生所属项目及 `MediaSourceInfo.Id` 关联各版本 STRM 和五字段 SQLite 主键；事务核对 expectedPrevious，过期执行／插入竞争不覆盖已接受基线。保存代理关联本次结果及原生事务成功；首次信任、复用、探测成功与未完成分别记录。SQLite 读／写故障停止优化并尽可能原生委托，损坏／未知 schema 不自动删库重建；修复后重启再次检查。隔离实机验证成功及失败变化跨重启、多版本选源、同内容换 URL、同 URL 内容／Size 变化、mtime／重放和不可写恢复。SQLite 托管与原生运行依赖已部署加载。
 
 Task 2.1 分层输入／原始日志、独立保存失败对照与实机证据见 [当前指针](progress.md) 及本机 `.git/validation-evidence/198f4ff2accd5bc9fcd87518a9684b9d068de103/b-rereview-20261014-03/INDEX.md`。B 独立控制验证使用真实 SQLite，但未对 Jellyfin 内部数据库注入保存故障；音频必要主流有原生适配控制证据，音频-only STRM 实机仍未验证。完整 Slice Final、批量、代理联调及发布 NOT RUN。
 
-### Task 2.2 候选（READY FOR B REVIEW，未验收）
+### Task 2.2 候选（FIX REQUIRED，未接受）
 
-- 全局 `ProbeCoordinator` 以项目 ID＋source key 登记只包含已实际进入匹配原生调用且仍在执行的工作；`AcquireAsync` 先取全局许可，再判断是否已有同源运行中探测，排队／仅持许可不登记；`TryMarkStarted` 为接入层实际开始信号，开始竞态失败时释放多余许可并加入已有执行；`Complete`／`Fail` 先移除登记再释放许可。
-- `StrmPlaybackOptimizer` 获得执行机会时重读当前 Manifest／指纹；加入者只等待共享结果并按自身原生权限重新取源、重查，不串用他人的 `MediaSourceInfo`；等待者退出不取消已开始执行，同版本共享失败原样上抛，不同版本重新判断。
-- 全局池惰性创建并读取插件启动时捕获的并发值（默认 2，合法 1～8），规避 Jellyfin 先解析 `IMediaSourceManager` 后创建插件实例导致的过早构造；保存的并发变更下次重启生效。
-- `PluginConfiguration` 新增 `Enabled`（默认 true）、`MaxConcurrentProbes`（默认 2）、`DetailedLog`（默认 false）；`Plugin.UpdateConfiguration` 先校验、再持久化、成功后才发布，非法值不落盘不生效，保存失败保留旧有效配置，启动读到非法并发退回默认并诊断。
-- 候选本机证据 `.git/validation-evidence/d651950950d6d3ad2be4322ddf8f0afb658c7755/developer-t4-20261014-0203/INDEX.md`；C# 91/91、聚焦 60/60、Python 30/30、默认实机 JSON PASS（同源共享、默认 2／配置 1 上限、配置 API 拒绝／保存／读回／重启、既有场景与清理恢复）。未验收，不升级矩阵状态。
+- 候选新增进程内 ProbeCoordinator、共享等待后按本调用者重读源、启动并发值的惰性许可池和四项核心配置；默认／部分保存／重启及代表性实机有 Developer 原始成功记录。
+- 当前 TryMarkStarted 位于原生 GetPlaybackMediaSources 之前，MarkCall 未接协调开始通知；该登记表示刷新准备，不能称为匹配探测已实际开始。等待许可返回 owner 后也没有版本／基线／启停准入重查。
+- 配置更新先保存再发布仅保护失败时的内存；原生 XML 写入会截断原文件，中途失败保护尚未满足。非法配置日志包含 ConfigurationFilePath，必须脱敏。
+- Developer 索引 `.git/validation-evidence/d651950950d6d3ad2be4322ddf8f0afb658c7755/developer-t4-20261014-0203/INDEX.md` 保留原始 91/91、30/30 和默认实机成功；B 索引 `.git/validation-evidence/d651950950d6d3ad2be4322ddf8f0afb658c7755/b-review-20261014-04/INDEX.md` 记录独立聚焦 60/60 与 7 个控制失败观测。B 默认实机及 Slice Final 本轮 NOT RUN，先修正明确阻塞，再为新候选执行完整 T4。
 
 ### Slice 1 关闭时的 Task 1.1 原型边界
 

@@ -5,7 +5,7 @@
 ```text
 Task ID: 2.2
 Parent Slice: 2
-Status: READY FOR B REVIEW
+Status: FIX REQUIRED
 Task Base: 13cb8bdac319fcf0b3e7500661bae1c7455077b0
 Contract Checkpoint: 7e0240cd1cada74f142b7b0afd612943ca991a91
 Slice Base: 924816a84c74f5d79c107478f2d40e621cb8be8d
@@ -115,10 +115,47 @@ python3 scripts/run_isolated_plugin_integration.py
 ## B Review Result
 
 ```text
-Reviewed: NOT SET
-Decision: PENDING
+Reviewed: 13cb8bdac319fcf0b3e7500661bae1c7455077b0..d651950950d6d3ad2be4322ddf8f0afb658c7755
+Reviewed Contract: HEAD:SLICE.md (Contract Checkpoint 7e0240cd1cada74f142b7b0afd612943ca991a91; working contract unchanged)
+Report Checkpoint: 0f3ee63a9af318150f26efe7d4dbb40c4e6431be (documentation-only successor; executable inputs unchanged)
+Decision: FIX REQUIRED
+P0 Blockers: NONE FOUND
+P1 Blockers: R1 / R2 / R3 / R4 / R5
 Slice Required Outcomes all satisfied: NO
-Next: B REVIEWS TASK 2.2 (DEVELOPER HEAD d651950950d6d3ad2be4322ddf8f0afb658c7755)
+Next: DEVELOPER CORRECTS TASK 2.2 IN PLACE
 ```
 
-B 独立审查后只返回 PASS 或 FIX REQUIRED；通过后重新核对全部 RO／Required Surfaces，选择 NEXT TASK 或 SLICE READY FOR A REVIEW，不在 Task 内关闭 Slice。
+2026-10-14，B 已完成必读清单，初始 `git status --short --branch` 为干净 main；规划／审查前治理退出 0。审查真实 Base..Developer Head、文档后继差异、协调／配置／原生接入源码、测试和 Developer 原始日志／实机 JSON。产品范围合法，现有 Contract 可满足；保留 Task ID、Base、Goal、Difficulty、T4、Scope 和全部门槛，不交 A 改变义务，不创建 Task 2.3。
+
+独立本机证据：`.git/validation-evidence/d651950950d6d3ad2be4322ddf8f0afb658c7755/b-review-20261014-04/INDEX.md`。指定聚焦命令为 **PASS：60 passed／0 failed／0 skipped**。独立边界／配置控制 harness 的最终运行为 **FAIL：7 个合同失败观测，exit 1**；仅操作临时文件和假原生服务，不是实机故障注入。初次五项诊断及追加配置对照的日志均保留。原生源码确认 GetPlaybackMediaSources 先执行 FullRefresh 准备，之后才进入匹配 GetMediaInfo；原生 XML 序列化直接以 FileMode.Create 打开配置文件。
+
+Developer 的 restore／build／91 项全套 C#／format／30 项 Python／治理／diff 原始日志及默认实机 JSON 已读取，记录的成功仍是其实际执行结果；这些绿灯不能证明以下缺失边界。此次 B 默认实机入口 **NOT RUN**：已有确定 P1，按开发流程先拒绝并保留其他未运行门槛，未把 Developer 实机成功写成 B 独立复现。Slice Final **NOT RUN**，Closure Packet **NOT SUBMITTED**。
+
+### 当前 Task 阻塞与同 Task 修正要求
+
+1. **R1 — 实际开始信号接在刷新准备之前（AC-T1／AC-T2，RO-4／RO-5）。** `StrmPlaybackOptimizer.ProbeAndVerifyAsync` 在第 334 行调用 TryMarkStarted，之后才创建 ProbeExecutionContext 并调用 native.GetPlaybackMediaSources；ProbeExecutionContext.MarkCall／MediaEncoderDispatchProxy 没有协调开始通知。控制屏障停在原生取源准备、尚未调用 MarkCall 时，RunningCount 已为 1，第二调用者已记录 Joined a running，匹配探测调用为 0。现有测试的 probeStarted 屏障也在 MarkCall 之前，不能证明真实开始。把可共享登记和开始日志接到经核验的匹配编码器调用边界；准备中的同源工作可以独立等待后重查，但不能登记为已开始或重复进入探测。开始失败／竞争及各提前退出路径都要释放许可，不能让仅取得许可成为开始。增加准备／已获许可／匹配原生调用三个独立屏障及真实开始后加入的回归；实机计数不能继续使用准备阶段的 started 日志充当实际开始。
+2. **R2 — 排队后不重查版本、基线、源和启停（AC-T1／AC-T3／AC-T4，RO-2／RO-4／RO-6）。** AcquireAsync 返回 owner 后直接执行排队前的 manifest／previous／previousSource，没有重新判断。独立占满许可再排队的控制对照复现：期间已提交相同当前版本并更新原生源，放行后仍新增 1 次匹配探测；期间 Enabled=false 或 PlaybackAutoCheck=false，放行后仍建立插件 ProbeExecutionContext 并探测；期间 Manifest 改到另一 URL，仍使用旧上下文进入原生，匹配调用为 0 后失败。取得机会／实际开始前重读当前 STRM、可信基线、本调用者原生源、库故障标记及成功保存的配置；已接受版本复用，变化按最新版本决策，关闭后按原权限委托且不进入插件执行。播放检查关闭仅约束播放上下文，保留未来共用源入口的批量边界。补同源排队成功后零重复、版本／基线再变、排队启停、进行中禁用仍收尾以及状态库故障的确定性回归。
+3. **R3 — 保存失败只保护内存，不能保护配置持久化（AC-T4，RO-6）。** Plugin.UpdateConfiguration 第 59 行使用原生 SaveConfiguration；原生 MyXmlSerializer.SerializeToFile 在序列化前 FileMode.Create 截断旧文件。独立临时配置用例在打开并写入部分 XML 后抛 IOException，保存反馈失败且内存保留旧值，但旧配置文件已改变／损坏。现有 FailedPersistence 测试在 File.Create 之前抛异常，掩盖中途写入失败；重启可能丢失先前有效禁用／并发配置。使配置持久化与发布满足失败保护：写入完整候选后安全替换，失败保留原有效文件／内存与明确错误反馈；不改 Jellyfin 核心代码。增加真实临时文件中途写入失败、失败后重新加载旧有效值及合法修复保存的控制验证，不要求破坏运行实例文件。
+4. **R4 — 非法配置诊断泄露私有路径（AC-T5，RO-6／X10）。** Plugin.ResolveStartupMaxConcurrentProbes 第 73～76 行把完整 ConfigurationFilePath 放入错误日志；独立捕获 ILogger 已确认 privatePathInLog=true。改为不含私有绝对路径的配置标识和可操作恢复说明，并对非法配置／保存故障／库故障等必要诊断断言日志不含假私有路径、签名 URL 或秘密。保留必要错误反馈，不借详细日志关闭来掩盖故障。
+5. **R5 — 必要验证／索引尚未闭合（AC-T2／AC-T3／AC-T4／AC-T5／AC-T6）。** GlobalLimitCapsConcurrentStartedProbes 只跑上限 2；1／8 仅构造合法性断言，未验证边界最大执行数。WaitingCallerCancellation 用例仍有 leader 等待且用 Task.Delay(25)，不证明全部等待者退出后的正常提交。无不同 user／路径替换的同源共享对照；配置 API 场景只保存／读回，未比较非法请求前后文件内容，也未验证下一请求启停／详细日志与保存并发不热改现有池；顺序 manual_full_refresh 不能证明池饱和时独立原生刷新仍可执行。按原计划补以上确定性控制／适用实机关键验证，索引所有 T01～T28 核心部分及 Required Surfaces 的具体输入、原始产物和实际边界；当前矩阵仅有 T01～T16／T26／T27／X03／X05 明细及候选概述。不要新增客户端取消关联、执行取消源、成功后人为取消门槛或真实批量要求。若无人等待用例涵盖首次调用者退出，明确仅退出等待生命周期，已开始执行仍独立收尾。
+
+修正先跑失败边界和直接相关回归，再为新实现 SHA 跑原计划全部 T4 门槛与默认隔离实机入口，保留首次失败／每次重跑和恢复证明。产品／工具改动使旧候选门槛失效；不得删测试、弱化断言、只改报告或以 Constructor／HTTP 200 代替所需行为。新完成报告交回 B；原实现 SHA、Developer 成功运行与本次 FAIL 都保留。
+
+### Slice 全部结果／表面对账（本次未 PASS）
+
+| 合同结果／表面 | 当前结论 |
+|---|---|
+| RO-1：解析／决策／首次信任／原生边界 | Task 2.1 已接受，60 项聚焦保持通过；最终新候选全回归仍须满足。 |
+| RO-2：SQLite／条件提交／失败保护 | Task 2.1 已接受；本次排队使用旧版本／基线问题由 R2 阻塞协调闭环。 |
+| RO-3：共用播放／真实成功／已保存地址与主流 | 既有接入和提交门槛仍在；Task 2.2 新开始边界及计数归因由 R1／R2 阻塞。 |
+| RO-4：只共享已开始／全局上限／调用者边界 | 未满足：R1／R2／R5；代表性 Developer 实机成功不补缺失控制边界。 |
+| RO-5：无等待者仍正常收尾 | 未充分证明：R1／R5；现有 follower 退出且 leader 仍在不等于零等待者。 |
+| RO-6：核心配置／恢复／诊断 | 未满足：R2／R3／R4／R5；非法输入拒绝和部分成功保存已有原始证据。 |
+| solution／测试入口、原生 PlaybackInfo／探测保存、私有 SQLite／身份映射 | 现有表面存在且 Task 2.1 已接受；保留源／权限／保存失败／重启全部回归，不升级整行产品 PASS。 |
+| 共用检查／Coordinator／实际开始与结束重查 | 未满足：R1／R2／R5。 |
+| 配置保存／操作恢复／脱敏日志 | 未满足：R3／R4／R5；操作文档改为候选说明。 |
+| 固定隔离计数／失败／共享并发／真实重启及矩阵原始产物 | Developer 部分实测已核验；必要补证和 B 默认实机复现待修正候选，R5 未闭合。 |
+
+少量经验候选供 A 在 Slice 收尾取舍：开始屏障必须落在实际接入边界，准备入口的屏障会把错误登记测成绿灯；持久化失败对照应覆盖打开／写入后的失败，提前抛错不能证明文件保护。本次不追加经验流水账。
+
+**B 决定：FIX REQUIRED，Developer 在同一 Task 2.2 内修正；Slice 保持 ACTIVE，已接受 Implementation Head 不移动。**

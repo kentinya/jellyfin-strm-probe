@@ -83,9 +83,13 @@ A 实质范围调整保留矩阵 ID 与历史结果，但移除当前 Slice 1 �
 
 ## 执行与对账
 
-Task 2.1 完整报告／B PASS 在 `13cb8bdac319fcf0b3e7500661bae1c7455077b0:TASK.md`，通过 Git 读取；根 TASK.md 现为 Task 2.2 的 READY FOR B REVIEW 候选报告，不能把其未审查报告当成旧 Task 或产品验收证据。
+Task 2.1 完整报告／B PASS 在 `13cb8bdac319fcf0b3e7500661bae1c7455077b0:TASK.md`，通过 Git 读取；根 TASK.md 现为 Task 2.2 的 FIX REQUIRED 候选报告／B 审查，候选报告不能替代旧 Task 记录或产品验收证据。
 
-Slice 2 现已 ACTIVE，Implementation Head 仍指向 Task 2.1 修正候选 `198f4ff2accd5bc9fcd87518a9684b9d068de103`；Task 2.2 候选 `d651950950d6d3ad2be4322ddf8f0afb658c7755` 已实现运行中探测共享、全局并发上限与核心配置并通过 T4 门槛，尚未由 B 审查，Implementation Head 不提前移动。尚无完整产品矩阵验收；表中各行 NOT RUN 保持原事实。Task 2.1 与 2.2 的部分单元及隔离 Jellyfin 证据见下方说明和 [已接受 Task 记录](progress.md#当前开发指针)，不把部分场景升级为整行 PASS。T24 的批量部分、B07 的批量停止收尾、完整配置页、原生任务及大规模部分继续留在后续 Slice 范围；T20／T25／B01／B02 的共享／并发核心部分已由 Task 2.2 候选提供分层证据，待 B 独立审查后判定。
+Slice 2 现已 ACTIVE，Implementation Head 仍指向 Task 2.1 修正候选 `198f4ff2accd5bc9fcd87518a9684b9d068de103`；Task 2.2 候选 `d651950950d6d3ad2be4322ddf8f0afb658c7755` 有 Developer 的 T4 成功执行记录，但 B 已判 FIX REQUIRED，实际开始／排队重查／配置失败保护／隐私及必要证据未闭合，Implementation Head 不提前移动。尚无完整产品矩阵验收；表中各行 NOT RUN 保持原事实。Task 2.1 与 2.2 的部分单元及隔离 Jellyfin 证据见下方说明和 [已接受 Task 记录](progress.md#当前开发指针)，不把部分场景升级为整行 PASS。T24 的批量部分、B07 的批量停止收尾、完整配置页、原生任务及大规模部分继续留在后续 Slice 范围；T20／T25／B01／B02 的共享／并发核心部分已由 Task 2.2 候选提供分层证据，B 已核验部分原始成功记录，但缺失边界与补证阻塞，不能判 PASS。
+
+### Task 2.2 独立审查（FIX REQUIRED）
+
+B 索引 `.git/validation-evidence/d651950950d6d3ad2be4322ddf8f0afb658c7755/b-review-20261014-04/INDEX.md`：指定聚焦 60/60 PASS，独立控制 7 个失败观测。T20／X08 的准备与实际开始边界、排队成功后重查为 FAIL；T24／X09 的排队启停为 FAIL；X09 的中途配置文件写入失败保护为 FAIL；X10 的非法配置日志私有路径为 FAIL。B 默认实机本轮 NOT RUN（已有明确 P1，先修正）；上限 1／8 的确定性最大执行数、全部等待者退出、不同调用者及配置／外部刷新对照等必要证据尚未完整。详细 R1～R5 及同 Task 修正门槛见 [B Review Result](../TASK.md#b-review-result)。以上失败属于控制层，不冒充真实 Jellyfin 故障注入；Developer 实机原始成功保留，未升级完整矩阵。
 
 ### 首轮实施证据（B 已裁定 FIX REQUIRED，保留历史）
 
