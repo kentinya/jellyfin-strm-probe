@@ -204,11 +204,22 @@ public sealed class PlaybackOptimizerTests
         fixture.Write(url, new string('f', 40), 99);
         var native = ScriptedManager.Create();
         native.StaticSources = [Source(url)];
-        native.Playback = (_, _, _, _) => Task.FromCanceled<IReadOnlyList<MediaSourceInfo>>(new CancellationToken(canceled: true));
+        using var cancellation = new CancellationTokenSource();
+        var probeStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        native.Playback = async (_, allowProbe, _, token) =>
+        {
+            Assert.IsTrue(allowProbe);
+            probeStarted.TrySetResult();
+            await Task.Delay(Timeout.Infinite, token);
+            return [];
+        };
         var optimizer = CreateOptimizer(repository);
 
-        await AssertThrowsAsync<TaskCanceledException>(() => optimizer.GetPlaybackMediaSourcesAsync(
-            native.Interface, item, null, true, false, CancellationToken.None));
+        var pending = optimizer.GetPlaybackMediaSourcesAsync(
+            native.Interface, item, null, true, false, cancellation.Token);
+        await probeStarted.Task;
+        cancellation.Cancel();
+        await AssertThrowsAsync<TaskCanceledException>(() => pending);
 
         Assert.AreEqual(oldFingerprint, repository.Get(item.Id, "primary"));
     }
