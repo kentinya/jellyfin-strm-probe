@@ -5,7 +5,7 @@
 ```text
 Task ID: 2.1
 Parent Slice: 2
-Status: FIX REQUIRED
+Status: READY FOR B REVIEW
 Task Base: 7e0240cd1cada74f142b7b0afd612943ca991a91
 Contract Checkpoint: 7e0240cd1cada74f142b7b0afd612943ca991a91
 Slice Base: 924816a84c74f5d79c107478f2d40e621cb8be8d
@@ -123,6 +123,21 @@ C# 全套包含解析／决策、真实 SQLite、源身份及播放／保存／�
 - 改写 Slice 1 接受结果、移动 Slice Base、弱化成功／权限／隐私门槛或修改当前 Contract；合同问题交 A。
 
 ## Developer Completion Report
+
+### 修正轮（响应 B FIX REQUIRED R1～R3）
+
+- Changed Files：测试：`tests/Jellyfin.Plugin.StrmProbeOptimizer.Tests/ManifestReaderTests.cs`、`ProbeDecisionServiceTests.cs`、`PlaybackOptimizerTests.cs`、`SqliteStrmFingerprintRepositoryTests.cs`；隔离实机入口：`scripts/run_isolated_plugin_integration.py`；交接事实：本文件、`SLICE.md` 实现指针、`docs/architecture.md`、`docs/test-matrix.md`、`docs/progress.md`。未改产品源码、依赖锁、Contract 或不变量。
+- Implemented：
+  - **R1**：默认实机入口新增同 URL 真实替换本地媒体并改变有效 SHA-1／Size 的成功探测、同 URL 无可比 SHA-1 且有效 Size 改变的成功探测与 Size 相同的零探测、仅 mtime／相同重写／删除重放的零探测；失败后保留未接受的失败 Manifest／URL，在同一 URL 修复本地目标并证明同一失败版本被重试、探测与提交，而不是改到第三个 URL。每步对账实际媒体读取计数、SQLite 前后五字段与已保存主流，并清理新增临时媒体。
+  - **R2**：补齐解析／决策矩阵回归：未知／冲突／不支持协议不跳过非法首地址、缺失／空文件、非法 SHA-1 长度／字符、最大／零 Size、mtime／重写／重放内容哈希稳定，以及 URL 优先、双侧 SHA-1 有效／缺失／非法组合、Size 可比与不可比、无主流优先于 URL 与指纹。逐项索引见 `docs/test-matrix.md` 的 Task 2.1 证据小节。
+  - **R3**：新增 repository.Get 读取故障控制回归（优化停止、原生委托、false 权限不升级、无新指纹、同一实例内闩锁且重启后修复重新检查），并新增真实损坏 SQLite 输入回归：明确拒绝且保留原文件字节、不删库／重建、不把损坏库当空库。
+- Tests and Results：修正候选 `3488e6b1df48d4c142595d27694a792bb32f0aad`。T4 门禁记录在 `.git/validation-evidence/3488e6b1df48d4c142595d27694a792bb32f0aad/developer-fix-t4-20261013-221013/INDEX.md`。固定 SDK 10.0.401；locked restore PASS；Release build PASS（0 warning／0 error）；solution MSTest PASS（65 passed、0 failed、0 skipped）；format verify PASS；Python unittest PASS（30 passed）；治理、`git diff --check` 与 Python compile PASS；隔离 Jellyfin 集成脚本退出 0、JSON status PASS、耗时约 500 秒。新增场景均以 PASS 记录，夹具与临时媒体已清理、原 STRM 与 Jellyfin 地址已恢复、SQLite 不可变标志已清除。
+- Decisions：只补证据与回归，不改产品行为与合同；读取故障控制用隔离假对象（不是真实 Jellyfin 数据库故障注入），损坏库用真实 SQLite 字节。
+- Remaining In-Slice Work：Task 2.1 等待 B 复审。RO-4／RO-5 的运行中共享、全局并发、独立收尾与 RO-6 完整核心配置仍未实现。
+- Risks / Deviations：新增同 URL 内容变化通过向合成媒体追加字节改变 ffprobe 内容指纹，隔离实机夹具为含音频和视频的媒体；未验证独立音频-only STRM。未运行外部代理／OpenList、其他 Jellyfin 版本、批量、运行中共享／并发或发布打包。测试矩阵其余行保持 NOT RUN。
+- Head SHA：`3488e6b1df48d4c142595d27694a792bb32f0aad`。
+
+### 首轮实施（B 已裁定 FIX REQUIRED，保留历史）
 
 - Changed Files：插件实现与依赖：`src/Jellyfin.Plugin.StrmProbeOptimizer/Jellyfin.Plugin.StrmProbeOptimizer.csproj`、`Packaging/meta.json`、`ServiceRegistrator.cs`、`Services/ProbeDecisionService.cs`、`Services/ProbeExecutionContext.cs`、新增 `Services/SqliteStrmFingerprintRepository.cs`、`Services/StrmManifestReader.cs`、`Services/StrmPlaybackOptimizer.cs`、`packages.lock.json`；测试：`tests/Jellyfin.Plugin.StrmProbeOptimizer.Tests/ManifestReaderTests.cs`、`PlaybackOptimizerTests.cs`、`ProbeDecisionServiceTests.cs`、新增 `SqliteStrmFingerprintRepositoryTests.cs`、测试项目 `packages.lock.json`；隔离实机入口：`scripts/run_isolated_plugin_integration.py`；交接事实：本文件、`SLICE.md` 实现指针、`docs/architecture.md`、`docs/test-matrix.md`。
 - Implemented：按实际 Jellyfin 项目／媒体源关联播放检查；新增五字段 SQLite 指纹表、按项目＋源主键的版本初始化及条件事务提交；扩展输入规范化、决策校验和播放提交核对；部署并验证 SQLite 托管／原生运行依赖。隔离实机覆盖首次信任和重启复用、相同内容换 URL、失败保留／恢复、Manifest 竞态、多版本源选择、状态库写入失败及不可写故障／重启恢复，并保留旧 STRM、普通媒体、直播、false 流权限、插件启停和 FullRefresh 场景。代码实现候选为 `b99bc00b08fd3a8cad32076a220c5219fcc78ab7`，等待 B 独立审查；AC 勾选和 B 决定保持未完成。

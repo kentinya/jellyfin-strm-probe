@@ -83,13 +83,42 @@ A 实质范围调整保留矩阵 ID 与历史结果，但移除当前 Slice 1 �
 
 ## 执行与对账
 
-Slice 2 现已 ACTIVE，Implementation Head 指向等待 B 审查的 Task 2.1 候选 `b99bc00b08fd3a8cad32076a220c5219fcc78ab7`。尚无完整产品矩阵验收；表中各行 NOT RUN 保持原事实。Task 2.1 的部分单元及隔离 Jellyfin 证据见下方说明和 [Developer Completion Report](../TASK.md#developer-completion-report)，不把部分场景升级为整行 PASS。T24 的批量部分、B07 的批量停止收尾、共享／并发、完整配置页、原生任务及大规模部分继续留在后续 Slice 范围。
+Slice 2 现已 ACTIVE，Implementation Head 指向等待 B 复审的 Task 2.1 修正候选 `3488e6b1df48d4c142595d27694a792bb32f0aad`。尚无完整产品矩阵验收；表中各行 NOT RUN 保持原事实。Task 2.1 的部分单元及隔离 Jellyfin 证据见下方说明和 [Developer Completion Report](../TASK.md#developer-completion-report)，不把部分场景升级为整行 PASS。T24 的批量部分、B07 的批量停止收尾、共享／并发、完整配置页、原生任务及大规模部分继续留在后续 Slice 范围。
 
-## Task 2.1 实施证据（等待 B 审查）
+### 首轮实施证据（B 已裁定 FIX REQUIRED，保留历史）
 
 候选 `b99bc00b08fd3a8cad32076a220c5219fcc78ab7` 的 T4 执行记录保存在 `.git/validation-evidence/b99bc00b08fd3a8cad32076a220c5219fcc78ab7/developer-final-t4-20261013-02/INDEX.md`。单元测试和隔离 Jellyfin 分别报告：C# 全套 51/51、Python 全套 30/30；真实实例验证首次信任／持久化重启复用、同内容换 URL、多版本源和主流关联、失败重试及 Manifest 竞态、SQLite 写入／只读故障与重启恢复，以及普通／旧 STRM、直播、false 流权限、禁用插件和 FullRefresh。临时条目和多版本关系已清理，原 STRM 与 Jellyfin 地址已恢复。
 
-这些证据支持 B 对 Task 2.1 实施候选的审查，不替代逐行完整矩阵对账。T01～T28、B01～B12 与 X01～X10 状态仍按上表记录；没有运行外部代理／OpenList、批量任务、运行中共享／全局并发、其他 Jellyfin 版本或完整发布门槛。
+### 修正轮证据与逐项索引（候选 `3488e6b1df48d4c142595d27694a792bb32f0aad`）
+
+响应 B FIX REQUIRED R1～R3 的修正候选 T4 记录保存在 `.git/validation-evidence/3488e6b1df48d4c142595d27694a792bb32f0aad/developer-fix-t4-20261013-221013/INDEX.md`：C# 全套 65/65、Python 全套 30/30、format／治理／diff／compile PASS、隔离实机 JSON PASS（约 500 秒，新增临时媒体已清理、原夹具与地址已恢复）。下表把合同要求的 T01～T16、T26／T27、X03／X05 逐项映射到实际证据层；证据层列 `单元`＝MSTest，`文件`＝真实文件读写回归，`实机`＝隔离 Jellyfin 默认入口。
+
+| 矩阵项 | 证据层与具体用例／场景 | 状态 |
+|---|---|---|
+| T01 首次无主流 | 实机 `first_play_without_primary_stream`（缺失媒体 URL，1 次原生探测，无指纹）；单元 `MissingPrimaryStreamTakesPrecedenceOverFirstTrust`、`AudioStrmRequiresAndAcceptsTheNativeAudioPrimaryStream` | PASS（Task 范围） |
+| T02 首次已有主流 | 实机 `first_trust`（禁用插件原生保存主流后信任接管，0 探测）；单元 `FirstTrustRequiresAnExistingPrimaryStreamAndCurrentAddress` | PASS（Task 范围） |
+| T03 URL 不变、SHA-1 相同 | 单元 `SameUrlAndShaSkipsRegardlessOfSizeDifference`；实机 `unchanged_repeat` | PASS（Task 范围） |
+| T04 URL 不变、SHA-1 不同 | 单元 `DifferentComparableShaRequiresProbe`、`FailedSameUrlProbeKeepsTheOldSavedStreamAndFingerprint`；实机 `same_url_content_replacement`（真实本地媒体替换，SHA-1／Size 变化，1 次探测并提交） | PASS（Task 范围） |
+| T05 URL 不变、SHA-1 相同、Size 不同 | 单元 `SameUrlAndShaSkipsRegardlessOfSizeDifference`（相同 SHA-1 忽略 Size） | PASS（单元） |
+| T06 URL 不变、SHA-1 不可比、Size 相同 | 单元 `UncomparableHashesUseOnlyDifferentValidSizes`、`ShaValidityCombinationsFollowTheDocumentedMatrix`；实机 `same_url_noncomparable_size_unchanged`（0 探测） | PASS（Task 范围） |
+| T07 URL 不变、SHA-1 不可比、Size 不同 | 单元同上；实机 `same_url_noncomparable_size_change`（无可比 SHA-1，Size 改变，1 次探测并提交） | PASS（Task 范围） |
+| T08 URL 改变、SHA-1 相同 | 实机 `same_sha_url_change`（同 SHA-1／Size 换 URL，1 次探测并提交，重启后新地址） | PASS（Task 范围） |
+| T09 URL 改变、SHA-1 不同 | 实机多版本 `alternate_only_url_change` 与失败恢复 `same_failed_url_repaired`；单元 `UrlChangeRequiresProbeEvenWhenShaAndSizeMatch` | PASS（Task 范围） |
+| T10 URL 改变、无 SHA-1、Size 相同 | 实机多版本 `alternate_url_change_without_sha`（无 SHA-1 换 URL，1 次探测并提交，存空 SHA-1） | PASS（Task 范围） |
+| T11 URL 改变、无 SHA-1、Size 不同 | 单元 `UrlPriorityBeatsEveryShaAndSizeCombination`；实机同内容换 URL 分支（URL 优先于 Size） | PASS（Task 范围） |
+| T12 URL 改变、仅一侧有效 SHA-1 | 单元 `SizeIsUsedWhenOnlyOneSideHasAValidSha1`、`ShaValidityCombinationsFollowTheDocumentedMatrix` | PASS（单元） |
+| T13 仅 Modified 变化 | 文件 `ContentHashIgnoresModifiedTimeRewriteAndSameContentReplay`；实机 `replay_and_mtime_zero_probe.mtime_only`（0 探测） | PASS（Task 范围） |
+| T14 同内容删除后重放 | 文件 `ContentHashIgnoresModifiedTimeRewriteAndSameContentReplay`；实机 `replay_and_mtime_zero_probe.delete_and_replay`（0 探测，指纹不变） | PASS（Task 范围） |
+| T15 同 URL、同 SHA-1 重写 STRM | 文件 `ContentHashIgnoresModifiedTimeRewriteAndSameContentReplay`；实机 `replay_and_mtime_zero_probe.identical_rewrite`（0 探测） | PASS（Task 范围） |
+| T16 同 URL 远程替换、SHA-1 变化 | 实机 `same_url_content_replacement`（真实本地媒体替换等价于远程内容替换） | PASS（Task 范围；远程代理未联调） |
+| T26 无协议标记旧 STRM | 实机 `legacy_strm_delegation`（默认原生，无插件事件）；单元 `ReadTreatsMissingProtocolAsUnsupported`、`LegacyStrmDelegatesOriginalProbePermission` | PASS（Task 范围） |
+| T27 暂缺 SHA-1 后恢复／另一版本缺哈希不继承 | 实机 `temporary_missing_sha_preserves_history`（保留有效历史 SHA-1）与多版本 `alternate_url_change_without_sha`（存空、不继承另一版本 SHA-1） | PASS（Task 范围） |
+| X03 编码／BOM／空白／非法字段／Size／协议／有界读取 | 文件 `ReadRejectsInvalidUtf8AndDuplicateOptionalMarkers`、`ReadRejectsUnsupportedSchemesWithoutSkippingToALaterAddress`、`ReadRejectsInvalidSha1LengthsAndCharacters`、`ReadAcceptsMaximumValidSizeAndZero`、`ReadTreatsMissingEmptyAndOverflowingSizesAsUnavailable`、`ReadRejectsFilesOverTheBoundedInputLimit`、`ContentHashIncludesBomBytesWhileParsingTheSameManifest` | PASS（文件） |
+| X05 信息不足跳过、mtime 不参与、签名变化算 URL 变化 | 单元 `UncomparableHashesUseOnlyDifferentValidSizes`、`ShaValidityCombinationsFollowTheDocumentedMatrix`；文件 `ContentHashIgnoresModifiedTimeRewriteAndSameContentReplay`；实机 `same_url_noncomparable_size_unchanged`、`replay_and_mtime_zero_probe` | PASS（Task 范围） |
+
+缺失项（如实报告，不升级为 PASS）：T16 的远程代理（OpenList／JellyfinProxy）联调 NOT RUN，当前以本地媒体替换证明同 URL 内容变化分支；T01～T16 中依赖真实远程内容的部分未做外部联调；T20～T25 的共享／并发／身份行、B01～B12 与其余 X 项仍见上表 NOT RUN。
+
+这些证据支持 B 对 Task 2.1 修正候选的审查，不替代逐行完整矩阵对账。T01～T28、B01～B12 与 X01～X10 状态仍按上表记录；没有运行外部代理／OpenList、批量任务、运行中共享／全局并发、其他 Jellyfin 版本或完整发布门槛。表中 T01～T16、T26／T27、X03／X05 标注的是本 Task 范围内的证据状态，不代表完整产品矩阵整行验收；B 审查后可能调整。
 
 按开发流程保留源码／工作区身份、精确命令、版本、隔离配置、耗时、日志及原生 ffprobe 计数。所有哈希／地址／媒体使用假数据。区分单元、真实 Jellyfin、压力夹具与外部代理；十万条模拟枚举不冒充十万条真实库通过。
 
