@@ -5,7 +5,7 @@
 ```text
 Task ID: 2.1
 Parent Slice: 2
-Status: READY FOR B REVIEW
+Status: FIX REQUIRED
 Task Base: 7e0240cd1cada74f142b7b0afd612943ca991a91
 Contract Checkpoint: 7e0240cd1cada74f142b7b0afd612943ca991a91
 Slice Base: 924816a84c74f5d79c107478f2d40e621cb8be8d
@@ -137,10 +137,39 @@ C# 全套包含解析／决策、真实 SQLite、源身份及播放／保存／�
 ## B Review Result
 
 ```text
-Reviewed: NOT SET
-Decision: PENDING
-Slice Required Outcomes all satisfied: PENDING — B 在审查时核对；Task 2.1 不关闭 Slice 2
-Next: B REVIEWS TASK 2.1
+Reviewed: 7e0240cd1cada74f142b7b0afd612943ca991a91..b99bc00b08fd3a8cad32076a220c5219fcc78ab7
+Documentation Handoff: 443acc5133d1444df3e9c9dd4f2c782c157a9ba7
+Decision: FIX REQUIRED
+Slice Required Outcomes all satisfied: NO
+Next: DEVELOPER CORRECTS TASK 2.1 AND RESUBMITS FOR B REVIEW
 ```
 
-待审占位不是 PASS。Developer 提交 READY FOR B REVIEW 后，B 根据真实提交和证据判 PASS 或 FIX REQUIRED；修正通常留在本 Task。PASS 后核对所有 RO／Surfaces，决定 NEXT TASK 或 SLICE READY FOR A REVIEW；只有 A 可以关闭 Slice。
+### B 独立审查（2026-10-13）
+
+开始时 `main` 工作区干净，无已有用户改动；治理检查 PASS。审查上述完整范围，并核对后继交接提交只修改四份文档、执行输入未变。已提交 Slice 的义务可在当前 Task 内满足，**继续同一 Task 修正**；ID、Base、Goal、Scope、T4、验收与原测试计划保持有效，无须改变 Contract。以下阻塞是当前必要验收的证据缺口，不宣称已发现相应产品行为错误。
+
+本机独立证据：`.git/validation-evidence/b99bc00b08fd3a8cad32076a220c5219fcc78ab7/b-review-20261013-01/INDEX.md`。B 独立运行播放／Fingerprint 聚焦测试，28 passed、0 failed、0 skipped；另用真实 SQLite 的审查 harness 复现相同主流元数据下流保存失败、地址仅在内存更新、项目保存失败，连续两次允许请求均拒绝并保留旧基线，false 请求保持权限。审查 harness 首次运行误用假对象累计权限标志而失败，修正观测方式后通过；原失败保留，不作为产品故障。固定原生源码的 URL 选取、源 ID／用户过滤及保存事务边界亦已核对。
+
+Developer 的 locked restore、Release build（0 warning／0 error）、C# 全套 51 项、format、Python 全套 30 项及隔离实机原始日志已阅读，输入摘要匹配；它们覆盖已有场景，不能替代下列未执行门槛。B 独立实机复验退出 0、JSON PASS，耗时 495.108 秒，复现同内容换 URL、失败后重启、真实多版本及 SQLite 不可写／恢复；三个临时 STRM 与版本关系已移除、库条目不存在，原夹具及原生地址已恢复，数据库不可变标志已清除，隔离实例 healthy。其脚本 PASS 只表示脚本已包含场景通过，缺失场景仍为 NOT RUN。
+
+### 当前 Task 的 P1 阻塞与修正要求
+
+1. **R1 — 补齐默认实机入口的变化／文件与恢复场景（AC-T1／AC-T3／AC-T4）。** `scripts/run_isolated_plugin_integration.py:1341` 起只读取字节相同的两份媒体，后续验证 URL 变化；默认入口及最终 JSON 没有同 URL 实际替换本地媒体并改变有效 SHA-1、同 URL 无可比 SHA-1 且有效 Size 改变的成功探测场景，也没有仅 mtime／相同重写／删除重放的零探测场景。补齐原计划要求的场景，分别对账实际调用、新结果／已保存主流、返回及保存地址与 SQLite 前后值，恢复全部夹具。当前失败重启后恢复在 `scripts/run_isolated_plugin_integration.py:1530` 起改用第三个 URL；还须保持未接受的失败 Manifest／URL，修复该本地目标后证明同一失败版本重试成功并提交。现有换 URL 恢复证据保留。
+2. **R2 — 补齐完整解析／决策回归及逐项索引（AC-T1／AC-T7）。** 现有 10 项 Reader 和 9 项 Decision 测试未形成合同要求的完整覆盖。例如未知／冲突协议、缺失／空文件、非法 SHA-1 长度／字符，以及双侧 SHA-1 有效／缺失／非法组合、URL 已同步但历史 URL 改变时的哈希／Size 分支尚缺直接回归；mtime／重写／重放也无文件回归。以实际输入／预期行为补齐覆盖，给出 T01～T16、T26／T27、X03／X05 到测试／实机场景的索引，明确各证据层与缺失项。可用参数化用例，不要求每个字段或矩阵行另造 Task；不能用总测试数或整表 NOT RUN 代替对账。
+3. **R3 — 补齐状态库读故障和损坏保护回归（AC-T6）。** 现有 SQLite 测试验证正常重开、条件提交、插入竞争、事务写失败及未知／未版本化 schema；播放测试没有 repository.Get 异常控制场景，实机验证是提交写失败／不可写。补充读取故障时停止优化、后续原生委托、false 权限不升级、无新指纹及恢复重新检查的控制回归；使用真实损坏 SQLite 输入验证明确拒绝、保留原文件，不自动删库／重建。已有未知 schema 和不可写实机证据可保留，不新增内部 Jellyfin 数据库故障实机门槛。
+
+修正形成新实现提交并更新完成报告。源码、测试或工具输入改变后，在新候选重跑原计划全部 T4 门槛，保留首次失败与重跑；B 再独立复现指定关键行为。当前未满足的 AC 不勾选，不新建 Task 2.2。
+
+### Slice Required Outcomes／Surfaces 核对
+
+| 项目 | 当前事实与剩余义务 |
+|---|---|
+| RO-1／解析与决策 surface | 主要实现及首次信任／复用存在；R1／R2 阻塞完整矩阵验收。 |
+| RO-2／SQLite surface | 最小 schema、条件事务、哈希身份与重启已有匹配证据；R3 阻塞读故障／损坏保护验收。 |
+| RO-3／共用检查与原生 surface | 真实源检查入口、成功／保存保护、URL 变化、多版本与失败重启已实现；R1 阻塞同 URL 变化及保持失败目标的恢复验收。 |
+| RO-4／身份与协调 surface | 多版本源身份已有单元及实机证据；ProbeCoordinator、只共享实际运行、统一上限和配置 1／8 尚未实现。 |
+| RO-5／正常收尾 surface | 既有原生取消异常保护保留；已开始工作无人等待仍收尾、开始边界和资源释放待协调器实施。 |
+| RO-6／配置与诊断 surface | 库写失败／不可写停止优化及重启恢复已有证据；读故障／损坏保护待 R3，Enabled／DetailedLog／并发保存反馈及用户操作方法尚未完成。 |
+| 固定实机／最终证据 surface | 已有场景有独立复验；缺失场景待补，完整 Slice Final 尚未运行。 |
+
+**Slice 2 仍为 ACTIVE；不提交 Closure Packet，不宣布 Slice 关闭。** 通过本 Task 后再核对全部 RO／Surfaces，决定下一完整实施单元。可复用经验候选供 A 收尾：实机入口的 PASS 只覆盖实际断言过的场景 → 审查时将合同逐项映射到测试和原始产物，特别核对同 URL／换 URL 与恢复前提 → 适用于扩展旧集成脚本。
