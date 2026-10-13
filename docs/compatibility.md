@@ -2,9 +2,9 @@
 
 ## 当前结论
 
-当前只有固定组合上的 Task 1.1 原型证据，没有发布包或多版本兼容声明。真实插件已用 Jellyfin Controller／Model `12.2.0`、`net10.0` 和 SDK `10.0.401` 构建，并在隔离 Jellyfin `12.2.0` 容器加载；镜像 digest、媒体服务和环境身份见 [环境交接](development-environment.md)。此次证据覆盖插件启动及指定 STRM PlaybackInfo 行为，不代表 Slice 1 的所有 Required Outcomes 或正式发布支持。
+当前只有固定组合上的 Slice 1 核心原型证据，没有发布包或多版本兼容声明。真实插件已用 Jellyfin Controller／Model `12.2.0`、`net10.0` 和 SDK `10.0.401` 构建，并在隔离 Jellyfin `12.2.0` 容器加载；镜像 digest、媒体服务和环境身份见 [环境交接](development-environment.md)。当前证据满足 Slice 1 的 Required Outcomes，正式产品与发布支持仍未验证。
 
-B 对旧候选的 FIX REQUIRED 保留为历史；修正候选 `2b1e1b5bcf77b06997fabed5a31147838db16b47` 已经 B 独立审查，Task 1.1 PASS。保存关联和指定真实对照已裁定满足，单独的 Slice Final 已完成；当前为 [SLICE READY FOR A REVIEW](../SLICE.md#closure-packet)，尚无 A 最终关闭或后续产品实施准入。播放取消范围遵循 A 的 RESCOPE：保留原生取消异常处理，不要求成功返回后的额外取消检查或人为注入实机门槛；共享／批量执行的取消保护留在 Slice 2／3。
+B 对旧候选的 FIX REQUIRED 保留为历史；修正候选 `2b1e1b5bcf77b06997fabed5a31147838db16b47` 经 B 独立审查，Task 1.1 PASS。保存关联和指定真实对照已满足，单独 Slice Final 已完成；[A 最终审查](../SLICE.md#a-final-review) 裁定 Slice 1 PASS / CLOSED，后续 Slice 尚未激活。播放取消范围遵循 A 的 RESCOPE：保留原生取消异常处理，不要求成功返回后的额外取消检查或人为注入实机门槛；共享／批量执行的取消保护留在 Slice 2／3。
 
 | 候选源码 | 已记录标签提交 | 定位用途 |
 |---|---|---|
@@ -57,11 +57,11 @@ Slice 1 不再要求人为传入可取消 token 的真实原生取消验证，�
 
 B 另在隔离实例临时开启 Debug，两次地址变化都观察到 `ProbeProvider`、`MovieNfoProvider`、`TrickplayProvider` 各调用一次，ETag 改变，匹配探测和合成媒体 GET 各一次，PlaybackInfo 为 91／75 ms。日志级别与 STRM 已恢复。提供器调用不证明远程下载／Trickplay 生成，不提供开销分项或生产性能承诺；原始脱敏证据见 Closure Packet 引用的 B 索引。
 
-上述为有限原型及独立 Slice Final 证据，尚无 A 最终关闭、兼容性认证、发布包验证或外部代理联调。完整矩阵状态仍按 [测试矩阵](test-matrix.md) 与 Task 1.1 完成报告分别审查。
+上述为有限核心原型及独立 Slice Final 证据，A 已据此关闭 Slice 1；发布包、多版本／广泛媒体兼容和外部代理联调仍未验证。完整矩阵状态继续按 [测试矩阵](test-matrix.md) 与 [Task 历史指针](../TASK.md) 区分。
 
 ## Slice 1 风险门槛
 
-A 环境准备及 Task 1.1 原型后续：SDK、固定源码、镜像 digest、隔离服务、本地媒体链路和真实插件 PlaybackInfo 均已有分项证据。下表为 B 已核对的原型门槛事实；A 最终审查仍待进行。官方镜像没有 revision 标签，镜像整体源码构建溯源仍有限；NuGet nuspec repository commit 已与固定源码 SHA 核对一致。
+A 环境准备及 Task 1.1 原型后续：SDK、固定源码、镜像 digest、隔离服务、本地媒体链路和真实插件 PlaybackInfo 均已有分项证据。下表为 B 核对且经 A 最终审查接受的原型门槛事实。官方镜像没有 revision 标签，镜像整体源码构建溯源仍有限；NuGet nuspec repository commit 已与固定源码 SHA 核对一致。
 
 | 问题 | 必须取得的证据 | 状态 |
 |---|---|---|
@@ -72,7 +72,7 @@ A 环境准备及 Task 1.1 原型后续：SDK、固定源码、镜像 digest、�
 | 地址／流持久化 | URL 改变后原生探测并保存，当次 PlaybackInfo 新地址，重启仍有效且有必要主流；保存失败明确 | PASS；当次／重启保存与失败保流重试已独立复验；内部数据库故障未注入 |
 | 探测权限／禁用 | allowMediaProbe=false 各分支不执行；禁用／旧 STRM／手动刷新原生对照 | PASS；真实 false 流入口、禁用、旧 STRM、手动 FullRefresh 已独立复验；公共 PlaybackInfo 不提供 false 参数 |
 
-当前 Task 1.1 PASS；B 已复核全部 Outcomes／Surfaces 并停止创建 Task，完成 Slice Final 后交 A。历史失败按原事实保留，不自动扩大到下一个产品 Slice。外部 JellyfinProxy／OpenList 联调、完整 T01～T28 与 B01～B12 矩阵仍未运行；本原型没有新增 FFmpeg／ffprobe。
+Task 1.1 PASS；全部 Outcomes／Surfaces 与单独 Slice Final 经 A 最终审查接受，Slice 1 PASS / CLOSED。当前无活动实施 Task，历史失败按原事实保留。外部 JellyfinProxy／OpenList 联调、完整 T01～T28 与 B01～B12 矩阵仍未运行；本原型使用 Jellyfin 已有 FFmpeg／ffprobe。
 
 ## 后续真实运行门槛
 

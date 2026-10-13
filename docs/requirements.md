@@ -1,6 +1,6 @@
 # 插件需求
 
-状态：TARGET，已有 Slice 1 最小原型，完整产品尚未交付；原型分项证据与当前审查见 [Closure Packet](../SLICE.md#closure-packet)。当前来源为 [V4.2 方案](<../Jellyfin STRM Probe Optimizer V4.2 开发方案.md>) 与 [范围说明](scope.md)。保留原需求及 T01～T28 编号，但明确修订其验收含义；新增批量验收 B01～B12。执行状态见 [测试矩阵](test-matrix.md)。
+状态：TARGET，Slice 1 核心原型已 PASS / CLOSED，完整产品尚未交付；原型分项证据见 [Closure Packet](../SLICE.md#closure-packet)，最终决定见 [A 审查](../SLICE.md#a-final-review)。当前来源为 [V4.2 方案](<../Jellyfin STRM Probe Optimizer V4.2 开发方案.md>) 与 [范围说明](scope.md)。保留原需求及 T01～T28 编号，但明确修订其验收含义；新增批量验收 B01～B12。执行状态见 [测试矩阵](test-matrix.md)。
 
 V4.2 的 URL 改变规则替代 V3.0 路径单独更新规则；STATE 编号现指历史指纹合同，不要求独立状态机。首次信任接管是唯一无需本次探测即可初建指纹的例外，不能计为成功探测。
 

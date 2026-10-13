@@ -4,9 +4,9 @@
 
 V4.2 取代 V3.0 作为当前开发基准，旧原文与合同留在 Git 历史。仓库已包含 Task 1.1 的最小 C# 插件原型和测试；仍没有 SQLite schema、配置页、批量任务或发布包。
 
-原型固定 Jellyfin `12.2.0`、Controller／Model `12.2.0`、`net10.0` 和 SDK `10.0.401`。它在隔离实例中已加载并验证 STRM 播放接入、未变化复用、同 SHA-1／Size 地址变化时原生探测、新地址重启后可用，以及失败后重试。实际命令与限制见 [Task 1.1](../TASK.md)、[兼容性与接入验证](compatibility.md) 和 [环境交接](development-environment.md)。这些是 Task 原型的分项证据，不代表 Slice 1 完成或多版本兼容。
+原型固定 Jellyfin `12.2.0`、Controller／Model `12.2.0`、`net10.0` 和 SDK `10.0.401`。它在隔离实例中已加载并验证 STRM 播放接入、未变化复用、同 SHA-1／Size 地址变化时原生探测、新地址重启后可用，以及失败后重试。实际命令与限制见 [Closure Packet](../SLICE.md#closure-packet)、[兼容性与接入验证](compatibility.md) 和 [环境交接](development-environment.md)。这些证据支持 Slice 1 核心原型关闭；完整产品与多版本兼容仍未验证。
 
-B 已独立审查修正候选 `2b1e1b5bcf77b06997fabed5a31147838db16b47` 并裁定 Task 1.1 PASS；保存关联、指定真实对照、Manifest 竞态和 FullRefresh 附带工作均已有独立证据。Slice Final 已完成，当前 `READY FOR A REVIEW`，尚无 A 最终 PASS／关闭；见 [B 审查](../TASK.md#current-b-review-result) 与 [Closure Packet](../SLICE.md#closure-packet)。
+B 已独立审查修正候选 `2b1e1b5bcf77b06997fabed5a31147838db16b47` 并裁定 Task 1.1 PASS；保存关联、指定真实对照、Manifest 竞态和 FullRefresh 附带工作均已有独立证据。单独 Slice Final 与 A 完整范围审查均已完成，Slice 1 为 PASS / CLOSED；见 [A 最终审查](../SLICE.md#a-final-review)。
 
 ### 已实现的 Task 1.1 原型边界
 

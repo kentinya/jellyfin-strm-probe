@@ -1,6 +1,6 @@
 # 测试矩阵
 
-下表状态针对完整产品矩阵，尚未统一执行。Slice 1 原型已完成部分单元／真实 Jellyfin 场景，Task 1.1 经 B 审查 PASS，独立 Slice Final 已运行；分层结果见 [Closure Packet](../SLICE.md#closure-packet)，不把有限原型证据直接覆盖完整产品矩阵。表格是 V4.2 目标，不是原型运行报告。通常前提为受支持版本化 STRM、已有主流、历史指纹与允许探测；例外显式说明。
+下表状态针对完整产品矩阵，尚未统一执行。Slice 1 原型已完成部分单元／真实 Jellyfin 场景，Task 1.1 经 B 审查 PASS，单独 Slice Final 与 A 最终审查已完成，Slice 1 PASS / CLOSED；分层结果见 [Closure Packet](../SLICE.md#closure-packet)，不把有限原型证据直接覆盖完整产品矩阵。表格是 V4.2 目标，不是原型运行报告。通常前提为受支持版本化 STRM、已有主流、历史指纹与允许探测；例外显式说明。
 
 保留 T01～T28 身份以便追溯，但 T08／T22 按 V4.2 改为原生探测后新地址持久化，T02／T17～T19／T27 改为最小指纹合同。旧结果不自动继承。B01～B12 为新增批量／共享并发验收。
 

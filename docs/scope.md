@@ -39,4 +39,4 @@ V3.0 文件的删除与 V4.2 文件的新增是本轮开始前已有的用户改
 
 ## 当前规划
 
-Slice 1 保持核心验证能力和原始 Base；Task 1.1 在修订合同内完成原型并经 B 审查 PASS，单独 Slice Final 已运行，Closure Packet 已交 A，当前 READY FOR A REVIEW。其余 Slice 均为 PLANNED；正式 SQLite、共享并发、批量、外部联调与发布未完成。分项原型证据不等于完整产品验收。
+Slice 1 保持核心验证能力和原始 Base；Task 1.1 在修订合同内完成原型并经 B 审查 PASS，单独 Slice Final 已运行，A 已最终审查并关闭为 PASS / CLOSED。其余 Slice 均为 PLANNED；正式 SQLite、共享并发、批量、外部联调与发布未完成。下一 Slice 须另开一轮选择与激活；分项原型证据不等于完整产品验收。

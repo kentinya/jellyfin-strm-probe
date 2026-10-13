@@ -4,7 +4,7 @@
 Slice ID: 1
 Name: Jellyfin 核心接入与指纹提交验证
 Owner: A
-Status: READY FOR A REVIEW
+Status: PASS / CLOSED
 Base SHA: 8a6a955357a6fe7a6aea9dafead0ec33ffd203f3
 Implementation Head: 2b1e1b5bcf77b06997fabed5a31147838db16b47
 ```
@@ -111,7 +111,7 @@ B／Developer 只记录真实实现 Head、结果和 Required Outcomes 进度，
 
 ## Closure Packet
 
-本段由 B 提交最终审查包；不是 A Final Review，也不关闭 Slice。
+本段保留 B 在关闭前提交的最终审查包；A 的最终决定和关闭协调见下方 A Final Review 与 Closure Reconciliation。
 
 ```text
 Slice: 1
@@ -130,7 +130,7 @@ Next: A independently reviews Slice Base..Implementation Head
 
 最小原型在固定 Jellyfin 12.2.0／SDK 10.0.401 上包装原生媒体源、编码器和两处保存服务，使用只读 Manifest 与纯决策、进程内最小指纹条件提交。变化 URL 的本次编码器结果、媒体流事务保存、地址事务保存、返回主流和稳定 Manifest 必须相符；失败或不能证明时保留基线。普通媒体、旧 STRM、禁用、false 权限及未匹配接口继续原生委托。未增加生成器、独立状态机、路径单独更新分支或另一套 FFmpeg。
 
-只有一个实施单元：[Task 1.1 当前 B 审查](TASK.md#current-b-review-result)；完整任务／Developer 报告保留于根 TASK 与其 Git 检查点。原 BR-1／BR-3 已解决；BR-2 依 A RESCOPE 退出当前门槛，旧 FAIL／NOT RUN 不改写为 PASS。Task Base 未移动；停止创建 Task，不激活后续 Slice。
+只有一个实施单元：[Task 1.1 B 审查指针](TASK.md#current-b-review-result)；完整任务、Developer 报告与历史审查保留于交接快照 `46766d1eee5c7478a1aee1372a460b27ba4577bb` 的 `TASK.md`。原 BR-1／BR-3 已解决；BR-2 依 A RESCOPE 退出当前门槛，旧 FAIL／NOT RUN 不改写为 PASS。Task Base 未移动；停止创建 Task，不激活后续 Slice。
 
 ### Required Outcomes / Surfaces 对账
 
@@ -183,16 +183,45 @@ FullRefresh 的两次独立提供器日志观察均为 ProbeProvider、MovieNfoP
 
 内部数据库保存故障没有真实注入；本 Slice 以事务边界固定源码、实际成功保存／重启、真实不可达失败和独立保存失败控制测试组合取证，不把单元当成数据库故障实机证据。镜像缺 revision 标签：digest／实际版本、源码及 NuGet repository commit 分别固定，不能证明镜像所有构建输入。合成短媒体、禁用远程提供器的配置不代表生产开销或多版本支持；仍无发布包。
 
-本交接同步 README、Progress、架构、兼容性、环境、范围与 Roadmap 的当前事实，完整需求／旅程保持 TARGET；测试矩阵保留后续产品状态并指向原型分项证据。Roadmap 当前行仍 ACTIVE，表示等待 A；关闭账本保持无已关闭 Slice。A 最终决定后才进行 Closure Reconciliation、PASS / CLOSED、角色经验合并及下一 Slice 选择／激活。
+交接时已同步 README、Progress、架构、兼容性、环境、范围与 Roadmap 的事实；当时 Roadmap 为 ACTIVE、关闭账本为空。A 本轮完成下方关闭协调，完整需求／旅程保持 TARGET，测试矩阵继续保留后续产品状态。下一 Slice 的选择与激活须另开一轮。
 
-可复用经验候选（由 A 关闭时酌情合并）：提供器可能吞掉保存异常 → 在实际事务返回处关联本次结果，并独立验证保存失败仍可重试 → 适用于原生刷新接入；FullRefresh 只有探测计数看不到附带工作 → 同时观察提供器调用与端到端计数并声明调用／完成边界 → 适用于刷新成本验证。取消入口经验沿用现有候选，不新增流水账。
+可复用经验候选已在本轮关闭时合并到三份角色经验：原生保存边界取证、相同旧主流的失败对照、FullRefresh 提供器观察，以及取消义务与实际入口核对；不记录 Task 流水账。
 
 ## A Final Review
 
 ```text
-Reviewed Range: NOT SET
-Decision: PENDING
-P0/P1 Blockers: NOT REVIEWED BY A
+Reviewed Range: 8a6a955357a6fe7a6aea9dafead0ec33ffd203f3..2b1e1b5bcf77b06997fabed5a31147838db16b47
+Reviewed Contract: 4c749d7cce0f48b5c8146755db43837960e79f4f
+Review Checkout: 46766d1eee5c7478a1aee1372a460b27ba4577bb
+Decision: PASS
+P0/P1 Blockers: NONE
+Required Outcomes / Surfaces: ALL SATISFIED
+Review Date: 2026-10-13
 ```
 
-B 已交 Closure Packet；A 尚未进行独立最终审查。Task PASS 和 B 的 READY 决定不是 A PASS / CLOSED，后续 Slice 未激活。
+A 独立审查完整 Slice Base..Implementation Head，包含基线／合同与环境治理、全部插件源码、测试和隔离验证工具，并对照当前需求、取消 RESCOPE 与 Closure Packet。本轮无合同变更、产品代码修改或新 Task 规划。
+
+RO-1～RO-5、全部 Required Surfaces 与 AC-1～AC-7 满足当前核心原型合同。原生注册先于插件注册，包装保留唯一原生实例和所有权；四个接口未匹配方法继续委托，真实加载／启停和普通／直播／旧 STRM／禁用对照成立。URL 优先、false 权限及首次信任的例外与需求一致。
+
+保存信号经 A 核对固定源码成立：两处原生保存方法均为同步调用，在事务 Commit 后正常返回，代理随后才记信号；提供器上层捕获异常不会补出成功信号。本次编码器结果、项目、保存主流、返回主流及变化地址关联，稳定 Manifest 与条件提交共同保护基线。独立 harness 在旧主流与本次结果相同、流保存抛错、地址仅在内存变化和条目保存抛错时仍拒绝并保留重试；真实不可达失败／恢复、Manifest 竞态以及当次／重启最新地址和主流的原始输出与源码相符。
+
+A 已阅读 Slice Final 的 restore／build／test／format、完整隔离运行及工具日志，并核验 B 保存失败 harness 与提供器观察的源码、断言和原始日志。独立核对 47 项 Slice Final、24 项 B 原始产物摘要全部匹配；最终测试 checkout、实现检查点和本轮 checkout 的 41 项非 Markdown 输入一致。最终运行前后配置／夹具摘要一致，当前固定源码、SDK、镜像锁、配置、夹具及构建／部署 DLL 仍匹配最终记录。本轮明确复用单独执行的 Slice Final：32 项 C#、30 项工具回归、真实隔离 Jellyfin 与构建／质量门槛 PASS；没有另跑一轮产品或实机验收。关闭文档的治理／链接／差异检查另行记录。
+
+当前合同的原生取消异常保护由已有回归证明；人为注入取消的历史 FAIL／NOT RUN 继续按 RESCOPE 保留，不用来宣传取消实机 PASS。内部数据库故障实机注入、镜像全部构建输入溯源和通用性能证明不是本合同的额外关闭门槛；已有边界源码、失败控制测试及真实保存／重启证据足够支持核心机制。进程内 `primary`、格式／多源限制、尚无远程 CI 产品验收以及明确延期不阻止本 Slice PASS，也不代表完整产品或发布支持。
+
+A 本机证据索引：`.git/validation-evidence/2b1e1b5bcf77b06997fabed5a31147838db16b47/a-final-review-20261013/INDEX.md`。包含完整被审查差异、证据／运行输入核验、复用依据与关闭文档检查；仅本工作区可读。
+
+## Closure Reconciliation
+
+- SLICE 与 Roadmap：Slice 1 为 PASS / CLOSED；原始 Base 与实际实现检查点不变，Slice 2～4 继续 PLANNED。
+- README、Progress、架构 CURRENT、范围、兼容性与环境：同步已完成的固定版本核心原型、A 最终结论、原始证据与已知限制；Progress 新增首条关闭账本。
+- 需求、用户旅程和测试矩阵：仅同步原型关闭事实；完整产品保持 TARGET，后续矩阵 NOT RUN 保留，不改业务规则或验收。
+- TASK：无活动实施任务，保留接受的 Task 身份和 B 审查／历史快照指针；完整历史仍可从 Git 读取。
+- 三份角色经验：已审阅并合并可复用方法；经验不增加权限或测试门槛，不保存提交号／计数／任务流水。
+
+```text
+Closure Status: PASS / CLOSED
+Next Action: A SELECTS THE NEXT LARGE SLICE
+```
+
+本轮在关闭检查点完成后停止，未选择、激活或规划下一 Slice。
