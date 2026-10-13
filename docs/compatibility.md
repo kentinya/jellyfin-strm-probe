@@ -4,7 +4,7 @@
 
 当前只有固定组合上的 Task 1.1 原型证据，没有发布包或多版本兼容声明。真实插件已用 Jellyfin Controller／Model `12.2.0`、`net10.0` 和 SDK `10.0.401` 构建，并在隔离 Jellyfin `12.2.0` 容器加载；镜像 digest、媒体服务和环境身份见 [环境交接](development-environment.md)。此次证据覆盖插件启动及指定 STRM PlaybackInfo 行为，不代表 Slice 1 的所有 Required Outcomes 或正式发布支持。
 
-B 独立审查为 **FIX REQUIRED**：正常地址变化／重启及不可达失败保流重试已复现，但“本次编码器成功、返回仍为旧流”及“提交前 token 已取消、原生正常返回”均会错误接受新指纹。取消假对象 FAIL 保留，但按 A 实质范围调整退出当前播放 Task 阻塞范围。可靠保存关联尚未成立，停止进入后续完整插件开发；原 Task 内修正和缺失真实对照见 [当前 B Review](../TASK.md#current-b-review-result)。当前播放保留原生取消异常处理，不要求成功返回后的额外取消检查和人为注入取消实机门槛；共享／批量执行的取消保护在 Slice 2／3 验证。
+B 对候选 `153c0d31a699ff15047b6a2e274237497476ec76` 的独立审查为 **FIX REQUIRED**。Developer 已在同一 Task 修正保存关联并完成缺失实机对照；当前候选为 `2b1e1b5bcf77b06997fabed5a31147838db16b47`，状态 `READY FOR B REVIEW`。新候选尚未经过 B 独立审查，不代表 P1 已关闭或 Slice 通过。播放取消范围遵循 A 的 RESCOPE：保留原生取消异常处理，不要求成功返回后的额外取消检查或人为注入实机门槛；共享／批量执行的取消保护留在 Slice 2／3。
 
 | 候选源码 | 已记录标签提交 | 定位用途 |
 |---|---|---|
@@ -48,9 +48,10 @@ Slice 1 不再要求人为传入可取消 token 的真实原生取消验证，�
 - 插件在三次隔离容器启动后均为 Active。首次信任接管、未变化播放及地址变化后的未变化播放分别记录 0、0、0 次匹配原生编码器探测，返回必要 Video／Audio 主流。
 - 同 SHA-1／Size 的 URL 改变记录 1 次匹配原生 `IMediaEncoder.GetMediaInfo` 调用，结果含 Video／Audio 主流；PlaybackInfo 返回新 URL（证据仅记录 SHA-256），之后容器重启仍返回新 URL／主流，且没有新探测。
 - 不存在的新 URL 返回 HTTP 500，不被当成成功；同一失败 URL 的第二次 PlaybackInfo 再记录 1 次探测。控制逻辑与单元测试验证旧指纹未被失败结果替代。
-- `IMediaSourceManager` 全接口委托、核心注册迁移及单例释放各有单元测试；隔离实例实测实际注册后的播放路径。普通媒体、直播、旧 STRM、配置关闭和 `allowMediaProbe=false` 的边界由原生委托单元测试覆盖，未声明为独立真实 Jellyfin 行为验收。
-- 插件配置关闭时会直接委托原调用权限；上游 StreamingHelpers 的可取消取源调用传 `allowMediaProbe=false`，PlaybackInfo 则传 `CancellationToken.None`。因此插件拒绝提升 false 权限的控制由单元测试覆盖，而真实 PlaybackInfo 取消本次探测无法通过目标版本公共调用路径触发。
-- 单次合成媒体端到端延时记录在候选验证原始输出中。地址变化会触发 Jellyfin 原生 `FullRefresh`（源码实现含完整 metadata refresh）；本原型没有更窄的公开原生探测入口，也未尝试绕过它。该单条延时只供确认调用路径，不作为性能基准。
+- `IMediaSourceManager` 全接口委托、四个核心服务注册与单例释放各有单元测试；隔离实例实测普通媒体、旧 STRM、Live TV、插件禁用后原生播放及重新启用。各路径均返回有效媒体源且未产生插件 STRM 优化事件。
+- 对修改后 STRM 的实际 `/Videos/{itemId}/stream?static=true` 请求返回 HTTP 200 与 20,995 字节，没有插件探测事件；后续 PlaybackInfo 对同一变化 URL 执行 1 次匹配探测。这是真实 `allowMediaProbe=false` 流入口验证。公共 PlaybackInfo 固定传 `true`，因此未伪造 PlaybackInfo 的 false 参数调用。
+- 竞态用隔离媒体服务的延迟 URL：确认探测已开始后修改 STRM，PlaybackInfo 返回 HTTP 500，日志记录 1 次匹配调用及保留指纹；修复后的当前 Manifest 随后以 1 次探测成功恢复。
+- 手动 FullRefresh 返回 HTTP 204，保存后条目 ETag 改变；该项手动刷新未产生本地媒体 GET 或进程级 `GetMediaInfo` 调用，后续变化地址的 PlaybackInfo 仍执行 1 次探测。三次同 SHA-1／Size 地址切换的 PlaybackInfo 原生刷新均记录 1 次匹配调用和 1 次合成媒体 GET；其中两次重复运行还分别由进程级计数观察到 1 次 `GetMediaInfo`。调用时间、原始计数及限制见候选证据索引；这是固定合成夹具的调用路径观察，不是通用性能基准。
 
 目标版本任务接口已从固定源码核实：`IScheduledTask.ExecuteAsync(IProgress<double>, CancellationToken)` 提供取消与百分比进度；`GetDefaultTriggers()` 提供默认触发；`IConfigurableScheduledTask` 暴露隐藏、启用和日志设置。`ApplicationHost.RunStartupTasksAsync` 通过 `GetExports<IScheduledTask>(false)` 添加任务，`TaskManager` 建立 Worker；`ScheduledTasksController` 提供管理员手动运行、停止和触发器配置。Worker 读取已有触发器配置，否则使用 `GetDefaultTriggers()`；若该方法抛出异常会回退到每日触发，因此无自动时间要求必须正常返回空序列，不能抛异常。该接口研究未实现或运行本插件任务。
 
@@ -62,14 +63,14 @@ A 环境准备及 Task 1.1 原型后续：SDK、固定源码、镜像 digest、�
 
 | 问题 | 必须取得的证据 | 状态 |
 |---|---|---|
-| 核心 DI 接入 | 注册顺序、单一原生实例、无循环依赖、释放所有权、全接口委托、启动／关闭、普通媒体／直播 | B 复验加载／回归；普通与 Live TV 指定实机对照仍 NOT RUN |
+| 核心 DI 接入 | 注册顺序、单一原生实例、无循环依赖、释放所有权、全接口委托、启动／关闭、普通媒体／直播 | 单元与隔离实机对照已有证据；新候选待 B 复验 |
 | 跳过重复探测 | 未变化且已有主流的版本化 STRM 二次播放 ffprobe 零增量，原生媒体源有效 | B 隔离复现 0 匹配调用及有效主流；该正常分支 PASS |
 | 主动原生探测 | 变化时实际执行，包含 URL 改变且 SHA-1 相同；不靠 true 参数猜测 | B 复现同 SHA-1／Size URL 变化 1 次匹配调用；该正常分支 PASS |
-| 成功与指纹提交 | 真成功、故意失败而保留旧流、Manifest 再变的对照；新结果已保存后才提交；原生取消异常保留基线 | 正常／不可达失败保流重试已复现；保存关联 FAIL；取消假对象 FAIL 与注入实机 NOT RUN 保留历史，按 RESCOPE 不再阻塞当前播放 |
-| 地址／流持久化 | URL 改变后原生探测并保存，当次 PlaybackInfo 新地址，重启仍有效且有必要主流；保存失败明确 | B 复现正常当次／重启新地址及主流；成功编码器后保存失败的关联不成立，FIX REQUIRED |
-| 探测权限／禁用 | allowMediaProbe=false 各分支不执行；禁用／旧 STRM／手动刷新原生对照 | 单元复验 PASS；false 权限／禁用／旧 STRM／手动刷新指定实机对照仍 NOT RUN |
+| 成功与指纹提交 | 真成功、故意失败而保留旧流、Manifest 再变的对照；新结果已保存后才提交；原生取消异常保留基线 | 单测覆盖旧流返回和底层保存抛错；隔离实机覆盖成功保存和 Manifest 竞态；待 B 复核 |
+| 地址／流持久化 | URL 改变后原生探测并保存，当次 PlaybackInfo 新地址，重启仍有效且有必要主流；保存失败明确 | 当次／重启保存、结果关联及不可达失败保流重试已有实机证据；内部数据库保存故障未注入；待 B 复核 |
+| 探测权限／禁用 | allowMediaProbe=false 各分支不执行；禁用／旧 STRM／手动刷新原生对照 | 真实流入口 false 权限、插件禁用、旧 STRM、手动 FullRefresh 已运行；PlaybackInfo 的 false 参数入口在固定版本不可达；待 B 复核 |
 
-当前 Task 原型在正常 v12.2 STRM 播放路径观察到与请求 URL 匹配的编码器结果、新地址和主流，B 已复现；这些正常分支不足以证明保存失败时可靠拒绝新指纹。当前结论为 FIX REQUIRED，不继续扩大产品。FullRefresh 的额外提供器工作仍须作可复现观察；不新增另一个 FFmpeg／ffprobe。
+当前 Developer 候选为 `READY FOR B REVIEW`。B 尚未重新审查保存关联和新增长的实机证据；因此不能将历史 `FIX REQUIRED` 视为已裁定，也不能扩大到下一个产品 Task。外部 JellyfinProxy／OpenList 联调、完整 T01～T28 与 B01～B12 矩阵仍未运行；本原型没有新增 FFmpeg／ffprobe。
 
 ## 后续真实运行门槛
 

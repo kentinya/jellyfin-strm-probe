@@ -1,13 +1,13 @@
 # Task 1.1 — V4.2 核心接入原型与可靠指纹提交验证
 
-Task 1.1 已由用户激活。前轮的环境阻塞已由 A 补齐并由 B 解除；Developer 已交付最小插件原型，报告见下方 “Developer Completion Report: Task 1.1 implementation”。B 独立审查判定 **FIX REQUIRED**：本次结果与保存的关联及指定真实对照尚未满足。A 按用户要求实质调整当前播放取消范围，B 决定 ADJUST 原 Task：不要求成功返回后的额外取消检查和人为注入取消验收；原生取消异常保留基线并传播。BR-2 的历史 FAIL 保留，退出当前阻塞范围。
+Task 1.1 已由用户激活。前轮的环境阻塞已由 A 补齐并由 B 解除。上一份 B 独立审查对实现候选判定 **FIX REQUIRED**，指出结果保存关联和指定真实对照缺口；Developer 已按同一 Task 修正并补齐 T4 验证，当前交接见下方 “Developer Rework Report: Task 1.1”。A 按用户要求调整当前播放取消范围，B 决定 ADJUST 原 Task：不要求成功返回后的额外取消检查和人为注入取消验收；原生取消异常保留基线并传播。BR-2 的历史 FAIL 保留，退出当前阻塞范围。B 尚未审查新候选，不能据此关闭 P1 或宣告通过。
 
 未移动 Base、未新建 Task，T4 等级与四阶段流程保留；按新合同调整取消验收范围。Developer 不签发 B PASS，不更新 Slice Implementation Head，也不关闭 Slice。
 
 ```text
 Task ID: 1.1
 Parent Slice: 1
-Status: FIX REQUIRED
+Status: READY FOR B REVIEW
 Task Base: b69a930495c762fe546f8970891a2c955766b28c
 Contract Checkpoint: 4c749d7cce0f48b5c8146755db43837960e79f4f
 Original V4.2 Contract Checkpoint: 4a8536860fafaf25f7a1e573fef19255ca3d07c3
@@ -121,7 +121,7 @@ T19 在本 Task 验证原型结果／地址重启，不宣称完成 Slice 2 的�
 
 可执行代码、测试、工具、依赖或运行输入变更后更新证据；T4 修正候选完成全部最终门槛。纯文档后继提交核对输入不变并重跑相关治理。Slice Final 另行执行新合同最终验证。
 
-Task 环境阻塞阶段的原始计划快照曾记录产品门槛全为 NOT RUN；该历史状态已由下方当前 Developer Completion Report 的候选证据更新，不代表本次最终结果。治理检查与文件测试仍不代替产品测试。
+Task 环境阻塞阶段的原始计划快照曾记录产品门槛全为 NOT RUN；该历史状态已由下方 Developer Rework Report 的候选证据更新，不代表本次最终结果。治理检查与文件测试仍不代替产品测试。
 
 ## 非目标
 
@@ -130,7 +130,52 @@ Task 环境阻塞阶段的原始计划快照曾记录产品门槛全为 NOT RUN�
 - 大规模／扫描／代理联调、发布包与多版本兼容：Slice 4。
 - 生成器、OpenList API、媒体下载哈希、代理改造、独立调度器／探测状态机、仅更新路径服务、首版扫描后自动触发。
 
-## Developer Completion Report: Task 1.1 implementation
+## Developer Rework Report: Task 1.1
+
+本报告交付同一 Task 的修正候选供 B 独立审查，不是 B PASS、Slice Final 或 AC 自行验收。Task ID、Base、Contract Checkpoint、范围、T4 等级和四阶段流程未变。
+
+### Checkpoint and changed files
+
+- Product implementation SHA: `2b1e1b5bcf77b06997fabed5a31147838db16b47`（tree `5433e566cc5f4d9e32db409b08a51d262665bbc0`）。这是本轮源码、测试与隔离工具提交；本报告和 CURRENT 文档随后单独形成文档检查点。
+- 修正 `ProbeExecutionContext`：关联本次 URL 的完整关键主流身份；仅在 Jellyfin `SaveMediaStreams` 和 `SaveItems` 原生调用成功返回后记录媒体流／地址保存；返回源的主流必须与本次结果及已保存主流匹配，STRM 内容须在探测期间稳定，方可条件提交内存指纹。
+- `ServiceRegistrator` 包装 `IMediaStreamRepository` 和 `IItemPersistenceService` 的原生实现，同时保留现有媒体源管理器／编码器迁移、生命周期和委托。优化器日志只记录保存信号、调用计数和状态，不记录完整 URL 或路径。
+- 新增保存调用异常不发成功信号、已保存旧主流不得接受新结果的单元回归；新增本地隔离媒体服务器，用安全计数和延迟端点触发可重复 Manifest 竞态；扩展隔离脚本验证普通／旧 STRM／Live TV／禁用／false 权限／手动刷新／FullRefresh 工作及恢复。
+- 被测变更文件为 `src/Jellyfin.Plugin.StrmProbeOptimizer/Services/ProbeExecutionContext.cs`、`src/Jellyfin.Plugin.StrmProbeOptimizer/Services/StrmPlaybackOptimizer.cs`、`src/Jellyfin.Plugin.StrmProbeOptimizer/ServiceRegistrator.cs`、`src/Jellyfin.Plugin.StrmProbeOptimizer/Interceptors/MediaEncoderDispatchProxy.cs`、新 `src/Jellyfin.Plugin.StrmProbeOptimizer/Interceptors/ProbePersistenceDispatchProxy.cs`、`tests/Jellyfin.Plugin.StrmProbeOptimizer.Tests/PlaybackOptimizerTests.cs`、`scripts/run_isolated_plugin_integration.py`、新 `scripts/isolated_media_server.py`、`scripts/development_environment.py` 和 `dev/compose.yaml`。没有改 `config/alist.json`。
+- 完整脱敏日志及索引位于 `.git/validation-evidence/2b1e1b5bcf77b06997fabed5a31147838db16b47/developer-t4-20261013/`，仅本机可读；不含凭据或完整签名 URL。
+
+### Observed behavior
+
+- 固定 SDK `10.0.401`、目标框架 `net10.0`、Jellyfin Controller／Model `12.2.0`、隔离 Jellyfin `12.2.0` 和源码 `ca0f16eb7c195f720a1493ed469a27c4657db0c6`。插件在实机隔离实例多次启动为 Active；禁用后 Jellyfin 原生播放仍可用，重新启用并重启后插件为 Active。
+- 首次信任和未变化播放分别观察到 0 次匹配探测；同 SHA-1／Size 地址变化触发 1 次匹配探测，成功日志显示本次编码器主流、原生已保存主流、地址已保存及返回流匹配，PlaybackInfo 返回新地址与 Video／Audio 主流；服务器重启后新地址与主流仍可用。
+- 新地址不可达时 PlaybackInfo 返回 HTTP 500，原生保存流摘要与失败前相同；重复请求继续探测。恢复旧地址需按 Jellyfin 实际路径再探测，之后播放恢复成功。
+- 保存代理抛错时不会登记保存信号；单测模拟提供器吞掉保存异常后返回旧主流，优化器拒绝旧流并保留旧指纹。没有对隔离 Jellyfin 内部数据库执行故障注入；实机覆盖的是成功保存关联及失败 URL 保留旧流。
+- 隔离实机覆盖普通媒体、未版本化 STRM、M3U Live TV auto-open／取源、插件禁用、真实 `allowMediaProbe=false` 的视频流端点、手动 FullRefresh，以及成功探测期间修改 STRM。竞态返回 HTTP 500、记录 1 次匹配调用且保留指纹；恢复到稳定 Manifest 后下一次探测成功。
+- 手动 FullRefresh 返回 HTTP 204 并改变条目 ETag；该次没有本地媒体 GET 或进程级 `GetMediaInfo` 调用，之后地址变化的 PlaybackInfo 仍触发 1 次探测。地址变化探测路径另记录了 3 组同 SHA／Size 运行，每组 1 次匹配调用和 1 次媒体 GET；原始计数与约 60～90 ms 的合成 PlaybackInfo 时延在 JSON 中。它只说明固定本地夹具下的工作路径，不是通用性能结论。
+
+### T4 verification
+
+- `bash scripts/dotnet-local restore Jellyfin.Plugin.StrmProbeOptimizer.sln --locked-mode` — PASS。
+- `bash scripts/dotnet-local build Jellyfin.Plugin.StrmProbeOptimizer.sln --configuration Release --no-restore` — PASS，0 warnings／errors。
+- `bash scripts/dotnet-local test Jellyfin.Plugin.StrmProbeOptimizer.sln --configuration Release --no-restore` — PASS，32/32，0 skipped；包括保存关联、保存失败、旧流回退、取消异常、权限、Manifest 竞态和决策回归。
+- `bash scripts/dotnet-local format Jellyfin.Plugin.StrmProbeOptimizer.sln --verify-no-changes --no-restore` — PASS。
+- `python3 scripts/run_isolated_plugin_integration.py` — PASS，提交版最终运行恢复原 STRM、启用插件并验证 Jellyfin 地址同步。
+- 最终文档更新后重跑 `python3 scripts/check_governance.py`、`python3 -m unittest discover -s tests -v`、`python3 -m py_compile scripts/run_isolated_plugin_integration.py scripts/development_environment.py scripts/isolated_media_server.py` 和 `git diff --check`；结果及退出码写入同一证据索引。文档提交不改可执行候选或其锁／夹具输入。
+- 本地反馈阶段先后发现并修正插件列表匹配、失败 URL 后的原生恢复探测、FullRefresh 完成检测和 FullRefresh 观测区分问题；新增保存身份字段及保存异常测试时修正编译问题。未把这些失败算作最终 PASS；因最初交互执行未将每段终端原始输出重定向到文件，证据索引会明确标为会话输出摘录而非原始日志。
+
+### Limits and handoff
+
+- Jellyfin `12.2.0` 的公共 PlaybackInfo 固定传 `allowMediaProbe=true`／`CancellationToken.None`。false 权限通过固定源码所示、真实可取消的 `/Videos/{itemId}/stream?static=true` 入口验证；未声称测试了 PlaybackInfo false 参数或客户端取消探测。
+- 进程内指纹仓库重启后重新首次信任；本轮重启只证明 Jellyfin 原生地址与媒体流持久化。正式 SQLite、完整决策矩阵、跨媒体源协调、全局并发、批量任务、配置页面、发布包、多版本兼容和外部 JellyfinProxy／OpenList 联调不在当前 Task 实现中。完整 T01～T28 与 B01～B12 矩阵未运行。
+- 历史 B 决定 `FIX REQUIRED` 仍是最后一份独立审查结论；Developer 不改审查结果、不勾验收框、不更新 Slice Implementation Head、不规划下一 Task、不关闭 Slice。请 B 基于 Task Base `b69a930495c762fe546f8970891a2c955766b28c` 与 Contract Checkpoint `4c749d7cce0f48b5c8146755db43837960e79f4f` 审查新候选并裁定 BR-1／BR-3。
+
+```text
+Product implementation SHA: 2b1e1b5bcf77b06997fabed5a31147838db16b47
+Evidence: .git/validation-evidence/2b1e1b5bcf77b06997fabed5a31147838db16b47/developer-t4-20261013/
+Task status: READY FOR B REVIEW
+Last independent B decision: FIX REQUIRED (on prior implementation SHA)
+```
+
+## Developer Completion Report: Task 1.1 initial implementation (superseded)
 
 本报告提交固定候选供 B 独立审查，不是 B PASS 或 Slice Final。验收框仍由 B 对照 Contract 检查。
 
@@ -284,7 +329,8 @@ Next: Developer resumes Task 1.1 as IN PROGRESS
 3. 按原验收和四阶段测试计划完成探测计数、本次成功／保存关联、失败／取消／竞态保护、URL 变化当次与重启、探测权限对照，以及任务接口和刷新开销调研。不得用旧流或刷新返回值冒充本次成功。
 4. 完成候选的全部 T4 指定门槛，保存准确实现 SHA、输入身份、脱敏原始日志及未完成项；更新完成报告并交为 `READY FOR B REVIEW`。B 再独立复现指定关键行为；全部 Slice Outcomes 满足后才提交 A 最终审查。
 
-## Current B Review Result
+<a id="current-b-review-result"></a>
+## Last B Review Result (prior implementation)
 
 ```text
 Reviewed: b69a930495c762fe546f8970891a2c955766b28c..153c0d31a699ff15047b6a2e274237497476ec76

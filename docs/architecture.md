@@ -6,15 +6,15 @@ V4.2 取代 V3.0 作为当前开发基准，旧原文与合同留在 Git 历史�
 
 原型固定 Jellyfin `12.2.0`、Controller／Model `12.2.0`、`net10.0` 和 SDK `10.0.401`。它在隔离实例中已加载并验证 STRM 播放接入、未变化复用、同 SHA-1／Size 地址变化时原生探测、新地址重启后可用，以及失败后重试。实际命令与限制见 [Task 1.1](../TASK.md)、[兼容性与接入验证](compatibility.md) 和 [环境交接](development-environment.md)。这些是 Task 原型的分项证据，不代表 Slice 1 完成或多版本兼容。
 
-B 已独立复现上述正常与不可达失败路径，Task 仍为 FIX REQUIRED。本次保存判断只检查返回主流／地址和内存 `ShortcutPath`，无法排除成功编码器结果之后保存失败而旧流仍在。保存关联复现失败；提交前取消的假对象复现也失败，但已按 A RESCOPE 退出当前播放 Task 的防御性验收范围，详见 [当前 B Review](../TASK.md#current-b-review-result)。下述原型机制描述其实现意图，可靠提交目标仍未通过。
+B 对早期候选发现探测结果与已保存主流无法区分，且缺少普通媒体、Live TV、旧 STRM、禁用、false 权限、手动刷新、Manifest 竞态和 FullRefresh 工作观察。Developer 已在同一 Task 修正并补运行这些场景；新候选已交 `READY FOR B REVIEW`，不能视为 B 接受或 Slice 通过。上一份 B 决定仍记录 `FIX REQUIRED`，见 [Task 1.1 审查与当前交接](../TASK.md#current-b-review-result)。
 
 ### 已实现的 Task 1.1 原型边界
 
-- `ServiceRegistrator` 在 Jellyfin 核心服务注册后包装唯一的 `IMediaSourceManager` 与 `IMediaEncoder` 实例；未匹配播放方法完整反射委托。单元测试核对委托和原生实例生命周期，隔离实例验证插件启动、停止与加载。
+- `ServiceRegistrator` 在 Jellyfin 核心服务注册后包装唯一的 `IMediaSourceManager`、`IMediaEncoder`、`IMediaStreamRepository` 与 `IItemPersistenceService` 实例；未匹配方法委托给对应原生实现。单元测试核对核心注册和生命周期，隔离实例验证实际插件启动、禁用、恢复与加载。
 - `StrmManifestReader` 有界只读解析版本化 STRM；`ProbeDecisionService` 实现该原型所需的 URL／SHA-1／Size 决策。`StrmPlaybackOptimizer` 只接管允许探测的受支持 `.strm`；其他请求保留 Jellyfin 原始权限并委托原生路径。
-- `ProbeExecutionContext` 记录本次正确 URL 的 `IMediaEncoder.GetMediaInfo` 调用及是否返回主流；接入层检查返回地址／主流、内存 `ShortcutPath` 和 STRM 内容，再条件提交内存指纹。原生抛出失败／取消、地址未更新及 Manifest 竞态有保留基线分支；本次新主流保存关联仍须修正；原生正常返回后的额外取消保护已退出当前播放范围，原生取消异常分支与已有回归保留。
+- `ProbeExecutionContext` 记录本次请求 URL 的编码器主流身份；保存代理只在原生 `SaveMediaStreams`／`SaveItems` 成功返回后记录对应主流和地址。接入层再核对 Jellyfin 返回源、已保存主流、最新地址及未变化的 STRM，满足条件后才提交进程内指纹。单元测试覆盖旧流仍在和原生保存抛错；隔离实例观察到真实成功保存与返回流相符。隔离实例没有对 Jellyfin 内部数据库注入保存故障，需由 B 复核该接入证据与剩余边界。
 - 原型仓库使用进程内条件提交；重启后需要首次信任接管。正式 SQLite、同源并发协调、批量任务、配置 UI、完整决策矩阵和跨版本兼容仍是目标设计或后续 Slice 工作。
-- Jellyfin 12.2 PlaybackInfo 对 `GetPlaybackMediaSources` 传入 `allowMediaProbe=true` 与 `CancellationToken.None`。可取消的媒体流取源调用传入 `false`，因此不会进入主动探测分支。探测期间取消的控制逻辑有单元测试；此 API 组合没有可实测的请求取消路径。
+- 隔离实测覆盖普通文件、旧 STRM、Live TV、禁用插件、false 权限的实际流请求、手动 FullRefresh 和探测期间 STRM 变化。固定版本的 PlaybackInfo 固定传 `allowMediaProbe=true`；可取消的媒体流入口传 `false`，故 false 实测通过真实流 API，不能宣称为 PlaybackInfo 的 false 参数测试。提交后地址变化连续三次观察到匹配探测、`GetMediaInfo` 调用和本地媒体 GET；手动 FullRefresh 更新条目 ETag，但未运行这些探测，后续地址变化仍触发探测。精确证据和性能限制见 [兼容性记录](compatibility.md)。
 
 ### 播放与任务执行上下文
 
