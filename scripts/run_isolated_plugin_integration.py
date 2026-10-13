@@ -1168,6 +1168,88 @@ def multiversion_and_sqlite_failure_check(
     require(recovered_alternate and recovered_alternate["url_hash"] == expected_url_hash(failed_write_url), "The recovered SQLite store did not commit the alternate URL after restart.")
     require(fingerprint_row(canonical_project_id, primary_item_id) == primary_before, "The SQLite recovery changed the independent primary fingerprint.")
 
+    read_only_url = unique_query_url(failed_write_url, "sqlite-read-only-" + uuid.uuid4().hex[:10])
+    read_only_project_url = read_only_url if canonical_project_id == alternate_item_id else primary_url
+    alternate_fixture_path.write_bytes(write_versioned_fixture(alternate_fixture_path.read_bytes(), read_only_url, media_sha1, media_size))
+    for suffix in ("-wal", "-shm", "-journal"):
+        require(not Path(str(FINGERPRINT_DATABASE) + suffix).exists(), "The isolated fingerprint database has a sidecar; refusing read-only failure injection.")
+
+    read_only_flag_set = False
+    read_only_failure_summary: dict[str, object] = {}
+    read_only_recovery_api = restored_api
+    read_only_recovery_container = restored_container
+    stop = run([sys.executable, str(ENVIRONMENT), "stop"], timeout=120)
+    require(stop.returncode == 0, "The isolated Jellyfin server did not stop before read-only SQLite validation.")
+    try:
+        immutable = run(["chattr", "+i", str(FINGERPRINT_DATABASE)], timeout=20)
+        require(immutable.returncode == 0, "The isolated filesystem could not make the fingerprint database read-only for failure validation.")
+        read_only_flag_set = True
+        read_only_container = restart_isolated_server()
+        read_only_api = JellyfinApi()
+        read_only_playback = call_playback(
+            read_only_api,
+            read_only_container,
+            canonical_project_id,
+            read_only_project_url,
+            event_item_ids=[primary_item_id, alternate_item_id],
+        )
+        require(read_only_playback["http_status"] == 200 and read_only_playback["path_matches_manifest"], "Native playback did not preserve the changed source address after SQLite became read-only.")
+        read_only_alternate = source_summary(read_only_playback, alternate_item_id)
+        require(read_only_alternate and read_only_alternate["path_sha256"] == expected_url_hash(read_only_url), "Native fallback did not return the alternate source's current address while SQLite was read-only.")
+        read_only_events = [str(event) for event in read_only_playback["plugin_events"]]
+        require(
+            any("SqliteException" in event and "optimization disabled until restart" in event for event in read_only_events),
+            "An immutable SQLite fingerprint file did not disable optimization with a redacted failure category.",
+        )
+        require(not any("fingerprint committed" in event for event in read_only_events), "The immutable SQLite failure was reported as a committed fingerprint.")
+        retained_read_only_row = fingerprint_row(canonical_project_id, alternate_item_id)
+        require(retained_read_only_row == recovered_alternate, "Making the SQLite file read-only changed the trusted alternate baseline.")
+        read_only_followup = call_playback(
+            read_only_api,
+            read_only_container,
+            canonical_project_id,
+            read_only_project_url,
+            event_item_ids=[primary_item_id, alternate_item_id],
+        )
+        require(read_only_followup["http_status"] == 200 and read_only_followup["path_matches_manifest"], "Native playback did not continue after the SQLite failure latch.")
+        require(not read_only_followup["plugin_events"], "The plugin continued making fingerprint decisions after the read-only failure latch.")
+        require(fingerprint_row(canonical_project_id, alternate_item_id) == recovered_alternate, "Native fallback after the read-only failure changed the trusted baseline.")
+        read_only_failure_summary = {
+            "playback": read_only_playback,
+            "trusted_fingerprint_retained": retained_read_only_row,
+            "native_followup": read_only_followup,
+        }
+    finally:
+        stop = run([sys.executable, str(ENVIRONMENT), "stop"], timeout=120)
+        clear_status = 0
+        if read_only_flag_set:
+            clear_immutable = run(["chattr", "-i", str(FINGERPRINT_DATABASE)], timeout=20)
+            clear_status = clear_immutable.returncode
+        require(stop.returncode == 0, "The isolated Jellyfin server did not stop after read-only SQLite validation.")
+        require(clear_status == 0, "The isolated SQLite read-only flag could not be cleared during recovery.")
+        read_only_recovery_container = restart_isolated_server()
+        read_only_recovery_api = JellyfinApi()
+
+    recovered_after_read_only_failure = call_playback(
+        read_only_recovery_api,
+        read_only_recovery_container,
+        canonical_project_id,
+        read_only_project_url,
+        event_item_ids=[primary_item_id, alternate_item_id],
+    )
+    recovered_read_only_alternate = source_summary(recovered_after_read_only_failure, alternate_item_id)
+    require(
+        recovered_after_read_only_failure["http_status"] == 200
+        and recovered_after_read_only_failure["path_matches_manifest"]
+        and recovered_read_only_alternate
+        and recovered_read_only_alternate["path_sha256"] == expected_url_hash(read_only_url)
+        and probe_calls(source_event(recovered_after_read_only_failure, alternate_item_id)) == 1,
+        "After clearing the SQLite read-only flag and restarting, the alternate URL was not rechecked.",
+    )
+    read_only_recovered_row = fingerprint_row(canonical_project_id, alternate_item_id)
+    require(read_only_recovered_row and read_only_recovered_row["url_hash"] == expected_url_hash(read_only_url), "The writable SQLite store did not commit the alternate URL after read-only recovery.")
+    require(fingerprint_row(canonical_project_id, primary_item_id) == primary_before, "Read-only SQLite recovery changed the independent primary fingerprint.")
+
     return {
         "merge_http_status": merge_status,
         "canonical_project_item_id": canonical_project_id,
@@ -1199,7 +1281,10 @@ def multiversion_and_sqlite_failure_check(
         "sqlite_recovery_after_restart": recovered_after_store_failure,
         "alternate_fingerprint_after_sqlite_recovery": recovered_alternate,
         "primary_identity_after_sqlite_recovery": fingerprint_row(canonical_project_id, primary_item_id),
-    }, restored_api, restored_container, alternate_item_id
+        "sqlite_read_only_failure": read_only_failure_summary,
+        "sqlite_recovery_after_read_only_restart": recovered_after_read_only_failure,
+        "alternate_fingerprint_after_read_only_recovery": read_only_recovered_row,
+    }, read_only_recovery_api, read_only_recovery_container, alternate_item_id
 
 
 def ensure_success(result: dict, expected_url: str, expected_calls: int) -> None:
