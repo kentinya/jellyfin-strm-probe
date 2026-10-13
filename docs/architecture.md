@@ -2,9 +2,17 @@
 
 ## CURRENT
 
-仓库有方案、规划文档、治理／历史初始化工具、CI 和隔离开发环境工具，没有 C# 产品项目、插件运行时服务、SQLite schema、配置页或插件包。V4.2 取代 V3.0 作为当前开发基准，旧原文与合同留在 Git 历史。
+V4.2 取代 V3.0 作为当前开发基准，旧原文与合同留在 Git 历史。仓库已包含 Task 1.1 的最小 C# 插件原型和测试；仍没有 SQLite schema、配置页、批量任务或发布包。
 
-Slice 1 保留原始 Base 并修订核心验证合同。SDK `10.0.401` 已安装，隔离 Jellyfin `12.2.0`／本地媒体服务已启动并固定镜像 digest；忽略目录内的 `12.2.0` NuGet 引用样例已编译运行，见 [环境交接](development-environment.md)。产品项目／依赖锁尚未创建，原生接入、成功信号和最新地址持久化没有产品实机证据。方案中的接口与 SQL 是目标设计，不能写成已经实现。
+原型固定 Jellyfin `12.2.0`、Controller／Model `12.2.0`、`net10.0` 和 SDK `10.0.401`。它在隔离实例中已加载并验证 STRM 播放接入、未变化复用、同 SHA-1／Size 地址变化时原生探测、新地址重启后可用，以及失败后重试。实际命令与限制见 [Task 1.1](../TASK.md)、[兼容性与接入验证](compatibility.md) 和 [环境交接](development-environment.md)。这些是 Task 原型证据，仍待 B 独立复核，不代表 Slice 1 完成或多版本兼容。
+
+### 已实现的 Task 1.1 原型边界
+
+- `ServiceRegistrator` 在 Jellyfin 核心服务注册后包装唯一的 `IMediaSourceManager` 与 `IMediaEncoder` 实例；未匹配播放方法完整反射委托。单元测试核对委托和原生实例生命周期，隔离实例验证插件启动、停止与加载。
+- `StrmManifestReader` 有界只读解析版本化 STRM；`ProbeDecisionService` 实现该原型所需的 URL／SHA-1／Size 决策。`StrmPlaybackOptimizer` 只接管允许探测的受支持 `.strm`；其他请求保留 Jellyfin 原始权限并委托原生路径。
+- `ProbeExecutionContext` 只把本次正确 URL 的 `IMediaEncoder.GetMediaInfo` 主流结果作为原生成功观察；同时要求 Jellyfin 已返回并保存当前地址及必要主流、且 STRM 内容未变化，才条件提交内存指纹。失败、取消、地址变化失败、保存结果不匹配和竞态不覆盖基线。
+- 原型仓库使用进程内条件提交；重启后需要首次信任接管。正式 SQLite、同源并发协调、批量任务、配置 UI、完整决策矩阵和跨版本兼容仍是目标设计或后续 Slice 工作。
+- Jellyfin 12.2 PlaybackInfo 对 `GetPlaybackMediaSources` 传入 `allowMediaProbe=true` 与 `CancellationToken.None`。可取消的媒体流取源调用传入 `false`，因此不会进入主动探测分支。探测期间取消的控制逻辑有单元测试；此 API 组合没有可实测的请求取消路径。
 
 ## TARGET
 

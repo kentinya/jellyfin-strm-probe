@@ -12,7 +12,7 @@
 | Jellyfin | 官方镜像标签 `12.2`，实际 Public Info 为 `12.2.0`；原生服务启动及本机访问 PASS |
 | 源码 | `ca0f16eb7c195f720a1493ed469a27c4657db0c6`；本地检出 `artifacts/dev-env/source` 并核对 HEAD |
 | 服务器／媒体服务镜像 digest | 已固定于本地 `artifacts/dev-env/images.lock.json`，后续启动只用 digest；精确值见下表 |
-| 插件 NuGet 依赖 | 环境样例已恢复并编译 `Jellyfin.Controller`／`Jellyfin.Model` `12.2.0`，nuspec repository commit 与固定源码一致；产品项目及产品依赖锁尚未创建 |
+| 插件 NuGet 依赖 | 产品原型锁定 `Jellyfin.Controller`／`Jellyfin.Model` `12.2.0`；两个产品项目均提交 `packages.lock.json`，nuspec repository commit 与固定源码一致 |
 
 SDK 版本、下载地址和校验值来自 [Microsoft 官方发布元数据](https://dotnetcli.blob.core.windows.net/dotnet/release-metadata/10.0/releases.json)。目标源码的 [global.json](https://github.com/jellyfin/jellyfin/blob/ca0f16eb7c195f720a1493ed469a27c4657db0c6/global.json) 写出 `10.0.0`／`latestMinor`，本地环境具体固定为 `10.0.401`。这只确定构建工具输入，不证明插件已经兼容。
 
@@ -60,12 +60,13 @@ python3 scripts/development_environment.py up
 
 仅操作由仓库路径派生的专用 Compose project；检测到项目容器挂载其他目录时拒绝启动或停止。不提供删除数据、清理镜像或全局 Docker 清理入口。
 
-## 开发者下一步
+## Task 1.1 原型交接状态
 
-1. 已有固定源码、SDK、镜像锁和 Public Info，可从 `artifacts/dev-env/source` 开始核查接口。镜像标签不证明构建源码身份；该镜像没有 revision 标签。已记录实际 image ID／digest，NuGet nuspec 的 repository commit 与源码一致；镜像整体源码构建溯源仍需在 Task 证据中补齐。
-2. 已用实例自带的 FFmpeg `8.1.3-Jellyfin` 制作两秒本地媒体：`media/fixture.mp4` 与相同字节的 `fixture-alt.mp4`；手写 `strm/Environment Fixture.strm` 使用协议 v1、本地地址、固定假 SHA-1 和实际字节 Size。原生 ffprobe 通过 HTTP 读出 H.264／AAC，证明基础媒体链路；这不是插件探测成功信号或跳过计数证据。
-3. 创建 Task 内的最小 solution／插件／测试项目，核实 `net10.0` 与目标 NuGet 依赖，补真实 restore／Release build／test／format 命令及依赖锁。统一使用 `bash scripts/dotnet-local ...`。
-4. 原 Task T4 门槛、B 独立关键行为验证和 Slice Final 均保留。服务启动不是插件加载成功，媒体服务请求数不是 ffprobe 调用数；DI、探测成功、URL 保存和重启仍需各自真实证据。
+已创建 `Jellyfin.Plugin.StrmProbeOptimizer.sln`、插件项目、MSTest 项目和独立依赖锁；真实插件在隔离实例加载。最小包只含插件 DLL 和 `Packaging/meta.json`，不是发布 ZIP。锁定的镜像没有 revision 标签，镜像整体构建源码溯源仍有限；官方源代码 SHA、NuGet nuspec repository commit、实际 image ID／digest 与容器版本分别留证，不把其中一项替代另一项。
+
+合成媒体服务使用实例自带的 FFmpeg `8.1.3-Jellyfin` 制作两秒媒体：`media/fixture.mp4` 与相同字节的 `fixture-alt.mp4`。本次隔离集成脚本在 STRM 中写入从实际字节计算的 SHA-1／Size，验证换 URL 的同内容分支，并在脚本退出时恢复原始 STRM。
+
+固定 SDK 的 locked restore、Release build、C# 全部测试、format verify、仓库治理测试和真实 PlaybackInfo 集成均已有执行记录。T4 最终候选的证据索引、任务接口调研、未完成行为及实现 SHA 见 [Task 1.1 Developer Completion Report](../TASK.md)。B 的独立复核和 Slice Final 仍由各自角色负责。
 
 本文件记录 A 提供的已运行环境及事实交接，原 Developer 阻塞报告保留为历史。随后 B 已复核交接提交和当前环境，确认阻塞解除；Task 1.1 为 FIX REQUIRED，交回 Developer 恢复原 Task 实施，无须重新申请已授权范围。该决定不代表产品 PASS，详见 [B Review Result](../TASK.md#b-review-result)。
 
@@ -76,7 +77,7 @@ python3 scripts/development_environment.py up
 | Jellyfin | `jellyfin/jellyfin@sha256:357724bf0ae27a672c7cbaa899db2d9abeb13dbd8657ccce750258a4c059d037` |
 | 本地媒体 HTTP 服务 | `python@sha256:0a310eeecf4e1f5a0743f9a6520c90c88d089c903ca5fd283f501e3a805f5f89` |
 
-环境构建样例位于忽略目录 `artifacts/dev-env/build-smoke`，不是产品原型。`restore --use-lock-file`、Release build、运行引用检查均 PASS，0 编译警告／错误；真实产品 solution、插件加载、DI、成功信号、跳过计数、播放 URL 持久化和 T4 产品门槛仍 NOT RUN。工具回归 30/30 PASS，其中 6 项覆盖环境边界。
+环境构建样例位于忽略目录 `artifacts/dev-env/build-smoke`，不是产品原型；它的环境交接结果保留为历史。产品原型验证使用的项目锁和确切门禁命令见 Task 完成报告。工具回归 30/30 PASS，其中 6 项覆盖环境边界；该治理测试不替代插件测试或 Jellyfin 实测。
 
 样例实际命令：
 

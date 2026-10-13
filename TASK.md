@@ -1,13 +1,13 @@
 # Task 1.1 — V4.2 核心接入原型与可靠指纹提交验证
 
-Task 1.1 已由用户激活。Developer 前轮因缺少 SDK／隔离服务器交接阻塞；A 随后补齐环境，B 已复核交接提交与当前运行状态。环境阻塞已解除，但尚无 C# 产品原型，产品验收仍未运行；本次决定 FIX REQUIRED，交回 Developer 继续原已授权 Task。
+Task 1.1 已由用户激活。Developer 前轮因缺少 SDK／隔离服务器交接阻塞；A 随后补齐环境，B 已复核交接提交与当前运行状态。环境阻塞已解除，但尚无 C# 产品原型，产品验收仍未运行。B 决定 FIX REQUIRED，并明确由 Developer 恢复同一 Task；本轮进入实施。
 
 原 Developer 报告及 A 环境交接保留为历史。当前结论、证据和接续要求见下方 B Review Result；不移动 Base、不重规划、不降低 T4 门槛。
 
 ```text
 Task ID: 1.1
 Parent Slice: 1
-Status: FIX REQUIRED
+Status: IN PROGRESS
 Task Base: b69a930495c762fe546f8970891a2c955766b28c
 Contract Checkpoint: 4a8536860fafaf25f7a1e573fef19255ca3d07c3
 Superseded Plan: 4b1d0468c1e43e6e9034ef98e99b6cc44ea59485

@@ -1,0 +1,13 @@
+{
+  "category": "General",
+  "description": "STRM playback interception prototype for Jellyfin 12.2.0.",
+  "guid": "b061643e-d17d-4c6e-8ba2-6b57e286bd20",
+  "name": "STRM Probe Optimizer",
+  "overview": "Validates native playback probe decisions and saved results for versioned STRM files.",
+  "owner": "local-development",
+  "targetAbi": "12.2.0.0",
+  "version": "0.1.0.0",
+  "assemblies": [
+    "Jellyfin.Plugin.StrmProbeOptimizer.dll"
+  ]
+}
