@@ -116,7 +116,7 @@ B／Developer 只记录真实实现 Head、结果和 Required Outcomes 进度，
 ```text
 Slice: 1
 Slice Base: 8a6a955357a6fe7a6aea9dafead0ec33ffd203f3
-Implementation Head: 2b1e1b5bcf77b06997fabed5a31147838db16b47
+Accepted implementation SHA: 2b1e1b5bcf77b06997fabed5a31147838db16b47
 Reviewed Contract Checkpoint: 4c749d7cce0f48b5c8146755db43837960e79f4f
 Task: 1.1 — PASS
 Task Review Checkpoint: 15ce799b1ca0330378f498a4cd83ec8064cae783
