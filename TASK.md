@@ -1,3 +1,7 @@
+# NO ACTIVE IMPLEMENTATION TASK
+
+Task 2.1 已 PASS，活动实施结束；以下保留完整计划／完成报告／B 审查，下一步由 B 规划 Task 2.2。Slice 2 仍 ACTIVE，Required Outcomes 尚未全部满足。
+
 # Task 2.1 — 按真实媒体源持久化播放指纹与重启恢复
 
 模板来源：[Task 模板](Task/TEMPLATE.md)。范围 authority 为已提交的 [Slice 2](SLICE.md)，流程见 [开发流程](docs/development-workflow.md)；规划／审查参考 [B 经验](docs/agent-experience/task-planner-reviewer.md)，实施先读 [Developer 经验](docs/agent-experience/developer-implementation-role.md)。
@@ -5,7 +9,7 @@
 ```text
 Task ID: 2.1
 Parent Slice: 2
-Status: READY FOR B REVIEW
+Status: PASS
 Task Base: 7e0240cd1cada74f142b7b0afd612943ca991a91
 Contract Checkpoint: 7e0240cd1cada74f142b7b0afd612943ca991a91
 Slice Base: 924816a84c74f5d79c107478f2d40e621cb8be8d
@@ -59,13 +63,13 @@ Planner / Reviewer: B
 
 ## 验收条件
 
-- [ ] **AC-T1：版本判断与首次接管。** 完整逻辑／文件矩阵有逐项索引，包括原生地址已同步但历史 URL 不同、双侧哈希有效性组合、Size 0／缺失／负数／溢出、信息不足、签名变化和 mtime／重写／重放。已有主流信任零探测；无流／原生地址过期需原生处理；音频／视频必要主流不混用。对应 Slice AC-1／AC-2。
-- [ ] **AC-T2：SQLite 与哈希身份。** 最小 schema／版本／重开、原子条件提交／失败事务使用真实 SQLite；过期执行和插入竞争不覆盖新基线。暂缺 SHA-1 后恢复、接受另一版本缺哈希的序列正确，无完整 URL／路径／媒体流／执行状态。对应 AC-3、T27、X06。
-- [ ] **AC-T3：真实成功与失败恢复。** 同 SHA-1／Size 换 URL、同 URL 哈希变化、无可比 SHA-1 的 Size 变化实际新增探测，成功结果／地址／指纹对账。不可达失败、Manifest 竞态、同元数据但主流／地址保存失败保留基线并可重试；保留取消异常回归，不新增取消机制。对应 AC-4、T17／T18、X04／X07。
-- [ ] **AC-T4：重启不掩盖失败。** 成功地址／主流和指纹重启恢复，未变化零探测且非重新 FirstTrust。另在失败后保留当前未接受的变化 STRM 重启，先确认旧指纹仍在，再修复当前目标并验证下一次允许请求实际探测／提交；不靠变回旧 Manifest 恢复，不通过重启信任失败版本。对应 T19／T22、AC-3／AC-4。
-- [ ] **AC-T5：真实多版本。** 同一影片至少两个原生关联的 STRM 版本，各自主流／指纹；主入口、直接版本入口／MediaSourceId 选择及返回顺序变化时，变更一个版本只接受其结果，另一个键／指纹／地址／主流正确；用户可见范围／原生授权和重启键稳定可核验。两个无关联影片或多源回退不算 T25。对应 AC-5 身份部分；共享／上限尚未验收。
-- [ ] **AC-T6：状态库故障与委托。** 读／写故障控制测试及隔离代表性不可写验证：优化停止、权限保留、无新成功指纹，修复＋重启后重查；损坏／未知版本保留原库、明确失败。普通／旧／不支持输入、直播、false 真实流入口、禁用、全接口／生命周期和手动刷新不退化。对应 AC-7 状态库／原生边界部分。
-- [ ] **AC-T7：T4 证据与范围。** 完整指定门槛、新依赖部署、原始脱敏日志／计数／数据库与原生结果索引可核验；未运行／外部代理分别报告。只修改 Task 范围内文件，不改 Contract／不变量或生产数据。对应 AC-8；完整 Slice 验收仍待后续工作和单独 Slice Final。
+- [x] **AC-T1：版本判断与首次接管。** 完整逻辑／文件矩阵有逐项索引，包括原生地址已同步但历史 URL 不同、双侧哈希有效性组合、Size 0／缺失／负数／溢出、信息不足、签名变化和 mtime／重写／重放。已有主流信任零探测；无流／原生地址过期需原生处理；音频／视频必要主流不混用。对应 Slice AC-1／AC-2。
+- [x] **AC-T2：SQLite 与哈希身份。** 最小 schema／版本／重开、原子条件提交／失败事务使用真实 SQLite；过期执行和插入竞争不覆盖新基线。暂缺 SHA-1 后恢复、接受另一版本缺哈希的序列正确，无完整 URL／路径／媒体流／执行状态。对应 AC-3、T27、X06。
+- [x] **AC-T3：真实成功与失败恢复。** 同 SHA-1／Size 换 URL、同 URL 哈希变化、无可比 SHA-1 的 Size 变化实际新增探测，成功结果／地址／指纹对账。不可达失败、Manifest 竞态、同元数据但主流／地址保存失败保留基线并可重试；保留取消异常回归，不新增取消机制。对应 AC-4、T17／T18、X04／X07。
+- [x] **AC-T4：重启不掩盖失败。** 成功地址／主流和指纹重启恢复，未变化零探测且非重新 FirstTrust。另在失败后保留当前未接受的变化 STRM 重启，先确认旧指纹仍在，再修复当前目标并验证下一次允许请求实际探测／提交；不靠变回旧 Manifest 恢复，不通过重启信任失败版本。对应 T19／T22、AC-3／AC-4。
+- [x] **AC-T5：真实多版本。** 同一影片至少两个原生关联的 STRM 版本，各自主流／指纹；主入口、直接版本入口／MediaSourceId 选择及返回顺序变化时，变更一个版本只接受其结果，另一个键／指纹／地址／主流正确；用户可见范围／原生授权和重启键稳定可核验。两个无关联影片或多源回退不算 T25。对应 AC-5 身份部分；共享／上限尚未验收。
+- [x] **AC-T6：状态库故障与委托。** 读／写故障控制测试及隔离代表性不可写验证：优化停止、权限保留、无新成功指纹，修复＋重启后重查；损坏／未知版本保留原库、明确失败。普通／旧／不支持输入、直播、false 真实流入口、禁用、全接口／生命周期和手动刷新不退化。对应 AC-7 状态库／原生边界部分。
+- [x] **AC-T7：T4 证据与范围。** 完整指定门槛、新依赖部署、原始脱敏日志／计数／数据库与原生结果索引可核验；未运行／外部代理分别报告。只修改 Task 范围内文件，不改 Contract／不变量或生产数据。对应 AC-8；完整 Slice 验收仍待后续工作和单独 Slice Final。
 
 ## 必要测试
 
@@ -166,12 +170,44 @@ C# 全套包含解析／决策、真实 SQLite、源身份及播放／保存／�
 ## B Review Result
 
 ```text
-Reviewed: 7e0240cd1cada74f142b7b0afd612943ca991a91..3488e6b1df48d4c142595d27694a792bb32f0aad
-Documentation Handoff: 6a385f16a47f50db79f81b2fc6428c307d34c044
-Decision: FIX REQUIRED
+Reviewed: 7e0240cd1cada74f142b7b0afd612943ca991a91..198f4ff2accd5bc9fcd87518a9684b9d068de103
+Documentation Handoff: 9d7672b3f58508818324c08aa0bf0e5deec27494
+Decision: PASS
 Slice Required Outcomes all satisfied: NO
-Next: DEVELOPER COMPLETES R2 IN TASK 2.1 AND RESUBMITS FOR B REVIEW
+Next: B PLANS TASK 2.2 FOR COORDINATION AND CORE CONFIGURATION
 ```
+
+### B 第二轮修正复审（2026-10-13）
+
+开始时 main 工作区干净，无已有用户改动；完成必读清单，治理 PASS。审查完整 Task Base..Head、R2 修正及后继文档交接；交接只改五份文档，39 个源码／测试／工具输入与候选一致。Slice Contract 保持可满足，Task ID／Base／Goal／Scope／T4 与既有门槛不变，无须 A 改合同。
+
+本机独立证据：`.git/validation-evidence/198f4ff2accd5bc9fcd87518a9684b9d068de103/b-rereview-20261014-03/INDEX.md`（实际运行日期为 2026-10-13，目录名仅为运行标识）。独立聚焦 C# 65 passed／0 failed／0 skipped，涵盖 Reader／Decision／Playback／Fingerprint；原生适配 harness 使用真实 SQLite，再次验证相同元数据下流保存失败、地址仅内存更新、项目保存失败，各连续两次允许请求均拒绝且保留旧基线，false 权限保留。另独立验证 version 0／2／1-beta 及 1+2／0+1／2+2 的六组输入，在两种权限下原生委托且无新指纹；这是控制／文件证据，不是真实 Jellyfin 内部数据库故障注入。
+
+Developer 最新候选的 locked restore、Release build（0 warning／0 error）、C# 全套 69 项、format、Python 全套 30 项及实机原始日志已核对，源码／锁／工具输入匹配，可复用其实际执行门槛。B 编译时 AssemblyInformationalVersion 带文档交接 SHA，DLL 摘要因此不同；B 被测源码输入仍与实现候选一致，实际部署产物另留摘要，不冒称为 Developer 的同一 DLL。
+
+B 独立默认实机复验退出 0、JSON PASS，487.172 秒；同 URL 本地内容／有效 SHA-1 变化、无可比 SHA-1 Size 变化分别 1 次探测，mtime／重写／删除重放各 0 次。失败 Manifest／URL 跨重启保留旧基线，修复同一目标后 1 次重试并提交；既有换 URL、多版本身份、状态库写入／不可写故障及重启恢复与原生委托均通过。三个临时 STRM／一个临时媒体移除、版本关系解除、库条目不存在，原夹具／媒体摘要与此前恢复快照一致，原生地址同步；SQLite 不可变标志清除，实例 healthy。本轮没有失败重跑或跳过。
+
+R2 必需输入现已补齐：未知／冲突协议有实际文件用例；原生地址已为当前 URL 而历史 URL 不同的决策覆盖双侧有效不同、双侧缺失 Size 相同／不同及单侧有效两个方向；同 URL 的有效／缺失／非法组合与 Size 可比／不可比覆盖两侧方向。名称及报告仍有少量夸大，B 同步修正矩阵事实：T08 区分 NativeUrlMismatch／UrlChanged；相同有效 SHA-1 的修复实机不冒充 T09；旧侧非法／新侧缺失不写成双侧非法；T12 如实列两个方向及缺失 Size，不声称已测换 URL 单侧非法／不同 Size。所需行为已有单元／文件及独立委托证据，未运行的实机分支继续 NOT RUN；不据此新增合同门槛。
+
+**决定：PASS；R1／R2／R3 均已满足，AC-T1～AC-T7 在当前 Task 范围内通过。** 历史 FIX REQUIRED／失败／缺失原始产物保留。完整 Task 实现检查点仍为 `198f4ff2accd5bc9fcd87518a9684b9d068de103`，文档审查提交不是新实现。
+
+### Task PASS 后完整 Slice 对账
+
+| Required Outcome／Surface | 当前事实与剩余义务 |
+|---|---|
+| RO-1／解析决策 | Task 2.1 必需文件／纯逻辑矩阵与原生委托已通过；完整 Slice 的统一分层索引及 Final 尚待。 |
+| RO-2／SQLite | 最小 schema、条件提交／哈希身份、损坏／不可写保护和真实重启已验证；后续协调接入须保持回归。 |
+| RO-3／原生共用检查 | 本次成功／保存／稳定版本提交、同内容换 URL、同 URL 内容／Size 变化、失败重启／同目标修复及多版本身份已验证；真实共用源入口存在。 |
+| RO-4／协调 | 身份部分已通过；实际开始通知、仅运行中共享、全局默认 2／配置 1～8、调用者响应隔离未实现。 |
+| RO-5／收尾 | 原生取消异常保护已通过；等待者退出仍正常收尾、登记／许可释放和完成后重查待协调实施。 |
+| RO-6／配置诊断 | 状态库故障停止优化／原生委托／修复重启已通过；Enabled／DetailedLog／并发核心配置保存反馈、生效／操作说明未实现。 |
+| Required Surfaces | 原生链、源身份、SQLite 及既有实机入口成立；ProbeCoordinator、实际开始信号、核心配置操作和并发实机／最终证据仍缺。 |
+
+Slice Required Outcomes all satisfied：NO。Slice 2 保持 ACTIVE；不运行或冒称 Slice Final／Closure Packet，不代替 A 最终审查。下一最大合理单元是“运行中探测协调、正常收尾与核心配置”，在同一合同内规划 Task 2.2；合并关联的并发保存及启停边界，避免按字段拆任务。
+
+经验候选供 A 收尾：合同矩阵需索引到具体新旧输入与原始产物，不能以名称／总测试数或脚本 PASS 推断未执行分支；不新增角色经验流水账。
+
+### 前轮审查历史（以下 FIX REQUIRED 已由本轮修正复审解决）
 
 ### B 修正候选复审（2026-10-13）
 

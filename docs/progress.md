@@ -21,10 +21,10 @@ Slice 1 交付固定 Jellyfin 12.2.0 的最小核心原型：未变化零探测�
 
 - 开发基准：V4.2；V3.0 原文／旧合同保留在 Git 历史。
 - 当前 Slice：2，ACTIVE；真实 Base 为 Slice 1 关闭提交 `924816a84c74f5d79c107478f2d40e621cb8be8d`，Implementation Head 为 `198f4ff2accd5bc9fcd87518a9684b9d068de103`；完整合同见 [SLICE.md](../SLICE.md)。
-- 当前 Task：[Task 2.1](../TASK.md)，FIX REQUIRED／High／T4；Task Base 与 Contract Checkpoint 为 `7e0240cd1cada74f142b7b0afd612943ca991a91`。B 首轮复审已满足 R1／R3，Developer 在候选 `198f4ff2accd5bc9fcd87518a9684b9d068de103` 补齐剩余 R2 完整协议／决策矩阵及实际输入索引并重跑 T4，已交为 READY FOR B REVIEW；详细决定与证据见 TASK.md。
-- Slice 2 候选已实现 SQLite 与真实多版本源身份，并有独立分项验证，尚未取得 Task PASS；运行中共享／全局并发、正常收尾和完整核心配置未实现，完整 Slice Final 为 NOT RUN。
+- 当前 Task：[Task 2.1](../TASK.md)，B 独立复审 PASS／High／T4；Task Base／Contract Checkpoint 为 `7e0240cd1cada74f142b7b0afd612943ca991a91`，接受实现 `198f4ff2accd5bc9fcd87518a9684b9d068de103`。详细计划／完成报告／B 决定在本轮审查检查点的 TASK.md；本机独立证据 `.git/validation-evidence/198f4ff2accd5bc9fcd87518a9684b9d068de103/b-rereview-20261014-03/INDEX.md`。历史 FIX REQUIRED／FAIL／NOT RUN 保留。
+- Slice 2 已接受解析／决策、SQLite、实际多版本身份与持久化播放／恢复闭环；RO-4／RO-5 的运行中共享、全局并发与正常收尾，以及 RO-6 核心配置／诊断尚未实现。完整 Required Outcomes／Surfaces 未满足，Slice Final 为 NOT RUN，不提交 Closure Packet 或关闭 Slice。
 - Slice 3／4：PLANNED；原生批量与完整配置页、大规模／扫描、外部代理及发布仍未完成。
 - 合同修订：A 按用户“批量停止只撤销未开始工作、只共享已实际开始探测”提交 [Material Contract Change](../SLICE.md#a-停止与共享边界修订2026-10-13)，替代 `ac2fcead73664cfdaf66f62954ec6b11fb303168` 的人为执行取消约定，Base／ID 不变；原生取消异常保护及历史结果保留。
-- 下一动作：Developer 已补齐剩余 R2 并重跑 T4，Task 2.1 交 B 复审；PASS 后重新对账全部 RO／Surfaces。共享／全局并发／正常收尾及完整核心配置仍是后续连贯工作，不提前激活其他 Task。
+- 下一动作：B 在同一已提交合同内规划 Task 2.2，合并运行中探测协调、正常收尾与核心配置；通过后再完整对账并决定 Slice Final。
 
-NEXT ACTION: B REVIEWS TASK 2.1 CORRECTION CANDIDATE 198f4ff
+NEXT ACTION: B PLANS TASK 2.2

@@ -2,15 +2,13 @@
 
 ## CURRENT
 
-V4.2 取代 V3.0 作为当前开发基准，旧原文与合同留在 Git 历史。仓库保留 Slice 1 已接受的 Task 1.1 原型，并有 Task 2.1 修正候选 `198f4ff2accd5bc9fcd87518a9684b9d068de103`。B 首轮复审的 R1／R3 已满足，剩余 R2 完整协议／决策矩阵及索引已在候选补齐并重跑 T4，等待 B 复审。该候选包含 SQLite 指纹存储和真实媒体源映射，增加解析／决策回归（含未知／冲突协议版本、换 URL／同 URL 双向哈希矩阵）、状态库读故障与损坏保护回归及默认实机入口的同 URL 变化／重放／失败目标修复场景；它尚不是 B 接受结果。完整配置页、批量任务、共享协调和发布包尚未实现。
+V4.2 是当前开发基准，V3.0 原文与合同留在 Git 历史。Slice 1 原型已经 A 最终审查 PASS / CLOSED；[关闭证据](progress.md#slice-1-closed) 保留原始边界。固定 Jellyfin `12.2.0`／源码 `ca0f16eb7c195f720a1493ed469a27c4657db0c6`、Controller／Model `12.2.0`、`net10.0`／SDK `10.0.401`；单版本事实不构成跨版本兼容承诺。
 
-原型固定 Jellyfin `12.2.0`、Controller／Model `12.2.0`、`net10.0` 和 SDK `10.0.401`。它在隔离实例中已加载并验证 STRM 播放接入、未变化复用、同 SHA-1／Size 地址变化时原生探测、新地址重启后可用，以及失败后重试。实际命令与限制见 [Closure Packet](progress.md#slice-1-closed)、[兼容性与接入验证](compatibility.md) 和 [环境交接](development-environment.md)。这些证据支持 Slice 1 核心原型关闭；完整产品与多版本兼容仍未验证。
+Slice 2 为 ACTIVE，Base 固定为 `924816a84c74f5d79c107478f2d40e621cb8be8d`，Implementation Head 为 `198f4ff2accd5bc9fcd87518a9684b9d068de103`。Task 2.1 已经 B 独立复审 PASS：完成只读解析／完整逻辑矩阵、实际项目／媒体源映射、SQLite 最小指纹、共用源检查／可靠提交及失败重启恢复。运行中共享、全局并发、正常收尾及完整核心配置尚未实现；完整配置页、原生批量与发布仍是后续目标。
 
-B 已独立审查修正候选 `2b1e1b5bcf77b06997fabed5a31147838db16b47` 并裁定 Task 1.1 PASS；保存关联、指定真实对照、Manifest 竞态和 FullRefresh 附带工作均已有独立证据。单独 Slice Final 与 A 完整范围审查均已完成，Slice 1 为 PASS / CLOSED；见 [A 最终审查快照](progress.md#slice-1-closed)。
+已接受的 Task 2.1 按原生所属项目及 `MediaSourceInfo.Id` 关联各版本 STRM 和五字段 SQLite 主键；事务核对 expectedPrevious，过期执行／插入竞争不覆盖已接受基线。保存代理关联本次结果及原生事务成功；首次信任、复用、探测成功与未完成分别记录。SQLite 读／写故障停止优化并尽可能原生委托，损坏／未知 schema 不自动删库重建；修复后重启再次检查。隔离实机验证成功及失败变化跨重启、多版本选源、同内容换 URL、同 URL 内容／Size 变化、mtime／重放和不可写恢复。SQLite 托管与原生运行依赖已部署加载。
 
-Slice 2 合同现为 ACTIVE，Base 是上述真实关闭提交 `924816a84c74f5d79c107478f2d40e621cb8be8d`，当前 Implementation Head 指向 Task 2.1 修正候选 `198f4ff2accd5bc9fcd87518a9684b9d068de103`；[Task 2.1](../TASK.md) 的首轮 B 决定为 FIX REQUIRED，R1／R3 已满足，候选已补齐剩余 R2 并重跑 T4，等待 B 复审。候选新增项目／实际源身份映射、SQLite 五字段最小表与条件提交、持久化运行依赖，并增加解析／决策回归（含未知／冲突协议版本与换 URL／同 URL 双向哈希矩阵）、状态库读故障与损坏保护回归及默认实机入口的同 URL 变化／重放／失败目标修复场景。共用协调、全局并发和核心配置仍是后续目标设计。
-
-Task 2.1 候选按原生所属项目 ID 与真实 `MediaSourceInfo.Id` 关联 STRM 和指纹；SQLite 只保存项目 ID、源键、URL 哈希、SHA-1 与有效 Size。隔离实例验证了多版本源选择、保存地址／主流、跨重启复用，以及写入失败和只读数据库故障后的委托与修复重试；依赖部署复制了 SQLite 托管程序集与原生库并确认加载。精确输入身份、命令和场景结果见 [Task 2.1 Developer Completion Report](../TASK.md#developer-completion-report) 与 [B 复审](../TASK.md#b-review-result) 及其本机证据索引。这些分项证据不代表全矩阵、Task 或 Slice 通过。
+Task 2.1 分层输入／原始日志、独立保存失败对照与实机证据见 [当前指针](progress.md) 及本机 `.git/validation-evidence/198f4ff2accd5bc9fcd87518a9684b9d068de103/b-rereview-20261014-03/INDEX.md`。B 独立控制验证使用真实 SQLite，但未对 Jellyfin 内部数据库注入保存故障；音频必要主流有原生适配控制证据，音频-only STRM 实机仍未验证。完整 Slice Final、批量、代理联调及发布 NOT RUN。
 
 ### Slice 1 关闭时的 Task 1.1 原型边界
 
