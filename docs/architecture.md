@@ -4,9 +4,11 @@
 
 V4.2 取代 V3.0 作为当前开发基准，旧原文与合同留在 Git 历史。仓库已包含 Task 1.1 的最小 C# 插件原型和测试；仍没有 SQLite schema、配置页、批量任务或发布包。
 
-原型固定 Jellyfin `12.2.0`、Controller／Model `12.2.0`、`net10.0` 和 SDK `10.0.401`。它在隔离实例中已加载并验证 STRM 播放接入、未变化复用、同 SHA-1／Size 地址变化时原生探测、新地址重启后可用，以及失败后重试。实际命令与限制见 [Closure Packet](../SLICE.md#closure-packet)、[兼容性与接入验证](compatibility.md) 和 [环境交接](development-environment.md)。这些证据支持 Slice 1 核心原型关闭；完整产品与多版本兼容仍未验证。
+原型固定 Jellyfin `12.2.0`、Controller／Model `12.2.0`、`net10.0` 和 SDK `10.0.401`。它在隔离实例中已加载并验证 STRM 播放接入、未变化复用、同 SHA-1／Size 地址变化时原生探测、新地址重启后可用，以及失败后重试。实际命令与限制见 [Closure Packet](progress.md#slice-1-closed)、[兼容性与接入验证](compatibility.md) 和 [环境交接](development-environment.md)。这些证据支持 Slice 1 核心原型关闭；完整产品与多版本兼容仍未验证。
 
-B 已独立审查修正候选 `2b1e1b5bcf77b06997fabed5a31147838db16b47` 并裁定 Task 1.1 PASS；保存关联、指定真实对照、Manifest 竞态和 FullRefresh 附带工作均已有独立证据。单独 Slice Final 与 A 完整范围审查均已完成，Slice 1 为 PASS / CLOSED；见 [A 最终审查](../SLICE.md#a-final-review)。
+B 已独立审查修正候选 `2b1e1b5bcf77b06997fabed5a31147838db16b47` 并裁定 Task 1.1 PASS；保存关联、指定真实对照、Manifest 竞态和 FullRefresh 附带工作均已有独立证据。单独 Slice Final 与 A 完整范围审查均已完成，Slice 1 为 PASS / CLOSED；见 [A 最终审查快照](progress.md#slice-1-closed)。
+
+Slice 2 合同现为 ACTIVE，Base 是上述真实关闭提交 `924816a84c74f5d79c107478f2d40e621cb8be8d`，Implementation Head 为 NOT SET；当前无活动实施 Task，由 B 先计划。正式 SQLite、多源映射、共用协调和核心配置属于当前合同的 TARGET，尚未改变以下实现事实。
 
 ### 已实现的 Task 1.1 原型边界
 
@@ -110,9 +112,11 @@ CREATE TABLE strm_fingerprint (
 
 先以媒体源身份汇合工作，再由唯一执行者占用全局许可；同源等待者不重复排队占许可。不同媒体源独立但共用总上限。排队后与结束后重新检查版本；信号量在所有结束路径释放。
 
-调用者取消只结束自身等待。批量停止分页和排队，撤销自身等待；若仍有播放等待者，共享执行继续。没有任何等待者的工作是否取消及提交边界须在协调 Task 实测，不用首个请求的 cancellationToken 控制所有请求。
+调用者取消只结束自身等待。批量停止分页和排队，撤销自身等待；若仍有播放等待者，共享执行继续。Slice 2 合同固定：没有任何等待者时请求取消未完成工作；排队取消不启动探测，接受提交前执行已收到取消不写新指纹，已接受的有效事务不因随后等待者取消回滚。后来请求不得加入已取消工作冒充成功。共享执行使用自己的取消源，不用首个请求的 cancellationToken 控制所有请求；边界在实施 Task 与真实隔离执行中验证。
 
 共享执行与等待者分别处理取消：取消一个等待者不否决仍在执行的有效结果；仍有其他等待者时，执行满足全部成功／保存／Manifest 条件后可以提交。执行自身已收到取消时不提交新指纹。当前公共 PlaybackInfo 调用没有客户端取消 token，不能用客户端断开来模拟这一执行取消分支。
+
+核心并发配置默认 2、可保存 1～8，下一次 Jellyfin 启动生效；保存说明须明确，不要求 Slice 2 热调整已有许可池。核心配置通过 Jellyfin 已有保存通道提供，完整配置页仍在 Slice 3。
 
 库查询使用稳定分页顺序、去重和有界生产／消费，不一次保存全库列表或为十万项创建十万个 Task。扫描并发增删项目时不误报完整静态快照；重读 STRM、防止旧版本提交。插件并发上限只覆盖主动发起的探测，外部原生刷新保持独立。
 

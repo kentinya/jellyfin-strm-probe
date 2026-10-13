@@ -1,6 +1,6 @@
 # 插件需求
 
-状态：TARGET，Slice 1 核心原型已 PASS / CLOSED，完整产品尚未交付；原型分项证据见 [Closure Packet](../SLICE.md#closure-packet)，最终决定见 [A 审查](../SLICE.md#a-final-review)。当前来源为 [V4.2 方案](<../Jellyfin STRM Probe Optimizer V4.2 开发方案.md>) 与 [范围说明](scope.md)。保留原需求及 T01～T28 编号，但明确修订其验收含义；新增批量验收 B01～B12。执行状态见 [测试矩阵](test-matrix.md)。
+状态：TARGET，Slice 1 核心原型已 PASS / CLOSED，完整产品尚未交付；原型分项证据见 [Closure Packet](progress.md#slice-1-closed)，最终决定见 [A 审查](progress.md#slice-1-closed)。当前来源为 [V4.2 方案](<../Jellyfin STRM Probe Optimizer V4.2 开发方案.md>) 与 [范围说明](scope.md)。保留原需求及 T01～T28 编号，但明确修订其验收含义；新增批量验收 B01～B12。执行状态见 [测试矩阵](test-matrix.md)。
 
 V4.2 的 URL 改变规则替代 V3.0 路径单独更新规则；STATE 编号现指历史指纹合同，不要求独立状态机。首次信任接管是唯一无需本次探测即可初建指纹的例外，不能计为成功探测。
 
@@ -50,7 +50,7 @@ V4.2 配置表中的判断规则作为固定开启的说明展示；真正可编
 
 取消策略沿用经核对的 Jellyfin 版本。当前 `12.2.0` 的 PlaybackInfo 允许探测但传 `CancellationToken.None`，请求开始不等于一定探测，客户端退出／停止播放也不向该探测传入取消。插件不新增客户端停止到探测取消的机制；本次执行若成功、结果已保存且 Manifest 一致，客户端退出不单独阻止指纹提交。普通媒体、旧 STRM、禁用和 `allowMediaProbe=false` 的原生委托与权限边界保留。
 
-按用户要求的 A 实质范围调整，当前 Slice 1 播放原型不增加成功返回后额外检查取消的防御性约束，不要求人为注入可取消 token 的验收；原 token 委托、原生取消异常保留基线并传播及已有回归仍保留。REQ-PROBE-003 在 Slice 2 的可取消共享执行中覆盖探测中与提交前取消；Slice 3 验证真实批量停止。任务停止由 Jellyfin 向 `IScheduledTask.ExecuteAsync` 的 token 发出取消，插件停止分页／排队并撤销该任务的等待；单个等待者退出不把仍服务其他等待者的共享执行标记为取消。固定源码及接口见 [兼容性](compatibility.md#播放与批量取消语义)。这一边界不将尚未运行的真实取消或批量停止验收改为 PASS。
+按用户要求的 A 实质范围调整，已关闭的 Slice 1 播放原型不增加成功返回后额外检查取消的防御性约束，不要求人为注入可取消 token 的验收；原 token 委托、原生取消异常保留基线并传播及已有回归仍保留。REQ-PROBE-003 在 Slice 2 的可取消共享执行中覆盖探测中与提交前取消；Slice 3 验证真实批量停止。任务停止由 Jellyfin 向 `IScheduledTask.ExecuteAsync` 的 token 发出取消，插件停止分页／排队并撤销该任务的等待；单个等待者退出不把仍服务其他等待者的共享执行标记为取消。固定源码及接口见 [兼容性](compatibility.md#播放与批量取消语义)。这一边界不将尚未运行的真实取消或批量停止验收改为 PASS。
 
 ## 核心决策表
 

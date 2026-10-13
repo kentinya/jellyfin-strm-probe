@@ -1,6 +1,6 @@
 # 用户旅程
 
-以下为 V4.2 完整产品 TARGET；Slice 1 核心原型已 PASS / CLOSED，分项事实见 [Closure Packet](../SLICE.md#closure-packet)。核心验证通过也不表示完整产品交付。
+以下为 V4.2 完整产品 TARGET；Slice 1 核心原型已 PASS / CLOSED，分项事实见 [Closure Packet](progress.md#slice-1-closed)。核心验证通过也不表示完整产品交付。
 
 ## 安装与首次接管
 

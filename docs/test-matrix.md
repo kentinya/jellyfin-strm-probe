@@ -1,6 +1,6 @@
 # 测试矩阵
 
-下表状态针对完整产品矩阵，尚未统一执行。Slice 1 原型已完成部分单元／真实 Jellyfin 场景，Task 1.1 经 B 审查 PASS，单独 Slice Final 与 A 最终审查已完成，Slice 1 PASS / CLOSED；分层结果见 [Closure Packet](../SLICE.md#closure-packet)，不把有限原型证据直接覆盖完整产品矩阵。表格是 V4.2 目标，不是原型运行报告。通常前提为受支持版本化 STRM、已有主流、历史指纹与允许探测；例外显式说明。
+下表状态针对完整产品矩阵，尚未统一执行。Slice 1 原型已完成部分单元／真实 Jellyfin 场景，Task 1.1 经 B 审查 PASS，单独 Slice Final 与 A 最终审查已完成，Slice 1 PASS / CLOSED；分层结果见 [Closure Packet](progress.md#slice-1-closed)，不把有限原型证据直接覆盖完整产品矩阵。表格是 V4.2 目标，不是原型运行报告。通常前提为受支持版本化 STRM、已有主流、历史指纹与允许探测；例外显式说明。
 
 保留 T01～T28 身份以便追溯，但 T08／T22 按 V4.2 改为原生探测后新地址持久化，T02／T17～T19／T27 改为最小指纹合同。旧结果不自动继承。B01～B12 为新增批量／共享并发验收。
 
@@ -81,6 +81,8 @@ A 实质范围调整保留矩阵 ID 与历史结果，但移除当前 Slice 1 �
 固定源码与入口见 [兼容性](compatibility.md#播放与批量取消语义)。原型与 Slice Final 的真实运行另见 Closure Packet；共享／批量取消等后续矩阵义务未提前验证。
 
 ## 执行与对账
+
+Slice 2 现已 ACTIVE，当前 Implementation Head 为 NOT SET，尚无新产品矩阵验收。其合同覆盖 T01～T28 的核心播放／指纹部分及 B01／B02／B07、X01～X10 的相应核心边界；T24 的批量部分、完整配置页、原生任务停止和大规模部分继续在 Slice 3／4。表中 NOT RUN 保持原事实，实施后按单元、真实 Jellyfin 和延期部分分别对账，不能提前把整行全部写成 PASS。
 
 按开发流程保留源码／工作区身份、精确命令、版本、隔离配置、耗时、日志及原生 ffprobe 计数。所有哈希／地址／媒体使用假数据。区分单元、真实 Jellyfin、压力夹具与外部代理；十万条模拟枚举不冒充十万条真实库通过。
 

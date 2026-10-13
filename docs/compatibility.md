@@ -4,7 +4,7 @@
 
 当前只有固定组合上的 Slice 1 核心原型证据，没有发布包或多版本兼容声明。真实插件已用 Jellyfin Controller／Model `12.2.0`、`net10.0` 和 SDK `10.0.401` 构建，并在隔离 Jellyfin `12.2.0` 容器加载；镜像 digest、媒体服务和环境身份见 [环境交接](development-environment.md)。当前证据满足 Slice 1 的 Required Outcomes，正式产品与发布支持仍未验证。
 
-B 对旧候选的 FIX REQUIRED 保留为历史；修正候选 `2b1e1b5bcf77b06997fabed5a31147838db16b47` 经 B 独立审查，Task 1.1 PASS。保存关联和指定真实对照已满足，单独 Slice Final 已完成；[A 最终审查](../SLICE.md#a-final-review) 裁定 Slice 1 PASS / CLOSED，后续 Slice 尚未激活。播放取消范围遵循 A 的 RESCOPE：保留原生取消异常处理，不要求成功返回后的额外取消检查或人为注入实机门槛；共享／批量执行的取消保护留在 Slice 2／3。
+B 对旧候选的 FIX REQUIRED 保留为历史；修正候选 `2b1e1b5bcf77b06997fabed5a31147838db16b47` 经 B 独立审查，Task 1.1 PASS。保存关联和指定真实对照已满足，单独 Slice Final 已完成；[A 最终审查](progress.md#slice-1-closed) 裁定 Slice 1 PASS / CLOSED。当前 [Slice 2](../SLICE.md) 已激活，正式 SQLite／稳定多源／共享协调等新结果尚未验证；Slice 3／4 未激活。播放取消范围遵循 A 的 RESCOPE：保留原生取消异常处理，不要求成功返回后的额外取消检查或人为注入实机门槛；共享／批量执行的取消保护留在 Slice 2／3。
 
 | 候选源码 | 已记录标签提交 | 定位用途 |
 |---|---|---|
@@ -21,13 +21,13 @@ B 对旧候选的 FIX REQUIRED 保留为历史；修正候选 `2b1e1b5bcf77b0699
 - [`ProbeProvider.FetchVideoInfo`](https://github.com/jellyfin/jellyfin/blob/ca0f16eb7c195f720a1493ed469a27c4657db0c6/MediaBrowser.Providers/MediaInfo/ProbeProvider.cs#L234-L332) 对可探测视频 STRM 调用 `ProbeVideo`，并由原生 Provider 从 STRM 读取远程地址。该源码路径仍不能替代本次结果、持久化主流和地址的实机关联验证。
 - [`MediaBrowser.Controller.csproj`](https://github.com/jellyfin/jellyfin/blob/ca0f16eb7c195f720a1493ed469a27c4657db0c6/MediaBrowser.Controller/MediaBrowser.Controller.csproj#L36) 目标框架为 `net10.0`。源码定位阶段尚未固定 SDK、镜像、依赖或可加载插件；后续 Task 1.1 的固定组合与原型加载证据见下节。
 
-先前执行环境缺少 SDK／可用 Docker daemon 的记录保留在 [Task 1.1 历史交接](../TASK.md) 及 [环境交接](development-environment.md)；阻塞已解除，真实插件构建和隔离加载证据见下节。
+先前执行环境缺少 SDK／可用 Docker daemon 的记录保留在 [Task 1.1 历史交接](progress.md#slice-1-closed) 及 [环境交接](development-environment.md)；阻塞已解除，真实插件构建和隔离加载证据见下节。
 
 已对固定源码 `ca0f16eb7c195f720a1493ed469a27c4657db0c6` 检查 `MediaSourceManager`、Provider、`MediaInfoHelper`、任务模型与任务调度代码。源码定位是接口证据，不替代插件行为验收。
 
 ## 播放与批量取消语义
 
-以下限定固定 Jellyfin `12.2.0`／源码 `ca0f16eb7c195f720a1493ed469a27c4657db0c6`，版本变化后重新核对。A 已将事实与最新实质范围调整写入 [Slice 合同](../SLICE.md#a-播放取消范围调整2026-10-13)；没有将源码存在或未运行场景改为实机 PASS。
+以下限定固定 Jellyfin `12.2.0`／源码 `ca0f16eb7c195f720a1493ed469a27c4657db0c6`，版本变化后重新核对。A 的 Slice 1 实质范围调整保留于 [关闭快照](progress.md#slice-1-closed)，当前 [Slice 2 合同](../SLICE.md) 承接可取消共享执行义务；没有将源码存在或未运行场景改为实机 PASS。
 
 | 入口／动作 | 固定源码行为 | 插件与验收边界 |
 |---|---|---|
@@ -57,7 +57,7 @@ Slice 1 不再要求人为传入可取消 token 的真实原生取消验证，�
 
 B 另在隔离实例临时开启 Debug，两次地址变化都观察到 `ProbeProvider`、`MovieNfoProvider`、`TrickplayProvider` 各调用一次，ETag 改变，匹配探测和合成媒体 GET 各一次，PlaybackInfo 为 91／75 ms。日志级别与 STRM 已恢复。提供器调用不证明远程下载／Trickplay 生成，不提供开销分项或生产性能承诺；原始脱敏证据见 Closure Packet 引用的 B 索引。
 
-上述为有限核心原型及独立 Slice Final 证据，A 已据此关闭 Slice 1；发布包、多版本／广泛媒体兼容和外部代理联调仍未验证。完整矩阵状态继续按 [测试矩阵](test-matrix.md) 与 [Task 历史指针](../TASK.md) 区分。
+上述为有限核心原型及独立 Slice Final 证据，A 已据此关闭 Slice 1；发布包、多版本／广泛媒体兼容和外部代理联调仍未验证。完整矩阵状态继续按 [测试矩阵](test-matrix.md) 与 [Task 历史指针](progress.md#slice-1-closed) 区分。
 
 ## Slice 1 风险门槛
 
@@ -75,6 +75,8 @@ A 环境准备及 Task 1.1 原型后续：SDK、固定源码、镜像 digest、�
 Task 1.1 PASS；全部 Outcomes／Surfaces 与单独 Slice Final 经 A 最终审查接受，Slice 1 PASS / CLOSED。当前无活动实施 Task，历史失败按原事实保留。外部 JellyfinProxy／OpenList 联调、完整 T01～T28 与 B01～B12 矩阵仍未运行；本原型使用 Jellyfin 已有 FFmpeg／ffprobe。
 
 ## 后续真实运行门槛
+
+Slice 2 先验证 SQLite 指纹的真实重启／失败恢复、多源身份、同源共享和代表性全局并发计数、具有真实取消源的共享执行保护。公共 PlaybackInfo 仍传 None，不把独立共享服务入口当作客户端取消；这些新验收当前 NOT RUN。
 
 Slice 3 实测任务注册、默认无触发时间、原生手动／定时／停止、进度与播放共享协调。Slice 4 实测大规模分页内存、并发、媒体库扫描竞态、重启和隔离 JellyfinProxy 302。当前均 NOT RUN；接口存在不能替代这些验收。
 
