@@ -130,6 +130,34 @@ public sealed class SqliteStrmFingerprintRepositoryTests
         Assert.AreEqual(0, ReadUserVersion(viewFixture.DatabasePath));
     }
 
+    [TestMethod]
+    public void CorruptDatabaseIsRejectedWithoutReplacingOrDeletingIt()
+    {
+        using var fixture = new DatabaseFixture();
+        var corruptBytes = new byte[512];
+        new Random(20261013).NextBytes(corruptBytes);
+        File.WriteAllBytes(fixture.DatabasePath, corruptBytes);
+        var repository = new SqliteStrmFingerprintRepository(fixture.DatabasePath);
+
+        AssertThrowsAny<SqliteException, InvalidDataException>(() => repository.Get(ProjectId, SourceId.ToString("N")));
+        AssertThrowsAny<SqliteException, InvalidDataException>(() => repository.TryCommit(Fingerprint(FirstUrl, null, 42), expectedPrevious: null));
+
+        CollectionAssert.AreEqual(corruptBytes, File.ReadAllBytes(fixture.DatabasePath), "A rejected corrupt database must be preserved, not deleted or rebuilt.");
+        AssertThrowsAny<SqliteException, InvalidDataException>(() => TableExists(fixture.DatabasePath, "strm_fingerprint"));
+    }
+
+    [TestMethod]
+    public void EmptyFileIsTreatedAsANewDatabaseAndNotMistakenForCorruption()
+    {
+        using var fixture = new DatabaseFixture();
+        File.WriteAllBytes(fixture.DatabasePath, []);
+        var repository = new SqliteStrmFingerprintRepository(fixture.DatabasePath);
+
+        Assert.IsNull(repository.Get(ProjectId, SourceId.ToString("N")));
+        Assert.IsTrue(repository.TryCommit(Fingerprint(FirstUrl, null, 42), expectedPrevious: null));
+        AssertDatabaseSchema(fixture.DatabasePath);
+    }
+
     private static StrmFingerprint Fingerprint(string url, string? sha1, long? size)
     {
         var urlHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(url))).ToLowerInvariant();
@@ -210,6 +238,22 @@ public sealed class SqliteStrmFingerprintRepositoryTests
         }
 
         throw new AssertFailedException($"Expected {typeof(TException).Name}.");
+    }
+
+    private static void AssertThrowsAny<TFirst, TSecond>(Action action)
+        where TFirst : Exception
+        where TSecond : Exception
+    {
+        try
+        {
+            action();
+        }
+        catch (Exception exception) when (exception is TFirst or TSecond)
+        {
+            return;
+        }
+
+        throw new AssertFailedException($"Expected {typeof(TFirst).Name} or {typeof(TSecond).Name}.");
     }
 
     private sealed class DatabaseFixture : IDisposable

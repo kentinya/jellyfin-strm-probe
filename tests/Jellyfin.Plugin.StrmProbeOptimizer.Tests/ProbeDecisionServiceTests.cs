@@ -108,6 +108,58 @@ public sealed class ProbeDecisionServiceTests
         Assert.AreEqual(ProbeDecisionKind.RequireProbe, _service.Decide(manifest, null, true, "https://media.example.invalid/old.mp4").Kind);
     }
 
+    [TestMethod]
+    public void UrlPriorityBeatsEveryShaAndSizeCombination()
+    {
+        var changedUrl = "https://media.example.invalid/video.mp4?sig=changed";
+        var changedManifest = Manifest(changedUrl, ValidSha1, 24);
+        var previous = Fingerprint(CurrentUrl, ValidSha1, 24);
+
+        Assert.AreEqual(ProbeDecisionReason.UrlChanged, _service.Decide(changedManifest, previous, true, changedUrl).Reason);
+        Assert.AreEqual(ProbeDecisionReason.NativeUrlMismatch, _service.Decide(changedManifest, previous, true, CurrentUrl).Reason);
+        Assert.AreEqual(
+            ProbeDecisionReason.NativeUrlMismatch,
+            _service.Decide(Manifest(CurrentUrl, ValidSha1, 24), previous, true, changedUrl).Reason,
+            "A native address that differs from the current manifest must probe even when the stored fingerprint matches the manifest.");
+    }
+
+    [TestMethod]
+    public void ShaValidityCombinationsFollowTheDocumentedMatrix()
+    {
+        var previousValid = Fingerprint(CurrentUrl, ValidSha1, 24);
+        var previousMissing = Fingerprint(CurrentUrl, sha1: null, size: 24);
+        var previousInvalid = Fingerprint(CurrentUrl, sha1: "invalid", size: 24);
+
+        // Both sides valid: the SHA-1 decides and a matching SHA-1 ignores Size.
+        Assert.AreEqual(ProbeDecisionKind.SkipProbe, _service.Decide(Manifest(CurrentUrl, ValidSha1, 99), previousValid, true, CurrentUrl).Kind);
+        Assert.AreEqual(ProbeDecisionKind.RequireProbe, _service.Decide(Manifest(CurrentUrl, new string('f', 40), 24), previousValid, true, CurrentUrl).Kind);
+
+        // One or both sides without a valid SHA-1: only different valid Sizes require a probe.
+        foreach (var previous in new[] { previousMissing, previousInvalid })
+        {
+            Assert.AreEqual(ProbeDecisionReason.SizeChanged, _service.Decide(Manifest(CurrentUrl, ValidSha1, 25), previous, true, CurrentUrl).Reason);
+            Assert.AreEqual(ProbeDecisionKind.SkipProbe, _service.Decide(Manifest(CurrentUrl, ValidSha1, 24), previous, true, CurrentUrl).Kind);
+            Assert.AreEqual(ProbeDecisionKind.SkipProbe, _service.Decide(Manifest(CurrentUrl, null, 24), previous, true, CurrentUrl).Kind);
+            Assert.AreEqual(ProbeDecisionReason.InsufficientFingerprint, _service.Decide(Manifest(CurrentUrl, null, null), previous, true, CurrentUrl).Reason);
+        }
+
+        // Zero is a valid Size and must be compared like any other valid value.
+        Assert.AreEqual(ProbeDecisionKind.RequireProbe, _service.Decide(Manifest(CurrentUrl, null, 0), Fingerprint(CurrentUrl, null, 24), true, CurrentUrl).Kind);
+        Assert.AreEqual(ProbeDecisionKind.SkipProbe, _service.Decide(Manifest(CurrentUrl, null, 0), Fingerprint(CurrentUrl, null, 0), true, CurrentUrl).Kind);
+    }
+
+    [TestMethod]
+    public void MissingPrimaryStreamOutranksUrlChangeAndFingerprint()
+    {
+        var previous = Fingerprint(CurrentUrl, ValidSha1, 24);
+        var changed = Manifest("https://media.example.invalid/video.mp4?sig=changed", ValidSha1, 24);
+
+        var decision = _service.Decide(changed, previous, hasPrimaryStream: false, nativeUrl: CurrentUrl);
+
+        Assert.AreEqual(ProbeDecisionKind.RequireProbe, decision.Kind);
+        Assert.AreEqual(ProbeDecisionReason.MissingPrimaryStream, decision.Reason);
+    }
+
     private static StrmFingerprint Fingerprint(string url, string? sha1, long? size)
     {
         return new StrmFingerprint(Guid.NewGuid(), "primary", HashUrl(url), sha1, size);

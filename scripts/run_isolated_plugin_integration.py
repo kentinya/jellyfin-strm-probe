@@ -6,6 +6,7 @@ from __future__ import annotations
 import collections
 import hashlib
 import json
+import os
 import re
 import shutil
 import sqlite3
@@ -505,6 +506,17 @@ def unique_query_url(url: str, key: str) -> str:
     parts = urlsplit(url)
     query = urlencode({"strm_probe_case": key})
     return urlunsplit((parts.scheme, parts.netloc, parts.path, query, ""))
+
+
+def local_media_path_for_url(url: str) -> Path | None:
+    """Map an isolated synthetic-media URL back to the host file the media service serves."""
+    parts = urlsplit(url)
+    if parts.netloc != "media:8080":
+        return None
+    name = parts.path.rsplit("/", 1)[-1]
+    if not name:
+        return None
+    return ROOT / "artifacts" / "dev-env" / "media" / name
 
 
 def plugin_events_for_ids(container: str, item_ids: list[str]) -> list[str]:
@@ -1287,6 +1299,144 @@ def multiversion_and_sqlite_failure_check(
     }, read_only_recovery_api, read_only_recovery_container, alternate_item_id
 
 
+def same_url_content_and_size_change_check(
+    api: JellyfinApi,
+    container: str,
+    media_container: str,
+    item_id: str,
+    current_url: str,
+    current_sha1: str,
+    current_size: int,
+    media_bytes: bytes,
+) -> dict[str, object]:
+    """Exercise same-URL content replacement, non-comparable SHA-1 size changes and zero-probe replay."""
+    media_path = local_media_path_for_url(current_url)
+    require(media_path is not None and media_path.is_file(), "The same-URL change case does not reference a served local media file.")
+    original_media = media_path.read_bytes()
+    require(original_media == media_bytes, "The served media file changed before the same-URL content replacement test.")
+    baseline_before = fingerprint_row(item_id, item_id)
+    require(
+        baseline_before is not None
+        and baseline_before["url_hash"] == expected_url_hash(current_url)
+        and baseline_before["sha1"] == current_sha1
+        and baseline_before["file_size"] == current_size,
+        "The same-URL change case did not start from the expected accepted baseline.",
+    )
+    summary: dict[str, object] = {}
+    try:
+        # 1) Same URL, real local media replacement with a changed effective SHA-1 and Size.
+        changed_media = original_media + b"\n# strm-probe same-url content change\n"
+        changed_sha1 = hashlib.sha1(changed_media).hexdigest()
+        changed_size = len(changed_media)
+        require(changed_sha1 != current_sha1 and changed_size != current_size, "The same-URL replacement did not change the content identity.")
+        media_path.write_bytes(changed_media)
+        FIXTURE.write_bytes(write_versioned_fixture(FIXTURE.read_bytes(), current_url, changed_sha1, changed_size))
+        media_before = media_request_counts(media_container)
+        streams_before = api.saved_stream_snapshot(item_id)
+        content_change = call_playback(api, container, item_id, current_url)
+        media_delta = counter_delta(media_before, media_request_counts(media_container))
+        ensure_success(content_change, current_url, 1)
+        require("fingerprint committed" in str(content_change["plugin_event"]), "The same-URL content change did not commit a fingerprint.")
+        streams_after = api.saved_stream_snapshot(item_id)
+        require("Video" in streams_after["stream_types"], "The same-URL content change did not leave a saved primary stream.")
+        content_row = fingerprint_row(item_id, item_id)
+        require(
+            content_row is not None
+            and content_row["url_hash"] == expected_url_hash(current_url)
+            and content_row["sha1"] == changed_sha1
+            and content_row["file_size"] == changed_size,
+            "The same-URL content change did not persist the new SHA-1 and Size under the unchanged URL identity.",
+        )
+        require(media_delta.get("fixture", 0) + media_delta.get("fixture_alt", 0) >= 1, "The same-URL content change did not actually read the replaced local media.")
+        summary["same_url_content_replacement"] = {
+            "playback": content_change,
+            "media_request_delta": media_delta,
+            "saved_streams_before": streams_before,
+            "saved_streams_after": streams_after,
+            "fingerprint": content_row,
+        }
+
+        # 2) Same URL, no comparable SHA-1, valid Size change must probe. First commit a no-SHA baseline.
+        media_path.write_bytes(original_media)
+        no_sha_size = changed_size + 7
+        FIXTURE.write_bytes(write_versioned_fixture(FIXTURE.read_bytes(), current_url, None, no_sha_size))
+        no_sha_baseline = call_playback(api, container, item_id, current_url)
+        ensure_success(no_sha_baseline, current_url, 1)
+        require("fingerprint committed" in str(no_sha_baseline["plugin_event"]), "The no-SHA same-URL size change did not commit.")
+        no_sha_row = fingerprint_row(item_id, item_id)
+        require(no_sha_row is not None and no_sha_row["sha1"] is None and no_sha_row["file_size"] == no_sha_size, "The no-SHA baseline was not stored with an empty SHA-1 and the new Size.")
+
+        noncomparable_size = no_sha_size + 5
+        FIXTURE.write_bytes(write_versioned_fixture(FIXTURE.read_bytes(), current_url, None, noncomparable_size))
+        noncomparable = call_playback(api, container, item_id, current_url)
+        ensure_success(noncomparable, current_url, 1)
+        require("fingerprint committed" in str(noncomparable["plugin_event"]), "A non-comparable SHA-1 with a different valid Size did not probe and commit.")
+        noncomparable_row = fingerprint_row(item_id, item_id)
+        require(noncomparable_row is not None and noncomparable_row["sha1"] is None and noncomparable_row["file_size"] == noncomparable_size, "The non-comparable size change did not persist its Size.")
+        summary["same_url_noncomparable_size_change"] = {
+            "baseline_commit": no_sha_baseline,
+            "fingerprint": noncomparable_row,
+            "playback": noncomparable,
+        }
+
+        # 3) Same URL, no comparable SHA-1, same valid Size must skip without a probe.
+        same_size_repeat = call_playback(api, container, item_id, current_url)
+        ensure_success(same_size_repeat, current_url, 0)
+        summary["same_url_noncomparable_size_unchanged"] = same_size_repeat
+
+        # 4) Re-establish the original accepted baseline at the same URL for the remaining flow.
+        FIXTURE.write_bytes(write_versioned_fixture(FIXTURE.read_bytes(), current_url, current_sha1, current_size))
+        media_path.write_bytes(original_media)
+        reestablished = call_playback(api, container, item_id, current_url)
+        ensure_success(reestablished, current_url, 1)
+        require("fingerprint committed" in str(reestablished["plugin_event"]), "Re-establishing the original baseline did not commit.")
+        require(fingerprint_row(item_id, item_id) == baseline_before, "Re-establishing the original baseline did not restore the accepted fingerprint.")
+        summary["baseline_reestablished"] = reestablished
+    finally:
+        media_path.write_bytes(original_media)
+    return summary
+
+
+def replay_and_mtime_zero_probe_check(
+    api: JellyfinApi,
+    container: str,
+    item_id: str,
+    current_url: str,
+    current_sha1: str,
+    current_size: int,
+) -> dict[str, object]:
+    """Prove mtime-only changes, identical rewrites and delete/replay do not trigger a probe."""
+    original = FIXTURE.read_bytes()
+    baseline = fingerprint_row(item_id, item_id)
+    require(baseline is not None, "The replay/mtime case has no accepted baseline.")
+    try:
+        os.utime(FIXTURE, (time.time() + 3600, time.time() + 3600))
+        mtime_only = call_playback(api, container, item_id, current_url)
+        ensure_success(mtime_only, current_url, 0)
+
+        FIXTURE.write_bytes(original)
+        identical_rewrite = call_playback(api, container, item_id, current_url)
+        ensure_success(identical_rewrite, current_url, 0)
+
+        FIXTURE.unlink()
+        FIXTURE.write_bytes(original)
+        replayed = call_playback(api, container, item_id, current_url)
+        ensure_success(replayed, current_url, 0)
+
+        require(fingerprint_row(item_id, item_id) == baseline, "A replay or mtime-only change altered the accepted fingerprint.")
+        require(parse_manifest(FIXTURE.read_bytes())[1] == current_sha1, "The replay case changed the manifest SHA-1.")
+        return {
+            "mtime_only": mtime_only,
+            "identical_rewrite": identical_rewrite,
+            "delete_and_replay": replayed,
+            "fingerprint_unchanged": baseline,
+            "expected_sha1": current_sha1,
+            "expected_size": current_size,
+        }
+    finally:
+        FIXTURE.write_bytes(original)
+
+
 def ensure_success(result: dict, expected_url: str, expected_calls: int) -> None:
     require(result["http_status"] == 200, "Isolated PlaybackInfo did not return HTTP 200.")
     require(result["path_matches_manifest"], "PlaybackInfo did not return the current STRM address.")
@@ -1320,6 +1470,7 @@ def main() -> int:
     alternate_version_path: Path | None = None
     alternate_version_id: str | None = None
     linked_primary_id: str | None = None
+    temporary_media_paths: list[Path] = []
     summary: dict[str, object] = {"fixture_restoration": "not needed"}
     exit_code = 1
     try:
@@ -1458,6 +1609,25 @@ def main() -> int:
         ensure_success(unchanged_after_change, changed_url, 0)
         summary["unchanged_after_change"] = unchanged_after_change
 
+        summary["same_url_content_and_size_changes"] = same_url_content_and_size_change_check(
+            api,
+            container,
+            media_container,
+            item_id,
+            changed_url,
+            current_sha1,
+            len(media_a),
+            media_a,
+        )
+        summary["replay_and_mtime_zero_probe"] = replay_and_mtime_zero_probe_check(
+            api,
+            container,
+            item_id,
+            changed_url,
+            current_sha1,
+            len(media_a),
+        )
+
         # The saved URL and primary stream must survive a real server restart.
         container = restart_isolated_server()
         api = JellyfinApi()
@@ -1511,7 +1681,7 @@ def main() -> int:
         )
         summary["failed_url_fingerprint_before_restart"] = retained_fingerprint
 
-        # Keep the rejected URL on disk across restart; prove the old baseline survives before repairing to a third URL.
+        # Keep the rejected URL on disk across restart; prove the old baseline survives before repairing the failed target.
         container = restart_isolated_server()
         api = JellyfinApi()
         summary["plugin_status_after_failed_url_restart"] = api.plugin_status()
@@ -1525,6 +1695,31 @@ def main() -> int:
         summary["failed_url_after_restart"] = {
             **failed_after_restart,
             "old_fingerprint_retained": retained_after_restart,
+        }
+
+        # Repair the same failed local target while keeping the rejected Manifest/URL, and prove the same rejected version
+        # is retried, probed and committed rather than recovered by changing to another URL.
+        failed_media_path = local_media_path_for_url(failed_url)
+        require(failed_media_path is not None, "The failed URL does not map to a repairable local media target.")
+        require(not failed_media_path.exists(), "The failed URL unexpectedly already has a served media file.")
+        failed_media_path.write_bytes(media_a)
+        temporary_media_paths.append(failed_media_path)
+        same_failed_manifest = FIXTURE.read_bytes()
+        same_url_retry = call_playback(api, container, item_id, failed_url)
+        ensure_success(same_url_retry, failed_url, 1)
+        require("fingerprint committed" in str(same_url_retry["plugin_event"]), "The repaired same failed URL was not probed and committed.")
+        same_url_fingerprint = fingerprint_row(item_id, item_id)
+        require(
+            same_url_fingerprint is not None
+            and same_url_fingerprint["url_hash"] == expected_url_hash(failed_url)
+            and same_url_fingerprint["url_hash"] != retained_fingerprint["url_hash"],
+            "The same rejected version was not accepted under its own URL identity after local repair.",
+        )
+        require(FIXTURE.read_bytes() == same_failed_manifest, "The same-URL repair changed the rejected Manifest instead of repairing its local target.")
+        summary["same_failed_url_repaired"] = {
+            "playback": same_url_retry,
+            "fingerprint": same_url_fingerprint,
+            "manifest_unchanged": True,
         }
 
         recovered_url = unique_query_url(persisted_url, "recovery-" + uuid.uuid4().hex[:12])
@@ -1637,6 +1832,10 @@ def main() -> int:
                     if temporary_path is not None:
                         removed_names.append(temporary_path.stem)
                         temporary_path.unlink(missing_ok=True)
+                removed_media = 0
+                for media_path in temporary_media_paths:
+                    media_path.unlink(missing_ok=True)
+                    removed_media += 1
                 if removed_names:
                     api.refresh_library()
                     for name in removed_names:
@@ -1645,12 +1844,15 @@ def main() -> int:
                     "status": "PASS",
                     "alternate_versions_unlinked": linked_primary_id is not None,
                     "temporary_strm_files_removed": len(removed_names),
+                    "temporary_media_files_removed": removed_media,
                     "library_items_absent": True,
                 }
             else:
                 for temporary_path in (alternate_version_path, first_trust_path, no_stream_path):
                     if temporary_path is not None:
                         temporary_path.unlink(missing_ok=True)
+                for media_path in temporary_media_paths:
+                    media_path.unlink(missing_ok=True)
                 summary["temporary_fixture_cleanup"] = {"status": "PARTIAL", "reason": "Jellyfin API was not available to verify the temporary library items."}
                 temporary_cleanup_ok = False
         except Exception as error:

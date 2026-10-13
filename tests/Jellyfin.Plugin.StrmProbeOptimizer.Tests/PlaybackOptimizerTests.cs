@@ -757,6 +757,97 @@ public sealed class PlaybackOptimizerTests
         Assert.IsNull(repository.Get(item.Id, SourceKey(item.Id)));
     }
 
+    [TestMethod]
+    public async Task RepositoryReadFaultStopsOptimizationAndDelegatesWithOriginalPermission()
+    {
+        const string url = "https://media.example.invalid/video.mp4?sig=a";
+        using var fixture = new ManifestFixture(url, ValidSha1, 42);
+        var repository = new FaultInjectingFingerprintRepository();
+        var item = CreateItem(fixture.Path, url);
+        var native = ScriptedManager.Create();
+        native.StaticSources = [Source(url)];
+        native.Playback = (_, allowProbe, _, _) =>
+        {
+            Assert.IsTrue(allowProbe, "A read fault must not lower the caller's probe permission.");
+            return Task.FromResult<IReadOnlyList<MediaSourceInfo>>([Source(url)]);
+        };
+        var optimizer = CreateOptimizer(repository);
+
+        var result = await optimizer.GetPlaybackMediaSourcesAsync(native.Interface, item, null, true, false, CancellationToken.None);
+
+        Assert.AreEqual(1, repository.GetCalls, "The optimizer did not attempt the repository read that faulted.");
+        Assert.IsTrue(native.PlaybackCalls >= 1);
+        Assert.IsTrue(native.LastAllowMediaProbe);
+        Assert.AreEqual(url, result[0].Path);
+        Assert.AreEqual(0, repository.CommitCalls, "A read fault must not commit a fingerprint.");
+
+        // The store is latched until restart: the next request delegates without touching the repository again.
+        var callsAfterFault = native.PlaybackCalls;
+        var afterFault = await optimizer.GetPlaybackMediaSourcesAsync(native.Interface, item, null, true, false, CancellationToken.None);
+        Assert.AreEqual(1, repository.GetCalls, "Optimization continued reading the failed store without a restart.");
+        Assert.IsTrue(native.PlaybackCalls > callsAfterFault);
+        Assert.IsTrue(native.LastAllowMediaProbe);
+        Assert.AreEqual(url, afterFault[0].Path);
+    }
+
+    [TestMethod]
+    public async Task RepositoryReadFaultDoesNotElevateFalsePermission()
+    {
+        const string url = "https://media.example.invalid/video.mp4?sig=a";
+        using var fixture = new ManifestFixture(url, ValidSha1, 42);
+        var repository = new FaultInjectingFingerprintRepository();
+        var item = CreateItem(fixture.Path, url);
+        var native = ScriptedManager.Create();
+        native.StaticSources = [Source(url)];
+        native.Playback = (_, allowProbe, _, _) =>
+        {
+            Assert.IsFalse(allowProbe, "A false-permission request must remain false after a read fault.");
+            return Task.FromResult<IReadOnlyList<MediaSourceInfo>>([Source(url)]);
+        };
+        var optimizer = CreateOptimizer(repository);
+
+        var result = await optimizer.GetPlaybackMediaSourcesAsync(native.Interface, item, null, false, false, CancellationToken.None);
+
+        Assert.AreEqual(0, repository.GetCalls, "A false-permission request must not read or commit the fingerprint store.");
+        Assert.AreEqual(0, native.StaticCalls);
+        Assert.AreEqual(1, native.PlaybackCalls);
+        Assert.IsFalse(native.LastAllowMediaProbe);
+        Assert.AreEqual(url, result[0].Path);
+    }
+
+    [TestMethod]
+    public async Task RestartWithRepairedRepositoryRechecksAndCommits()
+    {
+        const string url = "https://media.example.invalid/video.mp4?sig=a";
+        using var fixture = new ManifestFixture(url, ValidSha1, 42);
+        var failingRepository = new FaultInjectingFingerprintRepository();
+        var item = CreateItem(fixture.Path, url);
+        var native = ScriptedManager.Create();
+        native.StaticSources = [Source(url)];
+        native.Playback = (_, allowProbe, _, _) =>
+        {
+            if (allowProbe && ProbeExecutionContext.Current is { } context)
+            {
+                var result = MediaInfoWithVideo("h264", 1920, 1080);
+                context.MarkCall(url);
+                context.RecordResult(url, result);
+            }
+
+            return Task.FromResult<IReadOnlyList<MediaSourceInfo>>([Source(url)]);
+        };
+        var faultedOptimizer = CreateOptimizer(failingRepository);
+        await faultedOptimizer.GetPlaybackMediaSourcesAsync(native.Interface, item, null, true, false, CancellationToken.None);
+        Assert.AreEqual(0, failingRepository.CommitCalls);
+
+        // A fresh optimizer instance represents the documented restart/re-check recovery path.
+        var healthyRepository = new InMemoryStrmFingerprintRepository();
+        var restartedOptimizer = CreateOptimizer(healthyRepository);
+        var restarted = await restartedOptimizer.GetPlaybackMediaSourcesAsync(native.Interface, item, null, true, false, CancellationToken.None);
+
+        Assert.AreEqual(url, restarted[0].Path);
+        Assert.IsNotNull(healthyRepository.Get(item.Id, SourceKey(item.Id)), "After restart the repaired store was not rechecked and committed.");
+    }
+
     private static StrmPlaybackOptimizer CreateOptimizer(IStrmFingerprintRepository repository, ILibraryManager? libraryManager = null)
     {
         return new StrmPlaybackOptimizer(
@@ -851,6 +942,27 @@ public sealed class PlaybackOptimizerTests
     }
 
     private sealed record PlaybackSettings(bool PlaybackAutoCheck) : IPlaybackSettings;
+
+    private sealed class FaultInjectingFingerprintRepository : IStrmFingerprintRepository
+    {
+        private readonly InMemoryStrmFingerprintRepository _inner = new();
+
+        public int GetCalls { get; private set; }
+
+        public int CommitCalls { get; private set; }
+
+        public StrmFingerprint? Get(Guid itemId, string sourceKey)
+        {
+            GetCalls++;
+            throw new IOException("Injected fingerprint store read failure.");
+        }
+
+        public bool TryCommit(StrmFingerprint candidate, StrmFingerprint? expectedPrevious)
+        {
+            CommitCalls++;
+            return _inner.TryCommit(candidate, expectedPrevious);
+        }
+    }
 
     public class NativePersistence : DispatchProxy
     {
