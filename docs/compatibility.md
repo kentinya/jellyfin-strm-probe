@@ -25,7 +25,22 @@ B 独立审查为 **FIX REQUIRED**：正常地址变化／重启及不可达失�
 
 已对固定源码 `ca0f16eb7c195f720a1493ed469a27c4657db0c6` 检查 `MediaSourceManager`、Provider、`MediaInfoHelper`、任务模型与任务调度代码。源码定位是接口证据，不替代插件行为验收。
 
-### Task 1.1 原型实测（2026-10-13）
+## 播放与批量取消语义
+
+以下限定固定 Jellyfin `12.2.0`／源码 `ca0f16eb7c195f720a1493ed469a27c4657db0c6`，版本变化后重新核对。A 已将这些事实澄清写入 [Slice 合同](../SLICE.md#a-取消语义澄清2026-10-13)；没有将源码存在或未运行场景改为实机 PASS。
+
+| 入口／动作 | 固定源码行为 | 插件与验收边界 |
+|---|---|---|
+| PlaybackInfo 取源 | [`MediaInfoHelper`](https://github.com/jellyfin/jellyfin/blob/ca0f16eb7c195f720a1493ed469a27c4657db0c6/Jellyfin.Api/Helpers/MediaInfoHelper.cs#L148) 传 `true` 和 `CancellationToken.None` | 是否探测由媒体状态与插件决策决定；客户端退出不沿此入口取消探测，不要求客户端取消实机场景 |
+| 实际流请求取源 | [`StreamingHelpers`](https://github.com/jellyfin/jellyfin/blob/ca0f16eb7c195f720a1493ed469a27c4657db0c6/Jellyfin.Api/Helpers/StreamingHelpers.cs#L129) 传调用 token 和 `allowMediaProbe=false` | 原样保留权限，不为测试取消而升级为允许探测 |
+| 报告停止播放 | [`PlaystateController`](https://github.com/jellyfin/jellyfin/blob/ca0f16eb7c195f720a1493ed469a27c4657db0c6/Jellyfin.Api/Controllers/PlaystateController.cs#L249) 停止关联转码并更新会话 | 该处理不向先前 PlaybackInfo 探测传取消 token；插件不新增停止事件到探测的关联 |
+| 停止计划任务 | [`ScheduledTasksController`](https://github.com/jellyfin/jellyfin/blob/ca0f16eb7c195f720a1493ed469a27c4657db0c6/Jellyfin.Api/Controllers/ScheduledTasksController.cs#L122) 调用任务取消；[`ScheduledTaskWorker`](https://github.com/jellyfin/jellyfin/blob/ca0f16eb7c195f720a1493ed469a27c4657db0c6/Emby.Server.Implementations/ScheduledTasks/ScheduledTaskWorker.cs#L331) 把自身 token 传入执行并在停止时取消 | Slice 3 验证停止分页／排队／自身等待；仍有播放等待者的共享执行不受错误取消 |
+
+客户端退出不等于执行取消。本次原生探测继续成功、结果已保存且 Manifest 一致时，仍可按全部提交条件接受指纹。执行本身收到取消时保留旧基线；取消一个共享等待者不阻止仍服务其他等待者的有效执行提交。
+
+Slice 1 的真实取消验证使用带可取消 token 的隔离原生执行上下文，覆盖探测中和结果返回后提交前；当前该验证仍 NOT RUN，不能把现有假对象验证写成真实 PASS。公共 PlaybackInfo 的客户端取消场景按入口事实不适用，既不伪造 PASS，也不作为该公共入口的额外阻塞。批量停止与通用共享协调分别保留后续 Slice 实机门槛。
+
+## Task 1.1 原型实测（2026-10-13）
 
 测试输入为隔离临时库的手写版本化 STRM、两个字节完全相同的本地合成 MP4、隔离 Jellyfin `12.2.0` 与本地媒体服务。STRM 临时写入该媒体字节的实际 SHA-1 和 Size；换 URL 场景保留两者不变。运行脚本在结束时恢复原 STRM，并重新通过 Jellyfin 同步原地址。
 
