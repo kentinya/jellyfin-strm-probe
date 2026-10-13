@@ -1,16 +1,12 @@
-# NO ACTIVE IMPLEMENTATION TASK
-
-Task 2.1 已 PASS，活动实施结束；以下保留完整计划／完成报告／B 审查，下一步由 B 规划 Task 2.2。Slice 2 仍 ACTIVE，Required Outcomes 尚未全部满足。
-
-# Task 2.1 — 按真实媒体源持久化播放指纹与重启恢复
+# Task 2.2 — 运行中探测协调、正常收尾与核心配置
 
 模板来源：[Task 模板](Task/TEMPLATE.md)。范围 authority 为已提交的 [Slice 2](SLICE.md)，流程见 [开发流程](docs/development-workflow.md)；规划／审查参考 [B 经验](docs/agent-experience/task-planner-reviewer.md)，实施先读 [Developer 经验](docs/agent-experience/developer-implementation-role.md)。
 
 ```text
-Task ID: 2.1
+Task ID: 2.2
 Parent Slice: 2
-Status: PASS
-Task Base: 7e0240cd1cada74f142b7b0afd612943ca991a91
+Status: PLANNED
+Task Base: 13cb8bdac319fcf0b3e7500661bae1c7455077b0
 Contract Checkpoint: 7e0240cd1cada74f142b7b0afd612943ca991a91
 Slice Base: 924816a84c74f5d79c107478f2d40e621cb8be8d
 Difficulty: High
@@ -20,71 +16,56 @@ Planner / Reviewer: B
 
 ## Goal
 
-用户播放受支持版本化 STRM 时，以实际媒体源所属项目的可信历史判断首次接管、复用或原生探测；正确地址／主流和最小 SQLite 指纹在重启后仍可核对。探测失败、保存失败、STRM 再变或状态库不可用不会接受错误版本，修复后可重新检查。多版本影片分别读取自己的 STRM、使用自己的原生保存证据与指纹，不能串版本。
+多个客户端播放同一版本化 STRM 时，仅在该源原生探测实际开始后共享其进行中的工作；各客户端随后按自己的原生权限、选源和路径替换取得正确响应。排队不共享，不同源不串用，全局插件主动探测受默认 2／合法 1～8 的统一上限控制。已开始工作在无人等待时继续验证、保存、条件提交和释放资源；管理员能通过 Jellyfin 现有通道保存核心配置、禁用优化并按说明恢复。
 
-这是 RO-1／RO-2／RO-3 的持久播放闭环及 RO-6 的状态库故障／恢复部分，提供后续协调器和 Slice 3 可复用的检查入口。RO-4／RO-5 的运行中共享和全局并发、RO-6 的完整核心配置留在后续连贯 Task；本 Task PASS 不表示 Slice 完成。
+闭合 RO-4／RO-5 及 RO-6 剩余核心配置／诊断部分，保持 Task 2.1 已接受的 RO-1～RO-3 和状态库恢复。此计划合并协调与核心配置，因为并发许可池必须消费真实保存配置，启停和故障会影响排队／开始边界；不再按配置字段或内部类另拆 Task。此 Task 后重新对账全部 RO／Required Surfaces；已满足则运行单独 Slice Final 并交 A，不自动创建 Task 2.3。
 
-## B 合同合法性决定
+## B 合法性决定与实际缺口
 
-2026-10-13，开始时 `git status --short --branch` 为干净的 `main`，无已有用户改动。必读文件、实际源码／测试和固定 Jellyfin 本地源码已核对；规划前 `python3 scripts/check_governance.py` 退出 0，确认已提交的 ACTIVE 合同与 Roadmap、真实 SHA 和祖先关系合法。
+2026-10-13，规划前 main 工作区干净；`python3 scripts/check_governance.py` 退出 0，已提交 ACTIVE 合同及真实 SHA／祖先关系合法。已核对全部 Required Outcomes／Surfaces，剩余协调／配置义务尚未满足。Task 2.1 已经 B 独立复审 PASS，完整 Base..Head 为 `7e0240cd1cada74f142b7b0afd612943ca991a91..198f4ff2accd5bc9fcd87518a9684b9d068de103`；报告／B 决定保留在 `13cb8bdac319fcf0b3e7500661bae1c7455077b0:TASK.md`，本机证据见 `.git/validation-evidence/198f4ff2accd5bc9fcd87518a9684b9d068de103/b-rereview-20261014-03/INDEX.md`。完整产品、批量与共享能力没有由该 PASS 提前验收。
 
-决定：**在修订合同下新规划 Task 2.1**。当前没有旧活动 Task 可继续或调整；不复用已通过的 Task 1.1 ID／Base，也不沿被替代的 `ac2fcead73664cfdaf66f62954ec6b11fb303168` 取消约定实施。Slice Base 不移动，Implementation Head 仍为 NOT SET。合同及规划前无活动 Task 的快照均可从本 Task Base 读取；历史 Task／证据见 [关闭账本](docs/progress.md#slice-1-closed)。
+已核对真实代码：`StrmPlaybackOptimizer.CheckSourceAsync` 是共用源入口，`ProbeAndVerifyAsync` 直接调用原生刷新并验证本次结果／保存后条件提交；`ProbeExecutionContext.MarkCall` 与 `MediaEncoderDispatchProxy` 可观察匹配的原生 GetMediaInfo 调用，但没有协调登记、许可池或实际开始通知。SQLite 已支持项目＋源主键和原子 expectedPrevious 提交，无需另造存储／状态机。`PluginConfiguration` 只有 PlaybackAutoCheck，`IPlaybackSettings` 只读这一项；Enabled、DetailedLog、并发保存／启动生效与操作说明不存在。
 
-本 Task 保留原生 token 委托及原生自身取消异常保护；公共 PlaybackInfo 的 `CancellationToken.None` 不变，不增加成功返回后的取消检查、客户端停止关联、独立执行取消源或人为取消实机门槛。后续协调器只能登记实际已开始且仍运行的探测，已开始执行不因无人等待或批量停止而取消；真实批量停止留在 Slice 3。
-
-本轮 B 只提交计划与当前指针，不开始插件实施、不签发产品 PASS。Developer 后续在本活动 Task 内实施、必要修正、隔离验证和普通本地提交按既有授权进行。无法满足合同则交 A 判定；A 提交新合同后 B 再明确决定继续、合法调整或重规划。
+固定源码 `BasePluginOfT.UpdateConfiguration` 先替换内存配置再保存，原生 API 以 `Plugins/{id}/Configuration` GET／POST 暴露配置；不能仅沿用赋值顺序就声称保存失败不生效。开始信号、共享结果与用户响应分离、配置校验／持久化失败及启动许可池属于本 Task 必需验证。已提交 Contract 可满足，保持 Slice ID／Base／不变量和停止边界，不交 A 修改合同。
 
 ## 实际缺口与实施范围
 
-### 已有能力与缺口
+1. **共用协调与实际开始。** 在既有源检查／原生适配链接入一个进程内 ProbeCoordinator，键为稳定项目 ID＋源键，播放和未来批量共用。登记只包含已经进入匹配原生探测调用且仍在执行的工作；创建 Task、进入刷新准备、排队、取得许可均不足。明确接入层实际开始通知与同源开始竞态：准备中的同源请求可以等待并重新判断，但不能被登记或报告成已加入共享探测，也不能因此重复实际启动。排队请求各自保留生命周期；获得机会后重读当前 STRM、指纹及本源原生结果，不按排队时旧决策盲目探测。
+2. **共享与正常收尾。** 共享的是探测／验证／提交工作，不是第一位用户的完整 MediaSourceInfo／PlaybackInfo。每个调用者按自己的用户可见范围、选源、路径替换及原生语义重新读取源和 Manifest；源集／版本变化按现有明确重试路径处理。等待者退出或数量为零不取消已开始工作，执行继续完成全部成功条件核对和条件提交。完成／失败／原生取消异常／Manifest 再变／提交冲突／状态库异常均清除运行登记并释放许可；完成 Task 不留作进行中缓存。保留原生自身取消异常保护，不新增客户端停止关联、共享执行取消源或成功后人为取消检查。未接管入口继续原 token／权限委托。
+3. **全局上限与权限。** 所有插件主动发起的源探测走同一个许可池，默认 2，可保存 1～8，下一次 Jellyfin 启动采用新值。加入实际运行中同源工作不额外占许可；不同源独立，不持有阻碍其他源的全局锁等待。许可覆盖主动原生执行及可靠收尾，不让异步返回或等待者退出提前释放。false 请求不启动、排队执行或接受变化指纹，其他允许上下文不能被记作它获准探测；普通／旧／不支持输入、禁用和外部独立原生刷新不进入插件限流。状态库故障沿用停止优化／原生委托，不转无条件插件探测。
+4. **核心配置与生效。** 新增 Enabled 默认 true、保留 PlaybackAutoCheck 默认 true、并发默认 2、DetailedLog 默认 false；可选字段名称由实施决定并记录准确 API 示例。启用／播放检查保存成功后下一次检查请求生效，未实际开始的排队工作在准入时也重读最新成功保存的启停值；详细日志下一次检查操作生效。已实际开始的探测使用稳定上下文，禁用不取消其收尾；排队请求执行前重新核对是否仍可优化；关闭后的原生委托保留权限，并明确独立原生探测不受插件许可池约束。并发变更只在重启后生效，读回保存值与当前运行上限须能区分。拒绝 0／9／负数／非整数／错误类型等非法值，提供可识别错误反馈，不落盘、不改变当前有效配置；模拟持久化失败也不能呈现已生效或成功保存。既有仅含 PlaybackAutoCheck 的配置加载保留该值并补合法默认；已存非法配置须明确诊断及恢复方法，不静默接受。
+5. **用户操作与诊断。** 利用 Jellyfin 已有配置保存通道提供可操作 GET／POST／核验和重启步骤，示例仅使用占位认证，不增加独立 UI／调度按钮。说明禁用／播放检查关闭的差异、并发生效时机、SQLite 修复后重启再次检查，以及无 SHA-1 同 URL／同 Size 的识别限制。日志区分首次信任、复用、真实成功、未完成／冲突／库不可用和排队／实际运行中加入；详细日志开关不能关闭必要故障反馈。不泄露完整 URL、签名、token、Cookie、私有路径，不把等待者数量计为探测成功数。
+6. **回归与实证。** 在既有 solution／MSTest 项目增加确定性协调和配置集成用例；使用可控开始／完成屏障，避免靠 sleep 或调用时间猜共享成功。扩展 `scripts/run_isolated_plugin_integration.py` 默认入口，在仓库隔离实例验证实际开始后的同源共享、不同项目／版本源、代表性全局上限、核心配置保存／拒绝／生效／重启与原生对照，保留 Task 2.1 全部实际场景和清理恢复。按分层证据补完整核心矩阵索引，修正缺失项；不把 B01／B02 的批量部分、X08 的真实批量停止或延期 UI 写成 PASS。
 
-- `StrmManifestReader` 已有 UTF-8／可选 BOM、64 KiB 上限、首条非注释地址、重复标记拒绝和字段规范化；`ProbeDecisionService` 已有主要分支。现有 5 项解析、6 项决策测试不足以覆盖完整矩阵；Size 决策只检查非空，未在决策入口排除负数历史值。固定原生 `ProbeProvider.NormalizeStrmLine` 会移除制表符等再选首条非空非注释行，Reader 仅 Trim，须补齐或明确安全回退，不能猜测原生探测 URL。
-- `StrmPlaybackOptimizer` 固定请求 `item.Id`＋`primary`，以首个含主流的源判断且只读取请求项目的 STRM，不能证明另一版本的文件／结果身份。固定源码 `BaseItem.GetVersionInfo` 使用所属项目 ID 作为 `MediaSourceInfo.Id`，`Video.GetAllItemsForMediaSources` 枚举版本，`MediaSourceManager.GetStaticMediaSources` 按用户过滤／排序。`MediaInfoHelper` 在包装接口返回后才过滤请求的 MediaSourceId，不能假装包装接口已有选源参数。
-- `InMemoryStrmFingerprintRepository` 仅提供进程内 Get／条件提交，重启丢失；无 SQLite schema、运行依赖部署或故障恢复。已有跳过不覆盖基线的能力须保留，接受另一版本时不继承旧 SHA-1。
-- 四处 DI 包装、`ProbeExecutionContext` 和原生保存代理可复用，继续关联本次编码器结果、主流保存成功返回及地址保存。现有失败／取消异常、保存失败和 Manifest 竞态测试，以及 B 的同元数据保存失败控制方法可复用；旧进程内证据不能替代 SQLite 集成。
-- `scripts/run_isolated_plugin_integration.py` 已有加载、信任／复用、同 SHA-1／Size 换 URL、失败／重试、Manifest 竞态、false 流入口、手动刷新、普通／旧／直播、插件禁用与地址重启链路。当前部署只复制 DLL／meta.json，重启后信任断言针对内存仓库；引入持久化后须修正场景前提和依赖部署，保持必要行为。
-
-### 完整实施范围
-
-1. **输入与版本判断。** 补齐版本 1 的编码／BOM／空白／重复或冲突标记／非法首地址／字段／有界读取，以及 T01～T16、T26／T27、X03／X05 的逻辑和文件矩阵。维持 http／https 支持边界，其他原生协议委托；URL 选取与固定原生读法一致，非法首条不能跳到后面地址。URL／签名变化先于 SHA-1／Size，仅双侧有效 SHA-1 或有效非负 Size 可比较，0 不等于缺失，mtime 不参与。
-2. **实际媒体源身份。** 从调用者可见原生源可靠解析所属 BaseItem、源 ID 和对应 STRM；候选键为实际所属项目 ID＋稳定原生源 ID，Guid 使用一致格式，实施须源码与实机共同验证。原生版本已有独立所属项目时无需另造版本系统，但不能继续用请求 ID＋primary 代替。URL／签名变化、返回顺序和重启不改键；不持久化路径／完整 URL。逐源使用必要音频／视频主流和保存关联，维持用户可见范围、路径替换及完整响应；验证主版本入口、直接版本入口与不同 MediaSourceId。无法可靠关联的源原生委托，不接受猜测指纹；混合普通／旧／不支持源不能因别的源可跳过就抑制其原生行为，也不能用整体回退替代受支持多版本验收。
-3. **SQLite 接入播放。** 插件私有数据目录建立五字段 `strm_fingerprint(item_id, source_key, url_hash, sha1, file_size)` 和项目＋源主键；schema 版本只用 SQLite 元数据，不存媒体信息或持久化执行状态。保留 Get／expectedPrevious 条件提交，事务内核对基线，首次插入竞争／过期执行不能覆盖已接受版本。验证空库初始化、版本重开、未知版本拒绝、事务失败／回滚与释放。无旧部署 schema，不编造迁移，不自动删库或重建损坏库。新增依赖须固定版本／更新锁并验证隔离部署全部运行依赖可加载。
-4. **共用检查与可靠提交。** 将源检查、原生执行／本次结果验证和条件提交组织为播放及未来批量可调用的真实服务入口；原生适配留接入层，解析／决策保持纯逻辑。首次有本源必要主流且原生地址相符才信任初建，无主流／地址过期按权限探测。其他提交必须关联本源本次真实成功、必要主流、原生保存地址／结果、稳定 Manifest 和预期基线。跳过时暂缺／非法观测不抹去历史有效 SHA-1；成功接受另一版本且无有效新哈希时存空。失败、取消异常、解析错误、文件再变和提交冲突不伪报已接受；返回前核对当前版本和原生源，不返回已知错误地址。保留同元数据仍需保存成功的对照。
-5. **库故障与恢复。** 初始化或运行时读取／提交异常使优化停止，尽可能原生委托；脱敏记录故障类别，保留 allowMediaProbe，不制造成功提交，不因写失败重复强制探测。旧库保留；修复访问权限／可用性后，重启＋再次播放恢复检查。损坏／未知 schema 明确失败，不把替换空库当自动恢复；隔离测试恢复原库快照和权限。运行时停止优化可持续至重启，不要求后台自动修复。
-6. **验证与事实同步。** 在现有 MSTest 项目增加文件／SQLite／源身份／播放回归，按需新增测试文件，无需预建项目。扩展现有实机脚本默认入口覆盖本 Task 场景，保留既有链路并恢复隔离夹具／配置。按证据类型更新矩阵和 CURRENT 事实，不把后续部分提前标 PASS。
-
-允许文件边界：现有插件服务、接入／注册、必要持久化代码及测试项目，确有需要的项目／依赖锁，隔离集成／本地媒体工具，与新行为直接相关的文档。类名不作为验收目标；不预建协调器空实现。
-
-### 后续范围与配置时机
-
-本 Task 不实现共享／全局并发。下一连贯单元候选为“实际开始边界、同源共享、独立收尾及全局上限”，再以“核心配置保存／禁用与故障恢复用户操作”闭合余下 RO-6；这是剩余工作方向，未激活其他 Task。每次 PASS 后 B 按实际结果重查全部 RO／Surfaces，已满足则停止规划并执行 Slice Final，不为凑 Task 数量继续拆分。
-
-现有 PlaybackAutoCheck 保持下次播放请求读取生效，不在请求中途改变决策上下文。后续核心配置计划采用：启用／播放检查保存成功后的下一次检查请求生效；详细日志下一次检查操作生效；并发 1～8 下一次 Jellyfin 启动生效，保存反馈说明时机。这是 RO-6 实施方向，本 Task 不宣称已有 Enabled／DetailedLog／并发配置。Jellyfin 自身插件禁用后的注册变化仍按原生重启语义验证，区别于未来插件自有启用配置。
+允许文件边界：现有插件配置／生命周期／注册、Services／Interceptors 及必要协调代码，现有测试项目，确有必要的依赖／锁，隔离集成／媒体工具及其 Python 回归、核心配置操作说明／README、architecture CURRENT／test-matrix／progress／Task 报告。不要求拆分 NativeProbeExecutor 或重构类名；先复用既有解析、决策、SQLite 和成功／保存信号。SLICE／Roadmap／稳定需求和 V4.2 原文冻结；发现 Contract 问题交 A。
 
 ## 验收条件
 
-- [x] **AC-T1：版本判断与首次接管。** 完整逻辑／文件矩阵有逐项索引，包括原生地址已同步但历史 URL 不同、双侧哈希有效性组合、Size 0／缺失／负数／溢出、信息不足、签名变化和 mtime／重写／重放。已有主流信任零探测；无流／原生地址过期需原生处理；音频／视频必要主流不混用。对应 Slice AC-1／AC-2。
-- [x] **AC-T2：SQLite 与哈希身份。** 最小 schema／版本／重开、原子条件提交／失败事务使用真实 SQLite；过期执行和插入竞争不覆盖新基线。暂缺 SHA-1 后恢复、接受另一版本缺哈希的序列正确，无完整 URL／路径／媒体流／执行状态。对应 AC-3、T27、X06。
-- [x] **AC-T3：真实成功与失败恢复。** 同 SHA-1／Size 换 URL、同 URL 哈希变化、无可比 SHA-1 的 Size 变化实际新增探测，成功结果／地址／指纹对账。不可达失败、Manifest 竞态、同元数据但主流／地址保存失败保留基线并可重试；保留取消异常回归，不新增取消机制。对应 AC-4、T17／T18、X04／X07。
-- [x] **AC-T4：重启不掩盖失败。** 成功地址／主流和指纹重启恢复，未变化零探测且非重新 FirstTrust。另在失败后保留当前未接受的变化 STRM 重启，先确认旧指纹仍在，再修复当前目标并验证下一次允许请求实际探测／提交；不靠变回旧 Manifest 恢复，不通过重启信任失败版本。对应 T19／T22、AC-3／AC-4。
-- [x] **AC-T5：真实多版本。** 同一影片至少两个原生关联的 STRM 版本，各自主流／指纹；主入口、直接版本入口／MediaSourceId 选择及返回顺序变化时，变更一个版本只接受其结果，另一个键／指纹／地址／主流正确；用户可见范围／原生授权和重启键稳定可核验。两个无关联影片或多源回退不算 T25。对应 AC-5 身份部分；共享／上限尚未验收。
-- [x] **AC-T6：状态库故障与委托。** 读／写故障控制测试及隔离代表性不可写验证：优化停止、权限保留、无新成功指纹，修复＋重启后重查；损坏／未知版本保留原库、明确失败。普通／旧／不支持输入、直播、false 真实流入口、禁用、全接口／生命周期和手动刷新不退化。对应 AC-7 状态库／原生边界部分。
-- [x] **AC-T7：T4 证据与范围。** 完整指定门槛、新依赖部署、原始脱敏日志／计数／数据库与原生结果索引可核验；未运行／外部代理分别报告。只修改 Task 范围内文件，不改 Contract／不变量或生产数据。对应 AC-8；完整 Slice 验收仍待后续工作和单独 Slice Final。
+- [ ] **AC-T1：实际开始与只共享运行中。** 确定性证明排队、许可已得但未进匹配原生调用、刷新准备均不登记共享；实际开始后同源允许请求才加入且同次只实际执行一次。开始竞态不重复，同键排队仍各自重查；完成后新请求重读当前版本／指纹，正常已接受版本不重复探测，失败或新变化可重试。对应 RO-4、AC-5／AC-6、T20／X08。
+- [ ] **AC-T2：独立收尾与保护。** 所有等待者退出后已开始执行仍完成保存／验证／稳定版本条件提交，资源不提前释放。失败、原生自身取消异常、保存失败、文件再变、提交竞争及库故障各路径保留可信基线且释放许可／登记，后续请求不复用完成／失败任务；维持同元数据保存失败对照。退出验证只作用于等待生命周期，不创造执行取消源／人为取消实机门槛。对应 RO-2／RO-5、AC-3／AC-4／AC-6。
+- [ ] **AC-T3：全局上限、多源及调用者边界。** 默认 2、配置 1／8 有确定性最大同时执行验证；代表性隔离 Jellyfin 默认 2／配置 1 的计数和实际重叠证明上限生效、不同源可独立执行。真实关联版本／不同项目不串结果、指纹或地址；同源不同调用者按自身原生授权／选源／路径替换重新构建完整响应。false 请求不提高权限，不归因另一执行；独立原生刷新不被插件限流。对应 RO-4、AC-5／AC-7、T25／T28、B01／B02 核心部分。
+- [ ] **AC-T4：核心配置完整闭环。** 四项默认、旧配置兼容、合法 GET／POST 保存／读回／重启持久化和生效时机可操作验证；0／9／负数／非整数／错误类型拒绝且有效配置与保存文件不变，保存失败明确反馈且不生效。禁用整个插件与关闭播放检查保留原生，未开始排队工作准入时重新判断，进行中执行收尾不受影响；并发保存不热改当前池。操作说明可用于隔离环境，不依赖未来 HTML 页。对应 RO-6、AC-7、X09、B01 核心部分。
+- [ ] **AC-T5：诊断、恢复与既有能力。** 首次信任／复用／真实成功／未完成／共享／库不可用证据可区分且脱敏，详细日志关闭仍有必要错误反馈。SQLite 故障停止优化、原权限／旧库保护与修复重启恢复不退化；T01～T28 核心部分和 Required Surfaces 有实际用例／输入／原始产物索引，延期部分单独 NOT RUN。对应 RO-1～RO-3／RO-6、AC-1～AC-4／AC-7／AC-8、X01／X10。
+- [ ] **AC-T6：完整 T4 与范围。** 新候选全部指定门槛、真实默认实机入口及部署产物核对通过；原始日志／首次失败／重跑与恢复可核验。只改 Task 文件范围，不改 Contract、固定业务规则或生产数据。Task PASS 后由 B 重查全部 RO／Surfaces，完整时另跑 Slice Final 并提交 Closure Packet，A 才最终审查／关闭。
 
 ## 必要测试
 
-所有命令 cwd 为 `/opt/jf-strm-probe`。真实 solution 为 `Jellyfin.Plugin.StrmProbeOptimizer.sln`，插件和测试项目为 `src/Jellyfin.Plugin.StrmProbeOptimizer/Jellyfin.Plugin.StrmProbeOptimizer.csproj`、`tests/Jellyfin.Plugin.StrmProbeOptimizer.Tests/Jellyfin.Plugin.StrmProbeOptimizer.Tests.csproj`；`scripts/dotnet-local` 固定 SDK `10.0.401`／net10.0。Jellyfin 固定 `12.2.0`／源码 `ca0f16eb7c195f720a1493ed469a27c4657db0c6` 与已有镜像锁，见 [环境交接](docs/development-environment.md)。本计划没有产品测试 PASS。
+cwd 为 `/opt/jf-strm-probe`；固定 SDK `10.0.401`／net10.0，solution `Jellyfin.Plugin.StrmProbeOptimizer.sln`，插件／MSTest 项目路径沿用现有目录。目标 Jellyfin `12.2.0`／源码 `ca0f16eb7c195f720a1493ed469a27c4657db0c6`，镜像／环境见 [环境交接](docs/development-environment.md)。本计划无产品测试 PASS。
 
 ### 开发／修正反馈
 
-- 实施前再次记录状态并运行 `python3 scripts/check_governance.py`。先处理已知失败，再跑新增／修改用例和受影响回归。新增依赖时先用 `bash scripts/dotnet-local restore Jellyfin.Plugin.StrmProbeOptimizer.sln --use-lock-file` 生成并审查锁，再 locked restore；更新锁不是最终门槛。
-- 输入／决策反馈：`bash scripts/dotnet-local test tests/Jellyfin.Plugin.StrmProbeOptimizer.Tests/Jellyfin.Plugin.StrmProbeOptimizer.Tests.csproj --configuration Release --no-restore --filter 'FullyQualifiedName~ManifestReaderTests|FullyQualifiedName~ProbeDecisionServiceTests'`，覆盖 AC-T1；最终全套已包含这些用例，不机械重复。
-- 播放／持久化反馈：`bash scripts/dotnet-local test tests/Jellyfin.Plugin.StrmProbeOptimizer.Tests/Jellyfin.Plugin.StrmProbeOptimizer.Tests.csproj --configuration Release --no-restore --filter 'FullyQualifiedName~PlaybackOptimizerTests|FullyQualifiedName~Fingerprint'`。新增 SQLite 测试类型名称包含 Fingerprint 以纳入入口；源映射／DI／保存代理新增用例另以实际 FullyQualifiedName 运行留证，最终全套全部发现。
-- 接入、身份、保存或部署边界变化时尽早运行 `python3 scripts/run_isolated_plugin_integration.py`。扩展后仍使用同一默认入口，不以假对象冒充实机；工具修改先跑相关 Python 回归，解决失败后再跑昂贵最终门槛。
+实施前记录已有改动并运行 `python3 scripts/check_governance.py`。先跑新增／修改、已知失败与直接受影响回归，再运行昂贵最终门槛；不得删减既有测试来取得通过。
+
+```bash
+bash scripts/dotnet-local test tests/Jellyfin.Plugin.StrmProbeOptimizer.Tests/Jellyfin.Plugin.StrmProbeOptimizer.Tests.csproj --configuration Release --no-restore --filter 'FullyQualifiedName~Coordinator|FullyQualifiedName~Configuration|FullyQualifiedName~PlaybackOptimizerTests|FullyQualifiedName~Fingerprint|FullyQualifiedName~CoreServiceRegistrationTests|FullyQualifiedName~ProbeExecutionContextTests|FullyQualifiedName~MediaSourceManagerProxyTests'
+python3 -m unittest discover -s tests -v
+```
+
+新协调／配置测试名称包含 Coordinator／Configuration 以进入聚焦筛选，实际类型与发现数写入报告；现有代理／注册测试已按真实类型纳入，实施后补核对，不用筛选零发现冒充通过。覆盖开始屏障／同源竞态、全局上限、版本再变／成功及故障收尾、不同调用者／false 权限与配置原子保存。集成边界改变时尽早运行 `python3 scripts/run_isolated_plugin_integration.py`，工具先用相应 Python 回归反馈。依赖如有真实新增先生成锁并审查，再 locked restore，不预设新增依赖。
 
 ### 最终检查点门槛
 
-持久化、媒体源身份、原生刷新和播放正确性相互影响，等级 T4，最终候选保留全部既有回归及适用实机门槛：
+共享工作跨原生刷新、保存、SQLite、并发和用户权限，T4 保留全部既有回归及真实入口：
 
 ```bash
 bash scripts/dotnet-local restore Jellyfin.Plugin.StrmProbeOptimizer.sln --locked-mode
@@ -97,186 +78,47 @@ git diff --check
 python3 scripts/run_isolated_plugin_integration.py
 ```
 
-C# 全套包含解析／决策、真实 SQLite、源身份及播放／保存／取消异常回归；Python 全套保护环境和治理。检查变更文档本地链接／锚点，留实际命令／结果。实机脚本默认入口保留既有链路并覆盖 AC-T1～AC-T6 新场景，不能仅生成报告字段。
+最终全套覆盖聚焦用例时记录关系，无须机械重复。检查修改文档本地链接／锚点并留精确命令。实机至少对账：同源实际开始后的第二请求与一次匹配探测／一次提交；排队场景获取机会后重查不重复已成功版本；默认 2 和重启生效的 1 在三个独立变化源上表现出实际重叠／排队与最大执行数；至少两个原生关联版本不串地址／主流／五字段指纹；配置 API 四项默认／合法保存读回、非法值／错误类型拒绝、下一请求启停／详细日志及并发重启生效；代表性独立原生刷新不被插件池阻塞。计数必须来自实际开始／结束观测，不能只看 HTTP 返回、Task 数量或媒体 GET 总数。非整数由真实 API 反序列化拒绝，保存失败可用原生配置序列化／持久化控制测试，不强制破坏运行实例文件。
 
-真实新增场景至少包括：无指纹新项目首次有流／无流；原生旧地址；同 URL 实际本地媒体替换配合哈希／Size 变化；同内容换 URL和无可比哈希换 URL；仅 mtime／重放；成功后 SQLite＋原生源重启；失败后变化文件保持、旧基线重启存续与修复重试；两个原生关联版本的主入口／选源／直接版本和重启；SQLite 代表性不可写及恢复。音频必要主流至少以原生适配控制测试验证，实机若目标不提供相同 STRM 入口则准确报告原生限制，不能将视频实测写成音频支持。保存失败、未知 schema／事务冲突可用真实 SQLite＋原生保存控制测试；内部 Jellyfin 数据库故障实机注入不是合同门槛。
-
-旧脚本重启后 `first_trust` 前提须调整：以新隔离项目获得无指纹前提，保留首次信任；另断言持久指纹重启后复用而非信任，不删已有库制造前提。只操作仓库专用隔离夹具，退出时恢复临时媒体、STRM、配置、权限及原生地址并验证。新增 SQLite 依赖实际复制／加载与部署产物摘要是门槛，开发机 build 不替代部署。
+仅使用仓库专用实例、临时源与慢速本地媒体服务；新增前确认作用域，退出恢复 STRM／媒体／配置／权限／版本关系和原生地址，核验临时库条目已移除、实例健康。无真实批量任务、外部代理或人为执行取消实机门槛。确定性无人等待收尾与开始竞态测试不能写成真实客户端取消探测。音频-only 实机限制保持原披露。
 
 ### B 独立验证
 
-审查完整 `Task Base..Developer Head`、原始证据和输入身份。在匹配候选上独立运行上述播放／Fingerprint 聚焦命令与 `python3 scripts/run_isolated_plugin_integration.py`，关键复现：同元数据保存失败仍拒绝提交、真实 SQLite 过期提交保护、失败后重启恢复、同内容换 URL新增探测、多版本身份及 SQLite 不可写后恢复。默认实机入口一并包含既有场景，无需再造工具。
-
-其余门槛按开发流程核验后可复用匹配原始运行；缺失／矛盾／不匹配重跑对应门槛，不因角色变化机械重跑全部构建。PASS 前满足全部计划；明确阻塞可先 FIX REQUIRED，未运行项如实报告。独立审查由实施者之外的角色完成，不授权自动启动其他代理。
+审查真实 `Task Base..Developer Head` 与原始产物。在匹配候选独立运行上述聚焦 C# 命令及默认实机脚本，复现实际开始前不共享／开始后共享、无人等待仍提交、默认／边界上限与异常释放、版本重查／不同调用者权限和非法／失败配置不生效；实机关键为同源一次探测、不同源代表性上限、配置下一请求／重启生效及既有 SQLite／原生地址重启恢复。原生开始／授权／保存和配置更新源码边界重新核对。其余完整门槛按流程核验匹配原始证据后可复用，缺失／矛盾／不匹配重跑；不因角色变化机械重复全部构建。
 
 ### 证据与重跑规则
 
-原始本机证据保留至 A 决定，索引为 `.git/validation-evidence/<implementation-sha>/<run-id>/INDEX.md`，不能仅放 `/tmp`。记录完整候选 SHA／实际被测工作区内容身份、精确命令／cwd／SDK／依赖锁／镜像／隔离配置和夹具摘要、筛选／并行／重试、产物与部署依赖摘要、退出码／耗时／通过失败跳过数及脱敏原始日志；保留首败和每次重跑。固定原生 URL 读取、版本 ID／用户过滤与保存事务源码核验写入索引。
+稳定本机索引 `.git/validation-evidence/<implementation-sha>/<run-id>/INDEX.md` 或 CI 产物，保留到 A 最终决定。记录候选 SHA／被测工作区内容、精确命令／cwd／SDK、依赖锁／源码／镜像、隔离配置与夹具内容身份、并行／筛选／重试、产物／部署依赖摘要、退出码／耗时／通过失败跳过数及原始脱敏日志；每次实机使用独立目录，不覆盖首败。逐项关联 AC、矩阵行和真实输入，计数区分排队／已开始／加入／成功／未完成及每源 SQLite／返回／已保存结果。
 
-各实机场景对账本源探测调用／成功计数、返回及已保存地址／主流、SQLite 前后五字段与重启差异；地址仅保存假夹具身份或哈希。HTTP 成功、旧流、零调用或库记录不能单独证明成功。保存失败控制测试与实机故障分别报告；不导出完整签名 URL／token／Cookie／私有路径。
-
-最终候选后改变源码、测试、工具、依赖、运行配置或夹具输入，T4 全部门槛在新候选重跑。纯报告／文档后继提交可明确比较执行输入后复用，重新运行消费文档的治理／链接检查。Slice Final 后续单独执行，不由旧 Task 运行替代。首次信任、复用、可靠成功、未完成／冲突／库故障分别记录；外部代理、批量、运行中共享及并发配置当前 NOT RUN，不纳入本 Task PASS。
+可执行源码、测试、工具、依赖、配置或夹具改变后新候选重跑完整 T4；文档后继可明确比较输入后复用，重跑消费文档的治理／链接检查。既有 Task 2.1 原生基线必须持续回归，不拿旧运行代替新协调候选。Task 通过不替代单独 Slice Final，未跑外部／批量／发布不写 PASS。
 
 ## 非目标
 
-- ProbeCoordinator 运行中共享、全局并发和无人等待收尾实机验证；条件提交竞争测试不表示协调器完成。
-- 完整 Enabled／DetailedLog／并发配置保存反馈、HTML 配置页、并发热调整；固定规则不增加关闭开关。
-- IScheduledTask、分页／有界批量、原生停止／定时／进度、ILibraryPostScanTask，仍属 Slice 3。
-- 大库压力、广泛格式／客户端、OpenList／JellyfinProxy 联调、发布 ZIP，仍属 Slice 4。
-- 生成器、STRM 写入／移动／删除、OpenList API、下载媒体计算内容 SHA-1、代理改写、另带 FFmpeg、独立调度／持久化执行状态、路径单独更新分支、生产操作和跨版本承诺。
-- 改写 Slice 1 接受结果、移动 Slice Base、弱化成功／权限／隐私门槛或修改当前 Contract；合同问题交 A。
+- IScheduledTask、真实批量停止／分页／有界生产消费／进度／定时、媒体库范围、HTML 完整配置页、ILibraryPostScanTask、独立运行按钮／调度器（Slice 3）。
+- 大规模真实库／十万模拟枚举、扫描联调、广泛客户端／格式／OpenList／JellyfinProxy、发布 ZIP、其他服务器版本（Slice 4）。
+- 并发热调整、自动修复数据库、新持久化执行状态、媒体流／PlaybackInfo 缓存、UpdatePathOnly／独立路径同步；生成器／STRM 写入／移动／删除、远程内容哈希／OpenList API／代理改写、另带 FFmpeg、生产操作。
+- 新增客户端停止到探测取消关联、共享执行取消源、成功后额外取消检查、人为执行取消实机验收；原生自身取消异常保留原语义与回归。
+- 改变 Slice／Roadmap／稳定需求、移动 Slice Base、宣称关闭 Slice 或自动实施未授权后续范围。
 
 ## Developer Completion Report
 
-### 修正轮 2（响应 B 复审剩余 R2）
+- Changed Files：NOT IMPLEMENTED。
+- Implemented：NOT IMPLEMENTED。
+- Tests and Results：NOT RUN；填写实际候选、原始证据、命令／计数／耗时、首败／重跑和缺失门槛。
+- Decisions：按本计划实施；合同问题交 B／A，不自行删减门槛。
+- Remaining In-Slice Work：RO-4／RO-5 和 RO-6 核心配置／诊断待本 Task；随后全 Slice 对账与单独 Slice Final。
+- Risks / Deviations：共享异步上下文、实际开始竞态、调用者授权、配置保存失败与许可释放均待验证。
+- Head SHA：NOT SET。
 
-- Changed Files：测试：`tests/Jellyfin.Plugin.StrmProbeOptimizer.Tests/ManifestReaderTests.cs`、`ProbeDecisionServiceTests.cs`；交接事实：本文件、`SLICE.md` 实现指针、`docs/architecture.md`、`docs/test-matrix.md`、`docs/progress.md`。未改产品源码、依赖锁、隔离脚本、Contract 或不变量。
-- Implemented：
-  - **R2（协议版本）**：新增 `ReadTreatsUnknownProtocolVersionsAsUnsupported`（`version:0`／`2`／`1-beta` → `Unsupported`）与 `ReadRejectsConflictingProtocolVersions`（`1+2`、`0+1`、`2+2` → `Invalid`），不再以 URL scheme 测试冒充 STRM 协议版本。
-  - **R2（换 URL 矩阵）**：新增 `ChangedUrlProbesForEveryHashAndSizeCombinationWhenNativeAddressMatchesTheManifest`，在历史 URL 不同、原生地址已等于当前 Manifest 的真实前提下覆盖 T09～T12 的双侧有效不同 SHA-1、仅一侧有效（两个方向）、双侧缺失、双侧非法及 Size 相同／不同／缺失；新增 `NativeAddressMismatchOutranksStoredUrlAndHashComparison`。删除名称不实的 `UrlPriorityBeatsEveryShaAndSizeCombination`。
-  - **R2（同 URL 矩阵）**：新增 `SameUrlShaValidityCombinationsCoverBothDirectionsAndSizeComparability`，覆盖同 URL 八个缺失／非法组合双向 × Size 相同／不同／缺失。
-  - **R2（索引）**：重写 `docs/test-matrix.md` 修正轮证据小节，T08～T12 与 X03／X05 逐项列出具体新旧输入、预期、证据层与缺失项，保留已有实机单侧缺哈希方向为 T12，双侧缺失实机分支如实标 NOT RUN。
-- Tests and Results：修正候选 `198f4ff2accd5bc9fcd87518a9684b9d068de103`（只改两份测试文件）。T4 门禁记录在 `.git/validation-evidence/198f4ff2accd5bc9fcd87518a9684b9d068de103/developer-fix2-t4-20261013-234000/INDEX.md`。固定 SDK 10.0.401；locked restore PASS；Release build PASS（0 warning／0 error）；solution MSTest PASS（69 passed、0 failed、0 skipped）；format verify PASS；Python unittest PASS（30 passed）；治理、`git diff --check` 与 Python compile PASS；隔离 Jellyfin 集成脚本退出 0、JSON status PASS、耗时 492 秒。新增场景均以 PASS 记录，夹具与临时媒体已清理、原 STRM 与 Jellyfin 地址已恢复。
-- Decisions：只补测试与索引，不改产品行为与合同；换 URL 矩阵以单元层直接构造输入，不新增人为取消或实机门槛。
-- Remaining In-Slice Work：Task 2.1 等待 B 复审。RO-4／RO-5 的运行中共享、全局并发、独立收尾与 RO-6 完整核心配置仍未实现。
-- Risks / Deviations：T16 远程代理联调、T10／T11 换 URL 双侧无 SHA-1 实机分支、外部代理／OpenList、其他 Jellyfin 版本、批量、运行中共享／并发与发布打包均未运行，保持 NOT RUN。测试矩阵其余行保持 NOT RUN。
-- Head SHA：`198f4ff2accd5bc9fcd87518a9684b9d068de103`。
-
-### 修正轮（响应 B FIX REQUIRED R1～R3，历史）
-
-- Changed Files：测试：`tests/Jellyfin.Plugin.StrmProbeOptimizer.Tests/ManifestReaderTests.cs`、`ProbeDecisionServiceTests.cs`、`PlaybackOptimizerTests.cs`、`SqliteStrmFingerprintRepositoryTests.cs`；隔离实机入口：`scripts/run_isolated_plugin_integration.py`；交接事实：本文件、`SLICE.md` 实现指针、`docs/architecture.md`、`docs/test-matrix.md`、`docs/progress.md`。未改产品源码、依赖锁、Contract 或不变量。
-- Implemented：
-  - **R1**：默认实机入口新增同 URL 真实替换本地媒体并改变有效 SHA-1／Size 的成功探测、同 URL 无可比 SHA-1 且有效 Size 改变的成功探测与 Size 相同的零探测、仅 mtime／相同重写／删除重放的零探测；失败后保留未接受的失败 Manifest／URL，在同一 URL 修复本地目标并证明同一失败版本被重试、探测与提交，而不是改到第三个 URL。每步对账实际媒体读取计数、SQLite 前后五字段与已保存主流，并清理新增临时媒体。
-  - **R2**：补齐解析／决策矩阵回归：未知／冲突／不支持协议不跳过非法首地址、缺失／空文件、非法 SHA-1 长度／字符、最大／零 Size、mtime／重写／重放内容哈希稳定，以及 URL 优先、双侧 SHA-1 有效／缺失／非法组合、Size 可比与不可比、无主流优先于 URL 与指纹。逐项索引见 `docs/test-matrix.md` 的 Task 2.1 证据小节。
-  - **R3**：新增 repository.Get 读取故障控制回归（优化停止、原生委托、false 权限不升级、无新指纹、同一实例内闩锁且重启后修复重新检查），并新增真实损坏 SQLite 输入回归：明确拒绝且保留原文件字节、不删库／重建、不把损坏库当空库。
-- Tests and Results：修正候选 `3488e6b1df48d4c142595d27694a792bb32f0aad`。T4 门禁记录在 `.git/validation-evidence/3488e6b1df48d4c142595d27694a792bb32f0aad/developer-fix-t4-20261013-221013/INDEX.md`。固定 SDK 10.0.401；locked restore PASS；Release build PASS（0 warning／0 error）；solution MSTest PASS（65 passed、0 failed、0 skipped）；format verify PASS；Python unittest PASS（30 passed）；治理、`git diff --check` 与 Python compile PASS；隔离 Jellyfin 集成脚本退出 0、JSON status PASS、耗时约 500 秒。新增场景均以 PASS 记录，夹具与临时媒体已清理、原 STRM 与 Jellyfin 地址已恢复、SQLite 不可变标志已清除。
-- Decisions：只补证据与回归，不改产品行为与合同；读取故障控制用隔离假对象（不是真实 Jellyfin 数据库故障注入），损坏库用真实 SQLite 字节。
-- Remaining In-Slice Work：Task 2.1 等待 B 复审。RO-4／RO-5 的运行中共享、全局并发、独立收尾与 RO-6 完整核心配置仍未实现。
-- Risks / Deviations：新增同 URL 内容变化通过向合成媒体追加字节改变 ffprobe 内容指纹，隔离实机夹具为含音频和视频的媒体；未验证独立音频-only STRM。未运行外部代理／OpenList、其他 Jellyfin 版本、批量、运行中共享／并发或发布打包。测试矩阵其余行保持 NOT RUN。
-- Head SHA：`3488e6b1df48d4c142595d27694a792bb32f0aad`。
-
-### 首轮实施（B 已裁定 FIX REQUIRED，保留历史）
-
-- Changed Files：插件实现与依赖：`src/Jellyfin.Plugin.StrmProbeOptimizer/Jellyfin.Plugin.StrmProbeOptimizer.csproj`、`Packaging/meta.json`、`ServiceRegistrator.cs`、`Services/ProbeDecisionService.cs`、`Services/ProbeExecutionContext.cs`、新增 `Services/SqliteStrmFingerprintRepository.cs`、`Services/StrmManifestReader.cs`、`Services/StrmPlaybackOptimizer.cs`、`packages.lock.json`；测试：`tests/Jellyfin.Plugin.StrmProbeOptimizer.Tests/ManifestReaderTests.cs`、`PlaybackOptimizerTests.cs`、`ProbeDecisionServiceTests.cs`、新增 `SqliteStrmFingerprintRepositoryTests.cs`、测试项目 `packages.lock.json`；隔离实机入口：`scripts/run_isolated_plugin_integration.py`；交接事实：本文件、`SLICE.md` 实现指针、`docs/architecture.md`、`docs/test-matrix.md`。
-- Implemented：按实际 Jellyfin 项目／媒体源关联播放检查；新增五字段 SQLite 指纹表、按项目＋源主键的版本初始化及条件事务提交；扩展输入规范化、决策校验和播放提交核对；部署并验证 SQLite 托管／原生运行依赖。隔离实机覆盖首次信任和重启复用、相同内容换 URL、失败保留／恢复、Manifest 竞态、多版本源选择、状态库写入失败及不可写故障／重启恢复，并保留旧 STRM、普通媒体、直播、false 流权限、插件启停和 FullRefresh 场景。代码实现候选为 `b99bc00b08fd3a8cad32076a220c5219fcc78ab7`，等待 B 独立审查；AC 勾选和 B 决定保持未完成。
-- Tests and Results：候选 T4 门禁记录在 `.git/validation-evidence/b99bc00b08fd3a8cad32076a220c5219fcc78ab7/developer-final-t4-20261013-02/INDEX.md`。固定 SDK 10.0.401；locked restore PASS；Release build PASS（0 warning／0 error）；solution MSTest PASS（51 passed、0 failed、0 skipped）；format verify PASS；Python unittest PASS（30 passed）；治理、`git diff --check` 与 Python compile PASS；最终隔离 Jellyfin 集成脚本退出 0、JSON status PASS。隔离实例已确认临时 STRM 移除／库条目不存在、版本关系解除、原 STRM 恢复且 Jellyfin 地址同步；仅使用仓库专用隔离实例和临时夹具，未改生产 Jellyfin 或媒体。先前反馈运行失败及后续最终复验均保留在证据索引中。
-- Decisions：不新增共享协调器、全局并发配置、批量任务或完整配置页；保留 SQLite 失败时停止优化并按原生权限委托的路径。最终隔离脚本新增真实不可写 SQLite 验证，使用文件系统不可变属性（`chattr +i`）触发 SQLite 写失败，并在重启恢复前清除属性。没有把整份 T01～T28／B01～B12 矩阵或完整 Slice 结果标记为通过。
-- Remaining In-Slice Work：Task 2.1 等待 B 审查。Slice 2 的运行中共享／全局并发／收尾与 RO-6 完整核心配置尚未由本 Task 实现或验收；完整 Slice 审查仍待后续授权工作。
-- Risks / Deviations：本 Task 的实际媒体源、多版本与 SQLite 故障链路有隔离 Jellyfin 证据；音频必要主流由原生适配控制测试覆盖，隔离实机夹具是含音频和视频的媒体，未验证独立音频-only STRM。未运行外部代理／OpenList 联调、其他 Jellyfin 版本、批量、运行中共享／并发门槛、完整产品矩阵或发布打包。测试矩阵各行继续保持 NOT RUN，等待 B 独立审查后按完整行范围核对。
-- Head SHA：`b99bc00b08fd3a8cad32076a220c5219fcc78ab7`。
-
-若产生少量可复用经验，提供候选供 A 收尾合并，不记流水账；本轮规划没有新增收尾经验。
+经验候选供 A 收尾：合同矩阵应索引到具体新旧输入和原始产物，不能以测试名称／总数或脚本 PASS 推断缺失分支；本轮不另写开发流水账。
 
 ## B Review Result
 
 ```text
-Reviewed: 7e0240cd1cada74f142b7b0afd612943ca991a91..198f4ff2accd5bc9fcd87518a9684b9d068de103
-Documentation Handoff: 9d7672b3f58508818324c08aa0bf0e5deec27494
-Decision: PASS
+Reviewed: NOT SET
+Decision: PENDING
 Slice Required Outcomes all satisfied: NO
-Next: B PLANS TASK 2.2 FOR COORDINATION AND CORE CONFIGURATION
+Next: DEVELOPER IMPLEMENTS TASK 2.2
 ```
 
-### B 第二轮修正复审（2026-10-13）
-
-开始时 main 工作区干净，无已有用户改动；完成必读清单，治理 PASS。审查完整 Task Base..Head、R2 修正及后继文档交接；交接只改五份文档，39 个源码／测试／工具输入与候选一致。Slice Contract 保持可满足，Task ID／Base／Goal／Scope／T4 与既有门槛不变，无须 A 改合同。
-
-本机独立证据：`.git/validation-evidence/198f4ff2accd5bc9fcd87518a9684b9d068de103/b-rereview-20261014-03/INDEX.md`（实际运行日期为 2026-10-13，目录名仅为运行标识）。独立聚焦 C# 65 passed／0 failed／0 skipped，涵盖 Reader／Decision／Playback／Fingerprint；原生适配 harness 使用真实 SQLite，再次验证相同元数据下流保存失败、地址仅内存更新、项目保存失败，各连续两次允许请求均拒绝且保留旧基线，false 权限保留。另独立验证 version 0／2／1-beta 及 1+2／0+1／2+2 的六组输入，在两种权限下原生委托且无新指纹；这是控制／文件证据，不是真实 Jellyfin 内部数据库故障注入。
-
-Developer 最新候选的 locked restore、Release build（0 warning／0 error）、C# 全套 69 项、format、Python 全套 30 项及实机原始日志已核对，源码／锁／工具输入匹配，可复用其实际执行门槛。B 编译时 AssemblyInformationalVersion 带文档交接 SHA，DLL 摘要因此不同；B 被测源码输入仍与实现候选一致，实际部署产物另留摘要，不冒称为 Developer 的同一 DLL。
-
-B 独立默认实机复验退出 0、JSON PASS，487.172 秒；同 URL 本地内容／有效 SHA-1 变化、无可比 SHA-1 Size 变化分别 1 次探测，mtime／重写／删除重放各 0 次。失败 Manifest／URL 跨重启保留旧基线，修复同一目标后 1 次重试并提交；既有换 URL、多版本身份、状态库写入／不可写故障及重启恢复与原生委托均通过。三个临时 STRM／一个临时媒体移除、版本关系解除、库条目不存在，原夹具／媒体摘要与此前恢复快照一致，原生地址同步；SQLite 不可变标志清除，实例 healthy。本轮没有失败重跑或跳过。
-
-R2 必需输入现已补齐：未知／冲突协议有实际文件用例；原生地址已为当前 URL 而历史 URL 不同的决策覆盖双侧有效不同、双侧缺失 Size 相同／不同及单侧有效两个方向；同 URL 的有效／缺失／非法组合与 Size 可比／不可比覆盖两侧方向。名称及报告仍有少量夸大，B 同步修正矩阵事实：T08 区分 NativeUrlMismatch／UrlChanged；相同有效 SHA-1 的修复实机不冒充 T09；旧侧非法／新侧缺失不写成双侧非法；T12 如实列两个方向及缺失 Size，不声称已测换 URL 单侧非法／不同 Size。所需行为已有单元／文件及独立委托证据，未运行的实机分支继续 NOT RUN；不据此新增合同门槛。
-
-**决定：PASS；R1／R2／R3 均已满足，AC-T1～AC-T7 在当前 Task 范围内通过。** 历史 FIX REQUIRED／失败／缺失原始产物保留。完整 Task 实现检查点仍为 `198f4ff2accd5bc9fcd87518a9684b9d068de103`，文档审查提交不是新实现。
-
-### Task PASS 后完整 Slice 对账
-
-| Required Outcome／Surface | 当前事实与剩余义务 |
-|---|---|
-| RO-1／解析决策 | Task 2.1 必需文件／纯逻辑矩阵与原生委托已通过；完整 Slice 的统一分层索引及 Final 尚待。 |
-| RO-2／SQLite | 最小 schema、条件提交／哈希身份、损坏／不可写保护和真实重启已验证；后续协调接入须保持回归。 |
-| RO-3／原生共用检查 | 本次成功／保存／稳定版本提交、同内容换 URL、同 URL 内容／Size 变化、失败重启／同目标修复及多版本身份已验证；真实共用源入口存在。 |
-| RO-4／协调 | 身份部分已通过；实际开始通知、仅运行中共享、全局默认 2／配置 1～8、调用者响应隔离未实现。 |
-| RO-5／收尾 | 原生取消异常保护已通过；等待者退出仍正常收尾、登记／许可释放和完成后重查待协调实施。 |
-| RO-6／配置诊断 | 状态库故障停止优化／原生委托／修复重启已通过；Enabled／DetailedLog／并发核心配置保存反馈、生效／操作说明未实现。 |
-| Required Surfaces | 原生链、源身份、SQLite 及既有实机入口成立；ProbeCoordinator、实际开始信号、核心配置操作和并发实机／最终证据仍缺。 |
-
-Slice Required Outcomes all satisfied：NO。Slice 2 保持 ACTIVE；不运行或冒称 Slice Final／Closure Packet，不代替 A 最终审查。下一最大合理单元是“运行中探测协调、正常收尾与核心配置”，在同一合同内规划 Task 2.2；合并关联的并发保存及启停边界，避免按字段拆任务。
-
-经验候选供 A 收尾：合同矩阵需索引到具体新旧输入与原始产物，不能以名称／总测试数或脚本 PASS 推断未执行分支；不新增角色经验流水账。
-
-### 前轮审查历史（以下 FIX REQUIRED 已由本轮修正复审解决）
-
-### B 修正候选复审（2026-10-13）
-
-开始时 `main` 工作区干净，无已有用户改动；完成必读清单，规划／审查前治理 PASS。审查完整 Task Base..修正 Head，以及首轮实现后的修正差异；交接提交只修改五份文档，产品源码、测试／工具、锁与运行输入未变。**继续同一 Task 修正**，保留 ID、Base、Goal、Scope、T4 和全部原验收／测试门槛；已提交 Contract 可满足，无须交 A 修改合同。
-
-本机独立证据索引：`.git/validation-evidence/3488e6b1df48d4c142595d27694a792bb32f0aad/b-rereview-20261013-02/INDEX.md`。B 独立播放／Fingerprint／Reader／Decision 聚焦运行 61 passed、0 failed、0 skipped；使用真实 SQLite 的同元数据保存失败 harness 再次验证流保存失败、地址仅内存更新、项目保存失败，每项连续两次允许请求均拒绝并保留旧基线，false 权限不升级。原生固定源码的地址读取、源 ID／用户过滤及保存事务边界重新核对。该 harness 是原生适配控制验证，不是 Jellyfin 内部数据库故障实测。
-
-Developer 新候选的 locked restore、Release build（0 warning／0 error）、C# 全套 65 项、format、Python 30 项和隔离实机原始产物已核对；输入匹配，可复用它们的已执行门槛。B 独立默认实机复验退出 0、JSON PASS，耗时 499.198 秒：同 URL 实际内容变化与无可比哈希 Size 变化分别新增 1 次探测，mtime／重写／删除重放各 0 次；保持失败 Manifest／URL 跨重启后修复同一目标，重试新增 1 次探测并提交；既有多版本、SQLite 不可写／重启恢复及原生委托链均通过。三个临时 STRM、版本关系和一个临时媒体已清理，原夹具／媒体哈希及原生地址恢复，SQLite 不可变标志已清除，隔离实例 healthy。**首轮 R1、R3 的指定修正已满足，只有 R2 仍阻塞 Task PASS。** 这些门槛的 PASS 不能覆盖脚本／测试未实际包含的场景。
-
-### 唯一剩余 P1 阻塞：R2 — 完整矩阵及真实索引（AC-T1／AC-T7）
-
-R2 已补齐缺失／空文件、非法 SHA-1 长度／字符、Size 边界和 mtime／重写／重放，但仍未满足原要求的完整协议／双侧哈希／URL 优先覆盖。以下是必要验收证据缺口，不据此宣称产品逻辑错误：
-
-1. `ManifestReaderTests.cs` 全部版本标记仍为 `version:1`，没有未知版本（例如 `2`）及不同版本冲突（`1`／`2`）的实际输入。`ReadRejectsUnsupportedSchemesWithoutSkippingToALaterAddress` 测的是 URL scheme，不是 STRM 协议版本；重复两个 `version:1` 只能证明同值重复拒绝。补齐未知／冲突版本回归并核对安全委托、无新指纹。
-2. `ProbeDecisionServiceTests.cs:112` 的 `UrlPriorityBeatsEveryShaAndSizeCombination` 只构造双侧相同有效 SHA-1、Size 24；没有名称所称的组合。补齐 T09～T12 的实际输入，尤其在原生地址已经等于当前 Manifest、历史 URL 不同时，SHA-1 不同、双侧缺失／Size 相同或不同、仅一侧有效仍为 RequireProbe；同 URL 的双侧有效／缺失／非法组合须覆盖两侧方向和可比／不可比 Size。可用一个参数化矩阵，不按字段另拆 Task。
-3. 修正 `docs/test-matrix.md` 的错配：T09 的 `alternate_only_url_change` 和 `same_failed_url_repaired` 保持有效 SHA-1 相同，`UrlChangeRequiresProbeEvenWhenShaAndSizeMatch` 亦是相同；T10 的 `alternate_url_change_without_sha` 为旧侧有效、新侧缺失，不能充当双侧无 SHA-1 的独立回归；T11 引用的 URL 测试只有相同有效 SHA-1／Size；T12 引用的两个单元用例 URL 没有变化。已有实机单侧缺哈希换 URL 证据可归入 T12 的对应方向，保留其真实 PASS；缺失分支写 NOT RUN。未知版本不能用 URL scheme 测试冒充。索引写清具体新旧输入、预期、证据层和实际用例，不用名称或总测试数证明覆盖。
-
-完成上述修正后按原计划在新候选重跑全部 T4 门槛，交 B 复审；不新增取消机制／实机门槛，也不要求外部代理联调来补这些逻辑／文件分支。Developer 已披露第一次扩展实机运行的 stdout 被覆盖，只剩失败说明；该原始产物为缺失，不能补造或声称已保留。后续每次运行使用独立目录，保留首败与重跑。当前匹配成功运行可用于其实际覆盖场景。
-
-### 本轮 Slice Required Outcomes／Surfaces 核对
-
-| 项目 | 当前事实与剩余义务 |
-|---|---|
-| RO-1／解析与决策 | 已有主体实现及文件／实机变化回归；R2 仍阻塞完整协议／矩阵和逐项索引验收。 |
-| RO-2／SQLite | 最小 schema、原子条件提交、过期／插入竞争、损坏保护、真实重启及失败基线已有证据；本轮读故障控制回归通过。 |
-| RO-3／共用检查与原生链 | 本次成功／保存关联、同内容换 URL、同 URL 内容／Size 变化及失败目标修复有证据；入口存在，Task 仍待 R2。 |
-| RO-4／身份与协调 | 多版本真实身份已有证据；ProbeCoordinator、只共享实际运行、全局上限及配置 1／8 未实现。 |
-| RO-5／正常收尾 | 原生取消异常保护保留；已开始执行无人等待仍收尾、实际开始边界、资源释放及完成重查待协调器实施。 |
-| RO-6／核心配置与诊断 | 状态库读／写故障、损坏／不可写与重启恢复已有分层证据；Enabled／DetailedLog／并发保存反馈、操作说明仍未实现。 |
-| Required Surfaces／最终证据 | 原生链、SQLite、源身份与共用源检查入口存在；协调／配置 surfaces 与完整矩阵、单独 Slice Final 未完成。 |
-
-Slice 2 保持 ACTIVE，不创建 Task 2.2，不提交 Closure Packet，不代替 A 作最终审查。下一连贯单元仍待 Task 2.1 PASS 后重新核对。经验候选沿用首轮“合同逐项映射到实际输入与原始产物”，本轮不另写开发流水账。
-
-### 首轮审查历史（以下范围与结论不代表本轮候选）
-
-```text
-Reviewed: 7e0240cd1cada74f142b7b0afd612943ca991a91..b99bc00b08fd3a8cad32076a220c5219fcc78ab7
-Documentation Handoff: 443acc5133d1444df3e9c9dd4f2c782c157a9ba7
-Decision: FIX REQUIRED
-Slice Required Outcomes all satisfied: NO
-Next: DEVELOPER CORRECTS TASK 2.1 AND RESUBMITS FOR B REVIEW
-```
-
-### B 独立审查（2026-10-13）
-
-开始时 `main` 工作区干净，无已有用户改动；治理检查 PASS。审查上述完整范围，并核对后继交接提交只修改四份文档、执行输入未变。已提交 Slice 的义务可在当前 Task 内满足，**继续同一 Task 修正**；ID、Base、Goal、Scope、T4、验收与原测试计划保持有效，无须改变 Contract。以下阻塞是当前必要验收的证据缺口，不宣称已发现相应产品行为错误。
-
-本机独立证据：`.git/validation-evidence/b99bc00b08fd3a8cad32076a220c5219fcc78ab7/b-review-20261013-01/INDEX.md`。B 独立运行播放／Fingerprint 聚焦测试，28 passed、0 failed、0 skipped；另用真实 SQLite 的审查 harness 复现相同主流元数据下流保存失败、地址仅在内存更新、项目保存失败，连续两次允许请求均拒绝并保留旧基线，false 请求保持权限。审查 harness 首次运行误用假对象累计权限标志而失败，修正观测方式后通过；原失败保留，不作为产品故障。固定原生源码的 URL 选取、源 ID／用户过滤及保存事务边界亦已核对。
-
-Developer 的 locked restore、Release build（0 warning／0 error）、C# 全套 51 项、format、Python 全套 30 项及隔离实机原始日志已阅读，输入摘要匹配；它们覆盖已有场景，不能替代下列未执行门槛。B 独立实机复验退出 0、JSON PASS，耗时 495.108 秒，复现同内容换 URL、失败后重启、真实多版本及 SQLite 不可写／恢复；三个临时 STRM 与版本关系已移除、库条目不存在，原夹具及原生地址已恢复，数据库不可变标志已清除，隔离实例 healthy。其脚本 PASS 只表示脚本已包含场景通过，缺失场景仍为 NOT RUN。
-
-### 当前 Task 的 P1 阻塞与修正要求
-
-1. **R1 — 补齐默认实机入口的变化／文件与恢复场景（AC-T1／AC-T3／AC-T4）。** `scripts/run_isolated_plugin_integration.py:1341` 起只读取字节相同的两份媒体，后续验证 URL 变化；默认入口及最终 JSON 没有同 URL 实际替换本地媒体并改变有效 SHA-1、同 URL 无可比 SHA-1 且有效 Size 改变的成功探测场景，也没有仅 mtime／相同重写／删除重放的零探测场景。补齐原计划要求的场景，分别对账实际调用、新结果／已保存主流、返回及保存地址与 SQLite 前后值，恢复全部夹具。当前失败重启后恢复在 `scripts/run_isolated_plugin_integration.py:1530` 起改用第三个 URL；还须保持未接受的失败 Manifest／URL，修复该本地目标后证明同一失败版本重试成功并提交。现有换 URL 恢复证据保留。
-2. **R2 — 补齐完整解析／决策回归及逐项索引（AC-T1／AC-T7）。** 现有 10 项 Reader 和 9 项 Decision 测试未形成合同要求的完整覆盖。例如未知／冲突协议、缺失／空文件、非法 SHA-1 长度／字符，以及双侧 SHA-1 有效／缺失／非法组合、URL 已同步但历史 URL 改变时的哈希／Size 分支尚缺直接回归；mtime／重写／重放也无文件回归。以实际输入／预期行为补齐覆盖，给出 T01～T16、T26／T27、X03／X05 到测试／实机场景的索引，明确各证据层与缺失项。可用参数化用例，不要求每个字段或矩阵行另造 Task；不能用总测试数或整表 NOT RUN 代替对账。
-3. **R3 — 补齐状态库读故障和损坏保护回归（AC-T6）。** 现有 SQLite 测试验证正常重开、条件提交、插入竞争、事务写失败及未知／未版本化 schema；播放测试没有 repository.Get 异常控制场景，实机验证是提交写失败／不可写。补充读取故障时停止优化、后续原生委托、false 权限不升级、无新指纹及恢复重新检查的控制回归；使用真实损坏 SQLite 输入验证明确拒绝、保留原文件，不自动删库／重建。已有未知 schema 和不可写实机证据可保留，不新增内部 Jellyfin 数据库故障实机门槛。
-
-修正形成新实现提交并更新完成报告。源码、测试或工具输入改变后，在新候选重跑原计划全部 T4 门槛，保留首次失败与重跑；B 再独立复现指定关键行为。当前未满足的 AC 不勾选，不新建 Task 2.2。
-
-### Slice Required Outcomes／Surfaces 核对
-
-| 项目 | 当前事实与剩余义务 |
-|---|---|
-| RO-1／解析与决策 surface | 主要实现及首次信任／复用存在；R1／R2 阻塞完整矩阵验收。 |
-| RO-2／SQLite surface | 最小 schema、条件事务、哈希身份与重启已有匹配证据；R3 阻塞读故障／损坏保护验收。 |
-| RO-3／共用检查与原生 surface | 真实源检查入口、成功／保存保护、URL 变化、多版本与失败重启已实现；R1 阻塞同 URL 变化及保持失败目标的恢复验收。 |
-| RO-4／身份与协调 surface | 多版本源身份已有单元及实机证据；ProbeCoordinator、只共享实际运行、统一上限和配置 1／8 尚未实现。 |
-| RO-5／正常收尾 surface | 既有原生取消异常保护保留；已开始工作无人等待仍收尾、开始边界和资源释放待协调器实施。 |
-| RO-6／配置与诊断 surface | 库写失败／不可写停止优化及重启恢复已有证据；读故障／损坏保护待 R3，Enabled／DetailedLog／并发保存反馈及用户操作方法尚未完成。 |
-| 固定实机／最终证据 surface | 已有场景有独立复验；缺失场景待补，完整 Slice Final 尚未运行。 |
-
-**Slice 2 仍为 ACTIVE；不提交 Closure Packet，不宣布 Slice 关闭。** 通过本 Task 后再核对全部 RO／Surfaces，决定下一完整实施单元。可复用经验候选供 A 收尾：实机入口的 PASS 只覆盖实际断言过的场景 → 审查时将合同逐项映射到测试和原始产物，特别核对同 URL／换 URL 与恢复前提 → 适用于扩展旧集成脚本。
+B 独立审查后只返回 PASS 或 FIX REQUIRED；通过后重新核对全部 RO／Required Surfaces，选择 NEXT TASK 或 SLICE READY FOR A REVIEW，不在 Task 内关闭 Slice。
