@@ -1,6 +1,6 @@
 # 核心配置与故障恢复操作说明
 
-本页记录 Task 2.2 候选的核心配置操作。B 对首轮候选 `d651950950d6d3ad2be4322ddf8f0afb658c7755` 和修正候选 `dd5f6b80b9bd0bf63e16f2d1923995514ebebf4a` 均判 FIX REQUIRED；最新 Developer 修正候选 `b3764f43713bbc22bdc00cab122340e241110484`（开始竞态原子化、排队准入重读当前源、准入异常幂等清理）已交 B 审查，尚未 PASS。详见 [B Review Result](../TASK.md#b-review-result)。配置通过 Jellyfin 现有插件配置通道读写，不需要未来 HTML 配置页；批量任务 UI、完整配置页和发布安装仍延期。
+本页记录 Task 2.2 候选的核心配置操作。B 对首轮候选 `d651950950d6d3ad2be4322ddf8f0afb658c7755` 和修正候选 `dd5f6b80b9bd0bf63e16f2d1923995514ebebf4a` 均判 FIX REQUIRED；最新 Developer 修正候选 `b3764f43713bbc22bdc00cab122340e241110484`（开始竞态原子化、排队准入重读当前源、准入异常幂等清理）也经 B 判 FIX REQUIRED；配置写入保护／启动脱敏及对应回归保持通过，剩余 R2 是行动前重判和首次信任当前性缺口。详见 [B Review Result](../TASK.md#b-review-result)。配置通过 Jellyfin 现有插件配置通道读写，不需要未来 HTML 配置页；批量任务 UI、完整配置页和发布安装仍延期。
 
 ## 配置字段
 

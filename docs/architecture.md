@@ -6,7 +6,7 @@ V4.2 是当前开发基准，V3.0 原文与合同留在 Git 历史。Slice 1 原
 
 Slice 2 为 ACTIVE，Base 固定为 `924816a84c74f5d79c107478f2d40e621cb8be8d`，Implementation Head 为 `198f4ff2accd5bc9fcd87518a9684b9d068de103`。Task 2.1 已经 B 独立复审 PASS：完成只读解析／完整逻辑矩阵、实际项目／媒体源映射、SQLite 最小指纹、共用源检查／可靠提交及失败重启恢复。
 
-Task 2.2 修正候选 `dd5f6b80b9bd0bf63e16f2d1923995514ebebf4a` 已交 B 审查。B 对首轮候选 `d651950950d6d3ad2be4322ddf8f0afb658c7755` 判 **FIX REQUIRED**：原生匹配探测尚未开始就登记共享；排队取得许可后仍用旧 Manifest／基线且不重读启停；配置中途写入失败破坏旧文件；非法配置诊断输出私有路径；并缺原计划的边界上限、零等待者、不同调用者及配置／外部刷新对照证据。修正候选把开始信号接到经核验的匹配 `GetMediaInfo` 调用、为等待过的 owner 增加 Manifest／基线／启停准入重查（当前源重读仍有缺口）、将配置持久化改为临时文件完整写入后原子替换、启动非法配置诊断脱敏，并增加上限 1／8、无人等待完成、池饱和原生独立及配置下一请求／重启生效的控制／实机对照；B 独立复审仍判 FIX REQUIRED：开始竞态产生第二 owner，排队准入沿用旧有主流的源，准入委托异常泄漏许可／准备登记；不同用户与运行上限证据仍缺。最新 Developer 修正候选 `b3764f43713bbc22bdc00cab122340e241110484` 把登记转换收进同一短时锁并使开始拒绝中止冗余原生调用，准入始终重读当前原生源并在每个提前退出前 `Abandon`，`Finish` 幂等单次释放；已交 B 审查。完整结果见 [B Review Result](../TASK.md#b-review-result)；SLICE 合同与已接受 Implementation Head 保持不变。完整配置页、原生批量与发布仍延期。
+Task 2.2 修正候选 `dd5f6b80b9bd0bf63e16f2d1923995514ebebf4a` 已交 B 审查。B 对首轮候选 `d651950950d6d3ad2be4322ddf8f0afb658c7755` 判 **FIX REQUIRED**：原生匹配探测尚未开始就登记共享；排队取得许可后仍用旧 Manifest／基线且不重读启停；配置中途写入失败破坏旧文件；非法配置诊断输出私有路径；并缺原计划的边界上限、零等待者、不同调用者及配置／外部刷新对照证据。修正候选把开始信号接到经核验的匹配 `GetMediaInfo` 调用、为等待过的 owner 增加 Manifest／基线／启停准入重查（当前源重读仍有缺口）、将配置持久化改为临时文件完整写入后原子替换、启动非法配置诊断脱敏，并增加上限 1／8、无人等待完成、池饱和原生独立及配置下一请求／重启生效的控制／实机对照；B 独立复审仍判 FIX REQUIRED：开始竞态产生第二 owner，排队准入沿用旧有主流的源，准入委托异常泄漏许可／准备登记；不同用户与运行上限证据仍缺。最新 Developer 修正候选 `b3764f43713bbc22bdc00cab122340e241110484` 把登记转换收进同一短时锁并使开始拒绝中止冗余原生调用，准入始终重读当前原生源并在每个提前退出前 `Abandon`，`Finish` 幂等单次释放；B 最新独立复审仍 FIX REQUIRED：立即获许可的 owner 继续沿用旧决定，同源已完成版本仍重复探测；准入无探测取源后可提交已变化文件的旧首次信任指纹。完整结果见 [B Review Result](../TASK.md#b-review-result)；SLICE 合同与已接受 Implementation Head 保持不变。完整配置页、原生批量与发布仍延期。
 
 已接受的 Task 2.1 按原生所属项目及 `MediaSourceInfo.Id` 关联各版本 STRM 和五字段 SQLite 主键；事务核对 expectedPrevious，过期执行／插入竞争不覆盖已接受基线。保存代理关联本次结果及原生事务成功；首次信任、复用、探测成功与未完成分别记录。SQLite 读／写故障停止优化并尽可能原生委托，损坏／未知 schema 不自动删库重建；修复后重启再次检查。隔离实机验证成功及失败变化跨重启、多版本选源、同内容换 URL、同 URL 内容／Size 变化、mtime／重放和不可写恢复。SQLite 托管与原生运行依赖已部署加载。
 
@@ -17,14 +17,14 @@ Task 2.1 分层输入／原始日志、独立保存失败对照与实机证据�
 - 首轮候选新增进程内 ProbeCoordinator、共享等待后按本调用者重读源、启动并发值的惰性许可池和四项核心配置。B 指出其 `TryMarkStarted` 位于原生 `GetPlaybackMediaSources` 之前，登记的是刷新准备而非匹配探测已开始；等待许可返回 owner 后没有版本／基线／启停准入重查；原生 XML 写入截断旧文件的保护不足；非法配置日志包含私有路径。
 - 修正候选把开始信号接到经核验的匹配 `IMediaEncoder.GetMediaInfo` 调用（准备态与运行态分离），对真正等待过的 owner 重读当前 Manifest／指纹／启停，但有主流的旧源仍未重读，配置改为临时文件完整写入后 `File.Move` 原子替换，启动非法配置诊断去除私有路径，并增加上限 1／8、无人等待完成、池饱和原生独立、配置下一请求／重启生效的控制及实机对照。
 - Developer 索引 `.git/validation-evidence/dd5f6b80b9bd0bf63e16f2d1923995514ebebf4a/developer-fix-t4-20261014-05/INDEX.md`（C# 102/102、聚焦 71/71、Python 30/30、默认实机 PASS）；被拒候选原始证据与 B 独立控制失败观测保留在 `.git/validation-evidence/d651950950d6d3ad2be4322ddf8f0afb658c7755/`。B 独立聚焦 71/71 PASS，补充控制四个合同失败观测；本机索引 `.git/validation-evidence/dd5f6b80b9bd0bf63e16f2d1923995514ebebf4a/b-rereview-20261014-06/INDEX.md`。B 默认实机 NOT RUN（已有确定 P1），继续同 Task 修正。
-- 最新 Developer 修正候选 `b3764f43713bbc22bdc00cab122340e241110484`（Task 2.2，READY FOR B REVIEW）：登记转换原子化、开始拒绝中止冗余调用、准入重读当前源并清理未开始 owner。证据 `.git/validation-evidence/b3764f43713bbc22bdc00cab122340e241110484/developer-fix2-t4-20261014-100054/INDEX.md`：C# 110/110、聚焦 79/79、Python 30/30、默认实机 JSON PASS（含重启前保存并发 1 仍为 2）；独立控制 harness 复现 B 四个失败观测全部转 PASS。B 尚未审查。
+- 最新 Developer 修正候选 `b3764f43713bbc22bdc00cab122340e241110484`（Task 2.2，FIX REQUIRED）：登记转换原子化、开始拒绝中止冗余调用、准入重读当前源并清理未开始 owner。证据 `.git/validation-evidence/b3764f43713bbc22bdc00cab122340e241110484/developer-fix2-t4-20261014-100054/INDEX.md`：C# 110/110、聚焦 79/79、Python 30/30、默认实机 JSON PASS（含重启前保存并发 1 仍为 2）；独立控制 harness 复现 B 四个失败观测全部转 PASS。B 最新聚焦 79/79 PASS；独立控制四个旧失败转 PASS，另两个 R2 观测 FAIL（立即获许可后重复已完成版本／准入过期首次信任）。索引 `.git/validation-evidence/b3764f43713bbc22bdc00cab122340e241110484/b-rereview-20261014-07/INDEX.md`；B 默认实机 NOT RUN（先拒绝确定 P1），继续同一 Task 修正。
 
 ### Slice 1 关闭时的 Task 1.1 原型边界
 
 - `ServiceRegistrator` 在 Jellyfin 核心服务注册后包装唯一的 `IMediaSourceManager`、`IMediaEncoder`、`IMediaStreamRepository` 与 `IItemPersistenceService` 实例；未匹配方法委托给对应原生实现。单元测试核对核心注册和生命周期，隔离实例验证实际插件启动、禁用、恢复与加载。
 - `StrmManifestReader` 有界只读解析版本化 STRM；`ProbeDecisionService` 实现该原型所需的 URL／SHA-1／Size 决策。`StrmPlaybackOptimizer` 只接管允许探测的受支持 `.strm`；其他请求保留 Jellyfin 原始权限并委托原生路径。
 - `ProbeExecutionContext` 记录本次请求 URL 的编码器主流身份；保存代理只在原生 `SaveMediaStreams`／`SaveItems` 成功返回后记录对应主流和地址。接入层再核对 Jellyfin 返回源、已保存主流、最新地址及未变化的 STRM，满足条件后才提交进程内指纹。单元测试覆盖旧流仍在和原生保存抛错；隔离实例观察到真实成功保存与返回流相符。隔离实例没有对 Jellyfin 内部数据库注入保存故障，B 已核对固定源码事务边界、独立保存失败 harness 与实际成功保存／重启证据；该结果不宣称实机数据库故障注入。
-- Slice 1 关闭时的原型使用进程内条件提交；重启后需要首次信任接管。Task 2.1 候选新增 SQLite 持久化和真实源身份。当前代码仍未实现同源并发协调、批量任务、完整配置 UI、全产品矩阵或跨 Jellyfin 版本承诺。
+- Slice 1 关闭时的原型使用进程内条件提交；重启后需要首次信任接管。Task 2.1 候选新增 SQLite 持久化和真实源身份。该 Slice 1 关闭原型未实现同源并发协调、批量任务、完整配置 UI、全产品矩阵或跨 Jellyfin 版本承诺。
 - 隔离实测覆盖普通文件、旧 STRM、Live TV、禁用插件、false 权限的实际流请求、手动 FullRefresh 和探测期间 STRM 变化。固定版本的 PlaybackInfo 固定传 `allowMediaProbe=true`；可取消的媒体流入口传 `false`，故 false 实测通过真实流 API，不能宣称为 PlaybackInfo 的 false 参数测试。提交后地址变化连续三次观察到匹配探测、`GetMediaInfo` 调用和本地媒体 GET；手动 FullRefresh 更新条目 ETag，但未运行这些探测，后续地址变化仍触发探测。精确证据和性能限制见 [兼容性记录](compatibility.md)。
 
 ### 播放与任务执行上下文

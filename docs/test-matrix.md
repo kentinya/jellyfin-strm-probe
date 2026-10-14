@@ -85,7 +85,7 @@ A 实质范围调整保留矩阵 ID 与历史结果，但移除当前 Slice 1 �
 
 Task 2.1 完整报告／B PASS 在 `13cb8bdac319fcf0b3e7500661bae1c7455077b0:TASK.md`，通过 Git 读取；根 TASK.md 现为 Task 2.2 的修正候选报告／当前 B FIX REQUIRED 与历史审查，候选报告不能替代旧 Task 记录或产品验收证据。
 
-Slice 2 现已 ACTIVE，Implementation Head 仍指向 Task 2.1 修正候选 `198f4ff2accd5bc9fcd87518a9684b9d068de103`；Task 2.2 首轮候选 `d651950950d6d3ad2be4322ddf8f0afb658c7755` 经 B 判 FIX REQUIRED，修正候选 `dd5f6b80b9bd0bf63e16f2d1923995514ebebf4a` 已交回 B 审查，Implementation Head 不提前移动。尚无完整产品矩阵验收；表中各行 NOT RUN 保持原事实。Task 2.1 与 2.2 的部分单元及隔离 Jellyfin 证据见下方说明和 [已接受 Task 记录](progress.md#当前开发指针)，不把部分场景升级为整行 PASS。T24 的批量部分、B07 的批量停止收尾、完整配置页、原生任务及大规模部分继续留在后续 Slice 范围；T20／T25／B01／B02 的共享／并发核心部分已由 Task 2.2 候选提供分层证据，B 已核验首轮部分原始成功记录，修正候选的独立复审仍发现当前源／开始竞态／清理边界失败，详见下方最新结论。
+Slice 2 现已 ACTIVE，Implementation Head 仍指向 Task 2.1 修正候选 `198f4ff2accd5bc9fcd87518a9684b9d068de103`；Task 2.2 首轮候选 `d651950950d6d3ad2be4322ddf8f0afb658c7755` 经 B 判 FIX REQUIRED，修正候选 `dd5f6b80b9bd0bf63e16f2d1923995514ebebf4a` 已交回 B 审查，Implementation Head 不提前移动。尚无完整产品矩阵验收；表中各行 NOT RUN 保持原事实。Task 2.1 与 2.2 的部分单元及隔离 Jellyfin 证据见下方说明和 [已接受 Task 记录](progress.md#当前开发指针)，不把部分场景升级为整行 PASS。T24 的批量部分、B07 的批量停止收尾、完整配置页、原生任务及大规模部分继续留在后续 Slice 范围；T20／T25／B01／B02 的共享／并发核心部分已由 Task 2.2 候选提供分层证据，B 已核验首轮部分原始成功记录，最新修正候选的独立复审仍发现行动前重判／首次信任当前性失败，详见下方最新结论。
 
 ### Task 2.2 修正候选 B 复审
 
@@ -93,9 +93,11 @@ Slice 2 现已 ACTIVE，Implementation Head 仍指向 Task 2.1 修正候选 `198
 
 下方 Developer PASS 只保留具体已执行用例的结果，不代表上述边界完整满足；Required Surfaces 的当前接受结论以 [最新 B 决定](../TASK.md#b-review-result) 为准。禁止用旧源已提前更新的队列夹具、顺序 start race 或两个 null user 推定缺失行为 PASS。
 
-### Task 2.2 最新修正候选（待 B 审查）
+### Task 2.2 最新修正候选 B 复审
 
-最新候选 `b3764f43713bbc22bdc00cab122340e241110484` 在同一 Task 内修正 B 复审的 R1／R2／R5／R6，尚未经 B 独立审查，不是 PASS：登记转换收进同一短时锁（消除第二 owner 竞态），开始拒绝抛 `ProbeStartRejectedException` 中止冗余原生调用，排队准入始终重读当前原生源并在每个提前退出前 `Abandon`，`Finish` 幂等单次释放；新增不同 `User` 同源响应、上限 1 以实际开始、`SharedJoinBarrier` 取代延时等确定性用例，实机脚本补保存并发后重启前仍为旧池上限的观测。本机证据 `.git/validation-evidence/b3764f43713bbc22bdc00cab122340e241110484/developer-fix2-t4-20261014-100054/INDEX.md`：C# 110/110、聚焦 79/79、Python 30/30、默认实机 JSON PASS；独立控制 harness 复现 B 四个失败观测全部转 PASS。T20／X08 开始竞态与排队重读、X08／X09 准入清理、B01 运行上限在候选层为 PASS，但完整行与 Required Surfaces 仍待 B 复核；此前 B 对 `dd5f6b80...` 的失败结论保留在下方历史。
+候选 `b3764f43713bbc22bdc00cab122340e241110484` 经 B 判 **FIX REQUIRED**，当前仅 R2 剩余 P1。独立索引 `.git/validation-evidence/b3764f43713bbc22bdc00cab122340e241110484/b-rereview-20261014-07/INDEX.md`：指定聚焦 79/79 PASS；原 R1 开始竞态、原 R2 排队已接受版本／主流消失、R6 准入委托异常四个控制观测转 PASS。新增真实同源交错观测 T20／X08：第一准备 owner 在第二立即取许可后真正开始、保存／提交并完成，第二沿用旧决策，总匹配探测 **2（预期 1），FAIL**。新增 T02／X04／X08 对照：准入无探测取源期间 STRM A→B，仍首次信任提交 A，**FAIL**。这些是临时 STRM／假原生及保存代理的产品控制验证，不是真实 ffprobe 竞态注入。当前性保护与行动前重判未完整实现，不升级共用检查／指纹／结束重查表面为 PASS。
+
+Developer 原始索引 `.git/validation-evidence/b3764f43713bbc22bdc00cab122340e241110484/developer-fix2-t4-20261014-100054/INDEX.md` 已核验：C# 110/110、聚焦 79/79、Python 30/30、默认实机 JSON PASS（含保存 1 后重启前仍按 2、重启后按 1）。两个不同 User 的差异响应、上限 1／2／8、确定性加入／退出及幂等结算聚焦通过；这些具体成功与新增 R2 失败分别保留。B 默认实机 **NOT RUN**（已有确定 P1），Slice Final **NOT RUN**；完整矩阵行、批量／配置 UI／外部代理／发布延期维持原事实。最新决定见 [B Review Result](../TASK.md#b-review-result)。以下旧候选表中的 PASS 仅指其具体 Developer 运行，不代表当前完整 Task 或表面验收。
 
 ### Task 2.2 审查与修正（R1～R5）
 
