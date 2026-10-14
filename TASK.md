@@ -5,7 +5,7 @@
 ```text
 Task ID: 3.1
 Parent Slice: 3
-Status: FIX REQUIRED
+Status: READY FOR B REVIEW
 Task Base: b86d9c17d7f915108072f54ee098f0f5543fe093
 Contract Checkpoint: 2b515f35db7fc8e85d8ac1a8085dd9b8ccc62ef3
 Superseded Plan Snapshot: eb4e272743f4c7e184d45fa48b660b2fef24c685
@@ -172,6 +172,18 @@ git diff --check
 - Head SHA：`c5192ba1e2bf1e23929b33919597d7dca34a1f50`。
 
 若实施产生新的可复用方法，提供少量经验候选供 A 收尾合并；本次规划不向经验文档写历史或虚构验收结论。
+
+## Developer Fix Completion Report（FIX REQUIRED 修正后）
+
+- Fix Base：`c5192ba1e2bf1e23929b33919597d7dca34a1f50`（上一轮 Developer Head）；同一 Task 3.1 修正，Task Base、Goal、Scope、High／T4、验收与必要测试均不变。
+- Changed Files：修改 `Services/ProbeCoordinator.cs`（把 owner 的本次条件提交结果随共享结算传播）、`Services/StrmPlaybackOptimizer.cs`（已加入运行中探测的停止收尾、共享可靠成功关联、执行准入范围重核）、`Services/BatchCheckRunner.cs`（拒绝额外／重复返回对象、已故障状态库报告不可用、候选获取未完成不发布总数、单调进度、重复／实际调用／耗时计数）、`Services/BatchLibraryScope.cs`（`IBatchScopeVerifier` 与 `ILibraryIdProvider`）、`PluginConfiguration.cs`／`Plugin.cs`／`ServiceRegistrator.cs`（保存时校验所选库真实存在）、`Tasks/StrmProbeScheduledTask.cs`（汇总扩展）、`tests/.../BatchCheckTests.cs`、`tests/.../ConfigurationTests.cs`、`scripts/run_isolated_batch_integration.py`、`tests/test_isolated_batch_integration.py`。未提交 `TASK.md` 本身。
+- Fixed：BR-1 已加入 running 的共享探测在批量停止后仍以 `CancellationToken.None` 等待本次执行、保存、验证与条件提交完成，停止只结束对仍在准备 owner 的等待；BR-2 `ProbeCoordinator` 传播本次条件提交结果，等待者仅当共享 owner 本次已提交且当前版本一致时计可靠成功；BR-3 批次只接受请求 ID，额外／重复对象被拒，执行入口与取得许可后的准入均重核当前库关系，越界对象计 missing；BR-4 已 latch 的与运行中触发的状态库故障都置 `StoreUnavailable` 并计检查阶段未完成，任务抛故障而非静默 Completed；BR-5 候选获取被停止／禁用打断时不发布完整候选总数，进度在并发消费者下单调，新增重复 ID、实际匹配探测调用次数与获取／批次读取耗时；BR-6 保存时通过 `ILibraryIdProvider` 校验显式选择只引用真实存在的库；BR-7 新批量脚本加入真实墙钟定时、scope／failure 场景、两方向共享、收尾期再次运行控制与配置／触发器恢复校验，十万候选测试物化真实对象并断言消费者上限；BR-8 新候选重新生成原始证据。
+- Tests and Results：证据索引 `.git/validation-evidence/753f7952bd9eac2857f9dc1b98c0ad92a8a33021/developer-fix-t4-20261014-162650/INDEX.md`。锁定 restore PASS；Release build 0 警告 0 错误；C# 全套 145/145（含 32 项 `TestCategory=Batch`）；format PASS；Python 39/39；治理 PASS；`git diff --check` PASS。B 六项 ReviewerControl 对修正源码独立复现 6/6 PASS。真实隔离：默认播放脚本 PASS；批量 `all`（发现／无默认触发／手动／真实墙钟定时实际触发／触发器重启持久化／新 STRM 首次信任／换 URL 提交并保留 SHA-1／重复零探测／重启后地址）PASS；`--scenario stop` 真实 `cancelled`、收尾期再次手动不启动新探测、已开始提交、下一轮可运行 PASS；`--scenario sharing` 批量先开始与播放先开始两方向各只一次真实慢探测 PASS；`--scenario scope` 两库范围、失效库保存拒绝（400）、禁用不新增探测 PASS；`--scenario failure` 状态库不可用任务 `failed`、无新探测、修复重启后 `completed` PASS。全部夹具、配置、触发器与地址已恢复并校验。
+- Remaining In-Slice Work：完整 HTML 配置页／浏览器交互旅程（后续连贯单元）；十万真实库压力与完整扫描压力留 Slice 4。真实墙钟定时已观察。
+- Risks / Deviations：Jellyfin 内部数据库保存故障实机注入仍 NOT RUN（沿用既有边界）；十万候选为确定性模拟，不代表真实大库性能。无产品 PASS 声明。
+- Head SHA：`753f7952bd9eac2857f9dc1b98c0ad92a8a33021`。
+
+经验候选（供 A 收尾合并，不写入经验文档）：共享等待返回不等于本次可靠成功，必须由执行 owner 在结算时把本次条件提交结果与稳定版本一起传播给等待者；旧指纹行存在不能证明新版本已提交。
 
 ## B Review Result
 
