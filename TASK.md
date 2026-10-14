@@ -5,7 +5,7 @@
 ```text
 Task ID: 2.2
 Parent Slice: 2
-Status: FIX REQUIRED
+Status: READY FOR B REVIEW
 Task Base: 13cb8bdac319fcf0b3e7500661bae1c7455077b0
 Contract Checkpoint: 7e0240cd1cada74f142b7b0afd612943ca991a91
 Slice Base: 924816a84c74f5d79c107478f2d40e621cb8be8d
@@ -13,6 +13,16 @@ Difficulty: High
 Test Level: T4
 Planner / Reviewer: B
 ```
+
+## Developer Correction Report (R2, current candidate)
+
+- Changed Files：`src/Jellyfin.Plugin.StrmProbeOptimizer/Services/StrmPlaybackOptimizer.cs`、`tests/Jellyfin.Plugin.StrmProbeOptimizer.Tests/PlaybackOptimizerTests.cs`。未改配置字段、依赖锁、`ServiceRegistrator`、`ProbeCoordinator`、解析／决策、SQLite schema 或 `Plugin.UpdateConfiguration`。
+- R2 行动前统一重判：删除只在 `reservation.Waited` 时执行的 `AdmitQueuedOwnerAsync`，改为**每个** owner 在取得许可后都进入单一 `AdmitOwnerAsync` 行动循环。循环先按本调用者 user／source Id／路径替换读取当前原生源，再在 await 之后重新核对启停／库故障、`TryGetRunning`、当前 Manifest／可信基线，再 `Decide`。立即取得许可不再以入口快照行动：同源执行若在许可与登记之间完成，第二 owner 重读已接受版本并复用，不再重复探测。首次信任在提交前用 `ManifestIsStillCurrent` 保护；`expectedPrevious: null` 提交失败则回到循环重判当前基线。
+- R2 开始竞态失败回退：`ExecuteProbeAsync` 抛出 `ProbeStartRejectedException` 时放弃该 owner 并回到当前版本重判／原生委托，而不是继续第二次原生调用。
+- Tests and Results：候选 `59fd3f7e4b6623449a691574fb69b817db72c2ae`，本机证据 `.git/validation-evidence/59fd3f7e4b6623449a691574fb69b817db72c2ae/developer-fix3-t4-20261014-1100/INDEX.md`。locked restore、Release build（0 警告 0 错误）、全套 C# 112/112、format verify、Python 30/30、governance、`git diff --check` 全部 exit 0；聚焦筛选 81/81；默认实机脚本 JSON `status=PASS`。B 独立控制 harness 重跑 6/6 PASS，其中上一轮两个失败观测转为 PASS：立即取得许可后第一个执行先完成（`probes=1`、`ActivePermits=0`）、准入异步取源期间 STRM A→B（`InvalidOperationException`、`acceptedStaleManifest=false`、基线保留）。实机 JSON 仍有同源一次开始／一次提交、默认 2／重启前保存 1 仍重叠 2／重启后串行、池饱和原生 FullRefresh 独立、配置默认／保存／拒绝／下一请求／重启、Task 2.1 全部场景与清理恢复。
+- Decisions：所有 owner 统一走行动前重判；当前原生源先读，再读 Manifest／基线／启停；首次信任是唯一无探测初建但必须描述当前版本；开始竞态失败者放弃并重判。
+- Risks / Deviations：控制证据使用测试原生代理与临时 STRM，不是真实 ffprobe 竞态注入；非整数／错误类型配置仍由 Jellyfin 反序列化层拒绝（HTTP 500），插件级越界值为 400。
+- Head SHA：`59fd3f7e4b6623449a691574fb69b817db72c2ae`。
 
 ## Goal
 
