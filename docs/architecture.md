@@ -4,7 +4,7 @@
 
 V4.2 是当前开发基准，V3.0 原文与合同留在 Git 历史。Slice 1 原型已经 A 最终审查 PASS / CLOSED；[关闭证据](progress.md#slice-1-closed) 保留原始边界。固定 Jellyfin `12.2.0`／源码 `ca0f16eb7c195f720a1493ed469a27c4657db0c6`、Controller／Model `12.2.0`、`net10.0`／SDK `10.0.401`；单版本事实不构成跨版本兼容承诺。
 
-Slice 2 已由 A 审查完整 Base..Implementation Head 并裁定 PASS / CLOSED；接受实现 `59fd3f7e4b6623449a691574fb69b817db72c2ae`，Slice Base 固定为 `924816a84c74f5d79c107478f2d40e621cb8be8d`。Task 2.1／2.2 均 B PASS，单独 Slice Final 经 A 核验输入和原始产物后接受；当前无活动 Task。完整合同、Closure Packet 和 [A Final Review](../SLICE.md#a-final-review) 保留必要结果及证据边界。
+Slice 2 已由 A 审查完整 Base..Implementation Head 并裁定 PASS / CLOSED；接受实现 `59fd3f7e4b6623449a691574fb69b817db72c2ae`，Slice Base 固定为 `924816a84c74f5d79c107478f2d40e621cb8be8d`。Task 2.1／2.2 均 B PASS，单独 Slice Final 经 A 核验输入和原始产物后接受；当前无活动 Task。完整合同、Closure Packet 和 [A Final Review](progress.md#slice-2-closed) 保留必要结果及证据边界。
 
 - 只读版本 1 解析及完整决策矩阵、原生所属项目／MediaSourceInfo.Id 的稳定多版本身份、五字段 SQLite 和 expectedPrevious 原子条件提交已接受。失败、原生自身取消异常、文件变化及过期结果保护可信基线；SQLite 异常停止优化，保留原权限与旧库，修复后重启重新检查。
 - 共用 `CheckSourceAsync` 使用已有原生探测／事务保存关联；每个取得许可的 owner 先读本调用者当前源，再核对 Manifest／指纹／启停后行动，立即获许可也重判。首次信任核对当前 Manifest 与原生地址，不称为本次探测成功。
@@ -12,7 +12,7 @@ Slice 2 已由 A 审查完整 Base..Implementation Head 并裁定 PASS / CLOSED�
 - 全局池惰性创建并消费启动时捕获的并发值，默认 2、合法 1～8；保存并发只在下次启动生效。Enabled／PlaybackAutoCheck／DetailedLog 保存成功后下一请求生效；关闭播放检查仅影响播放入口。配置先完整写入临时文件再原子替换，失败保留旧有效文件与内存，必要错误诊断脱敏。
 - B 独立聚焦 81/81、六项边界控制、默认实机及未安装插件／PlaybackAutoCheck 下一请求补充对照通过。实机核对同源一次开始／提交、默认 2／重启前保存 1 仍为 2／重启后为 1、池饱和时独立 FullRefresh、多版本及 SQLite／原生地址主流重启恢复。证据索引 `.git/validation-evidence/59fd3f7e4b6623449a691574fb69b817db72c2ae/b-rereview-20261014-08/INDEX.md`，完整 Task 2.2 计划／报告／B PASS 在 `76cd9e997548c4ffef04a8dd8f9b0d4ef4376347:TASK.md`；Task 2.1 在 `13cb8bdac319fcf0b3e7500661bae1c7455077b0:TASK.md`。历史失败保留在 Git 和原始证据，不堆叠在 CURRENT。
 
-单独 Slice Final 112 项 C#、30 项 Python 及全部构建／质量／默认隔离实机／补充对照通过；A 核验 40 个可执行输入、27 个产物和八个规范章节，另独立重跑 C# 112/112。真实 Final 明确复用，未声称 A 再次实机运行。本机索引位于 `.git/validation-evidence/59fd3f7e4b6623449a691574fb69b817db72c2ae/` 下的 `slice-final-20261014-09/INDEX.md` 与 `a-final-review-20261014/INDEX.md`，完整结果见 [Closure Packet](../SLICE.md#closure-packet)。
+单独 Slice Final 112 项 C#、30 项 Python 及全部构建／质量／默认隔离实机／补充对照通过；A 核验 40 个可执行输入、27 个产物和八个规范章节，另独立重跑 C# 112/112。真实 Final 明确复用，未声称 A 再次实机运行。本机索引位于 `.git/validation-evidence/59fd3f7e4b6623449a691574fb69b817db72c2ae/` 下的 `slice-final-20261014-09/INDEX.md` 与 `a-final-review-20261014/INDEX.md`，完整结果见 [Closure Packet](progress.md#slice-2-closed)。
 
 控制验证使用假原生／保存代理和临时 STRM；真实 Jellyfin 内部数据库保存故障注入、音频-only 实机、完整镜像构建溯源及通用 FullRefresh 性能证明仍未运行。固定组合事实不构成跨版本承诺。HTML 完整配置页、原生批量、外部代理和发布尚未交付；目标边界不变。
 
@@ -28,9 +28,11 @@ Slice 2 已由 A 审查完整 Base..Implementation Head 并裁定 PASS / CLOSED�
 
 播放接入保留原调用的 token 与探测权限。获取 PlaybackInfo 并不保证实际探测；插件未变化复用分支会使用原生不探测取源。当前 PlaybackInfo 传 `CancellationToken.None`，客户端退出及停止播放不连接到本次探测取消；不新增 `RequestAborted` 关联或 PlaybackStopped 事件取消器。客户端退出后，执行仍成功且结果已保存、Manifest 一致时，可继续按条件提交。
 
-批量尚未实现；原生计划任务的停止 token 在目标设计中仅用于后续分页和未实际开始的工作，不传给已开始探测，也不否决其满足全部成功条件后的提交。已开始工作正常收尾，即使没有其他等待者。用户停止／共享规则已由 A 作为 [Material Contract Change](../SLICE.md#a-停止与共享边界修订2026-10-13) 同步；Slice 2 取消人为可取消执行实机门槛，原生取消异常仍保留基线并传播，Slice 3 验证实际批量停止与收尾。固定版本入口见 [兼容性](compatibility.md#播放与批量取消语义)。
+批量尚未实现；原生计划任务的停止 token 在目标设计中仅用于后续分页和未实际开始的工作，不传给已开始探测，也不否决其满足全部成功条件后的提交。已开始工作正常收尾，即使没有其他等待者。用户停止／共享规则已由 A 作为 [Slice 2 Material Contract Change 记录](progress.md#slice-2-closed) 同步；Slice 2 取消人为可取消执行实机门槛，原生取消异常仍保留基线并传播，Slice 3 验证实际批量停止与收尾。固定版本入口见 [兼容性](compatibility.md#播放与批量取消语义)。
 
 ## TARGET
+
+[Slice 3 合同](../SLICE.md) 已激活，Base 为 Slice 2 关闭提交 `6da90ab6bd8995d8204ae0b7faf786c823699fe6`，尚无活动实施 Task。当前代码仍未提供批量任务／范围配置／HTML 页；以下批量设计不是已实现事实。新增入口必须区分批量准入停止与已开始探测收尾，并在批量不可用时停止枚举，不能直接复用现有允许原生委托的播放回退。范围按每次运行快照、分页／工作有界、进度与按源统计及配置生效约定见合同；真实任务／定时／停止／页面交互仍 NOT RUN。
 
 ```mermaid
 flowchart TD

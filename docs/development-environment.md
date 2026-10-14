@@ -68,7 +68,7 @@ python3 scripts/development_environment.py up
 
 固定 SDK 的 locked restore、Release build、C# 全部测试、format verify、仓库治理测试和真实 PlaybackInfo 集成均已有执行记录。T4 最终候选、单独 Slice Final 的证据索引、任务接口调研、实现 SHA 与延期见 [Closure Packet](progress.md#slice-1-closed)；完整 Developer 报告见 [Task 历史指针](progress.md#slice-1-closed)。A 已核验原始证据及输入身份，Slice 1 PASS / CLOSED。
 
-本文件记录已运行环境及事实交接，原环境阻塞和旧实现 FIX REQUIRED 保留为历史。Slice 1／2 均已 A 最终审查 PASS / CLOSED；当前 [TASK.md](../TASK.md) 无活动实施任务。Slice 2 单独 Final 完成 112 C#／30 Python、构建质量和真实 SQLite／多源／共享并发／配置／重启验收，A 核验匹配输入后明确复用；不能由环境可用或旧原型运行替代。Final 恢复 STRM／媒体／插件／配置、同步地址并清除临时条目，证据见 [Slice 2 关闭记录](progress.md#slice-2-closed)。
+本文件记录已运行环境及事实交接，原环境阻塞和旧实现 FIX REQUIRED 保留为历史。Slice 1／2 均已 A 最终审查 PASS / CLOSED；当前 [Slice 3 合同](../SLICE.md) 已激活，[TASK.md](../TASK.md) 无活动实施任务，B 先计划；本轮不操作运行实例或重跑产品验收。Slice 2 单独 Final 完成 112 C#／30 Python、构建质量和真实 SQLite／多源／共享并发／配置／重启验收，A 核验匹配输入后明确复用；不能由环境可用或旧原型运行替代。Final 恢复 STRM／媒体／插件／配置、同步地址并清除临时条目，证据见 [Slice 2 关闭记录](progress.md#slice-2-closed)。
 
 ## 已运行环境证据
 

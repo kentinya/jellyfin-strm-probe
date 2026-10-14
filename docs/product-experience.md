@@ -1,6 +1,6 @@
 # 用户旅程
 
-以下定义 V4.2 完整产品旅程。CURRENT：Slice 1／2 已 PASS / CLOSED，播放检查、SQLite 历史指纹、稳定多源、运行中共享／全局并发、核心配置和恢复已交付，分项事实见 [Closure Packet](../SLICE.md#closure-packet) 与 [A 最终审查](../SLICE.md#a-final-review)。完整配置页、原生批量管理、大规模／代理联调和发布安装仍为 TARGET；核心能力关闭不表示完整产品交付。
+以下定义 V4.2 完整产品旅程。CURRENT：Slice 1／2 已 PASS / CLOSED，播放检查、SQLite 历史指纹、稳定多源、运行中共享／全局并发、核心配置和恢复已交付，分项事实见 [Closure Packet](progress.md#slice-2-closed) 与 [A 最终审查](progress.md#slice-2-closed)。完整配置页、原生批量管理、大规模／代理联调和发布安装仍为 TARGET；[Slice 3](../SLICE.md) 已激活配置／批量旅程，待 B 先计划，未形成新实现或验收。核心能力关闭不表示完整产品交付。
 
 ## 安装与首次接管
 

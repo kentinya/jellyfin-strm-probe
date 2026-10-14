@@ -4,7 +4,7 @@
 
 项目：`Jellyfin.Plugin.StrmProbeOptimizer`，C# 插件。SQLite 仅保存最小历史指纹，媒体流继续保存在 Jellyfin 原生库，不维护独立探测状态机。
 
-**Slice 1／2 已由 A 最终审查 PASS / CLOSED，完整产品尚未交付。** [Slice 2 最终审查](SLICE.md#a-final-review) 接受 SQLite／稳定多源播放闭环、实际开始后的探测共享、全局并发、核心配置及失败／重启恢复；[Closure Packet](SLICE.md#closure-packet) 与 [关闭账本](docs/progress.md) 保留分层证据。固定 SDK `10.0.401`、Jellyfin `12.2.0`、源码／依赖与镜像 digest 见 [开发环境](docs/development-environment.md)。[核心配置操作说明](docs/core-configuration.md) 提供操作与恢复方法。完整配置页、批量任务、发布包和外部代理联调仍延期，Slice 3／4 保持 PLANNED。
+**Slice 1／2 已由 A 最终审查 PASS / CLOSED，完整产品尚未交付。** [Slice 2 最终审查](docs/progress.md#slice-2-closed) 接受 SQLite／稳定多源播放闭环、实际开始后的探测共享、全局并发、核心配置及失败／重启恢复；[Closure Packet](docs/progress.md#slice-2-closed) 与 [关闭账本](docs/progress.md) 保留分层证据。固定 SDK `10.0.401`、Jellyfin `12.2.0`、源码／依赖与镜像 digest 见 [开发环境](docs/development-environment.md)。[核心配置操作说明](docs/core-configuration.md) 提供操作与恢复方法。完整配置页与批量任务尚未交付，现已激活 [Slice 3](SLICE.md)；发布包和外部代理联调留在 PLANNED 的 Slice 4。
 
 ## 开发基准与范围
 
@@ -19,7 +19,7 @@
 3. 查看 [当前 Slice](SLICE.md)、[当前 Task](TASK.md)、[四个 Slice 路线图](docs/roadmap.md) 和 [进度](docs/progress.md)。
 4. 开发环境执行 `python3 scripts/development_environment.py doctor`；安装与隔离运行见 [环境交接](docs/development-environment.md)。
 
-Slice 1 已证明固定版本上的核心接入、可靠原生成功信号与最新地址持久化；Slice 2 的完整能力与单独 Final 已经 A 接受并关闭。当前无活动实施 Task，下一 Slice 的选择另开一轮；详细历史／独立审查与本机证据见 [进度](docs/progress.md#当前开发指针)。
+Slice 1 已证明固定版本上的核心接入、可靠原生成功信号与最新地址持久化；Slice 2 的完整能力与单独 Final 已经 A 接受并关闭。本轮已激活 Slice 3，真实 Base 为 Slice 2 关闭提交 `6da90ab6bd8995d8204ae0b7faf786c823699fe6`，当前无活动实施 Task，下一动作是 B 先计划；详细历史／独立审查与本机证据见 [进度](docs/progress.md#当前开发指针)。
 
 ## 产品目标
 

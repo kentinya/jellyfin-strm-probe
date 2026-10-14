@@ -4,7 +4,7 @@
 
 当前固定组合上的 Slice 1／2 均已 PASS / CLOSED，没有发布包或多版本兼容声明。真实插件已用 Jellyfin Controller／Model `12.2.0`、`net10.0` 和 SDK `10.0.401` 构建，并在隔离 Jellyfin `12.2.0` 容器加载；镜像 digest、媒体服务和环境身份见 [环境交接](development-environment.md)。当前证据已覆盖完整播放／SQLite／稳定多源／共享协调及核心配置，完整产品与发布支持仍未验证，分层状态见 [测试矩阵](test-matrix.md)。
 
-B 对旧候选的 FIX REQUIRED 保留为历史；Task 1.1、2.1／2.2 均已独立审查 PASS，A 分别完成 Slice 1／2 最终审查。当前 [Slice 2](../SLICE.md) 已关闭，接受实现 `59fd3f7e4b6623449a691574fb69b817db72c2ae`；原始 Final 经 A 核验并明确复用，A 另独立重跑 C# 全套，详情见 [关闭记录](progress.md#slice-2-closed)。Slice 3／4 未激活。播放取消范围遵循 A 的 RESCOPE：保留原生取消异常处理，不要求成功返回后的额外取消检查或人为注入实机门槛；只共享实际已开始探测，批量停止只撤销未开始工作，Slice 3 验证实际任务停止与已开始工作收尾。
+B 对旧候选的 FIX REQUIRED 保留为历史；Task 1.1、2.1／2.2 均已独立审查 PASS，A 分别完成 Slice 1／2 最终审查。[Slice 2](progress.md#slice-2-closed) 已关闭，接受实现 `59fd3f7e4b6623449a691574fb69b817db72c2ae`；原始 Final 经 A 核验并明确复用，A 另独立重跑 C# 全套，详情见 [关闭记录](progress.md#slice-2-closed)。[Slice 3](../SLICE.md) 已激活合同、待 B 先计划；Slice 4 保持 PLANNED，新增运行验收仍 NOT RUN。播放取消范围遵循 A 的 RESCOPE：保留原生取消异常处理，不要求成功返回后的额外取消检查或人为注入实机门槛；只共享实际已开始探测，批量停止只撤销未开始工作，Slice 3 验证实际任务停止与已开始工作收尾。
 
 | 候选源码 | 已记录标签提交 | 定位用途 |
 |---|---|---|
@@ -27,7 +27,7 @@ B 对旧候选的 FIX REQUIRED 保留为历史；Task 1.1、2.1／2.2 均已独�
 
 ## 播放与批量取消语义
 
-以下限定固定 Jellyfin `12.2.0`／源码 `ca0f16eb7c195f720a1493ed469a27c4657db0c6`，版本变化后重新核对。A 的 Slice 1 实质范围调整保留于 [关闭快照](progress.md#slice-1-closed)，当前 [Slice 2 合同修订](../SLICE.md#a-停止与共享边界修订2026-10-13) 按用户要求替代人为可取消执行义务；没有将源码存在或未运行场景改为实机 PASS。
+以下限定固定 Jellyfin `12.2.0`／源码 `ca0f16eb7c195f720a1493ed469a27c4657db0c6`，版本变化后重新核对。A 的 Slice 1 实质范围调整保留于 [关闭快照](progress.md#slice-1-closed)，历史 [Slice 2 合同修订记录](progress.md#slice-2-closed) 按用户要求替代人为可取消执行义务；没有将源码存在或未运行场景改为实机 PASS。
 
 | 入口／动作 | 固定源码行为 | 插件与验收边界 |
 |---|---|---|

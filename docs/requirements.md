@@ -1,6 +1,6 @@
 # 插件需求
 
-状态：以下为完整产品的稳定需求；Slice 1／2 已 PASS / CLOSED，播放／历史指纹／运行中共享／核心配置已交付，完整配置页、批量、外部联调与发布仍为 TARGET。分层证据见 [Closure Packet](../SLICE.md#closure-packet)，最终决定见 [A 审查](../SLICE.md#a-final-review)。当前来源为 [V4.2 方案](<../Jellyfin STRM Probe Optimizer V4.2 开发方案.md>) 与 [范围说明](scope.md)。保留原需求及 T01～T28 编号，但明确修订其验收含义；新增批量验收 B01～B12。执行状态见 [测试矩阵](test-matrix.md)。
+状态：以下为完整产品的稳定需求；Slice 1／2 已 PASS / CLOSED，播放／历史指纹／运行中共享／核心配置已交付，完整配置页、批量、外部联调与发布仍为 TARGET。分层证据见 [Closure Packet](progress.md#slice-2-closed)，最终决定见 [A 审查](progress.md#slice-2-closed)。当前来源为 [V4.2 方案](<../Jellyfin STRM Probe Optimizer V4.2 开发方案.md>) 与 [范围说明](scope.md)。保留原需求及 T01～T28 编号，但明确修订其验收含义；新增批量验收 B01～B12。执行状态见 [测试矩阵](test-matrix.md)。当前已激活 [Slice 3 批量合同](../SLICE.md)，尚无活动实施 Task，新增产品验收仍 NOT RUN；本轮不改变下表稳定需求。
 
 V4.2 的 URL 改变规则替代 V3.0 路径单独更新规则；STATE 编号现指历史指纹合同，不要求独立状态机。首次信任接管是唯一无需本次探测即可初建指纹的例外，不能计为成功探测。
 
@@ -50,7 +50,7 @@ V4.2 配置表中的判断规则作为固定开启的说明展示；真正可编
 
 取消策略沿用经核对的 Jellyfin 版本。当前 `12.2.0` 的 PlaybackInfo 允许探测但传 `CancellationToken.None`，请求开始不等于一定探测，客户端退出／停止播放也不向该探测传入取消。插件不新增客户端停止到探测取消的机制；本次执行若成功、结果已保存且 Manifest 一致，客户端退出不单独阻止指纹提交。普通媒体、旧 STRM、禁用和 `allowMediaProbe=false` 的原生委托与权限边界保留。
 
-已关闭的 Slice 1 播放原型按此前 A RESCOPE 保留原 token 委托、原生取消异常保留基线并传播及已有回归，不增加成功返回后的额外取消检查或人为注入取消验收。用户本次进一步明确批量停止和探测共享边界，A 在 [当前合同](../SLICE.md#a-停止与共享边界修订2026-10-13) 记录 Material Contract Change，替代旧“最后等待者退出取消执行”及 Slice 2 人为可取消共享执行门槛；ID、Base、必要成功／保存／版本条件及历史结果不变。
+已关闭的 Slice 1 播放原型按此前 A RESCOPE 保留原 token 委托、原生取消异常保留基线并传播及已有回归，不增加成功返回后的额外取消检查或人为注入取消验收。用户本次进一步明确批量停止和探测共享边界，A 在 [Slice 2 合同修订记录](progress.md#slice-2-closed) 记录 Material Contract Change，替代旧“最后等待者退出取消执行”及 Slice 2 人为可取消共享执行门槛；ID、Base、必要成功／保存／版本条件及历史结果不变。
 
 Jellyfin 向 `IScheduledTask.ExecuteAsync` 的 token 发出停止信号后，批量任务停止后续分页，撤销本任务未实际开始的工作。实际已经开始的探测继续完成，即使只有批量等待者也不取消；不把批量停止 token 传入它，不因停止否决满足全部成功条件的指纹。任务进入停止收尾，等待已开始工作结算，再报告实际检查数和成功／未完成，不伪造全库完成。开始与停止竞争时，先确认停止就不开始，已经实际开始则完成收尾。原生探测自身失败或抛出取消异常仍保护旧基线并按原异常语义处理。
 
