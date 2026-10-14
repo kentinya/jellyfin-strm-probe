@@ -113,6 +113,12 @@ python3 scripts/run_isolated_plugin_integration.py
 - Risks / Deviations：非整数／错误类型配置仍由 Jellyfin 反序列化层拒绝（HTTP 500），插件级越界值为 400，未统一状态码；实机池饱和对照使用原生 FullRefresh 端点，不声称由真实批量任务饱和。
 - Head SHA：`dd5f6b80b9bd0bf63e16f2d1923995514ebebf4a`。
 
+经验候选供 A 在 Slice 收尾取舍（问题 → 做法 → 适用条件）：
+
+1. 开始信号接在刷新准备而非匹配原生调用 → 把共享登记挂到经核验的匹配编码器调用，并把“准备中”与“运行中”分离 → 适用于接入层共享边界，准备态不能当作已开始。
+2. 排队任务沿用入队前决策 → 只对真正等待过的 owner 在取得机会时重读当前 Manifest／指纹／原生源／启停 → 适用于许可池排队准入；立即获准的请求无需重复重查。
+3. 原生 XML 序列化先截断目标文件，仅在序列化前抛错的对照掩盖了中途失败 → 用完整写入临时文件后原子替换，并以“打开／写入后失败”验证旧文件与内存值不变 → 适用于配置持久化保护。
+
 ## Developer Completion Report（首轮，历史）
 
 - Changed Files：`src/Jellyfin.Plugin.StrmProbeOptimizer/Plugin.cs`、`PluginConfiguration.cs`、`Services/IPlaybackSettings.cs`、`Services/ProbeCoordinator.cs`（新增）、`Services/StrmPlaybackOptimizer.cs`；`tests/Jellyfin.Plugin.StrmProbeOptimizer.Tests/ProbeCoordinatorTests.cs`（新增）、`ConfigurationTests.cs`（新增）、`PlaybackOptimizerTests.cs`、`MediaSourceManagerProxyTests.cs`；`scripts/run_isolated_plugin_integration.py`。`ServiceRegistrator.cs` 最终未改（曾试加早建 `ProbeCoordinator` 注册，因启动顺序问题回退）。
