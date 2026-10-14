@@ -1692,7 +1692,28 @@ def concurrency_limit_check(
         require(default_max >= 2.5, f"The third source did not wait for a freed permit under the default limit of 2 (last start {default_max:.2f}s).")
         require(len(default_starts) == 3, f"The default-limit run did not start exactly three probes: {default_starts}.")
 
-        # Configured limit 1: every source must wait for the previous one to finish.
+        # Save a concurrency change to 1 but do not restart. The running pool was captured at startup with 2
+        # permits, so the saved value must NOT hot-apply: the next concurrent run must still overlap two probes.
+        not_hot_status, _ = api.request_response(
+            config_path,
+            method="POST",
+            data=b'{"Enabled":true,"PlaybackAutoCheck":true,"MaxConcurrentProbes":1,"DetailedLog":false}',
+        )
+        require(not_hot_status == 204, "Jellyfin did not accept the saved concurrency-1 configuration.")
+        for name, path in zip(names, paths):
+            slow_id = uuid.uuid4().hex
+            slow_ids[name] = slow_id
+            path.write_bytes(write_versioned_fixture(path.read_bytes(), f"http://media:8080/slow/{slow_id}/fixture.mp4", media_sha1, media_size))
+        not_hot_before = plugin_events_for_ids(container, item_ids)
+        not_hot_markers, not_hot_results = _concurrent_slow_probes(api, media_container, item_ids, [slow_ids[name] for name in names])
+        not_hot_after = plugin_events_for_ids(container, item_ids)
+        not_hot_starts = [safe_event(line) for line in event_delta(not_hot_before, not_hot_after) if "probe started" in line]
+        require(all(status == 200 for status in not_hot_results.values()), f"The pre-restart concurrency playback requests failed: {not_hot_results}.")
+        require(all(marker is not None for marker in not_hot_markers), "The pre-restart concurrent probes did not all reach the slow media request.")
+        not_hot_overlap = sum(1 for marker in not_hot_markers if marker is not None and marker < 1.0)  # type: ignore[operator]
+        require(not_hot_overlap == 2, f"A saved concurrency change was hot-applied before restart; overlap was {not_hot_overlap} instead of 2.")
+
+        # Configured limit 1: after a real restart every source must wait for the previous one to finish.
         for name, path in zip(names, paths):
             slow_id = uuid.uuid4().hex
             slow_ids[name] = slow_id
@@ -1727,6 +1748,11 @@ def concurrency_limit_check(
                 "start_gaps_seconds": limited_gaps,
                 "probe_starts": len(limited_starts),
                 "http_statuses": limited_results,
+            },
+            "saved_before_restart_still_limit_2": {
+                "overlap": not_hot_overlap,
+                "probe_starts": len(not_hot_starts),
+                "http_statuses": not_hot_results,
             },
         }
 

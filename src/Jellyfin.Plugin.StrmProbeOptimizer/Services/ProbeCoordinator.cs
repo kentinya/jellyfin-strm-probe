@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using MediaBrowser.Model.Dto;
 
 namespace Jellyfin.Plugin.StrmProbeOptimizer.Services;
@@ -44,6 +43,18 @@ public sealed record ProbeReservation
 }
 
 /// <summary>
+/// Thrown when the access layer observes the matching native probe call for a reservation that is no longer
+/// the current owner. The native call must be aborted instead of starting a duplicate probe.
+/// </summary>
+public sealed class ProbeStartRejectedException : InvalidOperationException
+{
+    public ProbeStartRejectedException(Guid projectItemId, string sourceKey)
+        : base($"A same-source native probe is already registered for item {projectItemId}, source {sourceKey}.")
+    {
+    }
+}
+
+/// <summary>
 /// Owns the shared result and global permit for one probe. An item is first registered as preparing and
 /// only becomes shareable after the access layer observes the matching native probe call.
 /// </summary>
@@ -69,7 +80,11 @@ public sealed class ProbeWorkItem
     /// </summary>
     internal string ManifestContentHash { get; set; }
 
-    internal SemaphoreSlim? Permit { get; set; }
+    /// <summary>
+    /// Gets or sets the global permit held by this reservation. It is cleared exactly once by
+    /// <see cref="ProbeCoordinator.Finish"/> so repeated settlement cannot release twice.
+    /// </summary>
+    internal SemaphoreSlim? Permit;
 
     internal Task<MediaSourceInfo?> Result => _completion.Task;
 
@@ -89,10 +104,17 @@ public sealed class ProbeWorkItem
 /// A reservation that is still preparing is not shareable, and a finished item is removed before its
 /// permit is released so it can never be reused as an in-flight probe.
 /// </summary>
+/// <remarks>
+/// All registration transitions (running lookup, preparing lookup, preparing insert, preparing-to-running
+/// transition and removal) happen under one short-lived gate. That makes the start boundary atomic: a caller
+/// can never observe "no running" and then insert a second owner while the first owner is transitioning to
+/// running. Native calls, file/database work and task notifications all happen outside the gate.
+/// </remarks>
 public sealed class ProbeCoordinator : IDisposable
 {
-    private readonly ConcurrentDictionary<(Guid ProjectItemId, string SourceKey), ProbeWorkItem> _preparing = new();
-    private readonly ConcurrentDictionary<(Guid ProjectItemId, string SourceKey), ProbeWorkItem> _running = new();
+    private readonly object _gate = new();
+    private readonly Dictionary<(Guid ProjectItemId, string SourceKey), ProbeWorkItem> _preparing = new();
+    private readonly Dictionary<(Guid ProjectItemId, string SourceKey), ProbeWorkItem> _running = new();
     private readonly SemaphoreSlim _permits;
     private int _disposed;
 
@@ -110,11 +132,36 @@ public sealed class ProbeCoordinator : IDisposable
 
     public int MaxConcurrentProbes { get; }
 
+    /// <summary>
+    /// Gets or sets a test-only barrier that runs after a global permit has been acquired and before the
+    /// registration gate. It lets a deterministic regression force a caller to hold a permit without having
+    /// registered yet, so a concurrent start can be interleaved. It is <c>null</c> in production.
+    /// </summary>
+    internal Action? PermitAcquiredBarrier { get; set; }
+
     /// <summary>Gets the number of probes whose matching native call has actually started.</summary>
-    public int RunningCount => _running.Count;
+    public int RunningCount
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _running.Count;
+            }
+        }
+    }
 
     /// <summary>Gets the number of owners that hold a permit and are still preparing a native probe.</summary>
-    public int PreparingCount => _preparing.Count;
+    public int PreparingCount
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _preparing.Count;
+            }
+        }
+    }
 
     /// <summary>Gets the number of global permits currently held.</summary>
     public int ActivePermits => MaxConcurrentProbes - _permits.CurrentCount;
@@ -138,30 +185,30 @@ public sealed class ProbeCoordinator : IDisposable
             await _permits.WaitAsync(cancellationToken).ConfigureAwait(false);
         }
 
+        PermitAcquiredBarrier?.Invoke();
+
         var key = (projectItemId, sourceKey);
-        if (_running.TryGetValue(key, out var running))
+        lock (_gate)
         {
-            // An identical probe has actually started. Do not take a second permit for the same work.
-            _permits.Release();
-            return new ProbeReservation(running, permit: null, owner: false, running: true, waited: !acquiredImmediately);
-        }
+            if (_running.TryGetValue(key, out var running))
+            {
+                // An identical probe has actually started. Do not take a second permit for the same work.
+                _permits.Release();
+                return new ProbeReservation(running, permit: null, owner: false, running: true, waited: !acquiredImmediately);
+            }
 
-        if (_preparing.TryGetValue(key, out var preparing))
-        {
-            // An identical owner is preparing its native probe but has not reached the matching call yet.
-            // Wait for it instead of starting a duplicate; this is not a shared running probe.
-            _permits.Release();
-            return new ProbeReservation(preparing, permit: null, owner: false, running: false, waited: true);
-        }
+            if (_preparing.TryGetValue(key, out var preparing))
+            {
+                // An identical owner is preparing its native probe but has not reached the matching call yet.
+                // Wait for it instead of starting a duplicate; this is not a shared running probe.
+                _permits.Release();
+                return new ProbeReservation(preparing, permit: null, owner: false, running: false, waited: true);
+            }
 
-        var item = new ProbeWorkItem(projectItemId, sourceKey, manifestContentHash) { Permit = _permits };
-        if (!_preparing.TryAdd(key, item))
-        {
-            _permits.Release();
-            return new ProbeReservation(_preparing[key], permit: null, owner: false, running: false, waited: true);
+            var item = new ProbeWorkItem(projectItemId, sourceKey, manifestContentHash) { Permit = _permits };
+            _preparing.Add(key, item);
+            return new ProbeReservation(item, _permits, owner: true, running: false, waited: !acquiredImmediately);
         }
-
-        return new ProbeReservation(item, _permits, owner: true, running: false, waited: !acquiredImmediately);
     }
 
     /// <summary>
@@ -169,7 +216,10 @@ public sealed class ProbeCoordinator : IDisposable
     /// </summary>
     public bool TryGetRunning(Guid projectItemId, string sourceKey, out ProbeWorkItem? running)
     {
-        return _running.TryGetValue((projectItemId, sourceKey), out running);
+        lock (_gate)
+        {
+            return _running.TryGetValue((projectItemId, sourceKey), out running);
+        }
     }
 
     /// <summary>
@@ -181,19 +231,27 @@ public sealed class ProbeCoordinator : IDisposable
         ArgumentNullException.ThrowIfNull(item);
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         var key = (item.ProjectItemId, item.SourceKey);
-
-        // Publish the running entry before clearing preparing so a concurrent AcquireAsync always sees the
-        // running probe first and can never start a duplicate preparation for the same key.
-        if (_running.TryAdd(key, item))
+        lock (_gate)
         {
-            _preparing.TryRemove(new KeyValuePair<(Guid, string), ProbeWorkItem>(key, item));
+            if (_running.TryGetValue(key, out var running))
+            {
+                // Another owner already published this key. This reservation must not start a duplicate.
+                RemoveIfCurrent(_preparing, key, item);
+                existing = running;
+                return false;
+            }
+
+            if (!_preparing.TryGetValue(key, out var current) || !ReferenceEquals(current, item))
+            {
+                existing = null;
+                return false;
+            }
+
+            _running.Add(key, item);
+            _preparing.Remove(key);
             existing = null;
             return true;
         }
-
-        existing = _running[key];
-        _preparing.TryRemove(new KeyValuePair<(Guid, string), ProbeWorkItem>(key, item));
-        return false;
     }
 
     /// <summary>
@@ -233,32 +291,62 @@ public sealed class ProbeCoordinator : IDisposable
             return;
         }
 
-        foreach (var pair in _preparing)
+        var pending = new List<ProbeWorkItem>();
+        lock (_gate)
         {
-            if (_preparing.TryRemove(pair.Key, out var item))
+            foreach (var item in _preparing.Values)
             {
-                item.Fail(new ObjectDisposedException(nameof(ProbeCoordinator)));
+                pending.Add(item);
+                Interlocked.Exchange(ref item.Permit, null);
             }
+
+            foreach (var item in _running.Values)
+            {
+                pending.Add(item);
+                Interlocked.Exchange(ref item.Permit, null);
+            }
+
+            _preparing.Clear();
+            _running.Clear();
         }
 
-        foreach (var pair in _running)
+        foreach (var item in pending)
         {
-            if (_running.TryRemove(pair.Key, out var item))
-            {
-                item.Fail(new ObjectDisposedException(nameof(ProbeCoordinator)));
-            }
+            item.Fail(new ObjectDisposedException(nameof(ProbeCoordinator)));
         }
 
         _permits.Dispose();
     }
 
+    private static void RemoveIfCurrent(
+        Dictionary<(Guid ProjectItemId, string SourceKey), ProbeWorkItem> map,
+        (Guid ProjectItemId, string SourceKey) key,
+        ProbeWorkItem item)
+    {
+        if (map.TryGetValue(key, out var current) && ReferenceEquals(current, item))
+        {
+            map.Remove(key);
+        }
+    }
+
     private void Finish(ProbeWorkItem item, MediaSourceInfo? result, Exception? exception)
     {
         var key = (item.ProjectItemId, item.SourceKey);
+        SemaphoreSlim? permit;
+        lock (_gate)
+        {
+            // Clearing the permit exactly once makes settlement idempotent: a repeated Complete/Fail/Abandon
+            // cannot release the semaphore twice or remove a newer registration for the same key.
+            permit = Interlocked.Exchange(ref item.Permit, null);
+            if (permit is null)
+            {
+                return;
+            }
 
-        // Remove before releasing the permit so a queued waiter that acquires it cannot reuse a finished item.
-        _preparing.TryRemove(new KeyValuePair<(Guid, string), ProbeWorkItem>(key, item));
-        _running.TryRemove(new KeyValuePair<(Guid, string), ProbeWorkItem>(key, item));
+            RemoveIfCurrent(_preparing, key, item);
+            RemoveIfCurrent(_running, key, item);
+        }
+
         try
         {
             if (exception is null)
@@ -272,7 +360,7 @@ public sealed class ProbeCoordinator : IDisposable
         }
         finally
         {
-            item.Permit?.Release();
+            permit.Release();
         }
     }
 }

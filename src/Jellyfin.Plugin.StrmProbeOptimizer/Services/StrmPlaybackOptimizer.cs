@@ -51,6 +51,13 @@ public sealed class StrmPlaybackOptimizer
 
     private ProbeCoordinator Coordinator => _coordinator.Value;
 
+    /// <summary>
+    /// Gets or sets a test-only barrier that runs when a caller joins an existing same-source probe. It lets a
+    /// deterministic regression wait until the joining caller has actually reached the shared wait instead of
+    /// relying on a timing delay. It is <c>null</c> in production.
+    /// </summary>
+    internal Action? SharedJoinBarrier { get; set; }
+
     public async Task<IReadOnlyList<MediaSourceInfo>> GetPlaybackMediaSourcesAsync(
         IMediaSourceManager native,
         BaseItem item,
@@ -301,7 +308,9 @@ public sealed class StrmPlaybackOptimizer
     /// <summary>
     /// Re-evaluates a queued owner at the moment it obtains an execution opportunity. It re-reads the current
     /// manifest, trusted baseline, configuration and native source instead of probing the decision captured
-    /// before it waited. A preparing or running same-source probe is joined rather than duplicated.
+    /// before it waited. The current native source is always re-read, even when the earlier snapshot already
+    /// had a primary stream, so an accepted version is reused and a vanished primary stream still probes.
+    /// A preparing or running same-source probe is joined rather than duplicated.
     /// </summary>
     private async Task<ProbeAdmission> AdmitQueuedOwnerAsync(
         IMediaSourceManager native,
@@ -312,10 +321,14 @@ public sealed class StrmPlaybackOptimizer
         bool isPlaybackContext,
         User? user,
         bool enablePathSubstitution,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ProbeWorkItem workItem)
     {
         if (!CanOptimize(isPlaybackContext))
         {
+            // Release the unused owner reservation before any native delegation so a permit is never held
+            // while Jellyfin performs ordinary work. Settlement is idempotent.
+            Coordinator.Abandon(workItem);
             var delegated = await GetSourceWithNativeAsync(native, sourceItem, source.Id, allowMediaProbe: true, user, enablePathSubstitution, cancellationToken)
                 .ConfigureAwait(false);
             return ProbeAdmission.Delegate(delegated);
@@ -323,12 +336,14 @@ public sealed class StrmPlaybackOptimizer
 
         if (Coordinator.TryGetRunning(projectItemId, sourceKey, out var running))
         {
+            Coordinator.Abandon(workItem);
             return ProbeAdmission.Joined(running!);
         }
 
         var readResult = IsStrm(sourceItem) ? _manifestReader.Read(sourceItem.Path) : ManifestReadResult.Unsupported;
         if (readResult.Status != ManifestReadStatus.Supported || readResult.Manifest is not { } currentManifest)
         {
+            Coordinator.Abandon(workItem);
             var delegated = await GetSourceWithNativeAsync(native, sourceItem, source.Id, allowMediaProbe: true, user, enablePathSubstitution, cancellationToken)
                 .ConfigureAwait(false);
             return ProbeAdmission.Delegate(delegated);
@@ -342,17 +357,16 @@ public sealed class StrmPlaybackOptimizer
         catch (Exception exception)
         {
             MarkFingerprintStoreFailed(exception, sourceItem.Id);
+            Coordinator.Abandon(workItem);
             var delegated = await GetSourceWithNativeAsync(native, sourceItem, source.Id, allowMediaProbe: true, user, enablePathSubstitution, cancellationToken)
                 .ConfigureAwait(false);
             return ProbeAdmission.Delegate(delegated);
         }
 
-        var currentSource = source;
-        if (!HasPrimaryStream(sourceItem, currentSource))
-        {
-            currentSource = await GetSourceWithNativeAsync(native, sourceItem, source.Id, allowMediaProbe: false, user, enablePathSubstitution, cancellationToken)
-                .ConfigureAwait(false);
-        }
+        // Always read the current native source for this caller (its user, source id and path substitution).
+        // A queued decision must never be based on the pre-queue snapshot or on item.ShortcutPath alone.
+        var currentSource = await GetSourceWithNativeAsync(native, sourceItem, source.Id, allowMediaProbe: false, user, enablePathSubstitution, cancellationToken)
+            .ConfigureAwait(false);
 
         var currentDecision = _decisionService.Decide(
             currentManifest,
@@ -367,6 +381,7 @@ public sealed class StrmPlaybackOptimizer
                 if (_fingerprintRepository.TryCommit(CreateFingerprint(projectItemId, sourceKey, currentManifest), expectedPrevious: null))
                 {
                     LogDecision("reused saved media information", projectItemId, sourceKey, currentDecision.Reason);
+                    Coordinator.Abandon(workItem);
                     return ProbeAdmission.Delegate(null);
                 }
 
@@ -380,6 +395,7 @@ public sealed class StrmPlaybackOptimizer
             catch (Exception exception)
             {
                 MarkFingerprintStoreFailed(exception, sourceItem.Id);
+                Coordinator.Abandon(workItem);
                 var delegated = await GetSourceWithNativeAsync(native, sourceItem, source.Id, allowMediaProbe: true, user, enablePathSubstitution, cancellationToken)
                     .ConfigureAwait(false);
                 return ProbeAdmission.Delegate(delegated);
@@ -389,6 +405,7 @@ public sealed class StrmPlaybackOptimizer
         if (currentDecision.Kind is ProbeDecisionKind.SkipProbe or ProbeDecisionKind.TrustExisting)
         {
             LogDecision("reused saved media information", projectItemId, sourceKey, currentDecision.Reason);
+            Coordinator.Abandon(workItem);
             return ProbeAdmission.Delegate(null);
         }
 
@@ -443,50 +460,50 @@ public sealed class StrmPlaybackOptimizer
         }
 
         var workItem = reservation.Item;
-        if (reservation.Waited)
-        {
-            var admission = await AdmitQueuedOwnerAsync(
-                native,
-                projectItemId,
-                sourceItem,
-                previousSource,
-                sourceKey,
-                isPlaybackContext,
-                user,
-                enablePathSubstitution,
-                cancellationToken).ConfigureAwait(false);
-
-            switch (admission.Kind)
-            {
-                case ProbeAdmissionKind.Delegate:
-                    // The current version no longer needs a probe. Release the reservation without starting native work.
-                    Coordinator.Abandon(workItem);
-                    return admission.Result;
-                case ProbeAdmissionKind.Joined:
-                    Coordinator.Abandon(workItem);
-                    return await JoinSharedAsync(
-                        native,
-                        projectItemId,
-                        sourceItem,
-                        previousSource,
-                        sourceKey,
-                        user,
-                        enablePathSubstitution,
-                        cancellationToken,
-                        admission.Item!,
-                        isRunning: true,
-                        isPlaybackContext).ConfigureAwait(false);
-                default:
-                    manifest = admission.Manifest!;
-                    previous = admission.Previous;
-                    previousSource = admission.Source!;
-                    workItem.ManifestContentHash = manifest.ContentHash;
-                    break;
-            }
-        }
-
         try
         {
+            if (reservation.Waited)
+            {
+                var admission = await AdmitQueuedOwnerAsync(
+                    native,
+                    projectItemId,
+                    sourceItem,
+                    previousSource,
+                    sourceKey,
+                    isPlaybackContext,
+                    user,
+                    enablePathSubstitution,
+                    cancellationToken,
+                    workItem).ConfigureAwait(false);
+
+                switch (admission.Kind)
+                {
+                    case ProbeAdmissionKind.Delegate:
+                        // The admission already released the unused reservation; the permit is not held during
+                        // ordinary native work.
+                        return admission.Result;
+                    case ProbeAdmissionKind.Joined:
+                        return await JoinSharedAsync(
+                            native,
+                            projectItemId,
+                            sourceItem,
+                            previousSource,
+                            sourceKey,
+                            user,
+                            enablePathSubstitution,
+                            cancellationToken,
+                            admission.Item!,
+                            isRunning: true,
+                            isPlaybackContext).ConfigureAwait(false);
+                    default:
+                        manifest = admission.Manifest!;
+                        previous = admission.Previous;
+                        previousSource = admission.Source!;
+                        workItem.ManifestContentHash = manifest.ContentHash;
+                        break;
+                }
+            }
+
             var result = await ExecuteProbeAsync(
                 native,
                 projectItemId,
@@ -504,7 +521,9 @@ public sealed class StrmPlaybackOptimizer
         }
         catch (Exception exception)
         {
-            // Every failure, cancellation and validation path releases the running entry and the global permit.
+            // Every owner path after obtaining a permit is protected here: admission, delegation, execution,
+            // cancellation and validation. Settlement is idempotent, so an already abandoned reservation is a
+            // no-op and the global permit/registration can never leak. The original exception is preserved.
             Coordinator.Fail(workItem, exception);
             throw;
         }
@@ -528,6 +547,7 @@ public sealed class StrmPlaybackOptimizer
         bool isRunning,
         bool isPlaybackContext)
     {
+        SharedJoinBarrier?.Invoke();
         if (isRunning)
         {
             _logger.LogInformation(
@@ -569,19 +589,21 @@ public sealed class StrmPlaybackOptimizer
             // The shared probe verified a different version; fall through and re-evaluate the current one.
         }
 
-        // Re-read the current native source, manifest and fingerprint so this caller never reuses another caller's response.
+        // Re-read the current native source, manifest, fingerprint and configuration so this caller never reuses
+        // another caller's response and re-admits if the plugin was disabled while it waited.
         var currentSource = await GetSourceWithNativeAsync(native, sourceItem, source.Id, allowMediaProbe: false, user, enablePathSubstitution, cancellationToken)
             .ConfigureAwait(false);
-        return await CheckSourceCoreAsync(
+        return await CheckSourceAsync(
             native,
             projectItemId,
             sourceItem,
             currentSource,
             sourceKey,
-            isPlaybackContext,
+            allowMediaProbe: true,
             user,
             enablePathSubstitution,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken,
+            isPlaybackContext).ConfigureAwait(false);
     }
 
     private async Task<MediaSourceInfo> ExecuteProbeAsync(
@@ -607,12 +629,16 @@ public sealed class StrmPlaybackOptimizer
                 return;
             }
 
-            if (!Coordinator.TryMarkStarted(workItem, out var existing))
+            if (!Coordinator.TryMarkStarted(workItem, out _))
             {
-                // Another caller already started this key. The reservation should never reach here as the owner;
-                // record it so the caller can detect the race instead of publishing a duplicate running entry.
-                _logger.LogWarning("A duplicate same-source native probe start was rejected for item {ItemId}, source {SourceId}.", projectItemId, sourceKey);
-                return;
+                // Another caller owns this key (or this reservation is no longer the current owner). Abort the
+                // native call instead of publishing a duplicate running probe; the exception propagates through
+                // the encoder proxy and this reservation is settled as a failure.
+                _logger.LogWarning(
+                    "A duplicate same-source native probe start was rejected for item {ItemId}, source {SourceId}; aborting the redundant native call.",
+                    projectItemId,
+                    sourceKey);
+                throw new ProbeStartRejectedException(projectItemId, sourceKey);
             }
 
             _logger.LogInformation(

@@ -113,6 +113,8 @@ public sealed class ProbeCoordinatorTests
         // Configured limit 1: the second start cannot hold a permit until the first finishes.
         using var single = new ProbeCoordinator(1);
         var owner = await single.AcquireAsync(ProjectA, SourceA, HashOne, CancellationToken.None);
+        Assert.IsTrue(single.TryMarkStarted(owner.Item, out _), "The limit-1 boundary must be measured with an actually started probe.");
+        Assert.AreEqual(1, single.RunningCount);
         var blocked = single.AcquireAsync(ProjectB, SourceB, HashOne, CancellationToken.None);
         Assert.IsFalse(blocked.IsCompleted, "A configured limit of 1 must serialize a second source.");
         single.Complete(owner.Item, null);
@@ -223,6 +225,105 @@ public sealed class ProbeCoordinatorTests
         // The waiter's shared task completes so the access layer re-evaluates the current version instead of
         // reusing a result, and the permit is released.
         await waiter.Result!;
+        Assert.AreEqual(0, coordinator.ActivePermits);
+        Assert.AreEqual(0, coordinator.PreparingCount);
+        Assert.AreEqual(0, coordinator.RunningCount);
+    }
+
+    [TestMethod]
+    public async Task StartRaceWithSecondCallerHoldingAPermitCannotCreateASecondOwner()
+    {
+        using var coordinator = new ProbeCoordinator(2);
+        var first = await coordinator.AcquireAsync(ProjectA, SourceA, HashOne, CancellationToken.None);
+        Assert.IsTrue(first.IsOwner);
+
+        // Force the second caller to hold a global permit but pause before it enters the registration gate.
+        var barrierReached = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseBarrier = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        coordinator.PermitAcquiredBarrier = () =>
+        {
+            barrierReached.TrySetResult();
+            releaseBarrier.Task.Wait(TimeSpan.FromSeconds(10));
+        };
+
+        var secondTask = Task.Run(() => coordinator.AcquireAsync(ProjectA, SourceA, HashOne, CancellationToken.None));
+        await barrierReached.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        // The first owner publishes the running probe while the second caller is between permit acquisition
+        // and registration. This is exactly the interleaving that used to produce a second owner.
+        Assert.IsTrue(coordinator.TryMarkStarted(first.Item, out _));
+        Assert.AreEqual(1, coordinator.RunningCount);
+        Assert.AreEqual(0, coordinator.PreparingCount);
+        Assert.AreEqual(2, coordinator.ActivePermits, "Both callers hold a permit while the second is paused before registration.");
+
+        releaseBarrier.TrySetResult();
+        var second = await secondTask.WaitAsync(TimeSpan.FromSeconds(10));
+
+        // The atomic registration gate must make the second caller observe the running probe and become a
+        // follower, releasing its spare permit. A second owner here would duplicate the native probe.
+        Assert.IsFalse(second.IsOwner, "The atomic gate must not allow a second owner for the same key.");
+        Assert.IsTrue(second.IsRunning);
+        Assert.IsNull(second.Permit);
+        Assert.AreEqual(1, coordinator.ActivePermits, "The follower must release its redundant permit.");
+        Assert.AreEqual(1, coordinator.RunningCount);
+
+        coordinator.Complete(first.Item, null);
+        await second.Result!;
+        Assert.AreEqual(0, coordinator.ActivePermits);
+        Assert.AreEqual(0, coordinator.RunningCount);
+    }
+
+    [TestMethod]
+    public void TryMarkStartedAfterSettlementIsRejectedWithoutPublishingARunningProbe()
+    {
+        using var coordinator = new ProbeCoordinator(2);
+        var owner = coordinator.AcquireAsync(ProjectA, SourceA, HashOne, CancellationToken.None).GetAwaiter().GetResult();
+        coordinator.Abandon(owner.Item);
+
+        // A reservation that has already been settled is no longer the current owner and must not publish a
+        // running entry; the access layer relies on this to abort a redundant native call.
+        Assert.IsFalse(coordinator.TryMarkStarted(owner.Item, out var existing));
+        Assert.IsNull(existing);
+        Assert.AreEqual(0, coordinator.RunningCount);
+        Assert.AreEqual(0, coordinator.PreparingCount);
+        Assert.AreEqual(0, coordinator.ActivePermits);
+    }
+
+    [TestMethod]
+    public async Task StaleSettlementDoesNotRemoveANewerRegistrationOrReleaseTwice()
+    {
+        using var coordinator = new ProbeCoordinator(2);
+        var stale = await coordinator.AcquireAsync(ProjectA, SourceA, HashOne, CancellationToken.None);
+        coordinator.Abandon(stale.Item);
+
+        var fresh = await coordinator.AcquireAsync(ProjectA, SourceA, HashTwo, CancellationToken.None);
+        Assert.IsTrue(coordinator.TryMarkStarted(fresh.Item, out _));
+        Assert.AreEqual(1, coordinator.RunningCount);
+        Assert.AreEqual(1, coordinator.ActivePermits);
+
+        // Re-settling the stale item must be a no-op and must not remove the newer registration for the same key.
+        coordinator.Complete(stale.Item, null);
+        coordinator.Fail(stale.Item, new InvalidOperationException("stale settlement"));
+        coordinator.Abandon(stale.Item);
+        Assert.AreEqual(1, coordinator.RunningCount, "A stale settlement must not remove a newer registration.");
+        Assert.AreEqual(1, coordinator.ActivePermits, "A repeated settlement must not release the permit twice.");
+
+        coordinator.Complete(fresh.Item, null);
+        Assert.AreEqual(0, coordinator.RunningCount);
+        Assert.AreEqual(0, coordinator.ActivePermits);
+    }
+
+    [TestMethod]
+    public async Task RepeatedSettlementOfTheSameReservationReleasesExactlyOnce()
+    {
+        using var coordinator = new ProbeCoordinator(2);
+        var owner = await coordinator.AcquireAsync(ProjectA, SourceA, HashOne, CancellationToken.None);
+        coordinator.Complete(owner.Item, null);
+        Assert.AreEqual(0, coordinator.ActivePermits);
+
+        // Every later settlement of the same work item must be ignored.
+        coordinator.Fail(owner.Item, new InvalidOperationException("late failure"));
+        coordinator.Abandon(owner.Item);
         Assert.AreEqual(0, coordinator.ActivePermits);
         Assert.AreEqual(0, coordinator.PreparingCount);
         Assert.AreEqual(0, coordinator.RunningCount);
