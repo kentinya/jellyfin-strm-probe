@@ -5,7 +5,7 @@
 ```text
 Task ID: 2.2
 Parent Slice: 2
-Status: READY FOR B REVIEW
+Status: FIX REQUIRED
 Task Base: 13cb8bdac319fcf0b3e7500661bae1c7455077b0
 Contract Checkpoint: 7e0240cd1cada74f142b7b0afd612943ca991a91
 Slice Base: 924816a84c74f5d79c107478f2d40e621cb8be8d
@@ -132,6 +132,53 @@ python3 scripts/run_isolated_plugin_integration.py
 经验候选供 A 收尾：合同矩阵应索引到具体新旧输入和原始产物，不能以测试名称／总数或脚本 PASS 推断缺失分支；本轮不另写开发流水账。
 
 ## B Review Result
+
+```text
+Reviewed: 13cb8bdac319fcf0b3e7500661bae1c7455077b0..dd5f6b80b9bd0bf63e16f2d1923995514ebebf4a
+Reviewed Contract: committed SLICE.md; Contract Checkpoint 7e0240cd1cada74f142b7b0afd612943ca991a91; unchanged
+Report Checkpoint: 74b1e9f21f8e85293f0968ab89645a32a7d15272 (documentation-only successor; executable inputs unchanged)
+Decision: FIX REQUIRED
+P0 Blockers: NONE FOUND
+P1 Blockers: R1 (start race) / R2 (current native source) / R5 (remaining evidence) / R6 (admission cleanup)
+Slice Required Outcomes all satisfied: NO
+Next: DEVELOPER CORRECTS TASK 2.2 IN PLACE
+```
+
+2026-10-14，B 完成必读清单和 B 经验阅读；初始 main 工作区干净，规划／审查前治理 PASS。审查真实 Task Base..修正 Head、后继文件清单、协调／原生开始／准入／配置代码、测试及 Developer 原始日志与实机 JSON。后继只修改六份文档，src／tests／scripts／SDK／solution 输入没有变化。当前 Contract 可满足；保留 Task ID、Base、Goal、Scope、High／T4、验收和全部门槛，不修改 Slice／Roadmap／稳定需求，不创建 Task 2.3。
+
+独立本机证据：`.git/validation-evidence/dd5f6b80b9bd0bf63e16f2d1923995514ebebf4a/b-rereview-20261014-06/INDEX.md`。指定聚焦测试 **PASS：71 passed／0 failed／0 skipped，exit 0**。独立控制 harness 首轮三个观测 FAIL，补入真实 Acquire／MarkStarted 交错后最终 **FAIL：四个合同失败观测，exit 1**；首轮和最终日志均保留。控制只使用临时 STRM、假原生服务和进程内协调器，不是实机故障注入；开始竞态用保持标准键相等／哈希语义的屏障 comparer 延迟 preparing 查询，没有改产品代码或伪造登记结果。
+
+Developer 的 locked restore／build（0 警告 0 错误）／102 项全套 C#／format／30 项 Python／治理／diff 日志和默认实机 JSON 已读取。实机记录确有同源一次开始／一次提交、默认 2／配置 1、配置拒绝前后文件一致、下一请求 Enabled／DetailedLog、重启及清理恢复；这些成功保留为 Developer 实际结果，不能覆盖下述缺口。B 默认实机 **NOT RUN**（已有确定 P1，按流程先拒绝）；Slice Final **NOT RUN**，Closure Packet **NOT SUBMITTED**，不把 Developer 实机结果当作 B 独立复现。
+
+### 当前阻塞与原 Task 修正
+
+1. **R1 — 开始通知已移动，但开始竞态仍可产生第二 owner（AC-T1／AC-T2，RO-4）。** `ProbeCoordinator.AcquireAsync` 对 running、preparing 的查询与 preparing 插入不是同一个原子状态转换。独立交错：第二请求先查不到 running，停在 preparing 查询；第一 owner 发布 running 并删除 preparing；第二请求继续得到新的 owner。观测 `firstStarted=true / secondOwner=true / secondRunning=false / ActivePermits=2`。第二 owner 的 TryMarkStarted 返回 false；`ExecuteProbeAsync.MarkStarted` 只记录警告并 return，编码器代理随后仍调用原生，不能阻止重复探测。现有 StartRace 测试是顺序获取后顺序开始，未覆盖此交错。协调查询／登记／准备转运行的同键原子边界，竞争失败者必须在原生调用前退出多余执行并加入／重查，释放自己的资源；也核对 TryAdd 失败后字典索引的并发移除边界。补可控的 Acquire 与开始、结束交错回归，证明匹配原生调用只有一次。开始通知位于匹配调用的修正保留，不退回准备阶段登记。
+2. **R2 — 排队准入仍沿用有主流的旧源（AC-T1／AC-T3／AC-T5，RO-1／RO-3／RO-4）。** `AdmitQueuedOwnerAsync` 第 350～355 行仅在传入旧源缺主流时重新取源；旧源已有主流则沿用旧 Path／MediaStreams。独立对照 A：入队时旧源为 old URL，等待期间可信基线和原生源已接受 new URL，放行仍发生一次匹配探测（预期零）。对照 B：等待期间主流消失，旧快照仍有主流且当前基线已接受，放行返回复用 null、零匹配探测（预期缺主流 RequireProbe）。现有 accepted-version 测试入队前就给 new URL，掩盖问题。准入时按本调用者权限／user／路径替换重新取得当前源，再判断地址和必要主流；不能用旧快照或 item.ShortcutPath 替代当前源。补从真实旧源开始的已接受版本零重复、主流增删及源身份／用户边界对照。
+3. **R6 — 准入异常泄漏许可与准备登记（AC-T2／AC-T4，RO-4／RO-6）。** 第 448 行的 `AdmitQueuedOwnerAsync` 在第 488 行 try/catch 之外；禁用／解析或库故障的原生委托、无探测取源等如果抛异常，未调用 Abandon／Fail。独立对照：占满唯一许可，播放排队，设置 Enabled=false，再放行并令委托抛 IOException；异常传播后 `ActivePermits=1 / PreparingCount=1 / RunningCount=0`。上限 1 的后续插件工作因此无法准入。把 owner 获得许可后的全部准入、委托、执行和提前退出纳入可靠的单次释放保护；保留原异常／权限，唤醒同源准备等待者，避免双重释放。补委托／取源抛错及未开始等待退出的资源回归，不新增已开始执行取消源或成功后取消检查。
+4. **R5 — 剩余证据须随修正闭合（AC-T3／AC-T4／AC-T6）。** 新增路径替换用例两位调用者 user 都是 null，返回的源也相同，只证明参数记录，不证明不同用户可见源／响应独立；补两个真实不同 User 的控制对照并断言各自响应。实机配置脚本注释称“不热调整”，实际只做读回、Enabled／DetailedLog 和重启，未观察保存新并发后、重启前旧池的执行上限；补匹配行为证据。上限 1 控制测试目前只持有准备许可，补实际匹配开始的边界。无人等待用例保留正常完成事实，以明确加入／退出屏障替代 Task.Delay(25)，不引入客户端停止关联。矩阵／Required Surfaces 中“缺失边界已补齐”与“R1～R5 已修正”改为候选事实，当前 R1／R2／R6 失败不能仍写成该边界 PASS。
+
+R3 配置中途写入保护和 R4 启动诊断脱敏：修正代码及独立聚焦中的对应控制用例通过，原失败保护修正保留；没有发现需重新开放的当前阻塞。原生独立刷新、配置非法请求拒绝及代表性共享成功也保留分层事实。
+
+修正先跑上述已失败输入及直接相关回归，再对新实现 SHA 跑原计划完整 T4 和默认隔离实机入口。保留旧候选／首败／每次重跑；更新准确输入、命令、耗时、产物身份与矩阵索引。不得只改报告、削弱断言或将 constructor／参数记录／HTTP 成功当作缺失行为。报告交回 B 后才重新判断 PASS。
+
+### Slice 全部 Required Outcomes／Surfaces 对账
+
+| 合同结果／表面 | 本次结论 |
+|---|---|
+| RO-1：解析／决策／首次信任／原生边界 | Task 2.1 已接受；新准入用旧主流复用由 R2 阻塞，不升级整个 Slice PASS。 |
+| RO-2：SQLite／条件提交／失败保护 | 已接受能力及聚焦回归保持；协调过期源／多 owner 风险须随 R1／R2 回归。 |
+| RO-3：共用链／真实成功／原生地址与主流 | 已有链保留；准入重读／开始竞态由 R1／R2 阻塞。 |
+| RO-4：实际开始共享／上限／调用者边界 | 未满足：R1／R2／R5／R6。 |
+| RO-5：无人等待正常收尾 | 已有继续完成提交控制事实；资源全路径保护与必要确定性证据由 R5／R6 阻塞。 |
+| RO-6：核心配置／恢复／诊断 | 配置写入保护／脱敏已修正；禁用准入异常影响恢复与后续工作，R5／R6 未闭合。 |
+| solution／测试、原生播放／探测保存、最小 SQLite／身份映射 | 表面已存在，原有分层证据保留；R2 下当前源与主流判断未满足，不作整行 PASS。 |
+| 共用检查／Coordinator／实际开始与结束重查 | 未满足：R1／R2／R5／R6。 |
+| 原生配置保存／可操作禁用恢复／脱敏诊断 | 写入保护及启动脱敏通过；重启前运行上限／故障收尾仍缺。 |
+| 固定隔离计数／失败／多源／共享／重启及矩阵原始产物 | Developer 成功实测已读；B 默认实机尚未运行，修正候选完整门槛和缺失控制证据待补。 |
+
+**B 决定：FIX REQUIRED；Developer 继续同一 Task 2.2，Slice 保持 ACTIVE，已接受 Implementation Head 不移动。** 少量经验候选：重新准入必须从实际旧快照测试；许可清理保护从获得 owner 起覆盖全部提前退出。留给 A 收尾取舍，不记经验流水账。
+
+## B Review Result（首轮历史）
 
 ```text
 Reviewed: 13cb8bdac319fcf0b3e7500661bae1c7455077b0..d651950950d6d3ad2be4322ddf8f0afb658c7755

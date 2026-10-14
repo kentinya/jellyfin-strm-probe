@@ -6,17 +6,17 @@ V4.2 是当前开发基准，V3.0 原文与合同留在 Git 历史。Slice 1 原
 
 Slice 2 为 ACTIVE，Base 固定为 `924816a84c74f5d79c107478f2d40e621cb8be8d`，Implementation Head 为 `198f4ff2accd5bc9fcd87518a9684b9d068de103`。Task 2.1 已经 B 独立复审 PASS：完成只读解析／完整逻辑矩阵、实际项目／媒体源映射、SQLite 最小指纹、共用源检查／可靠提交及失败重启恢复。
 
-Task 2.2 修正候选 `dd5f6b80b9bd0bf63e16f2d1923995514ebebf4a` 已交 B 审查。B 对首轮候选 `d651950950d6d3ad2be4322ddf8f0afb658c7755` 判 **FIX REQUIRED**：原生匹配探测尚未开始就登记共享；排队取得许可后仍用旧 Manifest／基线且不重读启停；配置中途写入失败破坏旧文件；非法配置诊断输出私有路径；并缺原计划的边界上限、零等待者、不同调用者及配置／外部刷新对照证据。修正候选把开始信号接到经核验的匹配 `GetMediaInfo` 调用、为等待过的 owner 增加准入重查、将配置持久化改为临时文件完整写入后原子替换、启动非法配置诊断脱敏，并补齐上限 1／8、零等待者、池饱和原生独立及配置下一请求／重启生效的确定性／实机对照；B 独立复现待完成。完整结果见 [B Review Result](../TASK.md#b-review-result)；SLICE 合同与已接受 Implementation Head 保持不变。完整配置页、原生批量与发布仍延期。
+Task 2.2 修正候选 `dd5f6b80b9bd0bf63e16f2d1923995514ebebf4a` 已交 B 审查。B 对首轮候选 `d651950950d6d3ad2be4322ddf8f0afb658c7755` 判 **FIX REQUIRED**：原生匹配探测尚未开始就登记共享；排队取得许可后仍用旧 Manifest／基线且不重读启停；配置中途写入失败破坏旧文件；非法配置诊断输出私有路径；并缺原计划的边界上限、零等待者、不同调用者及配置／外部刷新对照证据。修正候选把开始信号接到经核验的匹配 `GetMediaInfo` 调用、为等待过的 owner 增加 Manifest／基线／启停准入重查（当前源重读仍有缺口）、将配置持久化改为临时文件完整写入后原子替换、启动非法配置诊断脱敏，并增加上限 1／8、无人等待完成、池饱和原生独立及配置下一请求／重启生效的控制／实机对照；B 独立复审仍判 FIX REQUIRED：开始竞态产生第二 owner，排队准入沿用旧有主流的源，准入委托异常泄漏许可／准备登记；不同用户与运行上限证据仍缺。完整结果见 [B Review Result](../TASK.md#b-review-result)；SLICE 合同与已接受 Implementation Head 保持不变。完整配置页、原生批量与发布仍延期。
 
 已接受的 Task 2.1 按原生所属项目及 `MediaSourceInfo.Id` 关联各版本 STRM 和五字段 SQLite 主键；事务核对 expectedPrevious，过期执行／插入竞争不覆盖已接受基线。保存代理关联本次结果及原生事务成功；首次信任、复用、探测成功与未完成分别记录。SQLite 读／写故障停止优化并尽可能原生委托，损坏／未知 schema 不自动删库重建；修复后重启再次检查。隔离实机验证成功及失败变化跨重启、多版本选源、同内容换 URL、同 URL 内容／Size 变化、mtime／重放和不可写恢复。SQLite 托管与原生运行依赖已部署加载。
 
 Task 2.1 分层输入／原始日志、独立保存失败对照与实机证据见 [当前指针](progress.md) 及本机 `.git/validation-evidence/198f4ff2accd5bc9fcd87518a9684b9d068de103/b-rereview-20261014-03/INDEX.md`。B 独立控制验证使用真实 SQLite，但未对 Jellyfin 内部数据库注入保存故障；音频必要主流有原生适配控制证据，音频-only STRM 实机仍未验证。完整 Slice Final、批量、代理联调及发布 NOT RUN。
 
-### Task 2.2 候选（R1～R5 已修正，待 B 复审）
+### Task 2.2 候选（修正后 B 仍判 FIX REQUIRED）
 
 - 首轮候选新增进程内 ProbeCoordinator、共享等待后按本调用者重读源、启动并发值的惰性许可池和四项核心配置。B 指出其 `TryMarkStarted` 位于原生 `GetPlaybackMediaSources` 之前，登记的是刷新准备而非匹配探测已开始；等待许可返回 owner 后没有版本／基线／启停准入重查；原生 XML 写入截断旧文件的保护不足；非法配置日志包含私有路径。
-- 修正候选把开始信号接到经核验的匹配 `IMediaEncoder.GetMediaInfo` 调用（准备态与运行态分离），对真正等待过的 owner 重读当前 Manifest／指纹／原生源／启停，配置改为临时文件完整写入后 `File.Move` 原子替换，启动非法配置诊断去除私有路径，并补齐上限 1／8、零等待者、池饱和原生独立、配置下一请求／重启生效的确定性及实机对照。
-- Developer 索引 `.git/validation-evidence/dd5f6b80b9bd0bf63e16f2d1923995514ebebf4a/developer-fix-t4-20261014-05/INDEX.md`（C# 102/102、聚焦 71/71、Python 30/30、默认实机 PASS）；被拒候选原始证据与 B 独立控制失败观测保留在 `.git/validation-evidence/d651950950d6d3ad2be4322ddf8f0afb658c7755/`。B 独立复现与默认实机尚待修正候选审查。
+- 修正候选把开始信号接到经核验的匹配 `IMediaEncoder.GetMediaInfo` 调用（准备态与运行态分离），对真正等待过的 owner 重读当前 Manifest／指纹／启停，但有主流的旧源仍未重读，配置改为临时文件完整写入后 `File.Move` 原子替换，启动非法配置诊断去除私有路径，并增加上限 1／8、无人等待完成、池饱和原生独立、配置下一请求／重启生效的控制及实机对照。
+- Developer 索引 `.git/validation-evidence/dd5f6b80b9bd0bf63e16f2d1923995514ebebf4a/developer-fix-t4-20261014-05/INDEX.md`（C# 102/102、聚焦 71/71、Python 30/30、默认实机 PASS）；被拒候选原始证据与 B 独立控制失败观测保留在 `.git/validation-evidence/d651950950d6d3ad2be4322ddf8f0afb658c7755/`。B 独立聚焦 71/71 PASS，补充控制四个合同失败观测；本机索引 `.git/validation-evidence/dd5f6b80b9bd0bf63e16f2d1923995514ebebf4a/b-rereview-20261014-06/INDEX.md`。B 默认实机 NOT RUN（已有确定 P1），继续同 Task 修正。
 
 ### Slice 1 关闭时的 Task 1.1 原型边界
 

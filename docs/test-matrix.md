@@ -83,9 +83,15 @@ A 实质范围调整保留矩阵 ID 与历史结果，但移除当前 Slice 1 �
 
 ## 执行与对账
 
-Task 2.1 完整报告／B PASS 在 `13cb8bdac319fcf0b3e7500661bae1c7455077b0:TASK.md`，通过 Git 读取；根 TASK.md 现为 Task 2.2 的修正候选报告（待 B 复审）／历史 B 审查，候选报告不能替代旧 Task 记录或产品验收证据。
+Task 2.1 完整报告／B PASS 在 `13cb8bdac319fcf0b3e7500661bae1c7455077b0:TASK.md`，通过 Git 读取；根 TASK.md 现为 Task 2.2 的修正候选报告／当前 B FIX REQUIRED 与历史审查，候选报告不能替代旧 Task 记录或产品验收证据。
 
-Slice 2 现已 ACTIVE，Implementation Head 仍指向 Task 2.1 修正候选 `198f4ff2accd5bc9fcd87518a9684b9d068de103`；Task 2.2 首轮候选 `d651950950d6d3ad2be4322ddf8f0afb658c7755` 经 B 判 FIX REQUIRED，修正候选 `dd5f6b80b9bd0bf63e16f2d1923995514ebebf4a` 已交回 B 审查，Implementation Head 不提前移动。尚无完整产品矩阵验收；表中各行 NOT RUN 保持原事实。Task 2.1 与 2.2 的部分单元及隔离 Jellyfin 证据见下方说明和 [已接受 Task 记录](progress.md#当前开发指针)，不把部分场景升级为整行 PASS。T24 的批量部分、B07 的批量停止收尾、完整配置页、原生任务及大规模部分继续留在后续 Slice 范围；T20／T25／B01／B02 的共享／并发核心部分已由 Task 2.2 候选提供分层证据，B 已核验首轮部分原始成功记录，缺失边界已在修正候选补齐，待 B 独立复现。
+Slice 2 现已 ACTIVE，Implementation Head 仍指向 Task 2.1 修正候选 `198f4ff2accd5bc9fcd87518a9684b9d068de103`；Task 2.2 首轮候选 `d651950950d6d3ad2be4322ddf8f0afb658c7755` 经 B 判 FIX REQUIRED，修正候选 `dd5f6b80b9bd0bf63e16f2d1923995514ebebf4a` 已交回 B 审查，Implementation Head 不提前移动。尚无完整产品矩阵验收；表中各行 NOT RUN 保持原事实。Task 2.1 与 2.2 的部分单元及隔离 Jellyfin 证据见下方说明和 [已接受 Task 记录](progress.md#当前开发指针)，不把部分场景升级为整行 PASS。T24 的批量部分、B07 的批量停止收尾、完整配置页、原生任务及大规模部分继续留在后续 Slice 范围；T20／T25／B01／B02 的共享／并发核心部分已由 Task 2.2 候选提供分层证据，B 已核验首轮部分原始成功记录，修正候选的独立复审仍发现当前源／开始竞态／清理边界失败，详见下方最新结论。
+
+### Task 2.2 修正候选 B 复审
+
+修正候选 `dd5f6b80b9bd0bf63e16f2d1923995514ebebf4a` 经 B 判 **FIX REQUIRED**。本机索引 `.git/validation-evidence/dd5f6b80b9bd0bf63e16f2d1923995514ebebf4a/b-rereview-20261014-06/INDEX.md`：独立聚焦 71/71 PASS；四个控制失败观测：T20／X08 开始竞态第二 owner；T20／X08 排队已接受版本重复探测；T01／X04 排队期间主流消失仍复用；X08／X09 禁用准入委托异常泄漏许可／准备登记。不同用户的实际响应独立、保存新并发后重启前运行上限等证据仍需补齐。R3 中途配置写入保护／R4 启动脱敏的对应聚焦控制通过。B 默认实机 NOT RUN（已有明确 P1），Slice Final NOT RUN。
+
+下方 Developer PASS 只保留具体已执行用例的结果，不代表上述边界完整满足；Required Surfaces 的当前接受结论以 [最新 B 决定](../TASK.md#b-review-result) 为准。禁止用旧源已提前更新的队列夹具、顺序 start race 或两个 null user 推定缺失行为 PASS。
 
 ### Task 2.2 审查与修正（R1～R5）
 
