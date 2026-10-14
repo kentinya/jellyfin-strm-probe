@@ -62,13 +62,13 @@ python3 scripts/development_environment.py up
 
 ## Task 1.1 原型交接状态
 
-已创建 `Jellyfin.Plugin.StrmProbeOptimizer.sln`、插件项目、MSTest 项目和独立依赖锁；真实插件在隔离实例加载。最小包只含插件 DLL 和 `Packaging/meta.json`，不是发布 ZIP。锁定的镜像没有 revision 标签，镜像整体构建源码溯源仍有限；官方源代码 SHA、NuGet nuspec repository commit、实际 image ID／digest 与容器版本分别留证，不把其中一项替代另一项。
+已创建 `Jellyfin.Plugin.StrmProbeOptimizer.sln`、插件项目、MSTest 项目和独立依赖锁；真实插件在隔离实例加载。Slice 1 当时的最小包只含插件 DLL 和 `Packaging/meta.json`；Slice 2 隔离部署新增 Microsoft.Data.Sqlite、SQLitePCLRaw 托管依赖和当前平台 native SQLite，加载与摘要已留证，仍不是发布 ZIP。锁定的镜像没有 revision 标签，镜像整体构建源码溯源仍有限；官方源代码 SHA、NuGet nuspec repository commit、实际 image ID／digest 与容器版本分别留证，不把其中一项替代另一项。
 
 合成媒体服务使用实例自带的 FFmpeg `8.1.3-Jellyfin` 制作两秒媒体：`media/fixture.mp4` 与相同字节的 `fixture-alt.mp4`。本次隔离集成脚本在 STRM 中写入从实际字节计算的 SHA-1／Size，验证换 URL 的同内容分支，并在脚本退出时恢复原始 STRM。
 
 固定 SDK 的 locked restore、Release build、C# 全部测试、format verify、仓库治理测试和真实 PlaybackInfo 集成均已有执行记录。T4 最终候选、单独 Slice Final 的证据索引、任务接口调研、实现 SHA 与延期见 [Closure Packet](progress.md#slice-1-closed)；完整 Developer 报告见 [Task 历史指针](progress.md#slice-1-closed)。A 已核验原始证据及输入身份，Slice 1 PASS / CLOSED。
 
-本文件记录 A 提供的已运行环境及事实交接，原环境阻塞和旧实现 FIX REQUIRED 保留为历史。B 独立审查 Task 1.1 PASS、单独 Slice Final 与 [A 最终审查](progress.md#slice-1-closed) 均已完成；当前 Slice 2 已激活，B 已规划 [Task 2.1](../TASK.md)（PLANNED），尚未实施；其最终门槛不能由环境可用或旧原型运行替代。Slice 1 隔离测试已恢复 STRM、启用插件并同步 Jellyfin 地址。
+本文件记录已运行环境及事实交接，原环境阻塞和旧实现 FIX REQUIRED 保留为历史。Slice 1／2 均已 A 最终审查 PASS / CLOSED；当前 [TASK.md](../TASK.md) 无活动实施任务。Slice 2 单独 Final 完成 112 C#／30 Python、构建质量和真实 SQLite／多源／共享并发／配置／重启验收，A 核验匹配输入后明确复用；不能由环境可用或旧原型运行替代。Final 恢复 STRM／媒体／插件／配置、同步地址并清除临时条目，证据见 [Slice 2 关闭记录](progress.md#slice-2-closed)。
 
 ## 已运行环境证据
 

@@ -1,6 +1,6 @@
 # 核心配置与故障恢复操作说明
 
-本页记录 B 已接受的 Task 2.2 核心配置操作：原子保存保护、启动诊断脱敏、行动前重判与首次信任当前性均已通过独立审查。详见 [B Review Result](../TASK.md#b-review-result) 与 [Slice 交接](../SLICE.md)。配置通过 Jellyfin 现有插件配置通道读写；完整配置页、批量任务 UI 和发布安装仍延期。
+本页记录 Slice 2 已经 A 最终审查接受的核心配置操作：原子保存保护、启动诊断脱敏、行动前重判与首次信任当前性均已验证。详见 [B Review Result](../TASK.md#b-review-result) 与 [A 最终审查](../SLICE.md#a-final-review)。配置通过 Jellyfin 现有插件配置通道读写；完整配置页、批量任务 UI 和发布安装仍延期。
 
 ## 配置字段
 

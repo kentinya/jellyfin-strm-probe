@@ -1,6 +1,6 @@
 # 测试矩阵
 
-下表保留完整产品矩阵；状态按实际证据层填写，核心播放已由 B 审查，真实批量／UI／外部代理／发布尚未执行。Slice 1 原型已完成部分单元／真实 Jellyfin 场景，Task 1.1 经 B 审查 PASS，单独 Slice Final 与 A 最终审查已完成，Slice 1 PASS / CLOSED；分层结果见 [Closure Packet](progress.md#slice-1-closed)，不把有限原型证据直接覆盖完整产品矩阵。表格是 V4.2 目标，不是原型运行报告。通常前提为受支持版本化 STRM、已有主流、历史指纹与允许探测；例外显式说明。
+下表保留完整产品矩阵；状态按实际证据层填写，Slice 1／2 均已 A 最终审查 PASS / CLOSED，真实批量／UI／外部代理／发布尚未执行。核心分层结果见 [Closure Packet](../SLICE.md#closure-packet) 与 [A 最终审查](../SLICE.md#a-final-review)，历史原型边界见关闭账本。表格保留 V4.2 完整产品目标，不把核心部分关闭升级为所有实机分支 PASS。通常前提为受支持版本化 STRM、已有主流、历史指纹与允许探测；例外显式说明。
 
 保留 T01～T28 身份以便追溯，但 T08／T22 按 V4.2 改为原生探测后新地址持久化，T02／T17～T19／T27 改为最小指纹合同。旧结果不自动继承。B01～B12 为新增批量／共享并发验收。
 
@@ -82,11 +82,11 @@ A 实质范围调整保留矩阵 ID 与历史结果，但移除当前 Slice 1 �
 - Slice 3／B07 验证停止后续分页和本任务未实际开始的工作，播放／其他调用者的排队请求不受影响。所有已开始探测继续，无其他等待者的仅批量探测也继续；成功且已保存、Manifest 稳定时仍提交。任务停止收尾等待其结算，按实际结果统计，不把批量停止当作探测执行取消。先确认停止则不开始，已实际开始则完成，竞态必须实测。
 - 服务器关闭或进程被杀作为执行中断／重启恢复记录，不充当取消 token 生效的证据。
 
-固定源码与入口见 [兼容性](compatibility.md#播放与批量取消语义)。原型与 Slice Final 的真实运行另见 Closure Packet；已开始共享／批量停止收尾等新矩阵义务未提前验证；被替代的取消注入门槛保留历史 NOT RUN，不改写为 PASS。
+固定源码与入口见 [兼容性](compatibility.md#播放与批量取消语义)。已开始共享、确定性正常收尾及代表性并发计数已在 Slice 2 验证；真实批量停止收尾仍 NOT RUN。被替代的取消注入门槛保留历史 NOT RUN，不改写为 PASS。
 
 ## 执行与对账
 
-Task 2.1／2.2 已 B 审查 PASS；最新接受实现 `59fd3f7e4b6623449a691574fb69b817db72c2ae`，Task 2.2 完整计划／报告／B 决定见 `76cd9e997548c4ffef04a8dd8f9b0d4ef4376347:TASK.md`。本轮六个 Required Outcomes／六个 Required Surfaces 已满足，停止创建 Task，单独 Slice Final 已通过，Closure Packet 已提交；A Final Review NOT RUN。上表仍按完整产品证据类型保留，不能把核心部分通过升级为真实批量、UI、外部代理或所有实机分支 PASS。
+Task 2.1／2.2 已 B 审查 PASS；最新接受实现 `59fd3f7e4b6623449a691574fb69b817db72c2ae`，Task 2.2 完整计划／报告／B 决定见 `76cd9e997548c4ffef04a8dd8f9b0d4ef4376347:TASK.md`。六个 Required Outcomes／六个 Required Surfaces 与单独 Final 已由 A 最终审查接受，Slice 2 PASS / CLOSED；A 独立重跑 C# 112/112，并核验匹配输入后复用下述 Final 原始证据。上表仍按完整产品证据类型保留，不能把核心部分通过升级为真实批量、UI、外部代理或所有实机分支 PASS。
 
 当前本机 B 索引：`.git/validation-evidence/59fd3f7e4b6623449a691574fb69b817db72c2ae/b-rereview-20261014-08/INDEX.md`。指定聚焦 81 passed／0 failed／0 skipped；六项独立边界控制 PASS：Acquire／开始交错、排队旧源已接受零重复、主流消失需探测、准入委托异常释放、立即取许可后第一执行先完成只探测一次、取源期间 STRM A→B 不提交旧信任。原生开始／授权／事务保存边界已核对。Developer 完整 112 项 C#、30 项 Python 和真实 JSON 原始证据已核验匹配；本次 B 默认实机重新运行并通过，历史失败在 Git 和各候选原始证据中保留。
 

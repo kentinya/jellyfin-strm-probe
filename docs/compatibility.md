@@ -2,9 +2,9 @@
 
 ## 当前结论
 
-当前只有固定组合上的 Slice 1 核心原型证据，没有发布包或多版本兼容声明。真实插件已用 Jellyfin Controller／Model `12.2.0`、`net10.0` 和 SDK `10.0.401` 构建，并在隔离 Jellyfin `12.2.0` 容器加载；镜像 digest、媒体服务和环境身份见 [环境交接](development-environment.md)。当前证据满足 Slice 1 的 Required Outcomes，正式产品与发布支持仍未验证。
+当前固定组合上的 Slice 1／2 均已 PASS / CLOSED，没有发布包或多版本兼容声明。真实插件已用 Jellyfin Controller／Model `12.2.0`、`net10.0` 和 SDK `10.0.401` 构建，并在隔离 Jellyfin `12.2.0` 容器加载；镜像 digest、媒体服务和环境身份见 [环境交接](development-environment.md)。当前证据已覆盖完整播放／SQLite／稳定多源／共享协调及核心配置，完整产品与发布支持仍未验证，分层状态见 [测试矩阵](test-matrix.md)。
 
-B 对旧候选的 FIX REQUIRED 保留为历史；修正候选 `2b1e1b5bcf77b06997fabed5a31147838db16b47` 经 B 独立审查，Task 1.1 PASS。保存关联和指定真实对照已满足，单独 Slice Final 已完成；[A 最终审查](progress.md#slice-1-closed) 裁定 Slice 1 PASS / CLOSED。当前 [Slice 2](../SLICE.md) 已激活，正式 SQLite／稳定多源／共享协调等新结果尚未验证；Slice 3／4 未激活。播放取消范围遵循 A 的 RESCOPE：保留原生取消异常处理，不要求成功返回后的额外取消检查或人为注入实机门槛；本次用户规则已修订为只共享实际已开始探测、批量停止只撤销未开始工作；当前 Slice 2 取消人为执行取消门槛，Slice 3 验证已开始工作继续收尾。
+B 对旧候选的 FIX REQUIRED 保留为历史；Task 1.1、2.1／2.2 均已独立审查 PASS，A 分别完成 Slice 1／2 最终审查。当前 [Slice 2](../SLICE.md) 已关闭，接受实现 `59fd3f7e4b6623449a691574fb69b817db72c2ae`；原始 Final 经 A 核验并明确复用，A 另独立重跑 C# 全套，详情见 [关闭记录](progress.md#slice-2-closed)。Slice 3／4 未激活。播放取消范围遵循 A 的 RESCOPE：保留原生取消异常处理，不要求成功返回后的额外取消检查或人为注入实机门槛；只共享实际已开始探测，批量停止只撤销未开始工作，Slice 3 验证实际任务停止与已开始工作收尾。
 
 | 候选源码 | 已记录标签提交 | 定位用途 |
 |---|---|---|
@@ -72,11 +72,11 @@ A 环境准备及 Task 1.1 原型后续：SDK、固定源码、镜像 digest、�
 | 地址／流持久化 | URL 改变后原生探测并保存，当次 PlaybackInfo 新地址，重启仍有效且有必要主流；保存失败明确 | PASS；当次／重启保存与失败保流重试已独立复验；内部数据库故障未注入 |
 | 探测权限／禁用 | allowMediaProbe=false 各分支不执行；禁用／旧 STRM／手动刷新原生对照 | PASS；真实 false 流入口、禁用、旧 STRM、手动 FullRefresh 已独立复验；公共 PlaybackInfo 不提供 false 参数 |
 
-Task 1.1 PASS；全部 Outcomes／Surfaces 与单独 Slice Final 经 A 最终审查接受，Slice 1 PASS / CLOSED。当前 [Task 2.1](../TASK.md) 为 PLANNED，尚未实施；历史失败按原事实保留。外部 JellyfinProxy／OpenList 联调、完整 T01～T28 与 B01～B12 矩阵仍未运行；本原型使用 Jellyfin 已有 FFmpeg／ffprobe。
+Task 1.1 PASS；该原型的全部 Outcomes／Surfaces 与单独 Final 经 A 接受，Slice 1 PASS / CLOSED。后续 Slice 2 也已完成并关闭，历史失败按原事实保留；当前 [TASK.md](../TASK.md) 无活动实施任务。T01～T28 核心分层结果见测试矩阵，外部 JellyfinProxy／OpenList 联调与完整 B01～B12 批量矩阵仍 NOT RUN；使用 Jellyfin 已有 FFmpeg／ffprobe。
 
 ## 后续真实运行门槛
 
-Slice 2 先验证 SQLite 指纹的真实重启／失败恢复、多源身份、实际开始后才共享及代表性全局并发计数、正常收尾与结束重查。公共 PlaybackInfo 仍传 None，不增加人为执行取消入口；这些新验收当前 NOT RUN。
+Slice 2 已验证 SQLite 指纹的真实重启／失败恢复、多源身份、实际开始后的共享及代表性全局并发计数；正常收尾、结束重查及行动前重判有确定性回归。公共 PlaybackInfo 仍传 None，不增加人为执行取消入口；必要证据已由 A 接受，逐分支实机和其他明确延期保持测试矩阵中的 NOT RUN。
 
 Slice 3 实测任务注册、默认无触发时间、原生手动／定时／停止、进度与播放共享协调。Slice 4 实测大规模分页内存、并发、媒体库扫描竞态、重启和隔离 JellyfinProxy 302。当前均 NOT RUN；接口存在不能替代这些验收。
 

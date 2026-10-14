@@ -4,7 +4,7 @@
 Slice ID: 2
 Name: 播放检查与历史指纹完整闭环
 Owner: A
-Status: READY FOR A REVIEW
+Status: PASS / CLOSED
 Base SHA: 924816a84c74f5d79c107478f2d40e621cb8be8d
 Implementation Head: 59fd3f7e4b6623449a691574fb69b817db72c2ae
 ```
@@ -142,7 +142,7 @@ A 最终审查整个 Base..Implementation Head，判 PASS、FIX REQUIRED 或 PAR
 
 ## Closure Packet
 
-2026-10-14，B 提交本包；决定 **SLICE READY FOR A REVIEW**。Task 2.1／2.2 均 PASS，全部 Required Outcomes／Surfaces 已满足，已停止创建 Task，单独 Slice Final 全部通过。A 尚未最终审查，Slice 未关闭。本次只更新审查元数据、事实文档和交接包；Base、用户目标、Required Outcomes／Surfaces、约束、不变量、排除范围、验收及最终门槛均不改变。
+2026-10-14，B 提交本包；交接决定 **SLICE READY FOR A REVIEW**。Task 2.1／2.2 均 PASS，全部 Required Outcomes／Surfaces 已满足，已停止创建 Task，单独 Slice Final 全部通过。以下保留 B 提交时的审查状态；A 本轮最终决定与关闭协调见文末。Base、用户目标、Required Outcomes／Surfaces、约束、不变量、排除范围、验收及最终门槛均不改变。
 
 ```text
 Slice: 2
@@ -220,8 +220,33 @@ AC-1～AC-8 按合同限定证据层全部满足：AC-1／AC-2 对应完整逻�
 
 ## A Final Review
 
-NOT RUN。等待 Closure Packet 后独立审查完整范围，记录 Reviewed Range、Reviewed Contract、Decision 与 P0/P1 Blockers；本次激活不是最终审查。
+2026-10-14，A 独立审查完整 Slice 差异、当前合同及原始证据，裁定 **PASS / CLOSED**。
 
 ```text
-NEXT ACTION: A REVIEWS COMPLETE SLICE
+Reviewed Range: 924816a84c74f5d79c107478f2d40e621cb8be8d..59fd3f7e4b6623449a691574fb69b817db72c2ae
+Reviewed Contract: 7e0240cd1cada74f142b7b0afd612943ca991a91; unchanged normative sections at a9e9a05bf909211c09de1962974e58db4eefc18d
+Decision: PASS
+P0/P1 Blockers: NONE FOUND
+Material Contract Change: NO
+Next Action: A SELECTS THE NEXT LARGE SLICE
+```
+
+- 审查范围包含两个 Task 的解析／决策、SQLite、稳定源身份、原生探测／事务保存关联、Coordinator、核心配置、依赖部署和验证工具；不只接受 Task 报告中的 PASS 标签。RO-1～RO-6、六个 Required Surfaces 与 AC-1～AC-8 按当前合同的证据层均满足。
+- A 核验 Final 的 40 个源码／测试／工具／SDK／锁文件输入均等于 Implementation Head 和当前工作区，27 个构建产物摘要匹配，八个规范章节与 Contract Checkpoint 相同；Base 与实现／交接提交的祖先关系成立。独立重跑 C# 全套为 112 passed／0 failed／0 skipped，覆盖关键行动前重判、首次信任、共享收尾、许可释放、保存失败和过期提交回归。
+- 明确复用单独 Slice Final 的 locked restore、Release build、format、默认真实 Jellyfin 与补充未安装／播放检查关闭对照。A 阅读原始命令、退出码、日志和实机 JSON，核对同源开始 1／提交 1／随后 0、默认并发 2／保存 1 重启前仍 2／重启后 1、新地址与主流持久化、失败／竞态／SQLite 恢复及夹具清理；没有声称 A 再次执行这些实机运行。B 六项独立控制作为补充证据；本轮文档检查另行执行。
+- P2／明确延期保持：配置错误类型的原生 500 与插件范围校验 400 尚未统一；逐分支 T09～T11、audio-only 实机、内部数据库保存故障实机注入、完整镜像构建溯源及通用性能基准仍 NOT RUN。它们不削弱本合同已要求的逻辑全矩阵、保存失败控制及代表性真实探测／重启证据，不单独阻止 PASS。
+- 按用户本轮澄清忽略 V2，审查输入为现有稳定需求、V4.2 与已提交的停止／共享合同；本次关闭不引入新约定。
+
+本机 A 索引：`.git/validation-evidence/59fd3f7e4b6623449a691574fb69b817db72c2ae/a-final-review-20261014/INDEX.md`，保存审查输入比较、复用原始证据摘要、独立测试及关闭文档检查。仅本工作区可读；历史 FAIL／NOT RUN 和先前文档治理失败均保留。
+
+## Closure Reconciliation
+
+同一个关闭检查点将 SLICE 与 Roadmap 同步为 PASS / CLOSED，TASK 保持无活动实施任务；同步 README、progress 关闭账本、architecture CURRENT、scope／requirements／product-experience、compatibility／development-environment、test-matrix 和核心配置说明。已交付的是固定组合的播放／历史指纹／运行中共享／全局并发／核心配置闭环，完整配置页、原生批量／实际停止收尾、大规模／扫描／外部代理与发布仍属于 Slice 3／4，保持 PLANNED。
+
+三份角色经验已经审阅，各补充一条可复用的方法，不记录 Task 流水账。此次只协调事实及经验；不修改可执行源码、稳定业务规则、八个规范章节或原始 V4.2，不移动真实 Base，不把关闭提交冒充 Implementation Head，不激活下一 Slice。关闭文档的 Python／链接／diff 与已提交治理结果保存在 A 索引。
+
+**PASS / CLOSED。本轮关闭后停止；下一 Slice 选择另开一轮。**
+
+```text
+NEXT ACTION: A SELECTS THE NEXT LARGE SLICE
 ```
