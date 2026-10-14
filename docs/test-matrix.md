@@ -106,6 +106,29 @@ Developer 修正候选 `dd5f6b80b9bd0bf63e16f2d1923995514ebebf4a` 按 R1～R5 �
 
 缺失项（如实报告）：B 对修正候选的独立复现与默认实机 NOT RUN；真实批量停止、分页、原生任务、完整配置页、外部代理及发布仍延期；实机池饱和对照使用原生 FullRefresh 端点，不声称由真实批量任务饱和。
 
+### 其余核心矩阵与表面索引（Task 2.1 已接受 ＋ Task 2.2 修正候选）
+
+| 矩阵项 | 证据层与具体用例／场景 | 状态 |
+|---|---|---|
+| T17 探测失败且旧流仍在 | 单元 `FailedProbeDoesNotReplaceTheAcceptedFingerprint`、`FailedSameUrlProbeKeepsTheOldSavedStreamAndFingerprint`、`FailedNativeStreamSaveLeavesChangedAddressFingerprintRetryable`、`PersistenceProxyDoesNotConfirmNativeSavesThatThrow`；实机 `failed_changed_url`（返回≥400、1 次探测、已保存流不变）、`failed_probe_retained_streams` | PASS（Task 范围） |
+| T18 探测期间 STRM 再变 | 单元 `ManifestChangedDuringProbeDoesNotCommitAnOldResult`；实机 `manifest_race`（HTTP≥400、`probe_calls=1`、保留指纹、恢复 1 次探测） | PASS（Task 范围） |
+| T19 重启含上次未完成变化 | 单元 `RestartWithRepairedRepositoryRechecksAndCommits`、SQLite 七项；实机 `failed_url_after_restart`、`same_failed_url_repaired`（保留基线重启后再探测并提交） | PASS（Task 范围） |
+| T20 多客户端同源并发 | 见上表 Task 2.2 行：单元准备／开始边界与排队重查；实机 `same_source_sharing`（1 探测 1 提交） | PASS（Task 范围） |
+| T21 手动强制刷新 | 实机 `manual_full_refresh`（ETag 更新但未当作确认；后续地址变化仍触发 1 次探测） | PASS（Task 范围） |
+| T22 地址变化成功探测后重启 | 实机 `address_after_restart`、`recovered_after_failure`（重启后新地址与主流仍可用） | PASS（Task 范围） |
+| T23 未安装插件 | 未在无插件实例上运行；`disabled_plugin_delegation` 只证明禁用后原生播放可用，不等同未安装 | NOT RUN |
+| T24 禁用插件 | 实机 `disabled_plugin_delegation`；单元 `DisabledOptimizerDelegatesOriginalProbePermission`、`DisabledOptimizerDelegatesWithoutStartingOrSharingAProbe`；批量不发起探测属 Slice 3 | PASS（播放部分）；NOT RUN（批量部分） |
+| T25 多版本影片 | 实机 `native_multiversion_and_sqlite_recovery`（两版本独立 source_key／地址／主流／五字段，选源正确）；单元 `AlternateVersionUsesItsOwnStrmProbeAndStableProjectSourceIdentity`、`MixedLegacySourceRetainsItsNativeProbeWhileSupportedSourceIsSkipped`、`MixedOrdinarySourceRetainsItsNativeProbeWhileSupportedSourceIsSkipped` | PASS（Task 范围） |
+| T28 allowMediaProbe=false | 单元 `DisallowedProbeIsPassedThroughWithoutReadingOrCommitting`、`DisallowedProbeDoesNotAcceptAChangedAddressOrFingerprint`、`RepositoryReadFaultDoesNotElevateFalsePermission`；实机 `false_permission_stream`（真实流请求 0 提交，后续允许请求 1 次探测） | PASS（Task 范围） |
+| X01 STRM 只读／无外部 API／不下载哈希 | 实机 `legacy_strm_delegation`、`ordinary_media_delegation`；工具仅以 `mode=ro` 读取 SQLite；无 OpenList／代理调用；未运行外部代理联调 | PASS（Task 范围）；NOT RUN（外部代理） |
+| X02 全接口委托／DI 顺序／生命周期 | 单元 `MediaSourceManagerProxyTests.ProxyDelegatesEveryInterfaceMethod`、`CoreServiceRegistrationTests.RehomedNativeSingletonIsCreatedAndDisposedExactlyOnce`；实机插件加载／启用／禁用重启 | PASS（Task 范围） |
+| X04 原生保存／SQLite 错误不覆盖指纹／回退保留权限 | 单元 `FailedNativeStreamSaveLeavesChangedAddressFingerprintRetryable`、`PersistenceProxyDoesNotConfirmNativeSavesThatThrow`、`RepositoryReadFaultStopsOptimizationAndDelegatesWithOriginalPermission`、`RepositoryReadFaultDoesNotElevateFalsePermission`；实机 `failed_changed_url`、`failed_url_after_restart` | PASS（Task 范围；未对 Jellyfin 内部数据库注入故障） |
+| X06 SQLite 最小 schema／重启／版本／损坏／不可写 | 单元 `EmptyDatabaseCreatesOnlyVersionedMinimalSchemaAndReopensFingerprint`、`ConditionalCommitRejectsStaleBaselineAndPreservesLatestVersion`、`CompetingFirstInsertionsAcceptOnlyOneBaseline`、`FailedSqlTransactionLeavesPreviouslyAcceptedFingerprintIntact`、`UnknownAndUnversionedDatabasesAreRejectedWithoutReplacingExistingData`、`CorruptDatabaseIsRejectedWithoutReplacingOrDeletingIt`、`EmptyFileIsTreatedAsANewDatabaseAndNotMistakenForCorruption`；实机 `native_multiversion_and_sqlite_recovery` | PASS（Task 范围） |
+| X07 实际 ffprobe／新结果／主流／持久化关联 | 单元 `UrlChangeWithSameShaProbesAndCommitsOnlyAfterSavedPrimaryResult`、`NewAddressWithOldPersistedPrimaryStreamDoesNotCommitAndRemainsRetryable`、`AudioStrmRequiresAndAcceptsTheNativeAudioPrimaryStream`；实机 `same_sha_url_change`、`manual_full_refresh`（GetMediaInfo 计数与本地媒体 GET） | PASS（Task 范围） |
+| X10 隐私（URL／token／私有路径不进入状态／日志／证据） | 单元 `ConfigurationTests.InvalidPersistedConfigurationDiagnosticDoesNotLeakPrivatePaths`；实机脚本仅输出 URL 的 SHA-256、主流类型与计数，不打印签名 URL／token／Cookie／私有路径 | PASS（Task 范围） |
+
+Required Surfaces 对账：solution／测试入口、原生 PlaybackInfo 与探测／保存链、私有 SQLite 最小指纹与恢复、项目／源身份映射与 ProbeCoordinator（实际开始、只共享运行中、正常收尾、结束重查）、Jellyfin 配置保存通道与脱敏日志均有上述单元／实机证据；完整 HTML 配置页与批量范围 UI 明确延期 Slice 3，发布包与跨版本延期 Slice 4。
+
 ### 首轮实施证据（B 已裁定 FIX REQUIRED，保留历史）
 
 候选 `b99bc00b08fd3a8cad32076a220c5219fcc78ab7` 的 T4 执行记录保存在 `.git/validation-evidence/b99bc00b08fd3a8cad32076a220c5219fcc78ab7/developer-final-t4-20261013-02/INDEX.md`。单元测试和隔离 Jellyfin 分别报告：C# 全套 51/51、Python 全套 30/30；真实实例验证首次信任／持久化重启复用、同内容换 URL、多版本源和主流关联、失败重试及 Manifest 竞态、SQLite 写入／只读故障与重启恢复，以及普通／旧 STRM、直播、false 流权限、禁用插件和 FullRefresh。临时条目和多版本关系已清理，原 STRM 与 Jellyfin 地址已恢复。
