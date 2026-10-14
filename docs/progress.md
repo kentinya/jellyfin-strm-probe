@@ -34,8 +34,8 @@ Slice 2 交付完整版本 1 解析／决策、首次信任、五字段 SQLite �
 - 开发基准：V4.2；Slice 1／2 PASS / CLOSED，V3.0 与历史失败保留在 Git／原始证据。
 - 当前 [Slice 3](../SLICE.md)：ACTIVE，真实 Base 为 Slice 2 关闭提交 `6da90ab6bd8995d8204ae0b7faf786c823699fe6`，Implementation Head 为 NOT SET。
 - 用户目标是完整配置／所选库候选 ID 集合／分批按需检查、原生运行／定时／停止收尾、播放混合共享及可对账结果；七个 Required Outcomes 与最终 T4 门槛见当前合同。新能力尚未实现／验收。
-- 用户授权 A 实质调整 Slice 3：一次获取候选 ID、分批读取对象、固定消费者；原 Task 3.1 计划／停止补充保留于 `eb4e272743f4c7e184d45fa48b660b2fef24c685:TASK.md`。合同提交后 B 判断同一 Task 的合法调整，当前状态见 [TASK.md](../TASK.md)。Slice／Task Base 不移动，Slice 4 保持 PLANNED。
+- 用户授权 A 实质调整 Slice 3：一次获取候选 ID、分批读取对象、固定消费者；原 Task 3.1 计划／停止补充保留于 `eb4e272743f4c7e184d45fa48b660b2fef24c685:TASK.md`。A 合同检查点 `2b515f35db7fc8e85d8ac1a8085dd9b8ccc62ef3` 已提交；B 随后判定同一 Task 3.1 合法调整，保留 ID／Task Base，改用固定候选与批次门槛，当前 [TASK.md](../TASK.md) 为 PLANNED。Slice／Task Base 不移动，Slice 4 保持 PLANNED。
 - 公共 PlaybackInfo 的 None token、原生取消异常保护、只共享已开始探测及批量仅撤销未开始工作的规则不变；历史 Material Contract Change 见 Slice 2 关闭快照。
 - 完整配置页／真实批量／定时／停止／统计仍 NOT RUN；本轮只有合同与事实指针，不运行产品验收、不修改运行实例。
 
-NEXT ACTION: B RE-EVALUATES TASK 3.1 ON THE COMMITTED CONTRACT
+NEXT ACTION: DEVELOPER IMPLEMENTS THE ADJUSTED TASK 3.1
