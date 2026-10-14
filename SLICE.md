@@ -147,7 +147,7 @@ A 最终审查整个 Base..Implementation Head，判 PASS、FIX REQUIRED 或 PAR
 ```text
 Slice: 2
 Slice Base: 924816a84c74f5d79c107478f2d40e621cb8be8d
-Implementation Head: 59fd3f7e4b6623449a691574fb69b817db72c2ae
+Accepted Implementation: 59fd3f7e4b6623449a691574fb69b817db72c2ae
 A Review Range: 924816a84c74f5d79c107478f2d40e621cb8be8d..59fd3f7e4b6623449a691574fb69b817db72c2ae
 Contract Checkpoint: 7e0240cd1cada74f142b7b0afd612943ca991a91 (acceptance meaning unchanged)
 Task 2.2 B PASS Checkpoint: 76cd9e997548c4ffef04a8dd8f9b0d4ef4376347
