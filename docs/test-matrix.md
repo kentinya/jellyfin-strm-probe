@@ -83,13 +83,28 @@ A 实质范围调整保留矩阵 ID 与历史结果，但移除当前 Slice 1 �
 
 ## 执行与对账
 
-Task 2.1 完整报告／B PASS 在 `13cb8bdac319fcf0b3e7500661bae1c7455077b0:TASK.md`，通过 Git 读取；根 TASK.md 现为 Task 2.2 的 FIX REQUIRED 候选报告／B 审查，候选报告不能替代旧 Task 记录或产品验收证据。
+Task 2.1 完整报告／B PASS 在 `13cb8bdac319fcf0b3e7500661bae1c7455077b0:TASK.md`，通过 Git 读取；根 TASK.md 现为 Task 2.2 的修正候选报告（待 B 复审）／历史 B 审查，候选报告不能替代旧 Task 记录或产品验收证据。
 
-Slice 2 现已 ACTIVE，Implementation Head 仍指向 Task 2.1 修正候选 `198f4ff2accd5bc9fcd87518a9684b9d068de103`；Task 2.2 候选 `d651950950d6d3ad2be4322ddf8f0afb658c7755` 有 Developer 的 T4 成功执行记录，但 B 已判 FIX REQUIRED，实际开始／排队重查／配置失败保护／隐私及必要证据未闭合，Implementation Head 不提前移动。尚无完整产品矩阵验收；表中各行 NOT RUN 保持原事实。Task 2.1 与 2.2 的部分单元及隔离 Jellyfin 证据见下方说明和 [已接受 Task 记录](progress.md#当前开发指针)，不把部分场景升级为整行 PASS。T24 的批量部分、B07 的批量停止收尾、完整配置页、原生任务及大规模部分继续留在后续 Slice 范围；T20／T25／B01／B02 的共享／并发核心部分已由 Task 2.2 候选提供分层证据，B 已核验部分原始成功记录，但缺失边界与补证阻塞，不能判 PASS。
+Slice 2 现已 ACTIVE，Implementation Head 仍指向 Task 2.1 修正候选 `198f4ff2accd5bc9fcd87518a9684b9d068de103`；Task 2.2 首轮候选 `d651950950d6d3ad2be4322ddf8f0afb658c7755` 经 B 判 FIX REQUIRED，修正候选 `dd5f6b80b9bd0bf63e16f2d1923995514ebebf4a` 已交回 B 审查，Implementation Head 不提前移动。尚无完整产品矩阵验收；表中各行 NOT RUN 保持原事实。Task 2.1 与 2.2 的部分单元及隔离 Jellyfin 证据见下方说明和 [已接受 Task 记录](progress.md#当前开发指针)，不把部分场景升级为整行 PASS。T24 的批量部分、B07 的批量停止收尾、完整配置页、原生任务及大规模部分继续留在后续 Slice 范围；T20／T25／B01／B02 的共享／并发核心部分已由 Task 2.2 候选提供分层证据，B 已核验首轮部分原始成功记录，缺失边界已在修正候选补齐，待 B 独立复现。
 
-### Task 2.2 独立审查（FIX REQUIRED）
+### Task 2.2 审查与修正（R1～R5）
 
-B 索引 `.git/validation-evidence/d651950950d6d3ad2be4322ddf8f0afb658c7755/b-review-20261014-04/INDEX.md`：指定聚焦 60/60 PASS，独立控制 7 个失败观测。T20／X08 的准备与实际开始边界、排队成功后重查为 FAIL；T24／X09 的排队启停为 FAIL；X09 的中途配置文件写入失败保护为 FAIL；X10 的非法配置日志私有路径为 FAIL。B 默认实机本轮 NOT RUN（已有明确 P1，先修正）；上限 1／8 的确定性最大执行数、全部等待者退出、不同调用者及配置／外部刷新对照等必要证据尚未完整。详细 R1～R5 及同 Task 修正门槛见 [B Review Result](../TASK.md#b-review-result)。以上失败属于控制层，不冒充真实 Jellyfin 故障注入；Developer 实机原始成功保留，未升级完整矩阵。
+B 索引 `.git/validation-evidence/d651950950d6d3ad2be4322ddf8f0afb658c7755/b-review-20261014-04/INDEX.md`：指定聚焦 60/60 PASS，独立控制 7 个失败观测。T20／X08 的准备与实际开始边界、排队成功后重查为 FAIL；T24／X09 的排队启停为 FAIL；X09 的中途配置文件写入失败保护为 FAIL；X10 的非法配置日志私有路径为 FAIL。B 默认实机本轮 NOT RUN（已有明确 P1，先修正）。详细 R1～R5 及同 Task 修正门槛见 [B Review Result](../TASK.md#b-review-result)。以上失败属于控制层，不冒充真实 Jellyfin 故障注入。
+
+Developer 修正候选 `dd5f6b80b9bd0bf63e16f2d1923995514ebebf4a` 按 R1～R5 修正，本机证据 `.git/validation-evidence/dd5f6b80b9bd0bf63e16f2d1923995514ebebf4a/developer-fix-t4-20261014-05/INDEX.md`：C# 全套 102/102、聚焦 71/71、Python 30/30、默认实机 JSON PASS。新增确定性证据逐项映射：
+
+| 矩阵项 | 修正候选证据层与场景 | 状态 |
+|---|---|---|
+| T20／X08 实际开始边界 | 单元 `ProbeCoordinatorTests.PreparingReservationIsNotRunningAndNotSharedAsStarted`、`StartRaceRegistersExactlyOneRunningProbe`、`PlaybackOptimizerTests.PreparationIsNotRegisteredAsStartedAndIsNotSharedAsRunning`（准备阶段 RunningCount=0、第二调用者不记为 running）；实机 `same_source_sharing`（`probes_started=1`、`fingerprints_committed=1`） | PASS（Task 范围） |
+| T20／X08 排队重查 | 单元 `QueuedOwnerReReadsAcceptedVersionAndDoesNotProbeAgain`、`QueuedOwnerReReadsChangedManifestAndProbesTheLatestVersion`；实机 `same_source_sharing.followup_probe_calls=0` | PASS（Task 范围） |
+| AC-6 零等待者收尾 | 单元 `StartedProbeCommitsEvenWhenNoCallerAwaitsAndTheWaiterCancels`（等待者取消、leader 未 await，仍提交新指纹） | PASS（单元） |
+| B01 上限 1／8 | 单元 `GlobalLimitCapsConcurrentStartedProbes`、`GlobalLimitOneSerializesAndGlobalLimitEightAllowsEight`；实机 `global_concurrency_limit`（默认 2 两个重叠＋一个排队；配置 1 串行） | PASS（Task 范围；配置 8 仅确定性） |
+| B02／AC-7 独立原生刷新 | 单元 `SaturatedPluginPoolDoesNotBlockNonPluginNativeWork`；实机 `independent_native_refresh`（插件池限 1 饱和时原生 FullRefresh 409 ms 完成） | PASS（Task 范围） |
+| AC-5 不同调用者边界 | 单元 `SharedProbeCallersKeepTheirOwnUserAndPathSubstitution` | PASS（单元） |
+| X09 配置闭环 | 单元 `ConfigurationTests.LatePersistenceFailureKeepsThePreviouslySavedFileAndEffectiveConfiguration`；实机 `core_configuration_api`（拒绝 0／9／负 400、非整数／错误类型 500 且文件字节不变；保存读回、DetailedLog 下一请求、Enabled=false 下一请求委托、并发重启持久化、恢复默认） | PASS（Task 范围） |
+| X10 日志隐私 | 单元 `ConfigurationTests.InvalidPersistedConfigurationDiagnosticDoesNotLeakPrivatePaths` | PASS（单元） |
+
+缺失项（如实报告）：B 对修正候选的独立复现与默认实机 NOT RUN；真实批量停止、分页、原生任务、完整配置页、外部代理及发布仍延期；实机池饱和对照使用原生 FullRefresh 端点，不声称由真实批量任务饱和。
 
 ### 首轮实施证据（B 已裁定 FIX REQUIRED，保留历史）
 

@@ -5,7 +5,7 @@
 ```text
 Task ID: 2.2
 Parent Slice: 2
-Status: FIX REQUIRED
+Status: READY FOR B REVIEW
 Task Base: 13cb8bdac319fcf0b3e7500661bae1c7455077b0
 Contract Checkpoint: 7e0240cd1cada74f142b7b0afd612943ca991a91
 Slice Base: 924816a84c74f5d79c107478f2d40e621cb8be8d
@@ -100,7 +100,20 @@ python3 scripts/run_isolated_plugin_integration.py
 - 新增客户端停止到探测取消关联、共享执行取消源、成功后额外取消检查、人为执行取消实机验收；原生自身取消异常保留原语义与回归。
 - 改变 Slice／Roadmap／稳定需求、移动 Slice Base、宣称关闭 Slice 或自动实施未授权后续范围。
 
-## Developer Completion Report
+## Developer Correction Report (R1–R5)
+
+- Changed Files：`src/Jellyfin.Plugin.StrmProbeOptimizer/Services/ProbeCoordinator.cs`、`Services/ProbeExecutionContext.cs`、`Services/StrmPlaybackOptimizer.cs`、`Plugin.cs`；`tests/Jellyfin.Plugin.StrmProbeOptimizer.Tests/ProbeCoordinatorTests.cs`、`ConfigurationTests.cs`、`PlaybackOptimizerTests.cs`；`scripts/run_isolated_plugin_integration.py`、`scripts/isolated_media_server.py`。未改配置字段、依赖锁、`ServiceRegistrator`、解析／决策或 SQLite。
+- R1 实际开始边界：`ProbeCoordinator` 新增 `_preparing` 状态；`AcquireAsync` 先 `_permits.Wait(0)` 判断是否等待；`TryMarkStarted` 由 `ProbeExecutionContext.MarkCall` 在经核验的匹配 `IMediaEncoder.GetMediaInfo` 调用处（经 `MediaEncoderDispatchProxy`）回调触发，不再在刷新准备前登记。准备中的 owner 可被同源请求等待但 `IsRunning=false`，不会记为“Joined a running”，也不重复实际启动；`TryMarkStarted` 发布 running 后再清除 preparing，避免竞态重复准备；开始失败／委托／放弃路径经 `Abandon` 释放许可与登记。
+- R2 排队重查：`ProbeReservation.Waited` 区分是否真的等待过；只有等待过的 owner 在获得机会时执行 `AdmitQueuedOwnerAsync`，重读当前 Manifest、可信基线、本调用者原生源、库故障标记与成功保存的启停配置，再决定复用／委托／按最新版本开始。首次立即取得许可的请求行为不变，避免对既有入口重复原生取源。
+- R3 配置持久化保护：`Plugin.UpdateConfiguration` 先把候选序列化到同目录临时文件，完整写完后 `File.Move(overwrite: true)` 原子替换；中途失败删除临时文件并保留旧有效文件与内存值，返回错误反馈。
+- R4 隐私：启动读到非法配置的诊断改为不含 `ConfigurationFilePath`／私有目录，使用插件 ID 与“重新保存并重启”的可操作说明；必要错误反馈保留。
+- R5 必要验证：新增准备边界、上限 1／8 最大执行数、零等待者仍提交、池饱和时普通原生工作与原生刷新不受阻、同源共享调用者各自路径替换等确定性用例；实机脚本新增拒绝请求前后持久化文件字节比较、`DetailedLog` 下一请求生效、`Enabled=false` 下一请求委托、并发重启持久化，以及插件池限 1 饱和时原生 FullRefresh 仍完成的对照。
+- Tests and Results：候选 `dd5f6b80b9bd0bf63e16f2d1923995514ebebf4a`，本机证据 `.git/validation-evidence/dd5f6b80b9bd0bf63e16f2d1923995514ebebf4a/developer-fix-t4-20261014-05/INDEX.md`。locked restore、Release build（0 警告 0 错误）、全套 C# 102/102、format verify、Python 30/30、governance、`git diff --check` 全部 exit 0；聚焦筛选 71/71；默认实机脚本 JSON `status=PASS`（同源一次探测一次提交、默认 2／配置 1 上限、原生刷新独立于插件池、配置拒绝／保存／读回／重启、既有 Task 2.1 场景与清理恢复）。计数取自实际开始事件与慢速媒体标记。
+- Decisions：`MarkCall` 回调在原生调用前同步触发（同一异步链），因此准备与真实开始边界确定；等待过的 owner 才重查，避免破坏 Task 2.1 已接受入口的原生调用计数。
+- Risks / Deviations：非整数／错误类型配置仍由 Jellyfin 反序列化层拒绝（HTTP 500），插件级越界值为 400，未统一状态码；实机池饱和对照使用原生 FullRefresh 端点，不声称由真实批量任务饱和。
+- Head SHA：`dd5f6b80b9bd0bf63e16f2d1923995514ebebf4a`。
+
+## Developer Completion Report（首轮，历史）
 
 - Changed Files：`src/Jellyfin.Plugin.StrmProbeOptimizer/Plugin.cs`、`PluginConfiguration.cs`、`Services/IPlaybackSettings.cs`、`Services/ProbeCoordinator.cs`（新增）、`Services/StrmPlaybackOptimizer.cs`；`tests/Jellyfin.Plugin.StrmProbeOptimizer.Tests/ProbeCoordinatorTests.cs`（新增）、`ConfigurationTests.cs`（新增）、`PlaybackOptimizerTests.cs`、`MediaSourceManagerProxyTests.cs`；`scripts/run_isolated_plugin_integration.py`。`ServiceRegistrator.cs` 最终未改（曾试加早建 `ProbeCoordinator` 注册，因启动顺序问题回退）。
 - Implemented：新增进程内 `ProbeCoordinator`，以项目 ID＋source key 只登记已实际进入匹配原生调用且仍在执行的工作；`AcquireAsync` 先取全局许可再判断是否已有同源运行中探测，排队／等待许可不算开始，`TryMarkStarted` 是接入层实际开始信号，`TryMarkStarted` 失败即释放多余许可并加入已有执行；`Complete`／`Fail` 先移除登记再释放许可，完成／失败／取消／校验失败均释放，完成项不被后续请求复用。`StrmPlaybackOptimizer` 在获得执行机会时重读当前 Manifest／指纹，加入者只等待共享结果、随后按自身原生权限重新取源并重查，不串用他人的 `MediaSourceInfo`；等待者取消只结束其等待，不取消已开始执行；同版本共享失败原样上抛，不同版本则重新判断。全局池惰性创建、读取插件启动时捕获的并发值（默认 2，合法 1～8），规避 Jellyfin 先解析 `IMediaSourceManager` 后创建插件实例导致的过早构造。`PluginConfiguration` 新增 `Enabled`（默认 true）、`MaxConcurrentProbes`（默认 2）、`DetailedLog`（默认 false），保留 `PlaybackAutoCheck`；`Plugin.UpdateConfiguration` 先校验再持久化、成功后才发布内存值，非法值抛 `ArgumentException` 且不落盘不生效，持久化失败保留旧有效配置；启动读到已存非法并发时记录诊断并退回默认 2。`IPlaybackSettings` 暴露实时启用／播放检查／详细日志与启动并发。日志区分开始／加入（带运行数与许可数）、复用、真实成功提交、失败与库不可用，脱敏。
