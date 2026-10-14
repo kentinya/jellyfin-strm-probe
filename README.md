@@ -1,6 +1,6 @@
 # Jellyfin STRM Probe Optimizer
 
-按版本化 STRM 的 URL、内容 SHA-1 和字节 Size 判断是否需要 Jellyfin 原生探测。V4.2 采用播放自动检查、Jellyfin 原生批量计划任务和共享并发控制；URL 改变一律要求探测。
+按版本化 STRM 的 URL、内容 SHA-1 和字节 Size 判断是否需要 Jellyfin 原生探测。V4.3 采用播放自动检查、Jellyfin 原生批量计划任务和共享并发控制；URL 改变一律要求探测。
 
 项目：`Jellyfin.Plugin.StrmProbeOptimizer`，C# 插件。SQLite 仅保存最小历史指纹，媒体流继续保存在 Jellyfin 原生库，不维护独立探测状态机。
 
@@ -8,13 +8,13 @@
 
 ## 开发基准与范围
 
-[V4.2 原始方案](<Jellyfin STRM Probe Optimizer V4.2 开发方案.md>) 是当前基准。V3.0 已按用户改动从工作区移除，原文及旧合同可在 Git 检查点 `4b1d0468c1e43e6e9034ef98e99b6cc44ea59485` 中读取；不改写历史。
+[V4.3 方案](<Jellyfin STRM Probe Optimizer V4.3 开发方案.md>) 是当前基准，仅修订 V4.2 的扫描方式；V4.2 原文保留在 Git 历史。V3.0 已按用户改动从工作区移除，原文及旧合同可在 Git 检查点 `4b1d0468c1e43e6e9034ef98e99b6cc44ea59485` 中读取；不改写历史。
 
 **不开发 STRM 生成程序。** 插件只读现有 STRM，不调用 OpenList 元数据 API、不下载媒体计算哈希、不改写 JellyfinProxy。首版不开发独立调度器、独立任务按钮、仅更新路径服务或扫描后自动触发，见 [范围说明](docs/scope.md)。
 
 ## 从这里开始
 
-1. 阅读 [AGENTS.md](AGENTS.md)、[开发流程](docs/development-workflow.md) 和 V4.2 方案。
+1. 阅读 [AGENTS.md](AGENTS.md)、[开发流程](docs/development-workflow.md) 和 V4.3 方案。
 2. 阅读 [需求](docs/requirements.md)、[用户旅程](docs/product-experience.md)、[架构](docs/architecture.md) 与 [测试矩阵](docs/test-matrix.md)。
 3. 查看 [当前 Slice](SLICE.md)、[当前 Task](TASK.md)、[四个 Slice 路线图](docs/roadmap.md) 和 [进度](docs/progress.md)。
 4. 开发环境执行 `python3 scripts/development_environment.py doctor`；安装与隔离运行见 [环境交接](docs/development-environment.md)。
@@ -42,4 +42,4 @@ git diff --check
 
 治理与 Python 回归只验证文档文件身份、已提交合同及状态约束，不代表插件构建、探测、播放或独立审查通过。
 
-`scripts/bootstrap_repository.py` 与 `bootstrap-manifest.json` 是 V3.0 首次初始化历史，当前已初始化仓库不得重新运行，也不重生成旧清单。当前治理使用 V4.2 原文身份及维护中的文件清单；需要追溯旧初始化时读取 Git 历史。
+`scripts/bootstrap_repository.py` 与 `bootstrap-manifest.json` 是 V3.0 首次初始化历史，当前已初始化仓库不得重新运行，也不重生成旧清单。当前治理使用 V4.3 方案身份及维护中的文件清单；需要追溯旧初始化时读取 Git 历史。

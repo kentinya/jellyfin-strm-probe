@@ -2,11 +2,11 @@
 
 ## 开发基准与版本替代
 
-用户更新的 [V4.2 原始方案](<../Jellyfin STRM Probe Optimizer V4.2 开发方案.md>) 是当前开发基准，原文不改写。初始重规划阶段仅修改文档；其后已授权的 Slice 1／2 分别交付核心原型和完整播放／指纹闭环，均经 A 最终审查 PASS / CLOSED。完整产品仍未交付。
+[V4.3 方案](<../Jellyfin STRM Probe Optimizer V4.3 开发方案.md>) 是当前开发基准；按用户明确授权，仅修订 V4.2 的扫描方式及版本标识，其他方案内容不改。V4.2 原文保留于 `fdcd3fc5576a1eba7835c9e9ff261ac6844a2e96:Jellyfin STRM Probe Optimizer V4.2 开发方案.md`。初始重规划阶段仅修改文档；其后已授权的 Slice 1／2 分别交付核心原型和完整播放／指纹闭环，均经 A 最终审查 PASS / CLOSED。完整产品仍未交付。
 
 V3.0 文件的删除与 V4.2 文件的新增是本轮开始前已有的用户改动。V3.0 原文及旧 Slice／Task 可从重规划前检查点 `4b1d0468c1e43e6e9034ef98e99b6cc44ea59485` 读取，不恢复到工作区。未提供 V4.1 原文，因此以 V4.2 本身写出的规则为准，不补写中间版本历史。
 
-| 旧规划 | V4.2 当前取舍 |
+| 旧规划 | V4.2 引入的取舍（V4.3 沿用） |
 |---|---|
 | URL 改变且 SHA-1 相同只更新路径 | 替代为 URL 改变一律要求原生探测；移除 UpdatePathOnly 与独立 ShortcutPathSynchronizer |
 | Assumed／Verified／PendingProbe／ProbeFailed 与观测状态库 | 替代为最小历史指纹；首次信任接管仍存在，不持久化独立探测状态机 |

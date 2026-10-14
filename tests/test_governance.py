@@ -221,7 +221,7 @@ class GovernanceTests(unittest.TestCase):
         self.assertEqual(digest, self.source_sha256)
         with (self.repo / self.source).open("a", encoding="utf-8") as document:
             document.write("\nUnauthorized edit.\n")
-        self.assert_guard(False, "current V4.2 proposal was changed")
+        self.assert_guard(False, "current V4.3 proposal was changed")
 
     def test_legacy_proposal_is_not_required(self) -> None:
         self.assertFalse(

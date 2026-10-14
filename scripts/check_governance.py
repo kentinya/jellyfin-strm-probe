@@ -11,8 +11,8 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = "Jellyfin STRM Probe Optimizer V4.2 开发方案.md"
-SOURCE_SHA256 = "4dc8e6aa4ebd16fa4ca32b35a6f58ac9e48932e334ac772f5c0f431a39ae32e2"
+SOURCE = "Jellyfin STRM Probe Optimizer V4.3 开发方案.md"
+SOURCE_SHA256 = "ce3d1bcb74bf56da6be566283adc162f57d174e5e36d4c9a5bcb86e265ab31fc"
 COMMIT = re.compile(r"[0-9a-f]{40}")
 TASK_STATUSES = {"PLANNED", "IN PROGRESS", "READY FOR B REVIEW", "FIX REQUIRED"}
 SLICE_STATUSES = {"PLANNED", "ACTIVE", "FIX REQUIRED", "READY FOR A REVIEW", "PASS / CLOSED"}
@@ -91,7 +91,7 @@ def check_files() -> None:
             kind = "workflow file" if name in WORKFLOW_FILES else "file"
             raise ValueError(f"Required {kind} missing or symbolic: {name}")
     if hashlib.sha256((ROOT / SOURCE).read_bytes()).hexdigest() != SOURCE_SHA256:
-        raise ValueError("The current V4.2 proposal was changed")
+        raise ValueError("The current V4.3 proposal was changed")
 
 
 def check(bootstrap: bool) -> None:

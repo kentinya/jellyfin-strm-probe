@@ -4,19 +4,19 @@
 
 ## 开始工作前
 
-先阅读本文件、[开发流程](docs/development-workflow.md)、根目录 [V4.2 方案](<Jellyfin STRM Probe Optimizer V4.2 开发方案.md>)、[范围说明](docs/scope.md)、[需求](docs/requirements.md)、[用户旅程](docs/product-experience.md)、[架构](docs/architecture.md)、[路线图](docs/roadmap.md)、[SLICE.md](SLICE.md) 和 [TASK.md](TASK.md)。
+先阅读本文件、[开发流程](docs/development-workflow.md)、根目录 [V4.3 方案](<Jellyfin STRM Probe Optimizer V4.3 开发方案.md>)、[范围说明](docs/scope.md)、[需求](docs/requirements.md)、[用户旅程](docs/product-experience.md)、[架构](docs/architecture.md)、[路线图](docs/roadmap.md)、[SLICE.md](SLICE.md) 和 [TASK.md](TASK.md)。
 
 按当前职责阅读对应经验：[A：Slice 所有者／最终审查](docs/agent-experience/slice-owner-architect-final-reviewer.md)、[B：Task 规划／审查](docs/agent-experience/task-planner-reviewer.md)、[Developer：实施](docs/agent-experience/developer-implementation-role.md)。经验文件只提供方法参考，不改变授权、范围、测试门槛或审查责任。
 
 先检查 `git status --short --branch`，记录已有改动。实施任务前运行 `python3 scripts/check_governance.py`。尚未初始化 Git 时只能用 `--bootstrap` 检查规划，不能据此开始未激活的产品 Task。
 
-用户在会话中明确给出的范围和授权优先于仓库指南。本次用户已授权 A 调整相关文档，采用候选 ID 集合＋分批对象读取的简化批量方案；V4.2 原文保留，授权不包含本轮插件实施。
+用户在会话中明确给出的范围和授权优先于仓库指南。本次用户已授权 A 调整相关文档，采用候选 ID 集合＋分批对象读取的简化批量方案；按后续明确授权最小修订扫描方式为 V4.3，V4.2 留在 Git 历史；授权不包含本轮插件实施。
 
 ## 文档职责
 
 1. 本文件维护长期业务、架构和范围约束。
 2. `docs/development-workflow.md` 独立维护 Slice／Task 状态、Git、测试和审查流程。
-3. V4.2 是当前开发基准，保留用户提供的原文；V3.0 从工作区移除后仍可从 Git 历史读取。`docs/scope.md` 记录版本替代与生成程序排除边界。
+3. V4.3 是当前开发基准，仅按用户授权修订 V4.2 的扫描方式；V4.2／V3.0 原文从 Git 历史读取。`docs/scope.md` 记录版本替代与生成程序排除边界。
 4. `docs/requirements.md` 是本次插件开发的稳定需求规范；`docs/product-experience.md` 定义用户结果。原方案作为保留的输入参考，不把其中被排除的生成程序重新纳入范围。
 5. `docs/architecture.md` 明确区分已经实现与目标设计。
 6. `SLICE.md` 限定当前完整能力，活动 `TASK.md` 限定其中的实施单元。
