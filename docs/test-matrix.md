@@ -95,7 +95,7 @@ Slice 2 现已 ACTIVE，Implementation Head 仍指向 Task 2.1 修正候选 `198
 
 ### Task 2.2 最新修正候选（待 B 审查）
 
-最新候选 `b3764f43713bbc22bdc00cab122340e241110484` 在同一 Task 内修正 B 复审的 R1／R2／R5／R6，尚未经 B 独立审查，不是 PASS：登记转换收进同一短时锁（消除第二 owner 竞态），开始拒绝抛 `ProbeStartRejectedException` 中止冗余原生调用，排队准入始终重读当前原生源并在每个提前退出前 `Abandon`，`Finish` 幂等单次释放；新增不同 `User` 同源响应、上限 1 以实际开始、`SharedJoinBarrier` 取代延时等确定性用例，实机脚本补保存并发后重启前仍为旧池上限的观测。本机证据 `.git/validation-evidence/dc62db4661286f2a7fa59e4c53cef1bf8c363614/developer-fix2-t4-20261014-100054/INDEX.md`：C# 110/110、聚焦 79/79、Python 30/30、默认实机 JSON PASS；独立控制 harness 复现 B 四个失败观测全部转 PASS。T20／X08 开始竞态与排队重读、X08／X09 准入清理、B01 运行上限在候选层为 PASS，但完整行与 Required Surfaces 仍待 B 复核；此前 B 对 `dd5f6b80...` 的失败结论保留在下方历史。
+最新候选 `b3764f43713bbc22bdc00cab122340e241110484` 在同一 Task 内修正 B 复审的 R1／R2／R5／R6，尚未经 B 独立审查，不是 PASS：登记转换收进同一短时锁（消除第二 owner 竞态），开始拒绝抛 `ProbeStartRejectedException` 中止冗余原生调用，排队准入始终重读当前原生源并在每个提前退出前 `Abandon`，`Finish` 幂等单次释放；新增不同 `User` 同源响应、上限 1 以实际开始、`SharedJoinBarrier` 取代延时等确定性用例，实机脚本补保存并发后重启前仍为旧池上限的观测。本机证据 `.git/validation-evidence/b3764f43713bbc22bdc00cab122340e241110484/developer-fix2-t4-20261014-100054/INDEX.md`：C# 110/110、聚焦 79/79、Python 30/30、默认实机 JSON PASS；独立控制 harness 复现 B 四个失败观测全部转 PASS。T20／X08 开始竞态与排队重读、X08／X09 准入清理、B01 运行上限在候选层为 PASS，但完整行与 Required Surfaces 仍待 B 复核；此前 B 对 `dd5f6b80...` 的失败结论保留在下方历史。
 
 ### Task 2.2 审查与修正（R1～R5）
 

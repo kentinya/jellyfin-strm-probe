@@ -17,7 +17,7 @@ Task 2.1 分层输入／原始日志、独立保存失败对照与实机证据�
 - 首轮候选新增进程内 ProbeCoordinator、共享等待后按本调用者重读源、启动并发值的惰性许可池和四项核心配置。B 指出其 `TryMarkStarted` 位于原生 `GetPlaybackMediaSources` 之前，登记的是刷新准备而非匹配探测已开始；等待许可返回 owner 后没有版本／基线／启停准入重查；原生 XML 写入截断旧文件的保护不足；非法配置日志包含私有路径。
 - 修正候选把开始信号接到经核验的匹配 `IMediaEncoder.GetMediaInfo` 调用（准备态与运行态分离），对真正等待过的 owner 重读当前 Manifest／指纹／启停，但有主流的旧源仍未重读，配置改为临时文件完整写入后 `File.Move` 原子替换，启动非法配置诊断去除私有路径，并增加上限 1／8、无人等待完成、池饱和原生独立、配置下一请求／重启生效的控制及实机对照。
 - Developer 索引 `.git/validation-evidence/dd5f6b80b9bd0bf63e16f2d1923995514ebebf4a/developer-fix-t4-20261014-05/INDEX.md`（C# 102/102、聚焦 71/71、Python 30/30、默认实机 PASS）；被拒候选原始证据与 B 独立控制失败观测保留在 `.git/validation-evidence/d651950950d6d3ad2be4322ddf8f0afb658c7755/`。B 独立聚焦 71/71 PASS，补充控制四个合同失败观测；本机索引 `.git/validation-evidence/dd5f6b80b9bd0bf63e16f2d1923995514ebebf4a/b-rereview-20261014-06/INDEX.md`。B 默认实机 NOT RUN（已有确定 P1），继续同 Task 修正。
-- 最新 Developer 修正候选 `b3764f43713bbc22bdc00cab122340e241110484`（Task 2.2，READY FOR B REVIEW）：登记转换原子化、开始拒绝中止冗余调用、准入重读当前源并清理未开始 owner。证据 `.git/validation-evidence/dc62db4661286f2a7fa59e4c53cef1bf8c363614/developer-fix2-t4-20261014-100054/INDEX.md`：C# 110/110、聚焦 79/79、Python 30/30、默认实机 JSON PASS（含重启前保存并发 1 仍为 2）；独立控制 harness 复现 B 四个失败观测全部转 PASS。B 尚未审查。
+- 最新 Developer 修正候选 `b3764f43713bbc22bdc00cab122340e241110484`（Task 2.2，READY FOR B REVIEW）：登记转换原子化、开始拒绝中止冗余调用、准入重读当前源并清理未开始 owner。证据 `.git/validation-evidence/b3764f43713bbc22bdc00cab122340e241110484/developer-fix2-t4-20261014-100054/INDEX.md`：C# 110/110、聚焦 79/79、Python 30/30、默认实机 JSON PASS（含重启前保存并发 1 仍为 2）；独立控制 harness 复现 B 四个失败观测全部转 PASS。B 尚未审查。
 
 ### Slice 1 关闭时的 Task 1.1 原型边界
 
