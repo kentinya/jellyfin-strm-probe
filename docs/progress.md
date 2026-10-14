@@ -19,14 +19,13 @@ Slice 1 交付固定 Jellyfin 12.2.0 的最小核心原型：未变化零探测�
 
 ## 当前开发指针
 
-- 开发基准：V4.2；V3.0 原文／旧合同保留在 Git 历史。
-- 当前 Slice：2，ACTIVE；真实 Base 为 Slice 1 关闭提交 `924816a84c74f5d79c107478f2d40e621cb8be8d`，Implementation Head 为 `198f4ff2accd5bc9fcd87518a9684b9d068de103`；完整合同见 [SLICE.md](../SLICE.md)。
-- 当前 Task：[Task 2.2](../TASK.md)，**FIX REQUIRED**／High／T4；Task Base 为 `13cb8bdac319fcf0b3e7500661bae1c7455077b0`，Contract Checkpoint 为 `7e0240cd1cada74f142b7b0afd612943ca991a91`。B 已拒绝的候选为 `d651950950d6d3ad2be4322ddf8f0afb658c7755`（R1～R5）和 `dd5f6b80b9bd0bf63e16f2d1923995514ebebf4a`（R1／R2／R5／R6）；Developer 已在同一 Task 内再次修正，最新候选 `b3764f43713bbc22bdc00cab122340e241110484` 也经 B 判 FIX REQUIRED：原 R1／R6 及原 R2 旧源对照已修正，剩余 R2 是立即获许可后的已完成版本重复探测、准入首次信任提交过期 Manifest。
-- Task 2.2 最新修正候选本机证据：`.git/validation-evidence/b3764f43713bbc22bdc00cab122340e241110484/developer-fix2-t4-20261014-100054/INDEX.md`；C# 110/110、聚焦 79/79、Python 30/30、默认实机 JSON PASS（含同源一次探测、默认 2／重启前保存 1 仍为 2／重启后配置 1 串行、池饱和原生刷新独立、配置拒绝／保存／下一请求生效／重启、清理恢复）；独立控制 harness 复现 B 四个失败观测全部转 PASS。更早修正候选 `dd5f6b80b9bd0bf63e16f2d1923995514ebebf4a` 证据保留在 `.git/validation-evidence/dd5f6b80b9bd0bf63e16f2d1923995514ebebf4a/`；B 独立索引 `.git/validation-evidence/dd5f6b80b9bd0bf63e16f2d1923995514ebebf4a/b-rereview-20261014-06/INDEX.md`（聚焦 71/71 PASS，四个边界／清理失败观测）。
-- 已接受 Task 2.1：B PASS，实现 `198f4ff2accd5bc9fcd87518a9684b9d068de103`，Task Base `7e0240cd1cada74f142b7b0afd612943ca991a91`；完整计划／完成报告／B 决定通过 `git show 13cb8bdac319fcf0b3e7500661bae1c7455077b0:TASK.md` 读取。本机独立证据 `.git/validation-evidence/198f4ff2accd5bc9fcd87518a9684b9d068de103/b-rereview-20261014-03/INDEX.md`；历史 FIX REQUIRED／FAIL／NOT RUN 保留。
-- Slice 2 已接受解析／决策、SQLite、实际多版本身份与持久化播放／恢复闭环；Task 2.2 最新 B 复审仍 FIX REQUIRED，只有 R2 剩余 P1。B 本机索引 `.git/validation-evidence/b3764f43713bbc22bdc00cab122340e241110484/b-rereview-20261014-07/INDEX.md`：聚焦 79/79 PASS；控制 4 PASS／2 FAIL（重复探测和过期首次信任）。B 默认实机 NOT RUN（先修正确定 P1），完整 Required Outcomes／Surfaces 未满足，Slice Final NOT RUN，Closure Packet NOT SUBMITTED。Developer 原始成功与历史 FAIL 保留，不互相覆盖。
-- Slice 3／4：PLANNED；原生批量与完整配置页、大规模／扫描、外部代理及发布仍未完成。
-- 合同修订：A 按用户“批量停止只撤销未开始工作、只共享已实际开始探测”提交 [Material Contract Change](../SLICE.md#a-停止与共享边界修订2026-10-13)，替代 `ac2fcead73664cfdaf66f62954ec6b11fb303168` 的人为执行取消约定，Base／ID 不变；原生取消异常保护及历史结果保留。
-- 下一动作：Developer 在同一 Task 2.2 内完成 R2 的统一行动前重判与首次信任当前性保护，补两个确定性失败回归并跑新候选完整 T4；交回 B。PASS 后再对账全部 RO／Surfaces，满足时单独 Slice Final 并交 A。
+- 开发基准：V4.2；V3.0 与历史失败保留在 Git／原始证据。
+- 当前 [Slice 2](../SLICE.md)：READY FOR A REVIEW，Base `924816a84c74f5d79c107478f2d40e621cb8be8d`；Task 2.1／2.2 已 B PASS，接受实现 `59fd3f7e4b6623449a691574fb69b817db72c2ae`。全部六个 Required Outcomes／六个 Surfaces 已满足，停止创建 Task；单独 Slice Final 全部通过，Closure Packet 已提交，A Final Review NOT RUN。
+- 当前 [TASK.md](../TASK.md) 无活动实施任务。Task 2.2 Base `13cb8bdac319fcf0b3e7500661bae1c7455077b0`，Contract Checkpoint `7e0240cd1cada74f142b7b0afd612943ca991a91`；完整计划／Developer 报告／B PASS 在 `76cd9e997548c4ffef04a8dd8f9b0d4ef4376347:TASK.md`。本机 B 索引 `.git/validation-evidence/59fd3f7e4b6623449a691574fb69b817db72c2ae/b-rereview-20261014-08/INDEX.md`：聚焦 81/81、六项控制、默认隔离实机、未安装插件和播放检查关闭补充对照均通过，恢复插件／配置／地址、临时库残留 0。
+- Task 2.1 Base `7e0240cd1cada74f142b7b0afd612943ca991a91`，实现 `198f4ff2accd5bc9fcd87518a9684b9d068de103`；计划／报告／B PASS 在 `13cb8bdac319fcf0b3e7500661bae1c7455077b0:TASK.md`，本机索引 `.git/validation-evidence/198f4ff2accd5bc9fcd87518a9684b9d068de103/b-rereview-20261014-03/INDEX.md`。
+- 单独 Slice Final 本机索引：`.git/validation-evidence/59fd3f7e4b6623449a691574fb69b817db72c2ae/slice-final-20261014-09/INDEX.md`；112 C#／30 Python、restore／build／format／治理／diff／链接、默认实机与补充未安装对照全部 PASS；原始命令、身份、计数、日志与恢复证明在索引。
+- Slice 3／4 保持 PLANNED：完整配置页、原生批量／停止／进度、大规模／扫描、外部代理和发布未交付，不自动启动。
+- [停止／共享合同修订](../SLICE.md#a-停止与共享边界修订2026-10-13) 保持；公共 PlaybackInfo 的 None token、原生取消异常保护和批量只停止未开始工作的边界不变。
+- 下一动作：A 独立审查完整 Slice 与 Closure Packet；只有 A 可最终审查和关闭。
 
-NEXT ACTION: DEVELOPER CORRECTS TASK 2.2 IN PLACE
+NEXT ACTION: A REVIEWS COMPLETE SLICE

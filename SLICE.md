@@ -4,9 +4,9 @@
 Slice ID: 2
 Name: 播放检查与历史指纹完整闭环
 Owner: A
-Status: ACTIVE
+Status: READY FOR A REVIEW
 Base SHA: 924816a84c74f5d79c107478f2d40e621cb8be8d
-Implementation Head: 198f4ff2accd5bc9fcd87518a9684b9d068de103
+Implementation Head: 59fd3f7e4b6623449a691574fb69b817db72c2ae
 ```
 
 ## 激活决定与真实基线
@@ -142,12 +142,86 @@ A 最终审查整个 Base..Implementation Head，判 PASS、FIX REQUIRED 或 PAR
 
 ## Closure Packet
 
-NOT SUBMITTED。B 后续填写 Base／实际 Head、任务与审查索引、Required Outcomes／Surfaces 及 AC 对账、单独 Slice Final、业务不变量证据、非阻塞问题、延期和文档协调项，明确给出 `SLICE READY FOR A REVIEW`。没有产品验收结论。
+2026-10-14，B 提交本包；决定 **SLICE READY FOR A REVIEW**。Task 2.1／2.2 均 PASS，全部 Required Outcomes／Surfaces 已满足，已停止创建 Task，单独 Slice Final 全部通过。A 尚未最终审查，Slice 未关闭。本次只更新审查元数据、事实文档和交接包；Base、用户目标、Required Outcomes／Surfaces、约束、不变量、排除范围、验收及最终门槛均不改变。
+
+```text
+Slice: 2
+Slice Base: 924816a84c74f5d79c107478f2d40e621cb8be8d
+Implementation Head: 59fd3f7e4b6623449a691574fb69b817db72c2ae
+A Review Range: 924816a84c74f5d79c107478f2d40e621cb8be8d..59fd3f7e4b6623449a691574fb69b817db72c2ae
+Contract Checkpoint: 7e0240cd1cada74f142b7b0afd612943ca991a91 (acceptance meaning unchanged)
+Task 2.2 B PASS Checkpoint: 76cd9e997548c4ffef04a8dd8f9b0d4ef4376347
+B Decision: SLICE READY FOR A REVIEW
+B P0/P1 Blockers: NONE FOUND
+A Final Review: NOT RUN
+Next Action: A REVIEWS COMPLETE SLICE; NO NEW TASK OR SLICE ACTIVATION
+```
+
+### 实现与 Task 索引
+
+交付只读完整解析／决策、默认首次信任、稳定项目／源映射和最小 SQLite 条件提交／重启恢复；播放共用原生探测、可靠成功／事务保存／稳定版本核对。URL 变化使用原生保存的新地址主流。同源只登记实际开始的执行，共用全局上限，调用者按自身原生权限／源／路径替换取得响应；所有 owner 行动前重判，开始与结束登记原子化，已开始工作在无人等待时仍收尾并按条件提交。四项核心配置有原子保存、明确生效时机、错误反馈和操作／故障恢复说明。
+
+| Task | 实现范围与状态 | 完整可达记录 |
+|---|---|---|
+| 2.1 | 项目／媒体源 SQLite 播放指纹、完整矩阵、原生保存与重启恢复；B PASS。Base `7e0240cd1cada74f142b7b0afd612943ca991a91` → Head `198f4ff2accd5bc9fcd87518a9684b9d068de103`。 | `13cb8bdac319fcf0b3e7500661bae1c7455077b0:TASK.md`；本机 `.git/validation-evidence/198f4ff2accd5bc9fcd87518a9684b9d068de103/b-rereview-20261014-03/INDEX.md`。 |
+| 2.2 | 运行中协调／正常收尾／全局上限／核心配置及 R1～R6 同 Task 修正；B PASS。Base `13cb8bdac319fcf0b3e7500661bae1c7455077b0` → Head `59fd3f7e4b6623449a691574fb69b817db72c2ae`。 | `76cd9e997548c4ffef04a8dd8f9b0d4ef4376347:TASK.md` 保留完整计划／Developer 报告／B 审查；Developer 报告提交 `11d56961ec67a6ddcab84db0db18ff2b5ebff7cc`；本机 `.git/validation-evidence/59fd3f7e4b6623449a691574fb69b817db72c2ae/b-rereview-20261014-08/INDEX.md`。 |
+
+历史 FIX REQUIRED／FAIL／NOT RUN 与每轮原始日志均保留在 Git 和原候选证据目录。当前根 TASK 无活动实施任务；不新建 Task 2.3。
+
+### Required Outcomes、Surfaces 与验收对账
+
+| 必要结果 | 完成状态／最终证据 |
+|---|---|
+| RO-1 | SATISFIED。完整字段／逻辑／文件矩阵在 112 项全套中通过；首次已有主流真实信任 0 探测，首次缺主流有真实匹配探测（不可达时失败且无指纹）；原生地址不符控制／实机及准入过期信任保护通过。 |
+| RO-2 | SATISFIED。最小 schema、初始化／未知版本拒绝、条件提交／竞争／失败保护、SHA-1 身份序列；真实不可写故障、修复及成功／未完成变化跨重启。没有旧已部署 schema，不编造迁移。 |
+| RO-3 | SATISFIED。共用真实源入口；本次编码器结果＋事务保存＋必要主流＋最新地址＋稳定 Manifest＋expectedPrevious 的提交门槛。实机 URL／内容 SHA-1／无可比哈希 Size 变化、同内容换 URL、失败／恢复／竞态及重启正确。保存失败使用独立控制，未声称实机数据库故障注入。 |
+| RO-4 | SATISFIED。准备与实际匹配调用边界、同键原子登记、所有 owner 重判和完成重查；真实同源开始 1／提交 1／随后 0，稳定多版本独立；1／2／8 确定性上限、实机代表性 2／1、不同 User／路径替换／false 权限控制及独立刷新。 |
+| RO-5 | SATISFIED。确定性无人等待仍正常提交／释放；原生自身取消异常保留基线并传播，None token 和不新增客户端停止关联保持。真实批量停止／未开始工作撤销／收尾统计在 Slice 3 验证。 |
+| RO-6 | SATISFIED。四项核心配置默认／旧配置兼容／保存拒绝与中途失败保护、生效时机、下一请求启停／详细日志、启动并发与操作说明；SQLite 停止优化／原权限委托／旧库保护／修复重启和脱敏诊断。 |
+
+| Required Surface | 完成状态／证据入口 |
+|---|---|
+| solution／完整播放及单元、文件、存储、并发入口 | SATISFIED：真实 solution／MSTest 项目，112 全套与 Task B 聚焦 81。 |
+| 原生 PlaybackInfo／媒体源／探测事务保存／完整委托生命周期权限与刷新 | SATISFIED：适配／保存失败控制，全接口／DI／生命周期测试，真实加载、未安装／禁用／旧／普通／直播／false 流入口、手动刷新和重启。 |
+| 私有最小 SQLite／schema／条件提交／损坏不可写恢复 | SATISFIED：存储回归及真实库故障修复／重启；只有五字段，不保存媒体流、PlaybackInfo 或持久化探测状态。 |
+| 稳定身份／共用检查／Coordinator／实际开始收尾结束重查 | SATISFIED：全套确定性协调／不同调用者、六项 B 独立边界控制和实机共享／多版本／上限。 |
+| 既有配置通道／核心配置／操作恢复／脱敏 | SATISFIED：配置控制、真实 API 保存拒绝／生效／重启及补充 PlaybackAutoCheck 下一请求对照；[操作说明](docs/core-configuration.md)。 |
+| 固定隔离计数／正确源／失败竞态／多源共享／真实重启与原始索引 | SATISFIED：本包单独 Final 默认入口＋补充对照，JSON 逐源计数／指纹／返回与已保存源、恢复和清理；[矩阵](docs/test-matrix.md)。 |
+
+AC-1～AC-8 按合同限定证据层全部满足：AC-1／AC-2 对应完整逻辑／文件／首次信任；AC-3／AC-4 对应 SQLite／失败保护／原生保存和重启；AC-5／AC-6 对应真实开始与确定性共享收尾、代表性实机上限；AC-7 对应原生对照／核心配置／恢复（未安装已补）；AC-8 对应只读／隐私／固定输入／分层索引与文档。T09～T11 等逐逻辑分支实机仍明确 NOT RUN，逻辑全矩阵通过且代表性 URL 变化真实探测成立；不把完整产品矩阵的批量／UI／外部部分写成 PASS。
+
+### 单独 Slice Final 与原始证据
+
+源码检查点 `59fd3f7e4b6623449a691574fb69b817db72c2ae`，Task B 检查点 `76cd9e997548c4ffef04a8dd8f9b0d4ef4376347`；cwd `/opt/jf-strm-probe`，SDK `10.0.401`／net10.0；Jellyfin `12.2.0`／固定源码 `ca0f16eb7c195f720a1493ed469a27c4657db0c6`、NuGet 锁与 image digest 保留在索引。Final 重新执行全部指定门槛，没有用旧 Task 实机运行代替本轮 Final。
+
+本机最终索引：`.git/validation-evidence/59fd3f7e4b6623449a691574fb69b817db72c2ae/slice-final-20261014-09/INDEX.md`。相邻 `*-command.json` 记录精确 argv、cwd、退出码和耗时；`identity.json`／`inputs.json`／`runtime.json`／`build-artifacts.json` 保存源码／工作区、依赖／工具／镜像／夹具与部署输入身份，原始 `.log` 保留。证据仅本工作区可读，保留到 A 决定。
+
+| 最终门槛 | 实际结果 |
+|---|---|
+| locked restore | PASS，exit 0，2.519 秒。 |
+| Release build --no-restore | PASS，0 警告／0 错误，exit 0，8.676 秒。 |
+| C# 全套 test --no-restore | PASS，112 passed／0 failed／0 skipped，exit 0，6.018 秒；覆盖全部聚焦用例。 |
+| format --verify-no-changes --no-restore | PASS，exit 0，15.488 秒。 |
+| Python 全套 | PASS，30 tests／0 failures，exit 0，2.873 秒；后继文档另跑消费文档检查。 |
+| 治理／diff／本地文件锚点链接 | PASS，初始 Final 与交接检查点分别记录；合同／Roadmap 元数据要求已提交后治理，最终文档变动后重跑。 |
+| 默认隔离 Jellyfin 入口 | PASS，exit 0，706.997 秒。同源 1 开始／1 提交／随后 0，默认重叠 2、保存 1 重启前仍 2、重启后串行（3.795／3.185 秒）；饱和池独立 FullRefresh 495 ms；配置／多版本／失败竞态／SQLite＋地址主流重启，夹具恢复与同步、临时条目清理。 |
+| 补充隔离对照 | PASS，exit 0，107.809 秒。未安装的原生 PlaybackInfo 地址／主流正确，播放检查关闭下一请求原生委托，指纹不变；恢复插件／配置并重启后零探测，临时库残留 0，夹具内容身份与 Final 初始一致。 |
+
+业务不变量证据：URL 优先／双侧有效哈希／Size／mtime／字段身份由完整矩阵与真实代表输入核验；原生 false 权限／委托与客户端 None token 保留；首次信任与真实成功分开；本次保存、版本与历史条件缺一不提交，旧流／事件不足，失败／竞态／原生取消异常保护旧基线；同源实际开始／调用者独立／上限与幂等收尾；只读 STRM、五字段存储和插件诊断脱敏。仅专用实例／临时媒体，未改生产或 STRM 生成器／外部代理。
+
+### 非阻塞、延期、文档协调与经验候选
+
+- 非阻塞事实：JSON 错误类型／非整数由 Jellyfin 反序列化返回 500，插件越界返回 400；没有统一状态码。音频必要主流有控制证据，audio-only 实机 NOT RUN；Jellyfin 内部数据库保存故障实机注入、完整镜像构建溯源及通用 FullRefresh 性能基准 NOT RUN，维持合同明确限制。
+- Slice 3：完整 HTML 配置页、批量范围、原生计划任务／分页／有界工作／运行停止定时进度／播放批量混合与停止收尾。共用检查入口已存在，真实批量停止边界仍须新合同内实证。Slice 4：大规模／扫描／外部代理／广泛格式客户端及单版本发布。两者仍 PLANNED，不自动激活；并发热调整／自动数据库修复非目标。
+- 文档协调：本次同步 README、architecture CURRENT、test-matrix 分层状态、progress 当前指针、核心配置说明与 TASK，未修改 Roadmap／稳定需求／V4.2 原文或合同条款。Roadmap 表按流程保持 ACTIVE，A 审查 PASS 后在关闭检查点协调它的当前说明，以及 scope／requirements／product-experience／development-environment 的旧阶段指针和 CURRENT／TARGET；保留所有未运行／延期事实，更新关闭账本与 A Final Review。B 不提前签 Closure Reconciliation 或 PASS / CLOSED。
+- 经验候选供 A 收尾取舍，经验文件本轮不记录流水账：立即取得许可仍可能在登记前遇到同源完成 → 每个 owner 行动前重新读取原生源／Manifest／可信基线并重判 → 适用于并发准入；异步取源后直接首次信任可能发布旧版本 → await 后读取行动输入，并在信任提交前核对当前 Manifest 与预期基线 → 适用于信任／复用例外。A 关闭时按流程审阅三份角色经验，只合并少量可复用条目。
+
+**SLICE READY FOR A REVIEW。A 独立审查完整 Base..Implementation Head；B 停止新建 Task。**
 
 ## A Final Review
 
 NOT RUN。等待 Closure Packet 后独立审查完整范围，记录 Reviewed Range、Reviewed Contract、Decision 与 P0/P1 Blockers；本次激活不是最终审查。
 
 ```text
-NEXT ACTION: B PLANS FIRST TASK
+NEXT ACTION: A REVIEWS COMPLETE SLICE
 ```

@@ -4,7 +4,7 @@
 
 项目：`Jellyfin.Plugin.StrmProbeOptimizer`，C# 插件。SQLite 仅保存最小历史指纹，媒体流继续保存在 Jellyfin 原生库，不维护独立探测状态机。
 
-**Slice 1 核心原型已由 A 最终审查 PASS / CLOSED，完整产品尚未交付。** [最终审查](docs/progress.md#slice-1-closed) 与 [Closure Packet](docs/progress.md#slice-1-closed) 记录构建、加载、探测／保存、失败恢复和重启证据。固定 SDK `10.0.401`、Jellyfin `12.2.0`、源码／依赖与镜像 digest 见 [开发环境](docs/development-environment.md)。ACTIVE 的 [Slice 2](SLICE.md) 已完成 B 接受的 SQLite／真实媒体源持久播放闭环；运行中探测共享、全局并发上限与核心配置（`Enabled`／`PlaybackAutoCheck`／`MaxConcurrentProbes`／`DetailedLog`）的 [Task 2.2](TASK.md) 首轮与修正候选均经 B 独立审查为 FIX REQUIRED；Developer 已在同一 Task 内按 R1／R2／R5／R6 修正（开始竞态原子化、排队准入重读当前源、准入异常清理与必要边界证据）；最新 B 复审仍 FIX REQUIRED，只剩 R2 的行动前重判与过期首次信任提交缺口；[核心配置操作说明](docs/core-configuration.md) 记录候选操作与限制；完整配置页、批量任务、发布包与外部代理联调仍延期。
+**Slice 1 核心原型已由 A 最终审查 PASS / CLOSED，完整产品尚未交付。** [最终审查](docs/progress.md#slice-1-closed) 与 [Closure Packet](docs/progress.md#slice-1-closed) 记录构建、加载、探测／保存、失败恢复和重启证据。固定 SDK `10.0.401`、Jellyfin `12.2.0`、源码／依赖与镜像 digest 见 [开发环境](docs/development-environment.md)。[Slice 2](SLICE.md) 的 Task 2.1／2.2 已经 B 独立审查 PASS，完成 SQLite／稳定多源播放闭环、实际开始后的探测共享、全局并发和核心配置；[核心配置操作说明](docs/core-configuration.md) 提供操作与恢复方法。已停止创建 Task，单独 Slice Final 全部通过，Closure Packet 已提交给 A；A 最终审查尚未运行。完整配置页、批量任务、发布包和外部代理联调仍延期。
 
 ## 开发基准与范围
 
@@ -19,7 +19,7 @@
 3. 查看 [当前 Slice](SLICE.md)、[当前 Task](TASK.md)、[四个 Slice 路线图](docs/roadmap.md) 和 [进度](docs/progress.md)。
 4. 开发环境执行 `python3 scripts/development_environment.py doctor`；安装与隔离运行见 [环境交接](docs/development-environment.md)。
 
-Slice 1 已证明固定版本上的核心接入、可靠的原生成功信号与最新地址持久化。Slice 2 已由 A 在独立一轮激活，以 Slice 1 关闭提交为 Base；Task 2.1 已经 B 独立复审 PASS，报告与证据见 [进度](docs/progress.md#当前开发指针)。[Task 2.2](TASK.md)（High／T4）负责运行中探测协调、正常收尾与核心配置；B 对首轮与修正候选均判 FIX REQUIRED，最新候选经 B 独立复审仍 FIX REQUIRED；Developer 继续同一 Task 修正 R2 的行动前重判与首次信任保护。Slice 2 未完成最终验收；Slice 3／4 保持 PLANNED。
+Slice 1 已证明固定版本上的核心接入、可靠原生成功信号与最新地址持久化。Slice 2 已由 B 接受全部 Required Outcomes／Surfaces，当前无活动实施 Task，单独 Slice Final 通过且已提交 Closure Packet 给 A；详细计划／报告／独立审查与本机证据见 [进度](docs/progress.md#当前开发指针)。Slice 2 尚未由 A 关闭，Slice 3／4 保持 PLANNED。
 
 ## 产品目标
 
@@ -29,7 +29,7 @@ Slice 1 已证明固定版本上的核心接入、可靠的原生成功信号与
 - 「控制台 → 计划任务 → STRM 媒体信息检查」支持原生运行／停止／定时，默认无自动触发；分页只处理需要探测的项目。停止只撤销未开始工作，已开始探测继续完成并按条件提交，收尾报告实际结果。
 - 播放与批量共用 ProbeCoordinator，只共享已实际开始且仍在执行的探测，排队不共享；插件主动探测并发默认 2、允许 1～8，不限制其他原生任务或插件。
 
-这些是 TARGET，不是已实现功能或安装说明。兼容性及接口定位见 [compatibility.md](docs/compatibility.md) 和 [references.md](docs/references.md)。
+上列描述完整产品目标；当前已接受的播放／指纹／共享和核心配置范围见 Slice 2，原生批量与后续发布仍未交付。兼容性及接口定位见 [compatibility.md](docs/compatibility.md) 和 [references.md](docs/references.md)。
 
 ## 仓库检查
 
