@@ -4,7 +4,7 @@
 
 V4.2 是当前开发基准，V3.0 原文与合同留在 Git 历史。Slice 1 原型已经 A 最终审查 PASS / CLOSED；[关闭证据](progress.md#slice-1-closed) 保留原始边界。固定 Jellyfin `12.2.0`／源码 `ca0f16eb7c195f720a1493ed469a27c4657db0c6`、Controller／Model `12.2.0`、`net10.0`／SDK `10.0.401`；单版本事实不构成跨版本兼容承诺。
 
-Slice 2 已由 A 审查完整 Base..Implementation Head 并裁定 PASS / CLOSED；接受实现 `59fd3f7e4b6623449a691574fb69b817db72c2ae`，Slice Base 固定为 `924816a84c74f5d79c107478f2d40e621cb8be8d`。Task 2.1／2.2 均 B PASS，单独 Slice Final 经 A 核验输入和原始产物后接受；当前无活动 Task。完整合同、Closure Packet 和 [A Final Review](progress.md#slice-2-closed) 保留必要结果及证据边界。
+Slice 2 已由 A 审查完整 Base..Implementation Head 并裁定 PASS / CLOSED；接受实现 `59fd3f7e4b6623449a691574fb69b817db72c2ae`，Slice Base 固定为 `924816a84c74f5d79c107478f2d40e621cb8be8d`。Task 2.1／2.2 均 B PASS，单独 Slice Final 经 A 核验输入和原始产物后接受；当前 Slice 3 任务状态另见 [TASK.md](../TASK.md)。完整合同、Closure Packet 和 [A Final Review](progress.md#slice-2-closed) 保留必要结果及证据边界。
 
 - 只读版本 1 解析及完整决策矩阵、原生所属项目／MediaSourceInfo.Id 的稳定多版本身份、五字段 SQLite 和 expectedPrevious 原子条件提交已接受。失败、原生自身取消异常、文件变化及过期结果保护可信基线；SQLite 异常停止优化，保留原权限与旧库，修复后重启重新检查。
 - 共用 `CheckSourceAsync` 使用已有原生探测／事务保存关联；每个取得许可的 owner 先读本调用者当前源，再核对 Manifest／指纹／启停后行动，立即获许可也重判。首次信任核对当前 Manifest 与原生地址，不称为本次探测成功。
@@ -28,19 +28,20 @@ Slice 2 已由 A 审查完整 Base..Implementation Head 并裁定 PASS / CLOSED�
 
 播放接入保留原调用的 token 与探测权限。获取 PlaybackInfo 并不保证实际探测；插件未变化复用分支会使用原生不探测取源。当前 PlaybackInfo 传 `CancellationToken.None`，客户端退出及停止播放不连接到本次探测取消；不新增 `RequestAborted` 关联或 PlaybackStopped 事件取消器。客户端退出后，执行仍成功且结果已保存、Manifest 一致时，可继续按条件提交。
 
-批量尚未实现；原生计划任务的停止 token 在目标设计中仅用于后续分页和未实际开始的工作，不传给已开始探测，也不否决其满足全部成功条件后的提交。已开始工作正常收尾，即使没有其他等待者。用户停止／共享规则已由 A 作为 [Slice 2 Material Contract Change 记录](progress.md#slice-2-closed) 同步；Slice 2 取消人为可取消执行实机门槛，原生取消异常仍保留基线并传播，Slice 3 验证实际批量停止与收尾。固定版本入口见 [兼容性](compatibility.md#播放与批量取消语义)。
+批量尚未实现；原生计划任务的停止 token 在目标设计中仅用于候选获取边界、后续批次和未实际开始的工作，不传给已开始探测，也不否决其满足全部成功条件后的提交。已开始工作正常收尾，即使没有其他等待者。用户停止／共享规则已由 A 作为 [Slice 2 Material Contract Change 记录](progress.md#slice-2-closed) 同步；Slice 2 取消人为可取消执行实机门槛，原生取消异常仍保留基线并传播，Slice 3 验证实际批量停止与收尾。固定版本入口见 [兼容性](compatibility.md#播放与批量取消语义)。
 
 ## TARGET
 
-[Slice 3 合同](../SLICE.md) 已激活，Base 为 Slice 2 关闭提交 `6da90ab6bd8995d8204ae0b7faf786c823699fe6`，尚无活动实施 Task。当前代码仍未提供批量任务／范围配置／HTML 页；以下批量设计不是已实现事实。新增入口必须区分批量准入停止与已开始探测收尾，并在批量不可用时停止枚举，不能直接复用现有允许原生委托的播放回退。范围按每次运行快照、分页／工作有界、进度与按源统计及配置生效约定见合同；真实任务／定时／停止／页面交互仍 NOT RUN。
+[Slice 3 合同](../SLICE.md) 已激活，Base 为 Slice 2 关闭提交 `6da90ab6bd8995d8204ae0b7faf786c823699fe6`，本轮按用户授权实质修订为候选 ID 集合＋分批对象读取，Task 3.1 合法性与状态见 [TASK.md](../TASK.md)。当前代码仍未提供批量任务／范围配置／HTML 页；以下批量设计不是已实现事实。新增入口必须区分批量准入停止与已开始探测收尾，并在批量不可用时停止枚举，不能直接复用现有允许原生委托的播放回退。范围按每次运行固定，候选 ID 集合允许 O(N) 内存，完整媒体对象／活动工作按批次有界；进度、按源统计及配置生效约定见合同；真实任务／定时／停止／页面交互仍 NOT RUN。
 
 ```mermaid
 flowchart TD
     A[现有版本化 STRM] --> R[只读 Manifest Reader]
     P[Jellyfin 播放请求] --> I[经版本验证的播放接入层]
-    T[Jellyfin 原生计划任务] --> Q[所选媒体库分页枚举]
+    T[Jellyfin 原生计划任务] --> Q[所选媒体库候选 ID 集合]
+    Q --> W[分批读取当前对象与固定消费者]
     I --> R
-    Q --> R
+    W --> R
     R --> D[共用 ProbeDecisionService]
     F[SQLite 最小历史指纹] --> D
     N[Jellyfin 原生主媒体流] --> D
@@ -68,7 +69,7 @@ flowchart TD
 | ProbeDecisionService | 纯决策：RequireProbe／SkipProbe／Fallback；没有 UpdatePathOnly |
 | ProbeCoordinator | 以 item_id＋source_key 只共享实际已开始的运行中探测；排队不作为共享执行，已开始工作独立收尾；全局许可默认 2、配置 1～8，播放／批量共用 |
 | NativeProbeExecutor | 版本相关原生探测、关联本次结果、媒体流／地址持久化验证；评估 FullRefresh 附带开销 |
-| StrmProbeScheduledTask | 候选 IScheduledTask／IConfigurableScheduledTask，分页所选库、有界消费、取消、原生进度及统计 |
+| StrmProbeScheduledTask | 候选 IScheduledTask／IConfigurableScheduledTask，所选库候选 ID 集合、分批对象／固定消费者、停止收尾、原生进度及统计 |
 | StrmFingerprintRepository | SQLite 最小历史指纹、条件提交与异常保护；不保存媒体信息或持久化探测状态 |
 
 结果验证是 Executor 的必需责任，不因移除独立 Validator／Synchronizer 类而消失。首次验证后才决定具体代码组织，不预建空类。
@@ -120,13 +121,17 @@ CREATE TABLE strm_fingerprint (
 
 运行中共享登记只包含实际已进入原生探测调用且尚未结束的工作，开始信号须经接入层核验；仅创建 Task、排队、等待或取得许可都不算。未开始请求各自排队，保留调用者权限／生命周期；不把同键排队任务合并为共享执行。获得执行机会后重读 Manifest 和指纹，若同源已经实际开始才加入，否则按最新决策开始或复用已保存结果。协调开始竞态，避免同源重复实际执行；加入已开始探测不额外占全局许可。不同源独立，共用总上限；执行结束后释放许可／登记，等待者重查版本，不把完成任务缓存成运行中共享。
 
-批量任务的停止在 Slice 3 处理：停止后续分页，撤销本任务未实际开始的请求；不能取消其他调用者的排队请求。先确认停止的工作不再开始，已实际开始的工作继续完成，任务进入停止收尾并等待其结果结算。停止 token 不传播给已开始探测；原生保存／验证／指纹条件提交继续执行，不用批量停止 token 在成功返回后阻止有效提交。
+批量任务的停止在 Slice 3 处理：停止后续候选获取／批次读取，撤销本任务未实际开始的请求；不能取消其他调用者的排队请求。先确认停止的工作不再开始，已实际开始的工作继续完成，任务进入停止收尾并等待其结果结算。停止 token 不传播给已开始探测；原生保存／验证／指纹条件提交继续执行，不用批量停止 token 在成功返回后阻止有效提交。
 
 等待者退出或数量为零均不取消已开始探测，不需要按等待者计数取消执行的机制，也不新增独立执行取消源。原生探测自身失败／取消异常仍保留旧基线并传播；成功必须满足本次真实探测、保存、主流和稳定 Manifest 条件。当前公共 PlaybackInfo 沿用 None token，不新增客户端断开／停止播放到探测取消的关联。
 
 核心并发配置默认 2、可保存 1～8，下一次 Jellyfin 启动生效；保存说明须明确，不要求 Slice 2 热调整已有许可池。核心配置通过 Jellyfin 已有保存通道提供，完整配置页仍在 Slice 3。
 
-库查询使用稳定分页顺序、去重和有界生产／消费，不一次保存全库列表或为十万项创建十万个 Task。扫描并发增删项目时不误报完整静态快照；重读 STRM、防止旧版本提交。插件并发上限只覆盖主动发起的探测，外部原生刷新保持独立。
+批量使用目标版本原生 `ILibraryManager.GetItemIds`，按所选库关系和同一过滤取得物理媒体项 ID；包含 alternate versions，关闭展示聚合。允许一次取得全部候选身份，去重后以确定顺序固定本轮 ID 序列，不依赖名称／原生 offset 排序。按固定批次使用 `GetItemList(ItemIds=批次ID)` 读取当前对象，并通过原生库关系重核范围；消失／移出者安全结算，新增留下一轮。固定消费者处理当前批次，整批结算后才读取下一批，不要求独立生产者／等待队列，也不为每个 ID 创建 Task。
+
+ID 获取完成前不开始对象处理；任一所选库获取失败时报告不可用，不按部分候选继续。原生同步 ID／对象查询无 token 时只在调用前后检查停止／禁用，调用中停止等返回，返回后不准入；不使用脱离任务的后台获取伪装取消。旧轮执行保持未结束，待本轮已开始／已加入探测完成保存、指纹提交、统计与资源结算后抛停止异常；原生 Cancelling 结束后才允许下一轮批量实际运行。
+
+全部候选 ID、合并去重／排序副本及原生查询临时分配可能随 N 增长，独立观测获取耗时、数量、内存及停止延迟；只对当前批次完整媒体对象和固定消费者宣称上限。候选身份不是事务快照，不能替代当前 Manifest／指纹／主流与条件提交校验。候选获取阶段进度 0%，之后以去重 ID 数为分母、按候选结算推进；所有受支持源统计另按项目＋源去重，首次信任不算探测成功。修复或停止后重跑重新获取 ID，不保存分页位置／失败队列。插件并发上限仍只覆盖主动探测，外部原生刷新独立。
 
 ## 接入门槛与故障
 

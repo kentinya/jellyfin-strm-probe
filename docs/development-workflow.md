@@ -65,6 +65,8 @@ Task 计划前运行 `python3 scripts/check_governance.py`：读取 `HEAD:SLICE.
 
 本次 V4.2 重规划是实质合同变更：原 Slice 1 没有产品实现，核心接入目标仍成立，保留 ID／Base 并提交修订合同；根 TASK 暂设无活动任务。B 在该提交后重规划 Task 1.1，保留原 Task Base 作为审查起点，另记录新的 Contract Checkpoint 和被替代计划快照。此记录不代表产品审查 PASS，不授权本次文档工作执行插件开发。
 
+2026-10-14 用户授权 A 简化 Slice 3 的批量读取：允许一次获取原生候选 ID 集合、分批读取完整对象、固定消费者，不要求滑动分页／排除列表／独立等待队列。原文保留，变化属于 Material Contract Change；A 先提交修订 ACTIVE 合同及协调需求／架构，根 Task 暂无活动实施任务。B 在该提交后判断同一 Task 3.1 合法调整，保留 ID、Task Base 和原计划 Git 快照，更新 Contract Checkpoint／验收／测试；不假装产品 PASS 或启动本轮插件实施。
+
 当前文件治理独立检查 V4.2 原文及维护中的文件清单；`bootstrap-manifest.json` 与初始化脚本是 V3.0 一次性初始化历史，不再决定当前必需文件，也不重新生成旧摘要。未来再次替换方案时，必须显式同步原文身份、需求、合同和治理回归，不能通过删除原文校验规避变更记录。
 
 ## 4. Task 规划与实施

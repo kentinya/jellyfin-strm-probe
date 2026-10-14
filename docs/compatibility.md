@@ -4,7 +4,7 @@
 
 当前固定组合上的 Slice 1／2 均已 PASS / CLOSED，没有发布包或多版本兼容声明。真实插件已用 Jellyfin Controller／Model `12.2.0`、`net10.0` 和 SDK `10.0.401` 构建，并在隔离 Jellyfin `12.2.0` 容器加载；镜像 digest、媒体服务和环境身份见 [环境交接](development-environment.md)。当前证据已覆盖完整播放／SQLite／稳定多源／共享协调及核心配置，完整产品与发布支持仍未验证，分层状态见 [测试矩阵](test-matrix.md)。
 
-B 对旧候选的 FIX REQUIRED 保留为历史；Task 1.1、2.1／2.2 均已独立审查 PASS，A 分别完成 Slice 1／2 最终审查。[Slice 2](progress.md#slice-2-closed) 已关闭，接受实现 `59fd3f7e4b6623449a691574fb69b817db72c2ae`；原始 Final 经 A 核验并明确复用，A 另独立重跑 C# 全套，详情见 [关闭记录](progress.md#slice-2-closed)。[Slice 3](../SLICE.md) 已激活合同、待 B 先计划；Slice 4 保持 PLANNED，新增运行验收仍 NOT RUN。播放取消范围遵循 A 的 RESCOPE：保留原生取消异常处理，不要求成功返回后的额外取消检查或人为注入实机门槛；只共享实际已开始探测，批量停止只撤销未开始工作，Slice 3 验证实际任务停止与已开始工作收尾。
+B 对旧候选的 FIX REQUIRED 保留为历史；Task 1.1、2.1／2.2 均已独立审查 PASS，A 分别完成 Slice 1／2 最终审查。[Slice 2](progress.md#slice-2-closed) 已关闭，接受实现 `59fd3f7e4b6623449a691574fb69b817db72c2ae`；原始 Final 经 A 核验并明确复用，A 另独立重跑 C# 全套，详情见 [关闭记录](progress.md#slice-2-closed)。[Slice 3](../SLICE.md) 已激活并按用户授权改用 ID 集合／分批读取，Task 3.1 状态见 [TASK.md](../TASK.md)；Slice 4 保持 PLANNED，新增运行验收仍 NOT RUN。播放取消范围遵循 A 的 RESCOPE：保留原生取消异常处理，不要求成功返回后的额外取消检查或人为注入实机门槛；只共享实际已开始探测，批量停止只撤销未开始工作，Slice 3 验证实际任务停止与已开始工作收尾。
 
 | 候选源码 | 已记录标签提交 | 定位用途 |
 |---|---|---|
@@ -34,7 +34,7 @@ B 对旧候选的 FIX REQUIRED 保留为历史；Task 1.1、2.1／2.2 均已独�
 | PlaybackInfo 取源 | [`MediaInfoHelper`](https://github.com/jellyfin/jellyfin/blob/ca0f16eb7c195f720a1493ed469a27c4657db0c6/Jellyfin.Api/Helpers/MediaInfoHelper.cs#L148) 传 `true` 和 `CancellationToken.None` | 是否探测由媒体状态与插件决策决定；客户端退出不沿此入口取消探测，不要求客户端取消实机场景 |
 | 实际流请求取源 | [`StreamingHelpers`](https://github.com/jellyfin/jellyfin/blob/ca0f16eb7c195f720a1493ed469a27c4657db0c6/Jellyfin.Api/Helpers/StreamingHelpers.cs#L129) 传调用 token 和 `allowMediaProbe=false` | 原样保留权限，不为测试取消而升级为允许探测 |
 | 报告停止播放 | [`PlaystateController`](https://github.com/jellyfin/jellyfin/blob/ca0f16eb7c195f720a1493ed469a27c4657db0c6/Jellyfin.Api/Controllers/PlaystateController.cs#L249) 停止关联转码并更新会话 | 该处理不向先前 PlaybackInfo 探测传取消 token；插件不新增停止事件到探测的关联 |
-| 停止计划任务 | [`ScheduledTasksController`](https://github.com/jellyfin/jellyfin/blob/ca0f16eb7c195f720a1493ed469a27c4657db0c6/Jellyfin.Api/Controllers/ScheduledTasksController.cs#L122) 调用任务取消；[`ScheduledTaskWorker`](https://github.com/jellyfin/jellyfin/blob/ca0f16eb7c195f720a1493ed469a27c4657db0c6/Emby.Server.Implementations/ScheduledTasks/ScheduledTaskWorker.cs#L331) 把自身 token 传入执行并在停止时取消 | Slice 3 将该 token 仅用于后续分页／未实际开始工作；已开始探测继续完成，停止收尾等待结果结算，不能向其传入任务停止信号 |
+| 停止计划任务 | [`ScheduledTasksController`](https://github.com/jellyfin/jellyfin/blob/ca0f16eb7c195f720a1493ed469a27c4657db0c6/Jellyfin.Api/Controllers/ScheduledTasksController.cs#L122) 调用任务取消；[`ScheduledTaskWorker`](https://github.com/jellyfin/jellyfin/blob/ca0f16eb7c195f720a1493ed469a27c4657db0c6/Emby.Server.Implementations/ScheduledTasks/ScheduledTaskWorker.cs#L331) 把自身 token 传入执行并在停止时取消 | Slice 3 将该 token 仅用于候选获取边界／后续批次／未实际开始工作；已开始探测继续完成，停止收尾等待结果结算，不能向其传入任务停止信号 |
 
 客户端退出不等于执行取消。本次原生探测继续成功、结果已保存且 Manifest 一致时，仍可按全部提交条件接受指纹。原生执行自身抛出取消异常时保留旧基线；批量停止或等待者退出不取消任何已开始探测，也不阻止满足全部成功条件的提交，即使已经没有其他等待者。
 
@@ -72,12 +72,12 @@ A 环境准备及 Task 1.1 原型后续：SDK、固定源码、镜像 digest、�
 | 地址／流持久化 | URL 改变后原生探测并保存，当次 PlaybackInfo 新地址，重启仍有效且有必要主流；保存失败明确 | PASS；当次／重启保存与失败保流重试已独立复验；内部数据库故障未注入 |
 | 探测权限／禁用 | allowMediaProbe=false 各分支不执行；禁用／旧 STRM／手动刷新原生对照 | PASS；真实 false 流入口、禁用、旧 STRM、手动 FullRefresh 已独立复验；公共 PlaybackInfo 不提供 false 参数 |
 
-Task 1.1 PASS；该原型的全部 Outcomes／Surfaces 与单独 Final 经 A 接受，Slice 1 PASS / CLOSED。后续 Slice 2 也已完成并关闭，历史失败按原事实保留；当前 [TASK.md](../TASK.md) 无活动实施任务。T01～T28 核心分层结果见测试矩阵，外部 JellyfinProxy／OpenList 联调与完整 B01～B12 批量矩阵仍 NOT RUN；使用 Jellyfin 已有 FFmpeg／ffprobe。
+Task 1.1 PASS；该原型的全部 Outcomes／Surfaces 与单独 Final 经 A 接受，Slice 1 PASS / CLOSED。后续 Slice 2 也已完成并关闭，历史失败按原事实保留；当前 Slice 3 的计划调整与状态见 [TASK.md](../TASK.md)。T01～T28 核心分层结果见测试矩阵，外部 JellyfinProxy／OpenList 联调与完整 B01～B12 批量矩阵仍 NOT RUN；使用 Jellyfin 已有 FFmpeg／ffprobe。
 
 ## 后续真实运行门槛
 
 Slice 2 已验证 SQLite 指纹的真实重启／失败恢复、多源身份、实际开始后的共享及代表性全局并发计数；正常收尾、结束重查及行动前重判有确定性回归。公共 PlaybackInfo 仍传 None，不增加人为执行取消入口；必要证据已由 A 接受，逐分支实机和其他明确延期保持测试矩阵中的 NOT RUN。
 
-Slice 3 实测任务注册、默认无触发时间、原生手动／定时／停止、进度与播放共享协调。Slice 4 实测大规模分页内存、并发、媒体库扫描竞态、重启和隔离 JellyfinProxy 302。当前均 NOT RUN；接口存在不能替代这些验收。
+Slice 3 实测任务注册、默认无触发时间、原生手动／定时／停止、进度与播放共享协调。Slice 4 实测大规模 ID 获取／分批读取内存、并发、媒体库扫描竞态、重启和隔离 JellyfinProxy 302。当前均 NOT RUN；接口存在不能替代这些验收。
 
 每个发布包只声明已实测版本范围，核心 API／DI 改变后重新验证。发布材料包含准确 SDK／依赖、安装／禁用恢复步骤与客户端／代理未完成项。

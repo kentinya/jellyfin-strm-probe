@@ -1,6 +1,6 @@
 # 参考来源
 
-最新读取日期：2026-10-13。引用外部流程并针对本项目重新编写；没有复制 mediaflow 的媒体整理实现、Storage／Recognition 架构或“禁止 FFprobe”产品规则。
+最新补充日期：2026-10-14；原流程参考读取日期为 2026-10-13。引用外部流程并针对本项目重新编写；没有复制 mediaflow 的媒体整理实现、Storage／Recognition 架构或“禁止 FFprobe”产品规则。
 
 ## 当前原始方案与历史
 
@@ -75,3 +75,16 @@ V4.2 的“已核对源码”是用户方案陈述；本项目仍须独立验证
 同日用户恢复权限后，终端重新读取 Microsoft 官方 release metadata 并核对固定 SDK 的 URL／SHA-512，成功安装 SDK。Jellyfin 源码已本地检出至 `artifacts/dev-env/source`，HEAD 为 `ca0f16eb7c195f720a1493ed469a27c4657db0c6`；官方镜像已拉取并记录 digest，实际 Public Info 为 `12.2.0`。已实际恢复 `Jellyfin.Controller`／`Jellyfin.Model` `12.2.0`，两包 nuspec 的 repository commit 与该源码一致，引用样例 Release 编译运行 PASS。此前“没有检出／未安装／未取得 digest”是前轮历史诊断，不是当前环境状态。
 
 源文件、镜像身份、包来源和原始运行日志保留于 [环境交接](development-environment.md) 所指本机证据目录；镜像未提供 revision 标签，不能仅凭版本号证明镜像整体构建源码。Task 的插件接入／成功信号／地址持久化及 T4 产品门槛仍须独立验证。
+
+## 所选库候选 ID 与分批读取参考
+
+2026-10-14 源码调研后，用户授权 A 采用候选 ID 集合＋分批对象读取；该授权及合同边界见 [scope.md](scope.md#用户授权的批量读取替代)。下列固定源码仅作为接入与设计参考，不代表本项目批量、内存、取消、兼容或停止验收 PASS。
+
+| 固定来源 | 已读取的做法及本项目取舍 |
+|---|---|
+| [Meilisearch ReindexTask](https://github.com/Shadowghost/jellyfin-plugin-meilisearch/blob/6279d1559b991b792fc9af45c5f182df93f1d5f3/Jellyfin.Plugin.Meilisearch/Tasks/ReindexTask.cs#L179) | 先 `GetItemIds`，再按 ID 批次 `GetItemList`，避免滑动 offset；借鉴候选身份与对象分批分离，不引入其索引交换、同步暂停或持久化队列。它的一次获取 ID 成本需要本项目独立观测。 |
+| [Intro Skipper SeasonResolver](https://github.com/intro-skipper/intro-skipper/blob/e167e74bcf0b6b1f6772e88bebb3c65fa25f6388/IntroSkipper/Manager/SeasonResolver.cs#L105) | 用 `GetVirtualFolders`／库 ItemId、`ParentId`／Recursive 查库内项目；其无分页对象列表不照搬为本项目整库对象缓存。 |
+| [TheIntroDB 范围判断](https://github.com/TheIntroDB/jellyfin-plugin/blob/daa0a9b3054edc35adcde0eda7dadec7213a935d/TheIntroDB/Providers/TheIntroDbSegmentProvider.cs#L402) | 选定库 ID 与 `ItemIds＋AncestorIds` 重核范围；不照搬空选择扩大范围或依靠媒体片段扫描的运行模式。 |
+| [固定 Jellyfin LibraryManager](https://github.com/jellyfin/jellyfin/blob/ca0f16eb7c195f720a1493ed469a27c4657db0c6/Emby.Server.Implementations/Library/LibraryManager.cs) 与 [GetItemIdsList](https://github.com/jellyfin/jellyfin/blob/ca0f16eb7c195f720a1493ed469a27c4657db0c6/Jellyfin.Server.Implementations/Item/BaseItemRepository.Querying.cs#L22) | 本地固定源码已核对 ID 投影／原生库过滤入口；同步接口无调用 token，停止检查放在调用前后，不承诺查询中断。多库、alternate、对象批次和实际运行分配尚未实测。 |
+
+本轮保留 V4.2 原文身份；不为了采用这个设计改写原文中的分页文字或修改原文治理摘要。
