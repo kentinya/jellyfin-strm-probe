@@ -101,7 +101,9 @@ public sealed class PlaybackOptimizerTests
 
         var result = await optimizer.GetPlaybackMediaSourcesAsync(native.Interface, item, null, true, false, CancellationToken.None);
 
-        Assert.AreEqual(2, native.PlaybackCalls);
+        // One current-source read at admission, one actual probe and one final current-source read. Only the
+        // probe call carries probe permission; the extra read is the required action-time re-evaluation.
+        Assert.AreEqual(3, native.PlaybackCalls);
         Assert.IsTrue(native.LastAllowMediaProbe);
         Assert.AreEqual(newUrl, result[0].Path);
         Assert.AreEqual(newUrl, item.ShortcutPath);
@@ -589,7 +591,8 @@ public sealed class PlaybackOptimizerTests
 
         var resultSources = await optimizer.GetPlaybackMediaSourcesAsync(native.Interface, item, null, true, false, CancellationToken.None);
 
-        Assert.AreEqual(2, native.PlaybackCalls);
+        // One current-source read at admission, one actual probe and one final current-source read.
+        Assert.AreEqual(3, native.PlaybackCalls);
         Assert.IsTrue(native.LastAllowMediaProbe);
         Assert.IsTrue(resultSources.Single().MediaStreams.Any(stream => stream.Type == MediaStreamType.Audio));
         Assert.IsNotNull(repository.Get(item.Id, SourceKey(item.Id)));
@@ -641,7 +644,7 @@ public sealed class PlaybackOptimizerTests
         var primaryEntry = await optimizer.GetPlaybackMediaSourcesAsync(native.Interface, primary, null, true, false, CancellationToken.None);
 
         Assert.AreEqual(2, primaryEntry.Count);
-        Assert.AreEqual(2, native.PlaybackCalls);
+        Assert.AreEqual(3, native.PlaybackCalls, "The changed alternate source requires an admission read, the probe and the final current-source read.");
         Assert.AreEqual(alternateNewUrl, primaryEntry.Single(source => source.Id == alternate.Id.ToString("N")).Path);
         Assert.AreEqual(primaryUrl, primaryEntry.Single(source => source.Id == primary.Id.ToString("N")).Path);
         Assert.AreEqual(alternateManifest.UrlHash, repository.Get(primary.Id, SourceKey(alternate.Id))!.UrlHash);
@@ -654,7 +657,7 @@ public sealed class PlaybackOptimizerTests
 
         Assert.AreEqual(alternateNewUrl, selectedAlternate.Path);
         Assert.AreEqual(ProbeDecisionKind.SkipProbe, DecisionKind(reader.Read(alternateFixture.Path).Manifest!, repository.Get(primary.Id, SourceKey(alternate.Id))));
-        Assert.AreEqual(3, native.PlaybackCalls);
+        Assert.AreEqual(4, native.PlaybackCalls, "The second entry only skips, adding one final current-source read.");
     }
 
     [TestMethod]
@@ -1584,6 +1587,118 @@ public sealed class PlaybackOptimizerTests
             .WaitAsync(TimeSpan.FromSeconds(10));
         Assert.IsTrue(recovered.IsOwner);
         coordinator.Abandon(recovered.Item);
+        Assert.AreEqual(0, coordinator.ActivePermits);
+    }
+
+    [TestMethod]
+    public async Task OwnerImmediatelyAcquiringAPermitReReadsAVersionAcceptedBeforeItActs()
+    {
+        const string oldUrl = "https://media.example.invalid/video.mp4?sig=old";
+        const string newUrl = "https://media.example.invalid/video.mp4?sig=new";
+        using var fixture = new ManifestFixture(oldUrl, ValidSha1, 42);
+        var reader = new StrmManifestReader();
+        var repository = new InMemoryStrmFingerprintRepository();
+        var item = CreateItem(fixture.Path, oldUrl);
+        var key = SourceKey(item.Id);
+        repository.TryCommit(Fingerprint(item.Id, reader.Read(fixture.Path).Manifest!), expectedPrevious: null);
+        fixture.Write(newUrl, ValidSha1, 42);
+
+        using var coordinator = new ProbeCoordinator(2);
+        var native = ScriptedManager.Create();
+        var streamRepository = ProbePersistenceDispatchProxy.Create(NativePersistence.Create<IMediaStreamRepository>());
+        var itemPersistence = ProbePersistenceDispatchProxy.Create(NativePersistence.Create<IItemPersistenceService>());
+        var probeExecutions = 0;
+        var captured = Source(oldUrl);
+        captured.Id = key;
+        native.StaticSources = [captured];
+        var preparing = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseFirst = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        native.Playback = async (updatedItem, allowProbe, _, _) =>
+        {
+            Assert.IsTrue(allowProbe);
+            preparing.TrySetResult();
+            await releaseFirst.Task;
+            Interlocked.Increment(ref probeExecutions);
+            var result = MediaInfoWithVideo();
+            ProbeExecutionContext.Current!.MarkCall(newUrl);
+            ProbeExecutionContext.Current.RecordResult(newUrl, result);
+            streamRepository.SaveMediaStreams(updatedItem.Id, result.MediaStreams, CancellationToken.None);
+            updatedItem.ShortcutPath = newUrl;
+            itemPersistence.SaveItems([updatedItem], CancellationToken.None);
+            native.StaticSources = [Source(newUrl)];
+            return [Source(newUrl)];
+        };
+        var optimizer = CreateOptimizer(repository, coordinator: coordinator);
+
+        // The first owner is only preparing. The second request acquires the spare permit immediately, but the
+        // first owner starts, saves, commits and settles while the second is paused before registration. The
+        // second must re-read the now-accepted version instead of running a duplicate probe.
+        var first = optimizer.CheckSourceAsync(native.Interface, item.Id, item, captured, key, true, null, false, CancellationToken.None, isPlaybackContext: true);
+        await preparing.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        var barrierReached = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        coordinator.PermitAcquiredBarrier = () =>
+        {
+            barrierReached.TrySetResult();
+            releaseFirst.TrySetResult();
+            first.Wait(TimeSpan.FromSeconds(10));
+        };
+        var second = optimizer.CheckSourceAsync(native.Interface, item.Id, item, captured, key, true, null, false, CancellationToken.None, isPlaybackContext: true);
+        await barrierReached.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await first;
+        var secondResult = await second.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.AreEqual(1, probeExecutions, "A completed same-source execution must be reused, not probed again.");
+        Assert.IsNull(secondResult, "The second owner reuses the accepted version instead of returning a fresh replacement.");
+        Assert.AreEqual(0, coordinator.RunningCount);
+        Assert.AreEqual(0, coordinator.PreparingCount);
+        Assert.AreEqual(0, coordinator.ActivePermits);
+    }
+
+    [TestMethod]
+    public async Task QueuedFirstTrustIsNotPublishedWhenTheManifestChangesDuringTheCurrentSourceRead()
+    {
+        const string firstUrl = "https://media.example.invalid/trust-a.mp4";
+        const string laterUrl = "https://media.example.invalid/trust-b.mp4";
+        using var fixture = new ManifestFixture(firstUrl, ValidSha1, 42);
+        var reader = new StrmManifestReader();
+        var repository = new InMemoryStrmFingerprintRepository();
+        var item = CreateItem(fixture.Path, firstUrl);
+        var key = SourceKey(item.Id);
+        var firstHash = reader.Read(fixture.Path).Manifest!.UrlHash;
+
+        using var coordinator = new ProbeCoordinator(1);
+        var native = ScriptedManager.Create();
+        // The queued request starts with no primary stream, so it must re-read the current native source.
+        var captured = Source(firstUrl);
+        captured.Id = key;
+        captured.MediaStreams = [];
+        native.StaticSources = [captured];
+        var optimizer = CreateOptimizer(repository, coordinator: coordinator);
+
+        var blocker = await coordinator.AcquireAsync(Guid.NewGuid(), "unrelated-source", "unrelated", CancellationToken.None);
+        var queued = optimizer.CheckSourceAsync(native.Interface, item.Id, item, captured, key, true, null, false, CancellationToken.None, isPlaybackContext: true);
+        Assert.IsFalse(queued.IsCompleted, "The request must be waiting for a permit.");
+
+        // While queued, the native source gains a primary stream (so the decision becomes first trust) but the
+        // STRM changes to another version during the admission's no-probe current-source read.
+        native.StaticSources = [Source(firstUrl)];
+        native.OnNativeNoProbe = _ => fixture.Write(laterUrl, ValidSha1, 42);
+        coordinator.Abandon(blocker.Item);
+
+        try
+        {
+            await queued.WaitAsync(TimeSpan.FromSeconds(10));
+        }
+        catch (InvalidOperationException)
+        {
+            // A manifest that changed during admission requires a caller retry; the key point is that no stale
+            // first-trust fingerprint was published.
+        }
+
+        Assert.IsNull(repository.Get(item.Id, key), "A first trust must not be published for a STRM version that changed during admission.");
+        Assert.AreNotEqual(firstHash, reader.Read(fixture.Path).Manifest!.UrlHash, "The fixture must have changed during the read for this regression to be meaningful.");
+        Assert.AreEqual(0, coordinator.RunningCount);
+        Assert.AreEqual(0, coordinator.PreparingCount);
         Assert.AreEqual(0, coordinator.ActivePermits);
     }
 
