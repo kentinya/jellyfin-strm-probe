@@ -5,7 +5,7 @@
 ```text
 Task ID: 3.1
 Parent Slice: 3
-Status: PLANNED
+Status: READY FOR B REVIEW
 Task Base: b86d9c17d7f915108072f54ee098f0f5543fe093
 Contract Checkpoint: 2b515f35db7fc8e85d8ac1a8085dd9b8ccc62ef3
 Superseded Plan Snapshot: eb4e272743f4c7e184d45fa48b660b2fef24c685
@@ -50,6 +50,12 @@ B 合法性决定：LEGAL ADJUSTMENT — 同一 Task 3.1 继续规划。保留 I
 6. 新批量确定性测试与隔离实机入口，复用现有本地媒体、探测／保存计数、只读 SQLite 核对与恢复工具。更新 Task 完成报告和本 Task 实际实现事实／操作说明；不改变 Slice、Roadmap 或稳定需求。
 
 代码边界：现有插件项目内配置／注册、Services、Interceptors 及新增原生 Tasks；现有 MSTest 项目、必要工具回归；批量隔离工具及必要本地媒体夹具控制。仅当实际依赖需要时更新锁文件，并验证隔离部署加载。
+
+### 单项失败与重跑
+
+“单项失败可重试”指失败原因修复后，在下一轮手动或定时批量检查中重新读取当前 STRM 与可信历史指纹，按共用规则判断；仍需探测时再次尝试。下一次允许探测且启用播放自动检查的播放请求也可触发该重新判断。本轮不自动重试失败项目，不新增重试队列或持久化失败状态。
+
+例如某个 STRM 的媒体地址暂时不可达，本次探测失败时不计成功、不覆盖旧可信指纹，并计入未完成；其他项目继续检查。地址恢复后，重新运行任务可再次尝试。单项失败隔离不适用于 SQLite／全局不可用等故障，这些情况仍按 AC-T6 停止后续批量工作并收尾。
 
 ### 停止收尾与再次运行
 
@@ -157,13 +163,13 @@ git diff --check
 
 ## Developer Completion Report
 
-- Changed Files：NOT IMPLEMENTED。
-- Implemented：NOT IMPLEMENTED。
-- Tests and Results：产品候选测试 NOT RUN；本次规划前治理 PASS，仅为合法性检查。实施后逐项填写 AC-T1～T8 的分层结果及稳定证据索引、候选／输入身份、准确命令／计数／耗时、首败／重跑／复用和缺失门槛。
-- Decisions：待实施记录原生发现方式、候选查询／去重／Guid 顺序及批次对齐、容量／整批结算、同步查询停止延迟、开始唯一边界及共享可靠结算方式。
-- Remaining In-Slice Work：全部新增 RO 尚未验收；预计完整 HTML 配置／浏览器旅程及单独 Slice Final 仍需完成，不能以此预判后续 Task 数量。
-- Risks / Deviations：A 已提交候选 ID 集合方案的实质合同变更，B 决定同一 Task 合法调整；剩余风险为原生库／alternate 查询、全部 ID 及临时分配成本、同步查询停止延迟、故障允许探测回退、停止 token 传播及可靠提交结算，无产品 PASS。
-- Head SHA：NOT SET。
+- Changed Files：新增 `Services/BatchProbeTypes.cs`（批量停用边界、可靠结果与计数枚举）、`Services/BatchLibraryScope.cs`（范围解析与原生候选源）、`Services/BatchCheckRunner.cs`（固定候选集、分批对象、固定消费者与统计）、`Tasks/StrmProbeScheduledTask.cs`（原生计划任务）、`tests/.../BatchCheckTests.cs`、`scripts/run_isolated_batch_integration.py`、`tests/test_isolated_batch_integration.py`；修改 `PluginConfiguration.cs`（第五项批量范围）、`Services/IPlaybackSettings.cs`、`Services/StrmPlaybackOptimizer.cs`（批量准入与可靠结果）、`ServiceRegistrator.cs`、两个测试夹具与 `PlaybackOptimizerTests`／`MediaSourceManagerProxyTests`。未提交 `TASK.md` 本身。
+- Implemented：原生 `IScheduledTask`／`IConfigurableScheduledTask` 任务「STRM 媒体信息检查」，空默认触发器；默认全部／显式库范围的保存后端与运行前范围快照；原生 `GetItemIds` 一次取得候选 ID、Guid 排序去重固定本轮集合、`GetItemList(ItemIds=本批)` 每批最多 128、每批最多 8 个固定消费者、整批结算后读下一批；批量源检查复用解析、决策、`ProbeCoordinator`、原生探测与条件提交，批量从不原生委托、从不升级 `allowMediaProbe`；单一停止／开始边界保证停止确认后不启动、已实际开始则完成并可用 `CancellationToken.None` 提交；原生停止后先等待结算、释放资源、输出可对账统计再抛取消异常；状态库故障停止后续批量并报告不可用；脱敏汇总日志不依赖详细日志。
+- Tests and Results：证据索引 `.git/validation-evidence/c5192ba1e2bf1e23929b33919597d7dca34a1f50/developer-final-t4-20261014-221222/INDEX.md`。锁定 restore PASS；Release build 0 警告 0 错误；C# 全套 138/138（含 26 项新增 `TestCategory=Batch`）；format PASS；Python 35/35（含 4 项新增批量脚本守护回归）；治理 PASS；`git diff --check` PASS。真实隔离：默认播放脚本 PASS；新批量脚本 `all`（任务发现／无默认触发／手动运行／触发器重启持久化／新 STRM 首次信任／变化提交／重复零提交）PASS；`--scenario stop` 真实原生停止记录 `cancelled`、已开始探测提交、下一轮可运行 PASS；`--scenario sharing` 批量与播放共享同一次真实慢探测（slow 请求 1）PASS。全部夹具、触发器与地址已恢复。
+- Decisions：批量任务注入真实原生 `IMediaSourceManager` 实现而非播放代理，避免批量探测重入播放入口；候选 ID 以 `Guid` 比较顺序固定，不依赖名称或原生分页；停止边界集中在 `BatchStopSignal` 一把短锁，先确认停止则不启动、开始后 `CancellationToken.None` 完成提交；批量共享后重新读取当前源与指纹重判，不把等待返回当作成功；范围与批量读取均经原生库关系重核。
+- Remaining In-Slice Work：完整 HTML 配置页／浏览器交互旅程、真实定时（墙钟）触发、代表性真实多库多批多版本逐源对账与十万真实库压力、单独 Slice Final 仍未完成；本次新增验收均如实按分层证据记录。
+- Risks / Deviations：真实定时触发未观察墙钟触发（仅验证触发器持久化）；Jellyfin 内部数据库保存故障实机注入仍 NOT RUN（沿用既有边界）；十万候选仅确定性模拟，不代表真实大库性能。无产品 PASS 声明。
+- Head SHA：`c5192ba1e2bf1e23929b33919597d7dca34a1f50`。
 
 若实施产生新的可复用方法，提供少量经验候选供 A 收尾合并；本次规划不向经验文档写历史或虚构验收结论。
 
@@ -173,7 +179,7 @@ git diff --check
 Reviewed: NOT SET
 Decision: PENDING
 Slice Required Outcomes all satisfied: NO — RO-1～RO-7 的新增义务尚未验收
-Next: DEVELOPER IMPLEMENTS TASK 3.1
+Next: B REVIEWS TASK 3.1 IMPLEMENTATION (Base..c5192ba1e2bf1e23929b33919597d7dca34a1f50)
 ```
 
-当前是新合同上的合法调整计划，不是实施审查 PASS。本轮仅文档，Task Status 保持 PLANNED。Developer 提交完整实现与报告后 B 审查 PASS／FIX REQUIRED；修正通常留同一 Task。PASS 后逐项重核 Slice 全部 RO／Surfaces；满足则停止创建 Task，单独运行 Slice Final 并提交 Closure Packet 给 A，否则只规划剩余连贯用户行为。
+Developer 已在 Task Base 上实现并提交 `c5192ba1e2bf1e23929b33919597d7dca34a1f50`，完整报告与证据索引见上；B 审查真实 Task Base..Head 与原始产物，独立复现停止／共享关键行为，返回 PASS 或 FIX REQUIRED。
