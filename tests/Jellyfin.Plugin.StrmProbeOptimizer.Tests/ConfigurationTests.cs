@@ -2,6 +2,7 @@ using System.Xml.Serialization;
 using Jellyfin.Plugin.StrmProbeOptimizer.Services;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Model.Serialization;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -105,6 +106,55 @@ public sealed class ConfigurationTests
     }
 
     [TestMethod]
+    public void LatePersistenceFailureKeepsThePreviouslySavedFileAndEffectiveConfiguration()
+    {
+        using var fixture = new PluginFixture();
+        var saved = new PluginConfiguration { Enabled = false, PlaybackAutoCheck = true, MaxConcurrentProbes = 6, DetailedLog = true };
+        fixture.WriteConfiguration(saved);
+        var plugin = fixture.CreatePlugin();
+        var effective = plugin.Configuration;
+        var fileBefore = fixture.ReadConfigurationFileBytes();
+
+        // The native serializer opens and truncates the destination before serializing. A failure after the
+        // open/write boundary must not damage the previously valid configuration file.
+        fixture.Serializer.FailAfterPartialWrite = true;
+        Assert.ThrowsExactly<IOException>(() =>
+            plugin.UpdateConfiguration(new PluginConfiguration { Enabled = true, MaxConcurrentProbes = 7 }));
+
+        Assert.AreSame(effective, plugin.Configuration, "A mid-write failure must leave the previously effective configuration in place.");
+        CollectionAssert.AreEqual(fileBefore, fixture.ReadConfigurationFileBytes(), "A mid-write failure must not damage the previously saved configuration file.");
+
+        // A later restart re-loads the still-valid previous configuration rather than a truncated candidate.
+        var reloaded = fixture.CreatePlugin();
+        Assert.IsFalse(reloaded.Configuration.Enabled, "The previous valid disabled configuration must survive the failed save.");
+        Assert.AreEqual(6, reloaded.Configuration.MaxConcurrentProbes);
+        Assert.IsTrue(reloaded.Configuration.DetailedLog);
+
+        // A subsequent valid save replaces the file atomically and persists the repaired configuration.
+        fixture.Serializer.FailAfterPartialWrite = false;
+        reloaded.UpdateConfiguration(new PluginConfiguration { Enabled = true, PlaybackAutoCheck = true, MaxConcurrentProbes = 4, DetailedLog = false });
+        var repaired = fixture.ReadConfiguration();
+        Assert.IsTrue(repaired.Enabled);
+        Assert.AreEqual(4, repaired.MaxConcurrentProbes);
+        Assert.IsFalse(repaired.DetailedLog);
+    }
+
+    [TestMethod]
+    public void InvalidPersistedConfigurationDiagnosticDoesNotLeakPrivatePaths()
+    {
+        using var fixture = new PluginFixture();
+        fixture.WriteConfiguration(new PluginConfiguration { MaxConcurrentProbes = 9 });
+        var logger = new CapturingLogger<Plugin>();
+
+        var plugin = new Plugin(fixture.Paths, fixture.Serializer, logger);
+
+        Assert.AreEqual(PluginConfiguration.DefaultMaxConcurrentProbes, plugin.StartupMaxConcurrentProbes);
+        Assert.IsTrue(logger.Messages.Any(message => message.Contains("invalid", StringComparison.OrdinalIgnoreCase)), "The invalid configuration must still produce an actionable diagnostic.");
+        Assert.IsFalse(logger.Messages.Any(message => message.Contains(fixture.ConfigurationFilePath, StringComparison.Ordinal)), "The diagnostic must not contain the private configuration file path.");
+        Assert.IsFalse(logger.Messages.Any(message => message.Contains(fixture.Paths.PluginConfigurationsPath, StringComparison.Ordinal)), "The diagnostic must not contain the private configuration directory.");
+    }
+
+    [TestMethod]
     public void PluginPlaybackSettingsReadTheStartupLimitAndLiveValues()
     {
         using var fixture = new PluginFixture();
@@ -195,6 +245,8 @@ public sealed class ConfigurationTests
     {
         public bool FailSerialize { get; set; }
 
+        public bool FailAfterPartialWrite { get; set; }
+
         public object DeserializeFromStream(Type type, Stream stream)
         {
             return new XmlSerializer(type).Deserialize(stream)!;
@@ -235,7 +287,36 @@ public sealed class ConfigurationTests
             }
 
             using var stream = File.Create(file);
+            if (FailAfterPartialWrite)
+            {
+                // Match the native serializer's FileMode.Create truncation boundary, then fail mid-write.
+                stream.Write("<PluginConfiguration>"u8);
+                stream.Flush();
+                throw new IOException("Injected configuration write failure after truncation and partial write.");
+            }
+
             new XmlSerializer(obj.GetType()).Serialize(stream, obj);
+        }
+    }
+
+    private sealed class CapturingLogger<T> : ILogger<T>
+    {
+        public List<string> Messages { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull
+        {
+            return null;
+        }
+
+        public bool IsEnabled(LogLevel logLevel)
+        {
+            return true;
+        }
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            Messages.Add(formatter(state, exception));
         }
     }
 

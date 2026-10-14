@@ -10,11 +10,13 @@ namespace Jellyfin.Plugin.StrmProbeOptimizer.Services;
 /// </summary>
 public sealed record ProbeReservation
 {
-    internal ProbeReservation(ProbeWorkItem item, SemaphoreSlim? permit, bool owner)
+    internal ProbeReservation(ProbeWorkItem item, SemaphoreSlim? permit, bool owner, bool running, bool waited)
     {
         Item = item;
         Permit = permit;
         IsOwner = owner;
+        IsRunning = running;
+        Waited = waited;
     }
 
     internal ProbeWorkItem Item { get; }
@@ -25,12 +27,25 @@ public sealed record ProbeReservation
     /// <summary>Gets a value indicating whether this call owns the reservation and may start the probe.</summary>
     public bool IsOwner { get; }
 
+    /// <summary>
+    /// Gets a value indicating whether this call joined a probe whose matching native call has already
+    /// started. When <c>false</c> the reserved work is still preparing and must not be reported as started.
+    /// </summary>
+    public bool IsRunning { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether this owner had to wait for a global permit or a preparing owner before
+    /// obtaining its execution opportunity. A waiting owner must re-read the current version and configuration.
+    /// </summary>
+    public bool Waited { get; }
+
     /// <summary>Gets the running probe to join when this call is not the owner, otherwise <c>null</c>.</summary>
     public Task<MediaSourceInfo?>? Result => IsOwner ? null : Item.Result;
 }
 
 /// <summary>
-/// Owns the shared result and global permit for one probe that has actually started.
+/// Owns the shared result and global permit for one probe. An item is first registered as preparing and
+/// only becomes shareable after the access layer observes the matching native probe call.
 /// </summary>
 public sealed class ProbeWorkItem
 {
@@ -48,8 +63,9 @@ public sealed class ProbeWorkItem
     public string SourceKey { get; }
 
     /// <summary>
-    /// Gets or sets the content hash of the manifest that this running probe is verifying. It is set
-    /// immediately before the probe is registered and is used to decide whether a shared failure still applies.
+    /// Gets or sets the content hash of the manifest that this running probe is verifying. It is refreshed
+    /// when a queued owner re-reads the current version before starting and is used to decide whether a
+    /// shared failure still applies.
     /// </summary>
     internal string ManifestContentHash { get; set; }
 
@@ -70,11 +86,12 @@ public sealed class ProbeWorkItem
 
 /// <summary>
 /// Shares only probes that have actually entered a matching native probe call and are still running.
-/// Queued or waiting work is never registered as shareable, and a finished item is removed before its
+/// A reservation that is still preparing is not shareable, and a finished item is removed before its
 /// permit is released so it can never be reused as an in-flight probe.
 /// </summary>
 public sealed class ProbeCoordinator : IDisposable
 {
+    private readonly ConcurrentDictionary<(Guid ProjectItemId, string SourceKey), ProbeWorkItem> _preparing = new();
     private readonly ConcurrentDictionary<(Guid ProjectItemId, string SourceKey), ProbeWorkItem> _running = new();
     private readonly SemaphoreSlim _permits;
     private int _disposed;
@@ -93,15 +110,19 @@ public sealed class ProbeCoordinator : IDisposable
 
     public int MaxConcurrentProbes { get; }
 
-    /// <summary>Gets the number of probes currently registered as running.</summary>
+    /// <summary>Gets the number of probes whose matching native call has actually started.</summary>
     public int RunningCount => _running.Count;
+
+    /// <summary>Gets the number of owners that hold a permit and are still preparing a native probe.</summary>
+    public int PreparingCount => _preparing.Count;
 
     /// <summary>Gets the number of global permits currently held.</summary>
     public int ActivePermits => MaxConcurrentProbes - _permits.CurrentCount;
 
     /// <summary>
-    /// Waits for a global permit. The caller becomes the owner unless an identical probe is already running,
-    /// in which case it becomes a follower that can join that running probe without taking a second permit.
+    /// Waits for a global permit. The caller becomes the owner unless an identical probe is already
+    /// running or preparing, in which case it becomes a follower that can join that work without taking
+    /// a second permit. Only the owner may start the native probe.
     /// </summary>
     public async Task<ProbeReservation> AcquireAsync(
         Guid projectItemId,
@@ -111,25 +132,36 @@ public sealed class ProbeCoordinator : IDisposable
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sourceKey);
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
-        await _permits.WaitAsync(cancellationToken).ConfigureAwait(false);
-
-        try
+        var acquiredImmediately = _permits.Wait(0);
+        if (!acquiredImmediately)
         {
-            var key = (projectItemId, sourceKey);
-            if (_running.TryGetValue(key, out var running))
-            {
-                // An identical probe is already executing. Do not take a second permit for the same work.
-                _permits.Release();
-                return new ProbeReservation(running, permit: null, owner: false);
-            }
-
-            return new ProbeReservation(new ProbeWorkItem(projectItemId, sourceKey, manifestContentHash), _permits, owner: true);
+            await _permits.WaitAsync(cancellationToken).ConfigureAwait(false);
         }
-        catch
+
+        var key = (projectItemId, sourceKey);
+        if (_running.TryGetValue(key, out var running))
+        {
+            // An identical probe has actually started. Do not take a second permit for the same work.
+            _permits.Release();
+            return new ProbeReservation(running, permit: null, owner: false, running: true, waited: !acquiredImmediately);
+        }
+
+        if (_preparing.TryGetValue(key, out var preparing))
+        {
+            // An identical owner is preparing its native probe but has not reached the matching call yet.
+            // Wait for it instead of starting a duplicate; this is not a shared running probe.
+            _permits.Release();
+            return new ProbeReservation(preparing, permit: null, owner: false, running: false, waited: true);
+        }
+
+        var item = new ProbeWorkItem(projectItemId, sourceKey, manifestContentHash) { Permit = _permits };
+        if (!_preparing.TryAdd(key, item))
         {
             _permits.Release();
-            throw;
+            return new ProbeReservation(_preparing[key], permit: null, owner: false, running: false, waited: true);
         }
+
+        return new ProbeReservation(item, _permits, owner: true, running: false, waited: !acquiredImmediately);
     }
 
     /// <summary>
@@ -141,21 +173,26 @@ public sealed class ProbeCoordinator : IDisposable
     }
 
     /// <summary>
-    /// Registers the reserved work item as running. Call this from the access layer immediately before
-    /// entering the matching native probe call. On failure another identical probe won the start race.
+    /// Registers the reserved work item as running. Call this from the access layer at the verified
+    /// matching native probe call. A preparing reservation is not shareable and must not call this.
     /// </summary>
     public bool TryMarkStarted(ProbeWorkItem item, out ProbeWorkItem? existing)
     {
         ArgumentNullException.ThrowIfNull(item);
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
-        if (_running.TryAdd((item.ProjectItemId, item.SourceKey), item))
+        var key = (item.ProjectItemId, item.SourceKey);
+
+        // Publish the running entry before clearing preparing so a concurrent AcquireAsync always sees the
+        // running probe first and can never start a duplicate preparation for the same key.
+        if (_running.TryAdd(key, item))
         {
-            item.Permit = _permits;
+            _preparing.TryRemove(new KeyValuePair<(Guid, string), ProbeWorkItem>(key, item));
             existing = null;
             return true;
         }
 
-        existing = _running[(item.ProjectItemId, item.SourceKey)];
+        existing = _running[key];
+        _preparing.TryRemove(new KeyValuePair<(Guid, string), ProbeWorkItem>(key, item));
         return false;
     }
 
@@ -179,11 +216,29 @@ public sealed class ProbeCoordinator : IDisposable
         Finish(item, result: null, exception);
     }
 
+    /// <summary>
+    /// Releases a reservation that will not start a native probe, for example because a queued owner
+    /// re-read the current version or configuration and no longer needs to probe. Waiters re-evaluate.
+    /// </summary>
+    public void Abandon(ProbeWorkItem item)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        Finish(item, result: null, exception: null);
+    }
+
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0)
         {
             return;
+        }
+
+        foreach (var pair in _preparing)
+        {
+            if (_preparing.TryRemove(pair.Key, out var item))
+            {
+                item.Fail(new ObjectDisposedException(nameof(ProbeCoordinator)));
+            }
         }
 
         foreach (var pair in _running)
@@ -199,8 +254,11 @@ public sealed class ProbeCoordinator : IDisposable
 
     private void Finish(ProbeWorkItem item, MediaSourceInfo? result, Exception? exception)
     {
+        var key = (item.ProjectItemId, item.SourceKey);
+
         // Remove before releasing the permit so a queued waiter that acquires it cannot reuse a finished item.
-        _running.TryRemove((item.ProjectItemId, item.SourceKey), out _);
+        _preparing.TryRemove(new KeyValuePair<(Guid, string), ProbeWorkItem>(key, item));
+        _running.TryRemove(new KeyValuePair<(Guid, string), ProbeWorkItem>(key, item));
         try
         {
             if (exception is null)

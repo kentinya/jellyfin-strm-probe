@@ -33,6 +33,7 @@ PLUGIN_FOLDER_NAME = f"Jellyfin.Plugin.StrmProbeOptimizer_{PLUGIN_VERSION}"
 PLUGIN_DATA_DIRECTORY = ROOT / "artifacts" / "dev-env" / "config" / "data" / "plugins" / uuid.UUID(PLUGIN_ID).hex
 FINGERPRINT_DATABASE = PLUGIN_DATA_DIRECTORY / "strm-fingerprints.db"
 FIXTURE = ROOT / "artifacts" / "dev-env" / "strm" / "Environment Fixture.strm"
+CONFIGURATION_FILE = ROOT / "artifacts" / "dev-env" / "config" / "plugins" / "configurations" / "Jellyfin.Plugin.StrmProbeOptimizer.xml"
 PLUGIN_LOGGER = "Jellyfin.Plugin.StrmProbeOptimizer.Services.StrmPlaybackOptimizer"
 MAX_WAIT_SECONDS = 90
 
@@ -324,11 +325,11 @@ class JellyfinApi:
             time.sleep(0.25)
         raise RuntimeError("The isolated Jellyfin item did not persist its queued FullRefresh before the timeout.")
 
-    def playback_info(self, item_id: str) -> tuple[int, dict]:
+    def playback_info(self, item_id: str, timeout: int = 75) -> tuple[int, dict]:
         query = urlencode({"UserId": self.user_id})
         request = Request(self.base_url + f"/Items/{item_id}/PlaybackInfo?{query}", headers=self.headers)
         try:
-            with urlopen(request, timeout=75) as response:
+            with urlopen(request, timeout=timeout) as response:
                 return response.status, json.load(response)
         except HTTPError as error:
             return error.code, {}
@@ -1447,7 +1448,7 @@ def replay_and_mtime_zero_probe_check(
         FIXTURE.write_bytes(original)
 
 
-def configuration_api_check(api: JellyfinApi, container: str) -> dict[str, object]:
+def configuration_api_check(api: JellyfinApi, container: str, item_id: str, current_url: str) -> dict[str, object]:
     """Exercise the core configuration through Jellyfin's existing plugin configuration channel."""
     path = f"/Plugins/{PLUGIN_ID}/Configuration"
     defaults_status, defaults_body = api.request_response(path)
@@ -1463,6 +1464,7 @@ def configuration_api_check(api: JellyfinApi, container: str) -> dict[str, objec
 
     rejected: dict[str, object] = {}
     for name, payload in INVALID_CONFIGURATION_CASES.items():
+        file_before = CONFIGURATION_FILE.read_bytes()
         status, _ = api.request_response(path, method="POST", data=json.dumps(payload).encode("utf-8"))
         require(status >= 400, f"Jellyfin accepted the invalid configuration case {name!r}.")
         _, body = api.request_response(path)
@@ -1471,8 +1473,23 @@ def configuration_api_check(api: JellyfinApi, container: str) -> dict[str, objec
             current == defaults,
             f"The rejected configuration case {name!r} changed the effective configuration to {current}.",
         )
+        require(
+            CONFIGURATION_FILE.read_bytes() == file_before,
+            f"The rejected configuration case {name!r} changed the persisted configuration file.",
+        )
         rejected[name] = status
 
+    # Baseline reuse event with DetailedLog=false: the concise line must not include the encoder-call detail.
+    baseline_playback = call_playback(api, container, item_id, current_url)
+    require(baseline_playback["http_status"] == 200, "A playback request before enabling DetailedLog failed.")
+    baseline_events = [str(event) for event in baseline_playback["plugin_events"]]
+    require(
+        baseline_events and not any("Jellyfin GetMediaInfo calls observed" in event for event in baseline_events),
+        f"DetailedLog=false unexpectedly emitted the detailed diagnostic: {baseline_events}.",
+    )
+
+    # A valid save with DetailedLog=true must take effect on the next check request and must not hot-apply
+    # the concurrency change before restart.
     saved_status, _ = api.request_response(
         path,
         method="POST",
@@ -1486,12 +1503,36 @@ def configuration_api_check(api: JellyfinApi, container: str) -> dict[str, objec
         f"The saved plugin configuration was not read back: {saved}.",
     )
 
-    # A concurrency change only applies after a restart; the detailed-log flag applies to the next check request.
+    # DetailedLog takes effect on the next check request without a restart.
+    detailed_playback = call_playback(api, container, item_id, current_url)
+    require(detailed_playback["http_status"] == 200, "A playback request after enabling DetailedLog failed.")
+    require(
+        any("Jellyfin GetMediaInfo calls observed" in str(event) for event in detailed_playback["plugin_events"]),
+        f"DetailedLog=true did not produce the detailed next-request log: {detailed_playback['plugin_events']}.",
+    )
+
+    # Enabled=false must take effect on the next check request without a restart and delegate natively.
+    disabled_status, _ = api.request_response(
+        path,
+        method="POST",
+        data=b'{"Enabled":false,"PlaybackAutoCheck":true,"MaxConcurrentProbes":8,"DetailedLog":true}',
+    )
+    require(disabled_status == 204, "Jellyfin did not accept the Enabled=false configuration.")
+    disabled_playback = delegated_playback(api, container, item_id, current_url)
+    require(
+        disabled_playback["http_status"] == 200 and disabled_playback["has_media_source"] and not disabled_playback["plugin_events"],
+        f"Enabled=false did not delegate the next check request to Jellyfin: {disabled_playback}.",
+    )
+
+    # A concurrency change only applies after a restart; the saved file must retain the new value.
     container = restart_isolated_server()
     api = JellyfinApi()
     _, restarted_body = api.request_response(path)
     restarted = json.loads(restarted_body)
-    require(restarted == saved, f"The plugin configuration did not survive restart: {restarted}.")
+    require(
+        restarted.get("MaxConcurrentProbes") == 8 and restarted.get("Enabled") is False,
+        f"The plugin configuration did not survive restart: {restarted}.",
+    )
 
     restore_status, _ = api.request_response(
         path,
@@ -1506,6 +1547,8 @@ def configuration_api_check(api: JellyfinApi, container: str) -> dict[str, objec
         "defaults": defaults,
         "rejected_cases": rejected,
         "saved": saved,
+        "detailed_next_request": True,
+        "disabled_next_request_delegated": True,
         "read_back_after_restart": restarted,
         "restored": json.loads(restored_body),
         "restart_container": container,
@@ -1706,6 +1749,85 @@ def concurrency_limit_check(
                     api.wait_for_named_library_item_absent(name)
             except Exception:  # Cleanup failures are surfaced through the fixture restoration summary.
                 pass
+
+
+def independent_native_refresh_check(
+    api: JellyfinApi,
+    container: str,
+    media_container: str,
+    item_id: str,
+    current_url: str,
+    media_sha1: str,
+    media_size: int,
+) -> tuple[dict[str, object], JellyfinApi, str]:
+    """Prove a native manual FullRefresh is not gated by the plugin's saturated probe pool."""
+    config_path = f"/Plugins/{PLUGIN_ID}/Configuration"
+    nonce = uuid.uuid4().hex[:8]
+    name = f"Independent Slow {nonce}"
+    slow_id = uuid.uuid4().hex
+    path = temporary_versioned_fixture(name, f"http://media:8080/slow/{slow_id}/fixture.mp4", media_sha1, media_size)
+    try:
+        api.refresh_library()
+        slow_item_id = api.wait_for_named_library_item(name)["Id"]
+        limited_status, _ = api.request_response(
+            config_path,
+            method="POST",
+            data=b'{"Enabled":true,"PlaybackAutoCheck":true,"MaxConcurrentProbes":1,"DetailedLog":false}',
+        )
+        require(limited_status == 204, "Jellyfin did not accept the concurrency-1 configuration for the independence check.")
+        container = restart_isolated_server()
+        api = JellyfinApi()
+        slow_item_id = api.wait_for_named_library_item(name)["Id"]
+
+        result_holder: dict[str, object] = {}
+
+        def slow_playback() -> None:
+            try:
+                status, _ = api.playback_info(slow_item_id, timeout=120)
+                result_holder["slow_status"] = status
+            except Exception as error:  # Retain thread failures for the owning assertion.
+                result_holder["slow_error"] = type(error).__name__
+
+        worker = threading.Thread(target=slow_playback, name="isolated-independent-slow", daemon=True)
+        worker.start()
+        wait_for_slow_media_request(media_container, slow_id)
+
+        # The plugin pool is now saturated by the slow plugin probe. An independent native FullRefresh of a
+        # different item must still complete without waiting for the plugin permit.
+        details_before = api.item_details(item_id)
+        started = time.monotonic()
+        refresh_status, _ = api.force_full_refresh(item_id)
+        require(refresh_status == 204, "Jellyfin rejected the independent manual FullRefresh request.")
+        api.wait_for_item_refresh(item_id, details_before.get("Etag"), timeout=30)
+        elapsed = time.monotonic() - started
+
+        worker.join(timeout=120)
+        require(not worker.is_alive(), "The saturated slow plugin probe did not finish.")
+        require("slow_error" not in result_holder, "The saturated slow plugin probe failed outside the HTTP path.")
+        require(elapsed < 2.5, f"The independent native FullRefresh waited for the plugin pool permit (elapsed {elapsed:.2f}s).")
+        result = {
+            "status": "PASS",
+            "plugin_pool_limit": 1,
+            "native_refresh_elapsed_ms": int(elapsed * 1000),
+            "slow_plugin_probe_status": result_holder.get("slow_status"),
+            "native_refresh_not_blocked": True,
+        }
+    finally:
+        path.unlink(missing_ok=True)
+        try:
+            api.refresh_library()
+            api.wait_for_named_library_item_absent(name)
+        except Exception:
+            pass
+        restore_status, _ = api.request_response(
+            config_path,
+            method="POST",
+            data=b'{"Enabled":true,"PlaybackAutoCheck":true,"MaxConcurrentProbes":2,"DetailedLog":false}',
+        )
+        if restore_status == 204:
+            container = restart_isolated_server()
+            api = JellyfinApi()
+    return result, api, container
 
 
 def ensure_success(result: dict, expected_url: str, expected_calls: int) -> None:
@@ -2087,7 +2209,17 @@ def main() -> int:
             len(media_a),
         )
 
-        summary["core_configuration_api"] = configuration_api_check(api, container)
+        summary["independent_native_refresh"], api, container = independent_native_refresh_check(
+            api,
+            container,
+            media_container,
+            item_id,
+            refreshed_url,
+            current_sha1,
+            len(media_a),
+        )
+
+        summary["core_configuration_api"] = configuration_api_check(api, container, item_id, refreshed_url)
         api = JellyfinApi()
         container = isolated_container_name()
         summary["plugin_status_after_configuration"] = api.plugin_status()

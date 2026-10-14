@@ -15,23 +15,31 @@ public sealed class ProbeCoordinatorTests
     private const string HashTwo = "hash-two";
 
     [TestMethod]
-    public async Task QueuedReservationIsNotShareableUntilItActuallyStarts()
+    public async Task PreparingReservationIsNotRunningAndNotSharedAsStarted()
     {
         using var coordinator = new ProbeCoordinator(2);
 
         var first = await coordinator.AcquireAsync(ProjectA, SourceA, HashOne, CancellationToken.None);
         Assert.IsTrue(first.IsOwner, "The first reservation must own the start.");
-        Assert.IsFalse(coordinator.TryGetRunning(ProjectA, SourceA, out _), "A reservation that has not started must not be registered as running.");
+        Assert.IsFalse(first.IsRunning, "A reservation that has not reached the matching native call is not running.");
+        Assert.IsFalse(coordinator.TryGetRunning(ProjectA, SourceA, out _), "A preparing reservation must not be registered as running.");
         Assert.AreEqual(0, coordinator.RunningCount);
-        Assert.AreEqual(1, coordinator.ActivePermits, "A queued reservation still holds its global permit.");
+        Assert.AreEqual(1, coordinator.PreparingCount, "A preparing owner is tracked separately from running probes.");
+        Assert.AreEqual(1, coordinator.ActivePermits, "A preparing reservation still holds its global permit.");
 
-        // A second caller for the same source must not join an unstarted reservation.
+        // A second caller for the same source must not be reported as joining a running probe. It waits for the
+        // preparing owner instead of starting a duplicate.
         var second = await coordinator.AcquireAsync(ProjectA, SourceA, HashOne, CancellationToken.None);
-        Assert.IsTrue(second.IsOwner, "An unstarted reservation must not be shared; the second caller becomes its own owner.");
-        Assert.AreEqual(2, coordinator.ActivePermits);
+        Assert.IsFalse(second.IsOwner, "A preparing reservation must not be shared as an owner; the second caller waits.");
+        Assert.IsFalse(second.IsRunning, "The preparing work must not be reported as running.");
+        Assert.IsNull(second.Permit, "Waiting for a preparing owner must not take a second permit.");
+        Assert.AreEqual(1, coordinator.ActivePermits);
+        Assert.AreEqual(1, coordinator.PreparingCount);
 
-        first.Permit!.Release();
-        second.Permit!.Release();
+        coordinator.Abandon(first.Item);
+        Assert.AreEqual(0, coordinator.PreparingCount);
+        Assert.AreEqual(0, coordinator.ActivePermits);
+        await second.Result!;
     }
 
     [TestMethod]
@@ -41,10 +49,12 @@ public sealed class ProbeCoordinatorTests
         var owner = await coordinator.AcquireAsync(ProjectA, SourceA, HashOne, CancellationToken.None);
         Assert.IsTrue(coordinator.TryMarkStarted(owner.Item, out _), "The owner must be able to register the running probe.");
         Assert.AreEqual(1, coordinator.RunningCount);
+        Assert.AreEqual(0, coordinator.PreparingCount);
         Assert.AreEqual(1, coordinator.ActivePermits, "Starting must not take a second permit.");
 
         var follower = await coordinator.AcquireAsync(ProjectA, SourceA, HashTwo, CancellationToken.None);
         Assert.IsFalse(follower.IsOwner, "An actually running probe must be shared.");
+        Assert.IsTrue(follower.IsRunning, "The follower must be reported as joining a running probe.");
         Assert.IsNull(follower.Permit, "Joining a running probe must not consume an additional global permit.");
         Assert.AreEqual(1, coordinator.ActivePermits);
 
@@ -98,7 +108,48 @@ public sealed class ProbeCoordinatorTests
     }
 
     [TestMethod]
-    public async Task PermitIsReleasedOnSuccessAndFailure()
+    public async Task GlobalLimitOneSerializesAndGlobalLimitEightAllowsEight()
+    {
+        // Configured limit 1: the second start cannot hold a permit until the first finishes.
+        using var single = new ProbeCoordinator(1);
+        var owner = await single.AcquireAsync(ProjectA, SourceA, HashOne, CancellationToken.None);
+        var blocked = single.AcquireAsync(ProjectB, SourceB, HashOne, CancellationToken.None);
+        Assert.IsFalse(blocked.IsCompleted, "A configured limit of 1 must serialize a second source.");
+        single.Complete(owner.Item, null);
+        var admitted = await blocked;
+        Assert.IsTrue(admitted.IsOwner);
+        single.Abandon(admitted.Item);
+        Assert.AreEqual(0, single.ActivePermits);
+
+        // Configured limit 8: eight distinct sources may hold permits and start concurrently; the ninth waits.
+        using var eight = new ProbeCoordinator(8);
+        var holders = new List<ProbeReservation>();
+        for (var index = 0; index < 8; index++)
+        {
+            var reservation = await eight.AcquireAsync(Guid.NewGuid(), SourceA, HashOne, CancellationToken.None);
+            Assert.IsTrue(reservation.IsOwner);
+            Assert.IsTrue(eight.TryMarkStarted(reservation.Item, out _));
+            holders.Add(reservation);
+        }
+
+        Assert.AreEqual(8, eight.RunningCount);
+        Assert.AreEqual(8, eight.ActivePermits);
+        var ninth = eight.AcquireAsync(Guid.NewGuid(), SourceA, HashOne, CancellationToken.None);
+        Assert.IsFalse(ninth.IsCompleted, "The ninth source must wait at the configured limit of 8.");
+        eight.Complete(holders[0].Item, null);
+        var ninthReservation = await ninth;
+        Assert.IsTrue(ninthReservation.IsOwner);
+        foreach (var holder in holders.Skip(1))
+        {
+            eight.Complete(holder.Item, null);
+        }
+
+        eight.Abandon(ninthReservation.Item);
+        Assert.AreEqual(0, eight.ActivePermits);
+    }
+
+    [TestMethod]
+    public async Task PermitIsReleasedOnSuccessFailureAndAbandon()
     {
         using var coordinator = new ProbeCoordinator(2);
         var success = await coordinator.AcquireAsync(ProjectA, SourceA, HashOne, CancellationToken.None);
@@ -112,6 +163,11 @@ public sealed class ProbeCoordinatorTests
         coordinator.Fail(failure.Item, new InvalidOperationException("injected failure"));
         Assert.AreEqual(0, coordinator.ActivePermits);
         Assert.AreEqual(0, coordinator.RunningCount);
+
+        var abandoned = await coordinator.AcquireAsync(ProjectA, SourceB, HashOne, CancellationToken.None);
+        coordinator.Abandon(abandoned.Item);
+        Assert.AreEqual(0, coordinator.ActivePermits);
+        Assert.AreEqual(0, coordinator.PreparingCount);
     }
 
     [TestMethod]
@@ -139,17 +195,37 @@ public sealed class ProbeCoordinatorTests
         using var coordinator = new ProbeCoordinator(2);
         var owner = await coordinator.AcquireAsync(ProjectA, SourceA, HashOne, CancellationToken.None);
         var racing = await coordinator.AcquireAsync(ProjectA, SourceA, HashOne, CancellationToken.None);
-        Assert.IsTrue(racing.IsOwner);
+        Assert.IsFalse(racing.IsOwner, "A concurrent same-key reservation waits for the preparing owner.");
 
         Assert.IsTrue(coordinator.TryMarkStarted(owner.Item, out var none));
         Assert.IsNull(none);
-        Assert.IsFalse(coordinator.TryMarkStarted(racing.Item, out var existing), "A second identical start must be rejected.");
-        Assert.AreSame(owner.Item, existing);
         Assert.AreEqual(1, coordinator.RunningCount);
+        Assert.AreEqual(0, coordinator.PreparingCount);
+        Assert.IsTrue(racing.IsRunning == false, "The queued follower was told the owner was preparing, not running.");
+        Assert.AreSame(owner.Item, racing.Item);
 
         coordinator.Complete(owner.Item, null);
-        racing.Permit!.Release();
         Assert.AreEqual(0, coordinator.ActivePermits);
+        Assert.AreEqual(0, coordinator.RunningCount);
+        Assert.AreEqual(0, coordinator.PreparingCount);
+    }
+
+    [TestMethod]
+    public async Task AbandoningPreparingWorkWakesWaitersForReevaluation()
+    {
+        using var coordinator = new ProbeCoordinator(2);
+        var owner = await coordinator.AcquireAsync(ProjectA, SourceA, HashOne, CancellationToken.None);
+        var waiter = await coordinator.AcquireAsync(ProjectA, SourceA, HashTwo, CancellationToken.None);
+        Assert.IsFalse(waiter.IsOwner);
+
+        coordinator.Abandon(owner.Item);
+
+        // The waiter's shared task completes so the access layer re-evaluates the current version instead of
+        // reusing a result, and the permit is released.
+        await waiter.Result!;
+        Assert.AreEqual(0, coordinator.ActivePermits);
+        Assert.AreEqual(0, coordinator.PreparingCount);
+        Assert.AreEqual(0, coordinator.RunningCount);
     }
 
     [TestMethod]

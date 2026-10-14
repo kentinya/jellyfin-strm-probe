@@ -21,6 +21,14 @@ class MediaHandler(SimpleHTTPRequestHandler):
             print(f"MEDIA_REQUEST {self.command} " + filename, flush=True)
             return
 
+        if len(path_parts) == 3 and path_parts[0] == "independent":
+            request_id, filename = path_parts[1:]
+            print(f"INDEPENDENT_MEDIA_REQUEST_STARTED {request_id}", flush=True)
+            time.sleep(3)
+            self.path = "/" + filename
+            print(f"MEDIA_REQUEST {self.command} " + filename, flush=True)
+            return
+
         filename = path_parts[-1] if path_parts else "index"
         self.path = parsed.path
         print(f"MEDIA_REQUEST {self.command} " + filename, flush=True)

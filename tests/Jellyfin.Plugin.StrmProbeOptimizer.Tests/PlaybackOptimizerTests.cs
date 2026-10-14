@@ -874,10 +874,11 @@ public sealed class PlaybackOptimizerTests
             var execution = Interlocked.Increment(ref probeExecutions);
             if (execution == 1)
             {
+                // Preparation is done; the matching native call is the real start boundary.
+                ProbeExecutionContext.Current!.MarkCall(newUrl);
                 probeStarted.TrySetResult();
                 await releaseProbe.Task;
                 var result = MediaInfoWithVideo();
-                ProbeExecutionContext.Current!.MarkCall(newUrl);
                 ProbeExecutionContext.Current.RecordResult(newUrl, result);
                 streamRepository.SaveMediaStreams(updatedItem.Id, result.MediaStreams, CancellationToken.None);
                 updatedItem.ShortcutPath = newUrl;
@@ -927,10 +928,10 @@ public sealed class PlaybackOptimizerTests
         native.StaticSources = [Source(oldUrl)];
         native.Playback = async (updatedItem, _, _, _) =>
         {
+            ProbeExecutionContext.Current!.MarkCall(newUrl);
             probeStarted.TrySetResult();
             await releaseProbe.Task;
             var result = MediaInfoWithVideo();
-            ProbeExecutionContext.Current!.MarkCall(newUrl);
             ProbeExecutionContext.Current.RecordResult(newUrl, result);
             streamRepository.SaveMediaStreams(updatedItem.Id, result.MediaStreams, CancellationToken.None);
             updatedItem.ShortcutPath = newUrl;
@@ -981,6 +982,7 @@ public sealed class PlaybackOptimizerTests
         native.StaticSources = [Source(oldUrl)];
         native.Playback = async (_, _, _, _) =>
         {
+            ProbeExecutionContext.Current!.MarkCall(newUrl);
             probeStarted.TrySetResult();
             await releaseProbe.Task;
             return [Source(oldUrl)];
@@ -1056,6 +1058,381 @@ public sealed class PlaybackOptimizerTests
         Assert.AreEqual(0, coordinator.RunningCount, "A disabled plugin must not register or start plugin probes.");
         Assert.AreEqual(0, coordinator.ActivePermits);
         Assert.IsNull(repository.Get(item.Id, SourceKey(item.Id)));
+    }
+
+    [TestMethod]
+    public async Task PreparationIsNotRegisteredAsStartedAndIsNotSharedAsRunning()
+    {
+        const string oldUrl = "https://media.example.invalid/video.mp4?sig=old";
+        const string newUrl = "https://media.example.invalid/video.mp4?sig=new";
+        using var fixture = new ManifestFixture(oldUrl, ValidSha1, 42);
+        var reader = new StrmManifestReader();
+        var repository = new InMemoryStrmFingerprintRepository();
+        var item = CreateItem(fixture.Path, oldUrl);
+        repository.TryCommit(Fingerprint(item.Id, reader.Read(fixture.Path).Manifest!), expectedPrevious: null);
+        fixture.Write(newUrl, ValidSha1, 42);
+
+        using var coordinator = new ProbeCoordinator(2);
+        var native = ScriptedManager.Create();
+        var streamRepository = ProbePersistenceDispatchProxy.Create(NativePersistence.Create<IMediaStreamRepository>());
+        var itemPersistence = ProbePersistenceDispatchProxy.Create(NativePersistence.Create<IItemPersistenceService>());
+        var preparationReached = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseProbe = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var probeExecutions = 0;
+        var observedRunningDuringPreparation = -1;
+        var observedPreparingDuringPreparation = -1;
+        native.StaticSources = [Source(oldUrl)];
+        native.Playback = async (updatedItem, allowProbe, _, _) =>
+        {
+            Assert.IsTrue(allowProbe);
+            var execution = Interlocked.Increment(ref probeExecutions);
+            if (execution == 1)
+            {
+                // This is native GetPlaybackMediaSources preparation, before the matching encoder call.
+                observedRunningDuringPreparation = coordinator.RunningCount;
+                observedPreparingDuringPreparation = coordinator.PreparingCount;
+                preparationReached.TrySetResult();
+                await releaseProbe.Task;
+                var result = MediaInfoWithVideo();
+                ProbeExecutionContext.Current!.MarkCall(newUrl);
+                ProbeExecutionContext.Current.RecordResult(newUrl, result);
+                streamRepository.SaveMediaStreams(updatedItem.Id, result.MediaStreams, CancellationToken.None);
+                updatedItem.ShortcutPath = newUrl;
+                itemPersistence.SaveItems([updatedItem], CancellationToken.None);
+                native.StaticSources = [Source(newUrl)];
+            }
+
+            return [Source(newUrl)];
+        };
+        var optimizer = CreateOptimizer(repository, coordinator: coordinator);
+
+        var leader = optimizer.GetPlaybackMediaSourcesAsync(native.Interface, item, null, true, false, CancellationToken.None);
+        await preparationReached.Task;
+        Assert.AreEqual(0, observedRunningDuringPreparation, "Refresh preparation before the matching call must not be registered as running.");
+        Assert.AreEqual(1, observedPreparingDuringPreparation, "A preparing owner must be tracked separately.");
+        Assert.AreEqual(0, coordinator.RunningCount, "The preparation phase must not be shared as a running probe.");
+
+        // A second caller may wait for the preparing owner, but it must not be reported as joining a running probe.
+        var follower = optimizer.GetPlaybackMediaSourcesAsync(native.Interface, item, null, true, false, CancellationToken.None);
+        await Task.Delay(50);
+        Assert.AreEqual(1, probeExecutions, "Waiting for preparation must not start a duplicate native execution.");
+
+        releaseProbe.TrySetResult();
+        var results = await Task.WhenAll(leader, follower);
+        Assert.AreEqual(1, probeExecutions, "Exactly one native probe must actually execute.");
+        Assert.AreEqual(newUrl, results[0][0].Path);
+        Assert.AreEqual(newUrl, results[1][0].Path);
+        Assert.AreEqual(0, coordinator.RunningCount);
+        Assert.AreEqual(0, coordinator.PreparingCount);
+        Assert.AreEqual(0, coordinator.ActivePermits);
+    }
+
+    [TestMethod]
+    public async Task QueuedOwnerReReadsAcceptedVersionAndDoesNotProbeAgain()
+    {
+        const string oldUrl = "https://media.example.invalid/video.mp4?sig=old";
+        const string newUrl = "https://media.example.invalid/video.mp4?sig=new";
+        using var fixture = new ManifestFixture(oldUrl, ValidSha1, 42);
+        var reader = new StrmManifestReader();
+        var repository = new InMemoryStrmFingerprintRepository();
+        var item = CreateItem(fixture.Path, oldUrl);
+        repository.TryCommit(Fingerprint(item.Id, reader.Read(fixture.Path).Manifest!), expectedPrevious: null);
+        fixture.Write(newUrl, ValidSha1, 42);
+
+        using var coordinator = new ProbeCoordinator(1);
+        var native = ScriptedManager.Create();
+        var probeExecutions = 0;
+        native.StaticSources = [Source(newUrl)];
+        native.Playback = (_, _, _, _) =>
+        {
+            Interlocked.Increment(ref probeExecutions);
+            return Task.FromResult<IReadOnlyList<MediaSourceInfo>>([Source(newUrl)]);
+        };
+        var optimizer = CreateOptimizer(repository, coordinator: coordinator);
+
+        // Occupy the only permit with an unrelated preparing reservation so the real request queues.
+        var blocker = await coordinator.AcquireAsync(Guid.NewGuid(), "unrelated-source", "unrelated", CancellationToken.None);
+        var queued = optimizer.GetPlaybackMediaSourcesAsync(native.Interface, item, null, true, false, CancellationToken.None);
+        Assert.IsFalse(queued.IsCompleted, "The request must be waiting for a permit.");
+        Assert.AreEqual(0, probeExecutions);
+
+        // While queued, the same current version becomes accepted and the native address is updated.
+        var oldFingerprint = repository.Get(item.Id, SourceKey(item.Id));
+        var newManifest = reader.Read(fixture.Path).Manifest!;
+        Assert.IsTrue(repository.TryCommit(Fingerprint(item.Id, newManifest), oldFingerprint));
+        item.ShortcutPath = newUrl;
+        native.StaticSources = [Source(newUrl)];
+
+        blocker.Permit!.Release();
+        var result = await queued;
+
+        Assert.AreEqual(0, probeExecutions, "A queued owner must re-read the accepted version and not probe again.");
+        Assert.IsNotNull(result, "The accepted version is reused and returned from the current native source.");
+        Assert.AreEqual(newUrl, result[0].Path);
+        Assert.AreEqual(0, coordinator.RunningCount);
+        Assert.AreEqual(0, coordinator.ActivePermits);
+    }
+
+    [TestMethod]
+    public async Task QueuedOwnerReReadsDisabledConfigurationAndDelegates()
+    {
+        const string oldUrl = "https://media.example.invalid/video.mp4?sig=old";
+        const string newUrl = "https://media.example.invalid/video.mp4?sig=new";
+        using var fixture = new ManifestFixture(oldUrl, ValidSha1, 42);
+        var reader = new StrmManifestReader();
+        var repository = new InMemoryStrmFingerprintRepository();
+        var item = CreateItem(fixture.Path, oldUrl);
+        repository.TryCommit(Fingerprint(item.Id, reader.Read(fixture.Path).Manifest!), expectedPrevious: null);
+        fixture.Write(newUrl, ValidSha1, 42);
+
+        using var coordinator = new ProbeCoordinator(1);
+        var native = ScriptedManager.Create();
+        var pluginProbeExecutions = 0;
+        var delegatedWithProbePermission = 0;
+        native.StaticSources = [Source(oldUrl)];
+        native.Playback = (_, allowProbe, _, _) =>
+        {
+            if (allowProbe && ProbeExecutionContext.Current is not null)
+            {
+                Interlocked.Increment(ref pluginProbeExecutions);
+            }
+
+            if (allowProbe && ProbeExecutionContext.Current is null)
+            {
+                Interlocked.Increment(ref delegatedWithProbePermission);
+            }
+
+            return Task.FromResult<IReadOnlyList<MediaSourceInfo>>([Source(oldUrl)]);
+        };
+        var settings = new MutablePlaybackSettings();
+        var optimizer = CreateOptimizer(repository, settings: settings, coordinator: coordinator);
+
+        var blocker = await coordinator.AcquireAsync(Guid.NewGuid(), "unrelated-source", "unrelated", CancellationToken.None);
+        var queued = optimizer.GetPlaybackMediaSourcesAsync(native.Interface, item, null, true, false, CancellationToken.None);
+        Assert.IsFalse(queued.IsCompleted);
+
+        settings.Enabled = false;
+        blocker.Permit!.Release();
+
+        // The queued owner re-reads Enabled before starting and delegates with the caller's original permission.
+        // The outer playback pipeline may still require a retry because the native address is stale in this fixture.
+        try
+        {
+            await queued;
+        }
+        catch (InvalidOperationException)
+        {
+            // A native address that no longer matches the manifest requires a caller retry; the plugin must not have probed.
+        }
+
+        Assert.AreEqual(0, pluginProbeExecutions, "A queued owner must re-read Enabled and not start a plugin probe after it was disabled.");
+        Assert.AreEqual(1, delegatedWithProbePermission, "The disabled queued request must delegate with the caller's original probe permission.");
+        Assert.AreEqual(0, coordinator.RunningCount);
+        Assert.AreEqual(0, coordinator.ActivePermits);
+    }
+
+    [TestMethod]
+    public async Task QueuedOwnerReReadsChangedManifestAndProbesTheLatestVersion()
+    {
+        const string oldUrl = "https://media.example.invalid/video.mp4?sig=old";
+        const string requestedUrl = "https://media.example.invalid/video.mp4?sig=requested";
+        const string latestUrl = "https://media.example.invalid/video.mp4?sig=latest";
+        using var fixture = new ManifestFixture(oldUrl, ValidSha1, 42);
+        var reader = new StrmManifestReader();
+        var repository = new InMemoryStrmFingerprintRepository();
+        var item = CreateItem(fixture.Path, oldUrl);
+        repository.TryCommit(Fingerprint(item.Id, reader.Read(fixture.Path).Manifest!), expectedPrevious: null);
+        fixture.Write(requestedUrl, ValidSha1, 42);
+
+        using var coordinator = new ProbeCoordinator(1);
+        var native = ScriptedManager.Create();
+        var streamRepository = ProbePersistenceDispatchProxy.Create(NativePersistence.Create<IMediaStreamRepository>());
+        var itemPersistence = ProbePersistenceDispatchProxy.Create(NativePersistence.Create<IItemPersistenceService>());
+        var probedUrls = new List<string>();
+        native.StaticSources = [Source(oldUrl)];
+        native.Playback = (updatedItem, allowProbe, _, _) =>
+        {
+            Assert.IsTrue(allowProbe);
+            var url = reader.Read(fixture.Path).Manifest!.Url;
+            probedUrls.Add(url);
+            var result = MediaInfoWithVideo();
+            ProbeExecutionContext.Current!.MarkCall(url);
+            ProbeExecutionContext.Current.RecordResult(url, result);
+            streamRepository.SaveMediaStreams(updatedItem.Id, result.MediaStreams, CancellationToken.None);
+            updatedItem.ShortcutPath = url;
+            itemPersistence.SaveItems([updatedItem], CancellationToken.None);
+            native.StaticSources = [Source(url)];
+            return Task.FromResult<IReadOnlyList<MediaSourceInfo>>([Source(url)]);
+        };
+        var optimizer = CreateOptimizer(repository, coordinator: coordinator);
+
+        var blocker = await coordinator.AcquireAsync(Guid.NewGuid(), "unrelated-source", "unrelated", CancellationToken.None);
+        var queued = optimizer.GetPlaybackMediaSourcesAsync(native.Interface, item, null, true, false, CancellationToken.None);
+        Assert.IsFalse(queued.IsCompleted);
+
+        // The manifest changes to a newer URL while the request is queued.
+        fixture.Write(latestUrl, ValidSha1, 42);
+        blocker.Permit!.Release();
+
+        // The queued owner must probe the latest version. Because the manifest changed after the request began,
+        // the caller must retry the playback response instead of receiving a stale source.
+        try
+        {
+            await queued;
+        }
+        catch (InvalidOperationException)
+        {
+            // Expected: the outer playback pipeline detects the manifest change and requires a retry.
+        }
+
+        Assert.AreEqual(latestUrl, probedUrls.Single(), "The queued owner must probe the latest manifest, not the one captured before queueing.");
+        Assert.AreEqual(latestUrl, item.ShortcutPath);
+        Assert.AreEqual(0, coordinator.RunningCount);
+        Assert.AreEqual(0, coordinator.ActivePermits);
+    }
+
+    [TestMethod]
+    public async Task StartedProbeCommitsEvenWhenNoCallerAwaitsAndTheWaiterCancels()
+    {
+        const string oldUrl = "https://media.example.invalid/video.mp4?sig=old";
+        const string newUrl = "https://media.example.invalid/video.mp4?sig=new";
+        using var fixture = new ManifestFixture(oldUrl, ValidSha1, 42);
+        var reader = new StrmManifestReader();
+        var repository = new InMemoryStrmFingerprintRepository();
+        var item = CreateItem(fixture.Path, oldUrl);
+        var oldFingerprint = Fingerprint(item.Id, reader.Read(fixture.Path).Manifest!);
+        repository.TryCommit(oldFingerprint, expectedPrevious: null);
+        fixture.Write(newUrl, ValidSha1, 42);
+
+        using var coordinator = new ProbeCoordinator(2);
+        var native = ScriptedManager.Create();
+        var streamRepository = ProbePersistenceDispatchProxy.Create(NativePersistence.Create<IMediaStreamRepository>());
+        var itemPersistence = ProbePersistenceDispatchProxy.Create(NativePersistence.Create<IItemPersistenceService>());
+        var probeStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseProbe = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        native.StaticSources = [Source(oldUrl)];
+        native.Playback = async (updatedItem, _, _, _) =>
+        {
+            ProbeExecutionContext.Current!.MarkCall(newUrl);
+            probeStarted.TrySetResult();
+            await releaseProbe.Task;
+            var result = MediaInfoWithVideo();
+            ProbeExecutionContext.Current.RecordResult(newUrl, result);
+            streamRepository.SaveMediaStreams(updatedItem.Id, result.MediaStreams, CancellationToken.None);
+            updatedItem.ShortcutPath = newUrl;
+            itemPersistence.SaveItems([updatedItem], CancellationToken.None);
+            native.StaticSources = [Source(newUrl)];
+            return [Source(newUrl)];
+        };
+        var optimizer = CreateOptimizer(repository, coordinator: coordinator);
+
+        // The leading caller's result is deliberately not awaited; the started probe must finish on its own.
+        var leader = optimizer.GetPlaybackMediaSourcesAsync(native.Interface, item, null, true, false, CancellationToken.None);
+        await probeStarted.Task;
+
+        // A second caller joins and then exits before the probe finishes; it must not cancel the execution.
+        using var cancellation = new CancellationTokenSource();
+        var waiter = optimizer.GetPlaybackMediaSourcesAsync(native.Interface, item, null, true, false, cancellation.Token);
+        await Task.Delay(25);
+        cancellation.Cancel();
+        await AssertThrowsAsync<OperationCanceledException>(() => waiter);
+
+        releaseProbe.TrySetResult();
+        var leaderResult = await leader;
+
+        Assert.AreEqual(newUrl, leaderResult![0].Path, "An already started probe must complete even with no remaining waiters.");
+        Assert.AreEqual(0, coordinator.RunningCount);
+        Assert.AreEqual(0, coordinator.ActivePermits);
+        var committed = repository.Get(item.Id, SourceKey(item.Id));
+        Assert.IsNotNull(committed);
+        Assert.AreNotEqual(oldFingerprint, committed, "The completed probe must still commit its verified fingerprint.");
+    }
+
+    [TestMethod]
+    public async Task SaturatedPluginPoolDoesNotBlockNonPluginNativeWork()
+    {
+        const string url = "https://media.example.invalid/video.mp4?sig=a";
+        using var fixture = new ManifestFixture(url, ValidSha1, 42);
+        var repository = new InMemoryStrmFingerprintRepository();
+        var item = new Video { Id = Guid.NewGuid(), Path = "/media/ordinary.mp4", ShortcutPath = url };
+        var native = ScriptedManager.Create();
+        native.StaticSources = [Source(url)];
+        native.Playback = (_, allowProbe, _, _) =>
+        {
+            Assert.IsTrue(allowProbe);
+            return Task.FromResult<IReadOnlyList<MediaSourceInfo>>([Source(url)]);
+        };
+        using var coordinator = new ProbeCoordinator(2);
+
+        // Saturate the plugin pool with two running plugin probes for other keys.
+        var first = await coordinator.AcquireAsync(Guid.NewGuid(), "other-a", "h", CancellationToken.None);
+        var second = await coordinator.AcquireAsync(Guid.NewGuid(), "other-b", "h", CancellationToken.None);
+        Assert.IsTrue(coordinator.TryMarkStarted(first.Item, out _));
+        Assert.IsTrue(coordinator.TryMarkStarted(second.Item, out _));
+        Assert.AreEqual(2, coordinator.ActivePermits);
+
+        var optimizer = CreateOptimizer(repository, coordinator: coordinator);
+
+        // Ordinary (non-plugin) native work must not wait for a plugin permit.
+        var delegated = await optimizer.GetPlaybackMediaSourcesAsync(native.Interface, item, null, true, false, CancellationToken.None)
+            .WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.AreEqual(url, delegated[0].Path);
+        Assert.AreEqual(2, coordinator.ActivePermits, "Delegated native work must not consume a plugin permit.");
+
+        coordinator.Complete(first.Item, null);
+        coordinator.Complete(second.Item, null);
+        Assert.AreEqual(0, coordinator.ActivePermits);
+    }
+
+    [TestMethod]
+    public async Task SharedProbeCallersKeepTheirOwnUserAndPathSubstitution()
+    {
+        const string oldUrl = "https://media.example.invalid/video.mp4?sig=old";
+        const string newUrl = "https://media.example.invalid/video.mp4?sig=new";
+        using var fixture = new ManifestFixture(oldUrl, ValidSha1, 42);
+        var reader = new StrmManifestReader();
+        var repository = new InMemoryStrmFingerprintRepository();
+        var item = CreateItem(fixture.Path, oldUrl);
+        repository.TryCommit(Fingerprint(item.Id, reader.Read(fixture.Path).Manifest!), expectedPrevious: null);
+        fixture.Write(newUrl, ValidSha1, 42);
+
+        using var coordinator = new ProbeCoordinator(2);
+        var native = ScriptedManager.Create();
+        var streamRepository = ProbePersistenceDispatchProxy.Create(NativePersistence.Create<IMediaStreamRepository>());
+        var itemPersistence = ProbePersistenceDispatchProxy.Create(NativePersistence.Create<IItemPersistenceService>());
+        var probeStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseProbe = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        native.StaticSources = [Source(oldUrl)];
+        native.Playback = async (updatedItem, allowProbe, substitute, _) =>
+        {
+            if (!allowProbe)
+            {
+                return [Source(newUrl)];
+            }
+
+            ProbeExecutionContext.Current!.MarkCall(newUrl);
+            probeStarted.TrySetResult();
+            await releaseProbe.Task;
+            var result = MediaInfoWithVideo();
+            ProbeExecutionContext.Current.RecordResult(newUrl, result);
+            streamRepository.SaveMediaStreams(updatedItem.Id, result.MediaStreams, CancellationToken.None);
+            updatedItem.ShortcutPath = newUrl;
+            itemPersistence.SaveItems([updatedItem], CancellationToken.None);
+            native.StaticSources = [Source(newUrl)];
+            return [Source(newUrl)];
+        };
+        var optimizer = CreateOptimizer(repository, coordinator: coordinator);
+
+        var leader = optimizer.GetPlaybackMediaSourcesAsync(native.Interface, item, null, true, enablePathSubstitution: true, CancellationToken.None);
+        await probeStarted.Task;
+        var follower = optimizer.GetPlaybackMediaSourcesAsync(native.Interface, item, null, true, enablePathSubstitution: false, CancellationToken.None);
+        releaseProbe.TrySetResult();
+        var results = await Task.WhenAll(leader, follower);
+
+        Assert.AreEqual(newUrl, results[0][0].Path);
+        Assert.AreEqual(newUrl, results[1][0].Path, "The joining caller must re-read its own native source, not reuse the leader's response.");
+        Assert.IsTrue(native.NoProbePathSubstitutions.Contains(false), "The follower must re-read the native source with its own path substitution value.");
+        Assert.IsTrue(native.NoProbePathSubstitutions.Contains(true), "The leading caller's own path substitution must be preserved.");
     }
 
     private static StrmPlaybackOptimizer CreateOptimizer(
@@ -1161,6 +1538,17 @@ public sealed class PlaybackOptimizerTests
         bool Enabled = true,
         bool DetailedLog = false,
         int MaxConcurrentProbes = PluginConfiguration.DefaultMaxConcurrentProbes) : IPlaybackSettings;
+
+    private sealed class MutablePlaybackSettings : IPlaybackSettings
+    {
+        public bool Enabled { get; set; } = true;
+
+        public bool PlaybackAutoCheck { get; set; } = true;
+
+        public bool DetailedLog { get; set; }
+
+        public int MaxConcurrentProbes { get; set; } = PluginConfiguration.DefaultMaxConcurrentProbes;
+    }
 
     private sealed class FaultInjectingFingerprintRepository : IStrmFingerprintRepository
     {
@@ -1279,6 +1667,8 @@ public sealed class PlaybackOptimizerTests
 
         public bool LastAllowMediaProbe { get; private set; }
 
+        public List<bool> NoProbePathSubstitutions { get; } = [];
+
         public Action<BaseItem>? OnNativeNoProbe { get; set; }
 
         public IReadOnlyList<MediaSourceInfo> StaticSources { get; set; } = [];
@@ -1324,6 +1714,7 @@ public sealed class PlaybackOptimizerTests
                 }
 
                 OnNativeNoProbe?.Invoke(item);
+                NoProbePathSubstitutions.Add((bool)args[3]!);
                 var noProbeTask = Task.FromResult(StaticSources);
                 return EnsureSingleSourceIdAsync(item, noProbeTask);
             }

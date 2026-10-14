@@ -36,8 +36,8 @@ public sealed class Plugin : BasePlugin<PluginConfiguration>
     public override string Description => "Validates a Jellyfin-native STRM playback interception prototype.";
 
     /// <summary>
-    /// Validates the candidate configuration, persists it, and only then publishes it in memory.
-    /// A failed save therefore leaves the previous effective configuration untouched.
+    /// Validates the candidate configuration, persists it atomically, and only then publishes it in memory.
+    /// A failed save therefore leaves the previous effective configuration and the previously saved file untouched.
     /// </summary>
     /// <param name="configuration">The candidate configuration.</param>
     public override void UpdateConfiguration(BasePluginConfiguration configuration)
@@ -54,11 +54,45 @@ public sealed class Plugin : BasePlugin<PluginConfiguration>
             throw new ArgumentException(error, nameof(configuration));
         }
 
-        // Persist first. BasePluginOfT.UpdateConfiguration replaces the in-memory value before saving,
-        // which would leave an unsaved configuration effective when serialization fails.
-        SaveConfiguration(pluginConfiguration);
+        // Persist first, and atomically: the native SaveConfiguration serializes straight into the live file
+        // with FileMode.Create, so a mid-write failure would truncate the previously valid configuration.
+        SaveConfigurationAtomically(pluginConfiguration);
         Configuration = pluginConfiguration;
         ConfigurationChanged?.Invoke(this, pluginConfiguration);
+    }
+
+    /// <summary>
+    /// Serializes the candidate to a temporary file in the plugin configuration directory and only replaces the
+    /// live configuration file after the complete candidate has been written. A serialization failure leaves the
+    /// previous file and the previous in-memory configuration in place.
+    /// </summary>
+    private void SaveConfigurationAtomically(PluginConfiguration configuration)
+    {
+        var directory = ApplicationPaths.PluginConfigurationsPath;
+        Directory.CreateDirectory(directory);
+        var temporaryPath = Path.Combine(directory, ConfigurationFileName + ".tmp-" + Guid.NewGuid().ToString("N"));
+
+        try
+        {
+            XmlSerializer.SerializeToFile(configuration, temporaryPath);
+            File.Move(temporaryPath, ConfigurationFilePath, overwrite: true);
+        }
+        catch
+        {
+            try
+            {
+                if (File.Exists(temporaryPath))
+                {
+                    File.Delete(temporaryPath);
+                }
+            }
+            catch (IOException)
+            {
+                // Best effort cleanup; the original configuration file is left untouched.
+            }
+
+            throw;
+        }
     }
 
     private int ResolveStartupMaxConcurrentProbes()
@@ -70,10 +104,10 @@ public sealed class Plugin : BasePlugin<PluginConfiguration>
         }
 
         _logger.LogError(
-            "The persisted STRM Probe Optimizer configuration is invalid: {ValidationError} Using the default concurrency of {DefaultConcurrency} until the server is restarted with a corrected configuration. Edit {ConfigurationPath} or re-save the plugin configuration through Jellyfin and restart.",
+            "The persisted STRM Probe Optimizer configuration is invalid: {ValidationError} Using the default concurrency of {DefaultConcurrency} until the server is restarted with a corrected configuration. Re-save the plugin configuration through Jellyfin (plugin id {PluginId}) and restart.",
             error,
             PluginConfiguration.DefaultMaxConcurrentProbes,
-            ConfigurationFilePath);
+            Id);
         return PluginConfiguration.DefaultMaxConcurrentProbes;
     }
 }

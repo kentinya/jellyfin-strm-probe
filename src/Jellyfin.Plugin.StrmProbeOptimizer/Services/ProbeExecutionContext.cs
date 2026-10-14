@@ -12,18 +12,21 @@ public sealed class ProbeExecutionContext : IDisposable
     private readonly object _sync = new();
     private readonly HashSet<PrimaryStreamIdentity> _successfulPrimaryResults = [];
     private readonly HashSet<PrimaryStreamIdentity> _persistedPrimaryResults = [];
+    private readonly Action? _onMatchingCallStarted;
     private int _matchingCallCount;
+    private int _startNotified;
     private int _hasPrimaryResult;
     private int _hasPersistedAddress;
     private int _disposed;
 
-    private ProbeExecutionContext(Guid projectId, Guid sourceItemId, string sourceKey, string expectedUrl, MediaStreamType requiredStreamType)
+    private ProbeExecutionContext(Guid projectId, Guid sourceItemId, string sourceKey, string expectedUrl, MediaStreamType requiredStreamType, Action? onMatchingCallStarted)
     {
         ProjectId = projectId;
         SourceItemId = sourceItemId;
         SourceKey = sourceKey;
         ExpectedUrl = expectedUrl;
         RequiredStreamType = requiredStreamType;
+        _onMatchingCallStarted = onMatchingCallStarted;
         _previous = AmbientContext.Value;
         AmbientContext.Value = this;
     }
@@ -67,10 +70,11 @@ public sealed class ProbeExecutionContext : IDisposable
         Guid sourceItemId,
         string sourceKey,
         string expectedUrl,
-        MediaStreamType requiredStreamType)
+        MediaStreamType requiredStreamType,
+        Action? onMatchingCallStarted = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sourceKey);
-        return new ProbeExecutionContext(projectId, sourceItemId, sourceKey, expectedUrl, requiredStreamType);
+        return new ProbeExecutionContext(projectId, sourceItemId, sourceKey, expectedUrl, requiredStreamType, onMatchingCallStarted);
     }
 
     public void MarkCall(string? requestedPath)
@@ -81,6 +85,12 @@ public sealed class ProbeExecutionContext : IDisposable
         }
 
         Interlocked.Increment(ref _matchingCallCount);
+        if (Interlocked.Exchange(ref _startNotified, 1) == 0)
+        {
+            // The verified matching native call is the real start boundary. Notify the access layer before
+            // the native call proceeds so a same-source caller can join the running probe.
+            _onMatchingCallStarted?.Invoke();
+        }
     }
 
     public void RecordResult(string? requestedPath, MediaInfo result)
