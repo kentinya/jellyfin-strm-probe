@@ -33,6 +33,7 @@ public sealed class ServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<IProbeDecisionService, ProbeDecisionService>();
         serviceCollection.AddSingleton<IStrmFingerprintRepository, SqliteStrmFingerprintRepository>();
         serviceCollection.AddSingleton<IPlaybackSettings, PluginPlaybackSettings>();
+        serviceCollection.AddSingleton<ILibraryIdProvider, LibraryIdProvider>();
         serviceCollection.AddSingleton<StrmPlaybackOptimizer>();
         serviceCollection.AddSingleton<IBatchScopeResolver, BatchScopeResolver>();
         serviceCollection.AddSingleton<IBatchCandidateSource, LibraryBatchCandidateSource>();

@@ -80,6 +80,39 @@ class BatchScriptGuardTests(unittest.TestCase):
             self.assertEqual(fixture.read_bytes(), b"restored")
             self.assertIn("sync not available", status)
 
+    def test_parse_summary_field_reads_a_redacted_counter(self):
+        line = (
+            "STRM media information check finished: candidates 3 (raw 3, duplicates 0), checked 2, "
+            "actual probe calls 1, store unavailable True."
+        )
+        self.assertEqual(batch.parse_summary_field(line, "candidates"), 3)
+        self.assertEqual(batch.parse_summary_field(line, "actual probe calls"), 1)
+        self.assertIsNone(batch.parse_summary_field(line, "missing field"))
+
+    def test_future_time_of_day_ticks_is_ahead_of_now(self):
+        import datetime
+
+        ticks = batch.future_time_of_day_ticks(seconds_ahead=70)
+        seconds = ticks / 10_000_000
+        self.assertGreaterEqual(seconds, 0)
+        self.assertLess(seconds, 24 * 3600)
+        now_utc = datetime.datetime.now(datetime.timezone.utc)
+        target = now_utc + datetime.timedelta(seconds=70)
+        # The tick value encodes a time of day; it must be the near-future target (allowing for a minute boundary).
+        delta = abs(seconds - (target.hour * 3600 + target.minute * 60 + target.second))
+        self.assertLess(min(delta, 86400 - delta), 120)
+
+    def test_restore_state_reports_not_restored_when_the_api_is_unavailable(self):
+        # With no reachable isolated server the restore helper must report the failure instead of claiming success.
+        with patch.object(batch, "CONFIGURATION_FILE", Path("/nonexistent/config.xml")):
+            status = batch.restore_state(b"<x/>", {"task": [{"Type": "DailyTrigger"}]})
+        self.assertIn("NOT RESTORED", status)
+
+    def test_scenario_choices_include_stop_sharing_scope_and_failure(self):
+        parser_source = (ROOT / "scripts" / "run_isolated_batch_integration.py").read_text(encoding="utf-8")
+        for scenario in ("stop", "sharing", "scope", "failure"):
+            self.assertIn(scenario, parser_source)
+
 
 if __name__ == "__main__":
     unittest.main()

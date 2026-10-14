@@ -3,17 +3,24 @@ using MediaBrowser.Common.Configuration;
 using MediaBrowser.Model.Plugins;
 using MediaBrowser.Model.Serialization;
 using Microsoft.Extensions.Logging;
+using Jellyfin.Plugin.StrmProbeOptimizer.Services;
 
 namespace Jellyfin.Plugin.StrmProbeOptimizer;
 
 public sealed class Plugin : BasePlugin<PluginConfiguration>
 {
     private readonly ILogger<Plugin> _logger;
+    private readonly ILibraryIdProvider? _libraryIdProvider;
 
-    public Plugin(IApplicationPaths applicationPaths, IXmlSerializer xmlSerializer, ILogger<Plugin> logger)
+    public Plugin(
+        IApplicationPaths applicationPaths,
+        IXmlSerializer xmlSerializer,
+        ILogger<Plugin> logger,
+        ILibraryIdProvider? libraryIdProvider = null)
         : base(applicationPaths, xmlSerializer)
     {
         _logger = logger;
+        _libraryIdProvider = libraryIdProvider;
         Instance = this;
         StartupMaxConcurrentProbes = ResolveStartupMaxConcurrentProbes();
         _logger.LogInformation(
@@ -48,7 +55,15 @@ public sealed class Plugin : BasePlugin<PluginConfiguration>
             throw new ArgumentException($"The plugin configuration must be a {nameof(PluginConfiguration)}.", nameof(configuration));
         }
 
-        var error = PluginConfiguration.Validate(pluginConfiguration);
+        var availableLibraryIds = ResolveAvailableLibraryIds();
+        if (!pluginConfiguration.BatchAllLibraries && availableLibraryIds is null)
+        {
+            // The library id provider is unavailable. Fail closed instead of silently persisting a scope that
+            // could reference a library that no longer exists.
+            throw new ArgumentException("The batch media library selection cannot be verified because the library catalog is unavailable; retry after the server has finished starting.", nameof(configuration));
+        }
+
+        var error = PluginConfiguration.Validate(pluginConfiguration, availableLibraryIds);
         if (error is not null)
         {
             throw new ArgumentException(error, nameof(configuration));
@@ -93,6 +108,11 @@ public sealed class Plugin : BasePlugin<PluginConfiguration>
 
             throw;
         }
+    }
+
+    private IReadOnlyCollection<Guid>? ResolveAvailableLibraryIds()
+    {
+        return _libraryIdProvider?.GetAvailableLibraryIds();
     }
 
     private int ResolveStartupMaxConcurrentProbes()

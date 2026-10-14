@@ -221,7 +221,9 @@ public sealed class StrmPlaybackOptimizer
         BaseItem sourceItem,
         MediaSourceInfo source,
         string sourceKey,
-        BatchStopSignal stopSignal)
+        BatchStopSignal stopSignal,
+        IReadOnlyList<Guid>? scopeLibraryIds = null,
+        IBatchScopeVerifier? scopeVerifier = null)
     {
         ArgumentNullException.ThrowIfNull(native);
         ArgumentNullException.ThrowIfNull(sourceItem);
@@ -235,6 +237,13 @@ public sealed class StrmPlaybackOptimizer
         if (stopSignal.IsStopped)
         {
             return BatchSourceOutcome.Revoked;
+        }
+
+        // Re-check the current library relationship at the entry so an object that left the selected scope or
+        // changed type is settled as missing instead of being probed from a stale candidate decision.
+        if (scopeVerifier is not null && scopeLibraryIds is not null && !scopeVerifier.IsInScope(sourceItem, scopeLibraryIds))
+        {
+            return BatchSourceOutcome.Missing;
         }
 
         if (!IsStrm(sourceItem))
@@ -332,7 +341,9 @@ public sealed class StrmPlaybackOptimizer
             sourceKey,
             manifest,
             previous,
-            stopSignal).ConfigureAwait(false);
+            stopSignal,
+            scopeLibraryIds,
+            scopeVerifier).ConfigureAwait(false);
     }
 
     private async Task<BatchSourceOutcome> RunBatchProbeAsync(
@@ -343,7 +354,9 @@ public sealed class StrmPlaybackOptimizer
         string sourceKey,
         StrmManifest manifest,
         StrmFingerprint? previous,
-        BatchStopSignal stopSignal)
+        BatchStopSignal stopSignal,
+        IReadOnlyList<Guid>? scopeLibraryIds,
+        IBatchScopeVerifier? scopeVerifier)
     {
         if (stopSignal.IsStopped)
         {
@@ -352,7 +365,7 @@ public sealed class StrmPlaybackOptimizer
 
         if (Coordinator.TryGetRunning(projectItemId, sourceKey, out var running))
         {
-            return await JoinBatchSharedAsync(native, projectItemId, sourceItem, source, sourceKey, running!, stopSignal)
+            return await JoinBatchSharedAsync(native, projectItemId, sourceItem, source, sourceKey, running!, stopSignal, isRunning: true, scopeLibraryIds, scopeVerifier)
                 .ConfigureAwait(false);
         }
 
@@ -370,7 +383,7 @@ public sealed class StrmPlaybackOptimizer
 
         if (!reservation.IsOwner)
         {
-            return await JoinBatchSharedAsync(native, projectItemId, sourceItem, source, sourceKey, reservation.Item, stopSignal)
+            return await JoinBatchSharedAsync(native, projectItemId, sourceItem, source, sourceKey, reservation.Item, stopSignal, reservation.IsRunning, scopeLibraryIds, scopeVerifier)
                 .ConfigureAwait(false);
         }
 
@@ -388,7 +401,7 @@ public sealed class StrmPlaybackOptimizer
             BatchAdmission admission;
             try
             {
-                admission = await AdmitBatchOwnerAsync(native, projectItemId, sourceItem, source, sourceKey, workItem, stopSignal)
+                admission = await AdmitBatchOwnerAsync(native, projectItemId, sourceItem, source, sourceKey, workItem, stopSignal, scopeLibraryIds, scopeVerifier)
                     .ConfigureAwait(false);
             }
             catch (FingerprintStoreUnavailableException)
@@ -419,7 +432,7 @@ public sealed class StrmPlaybackOptimizer
                     return BatchSourceOutcome.FirstTrust;
                 case BatchAdmissionKind.Joined:
                     Coordinator.Abandon(workItem);
-                    return await JoinBatchSharedAsync(native, projectItemId, sourceItem, source, sourceKey, admission.Item!, stopSignal)
+                    return await JoinBatchSharedAsync(native, projectItemId, sourceItem, source, sourceKey, admission.Item!, stopSignal, isRunning: true, scopeLibraryIds, scopeVerifier)
                         .ConfigureAwait(false);
                 default:
                     manifest = admission.Manifest!;
@@ -460,7 +473,7 @@ public sealed class StrmPlaybackOptimizer
                 // A same-source execution started between registration and the matching call. Re-evaluate the
                 // current version instead of running a duplicate native probe.
                 Coordinator.Abandon(workItem);
-                return await RecheckBatchSourceAsync(native, projectItemId, sourceItem, source, sourceKey, stopSignal)
+                return await RecheckBatchSourceAsync(native, projectItemId, sourceItem, source, sourceKey, stopSignal, scopeLibraryIds, scopeVerifier)
                     .ConfigureAwait(false);
             }
             catch (Exception exception)
@@ -482,7 +495,7 @@ public sealed class StrmPlaybackOptimizer
                 throw new FingerprintStoreUnavailableException();
             }
 
-            Coordinator.Complete(workItem, outcome.Source);
+            Coordinator.Complete(workItem, outcome.Source, outcome.Committed);
             return outcome.Committed ? BatchSourceOutcome.Probed : BatchSourceOutcome.ProbeIncomplete;
         }
         catch (FingerprintStoreUnavailableException)
@@ -502,7 +515,9 @@ public sealed class StrmPlaybackOptimizer
         BaseItem sourceItem,
         MediaSourceInfo source,
         string sourceKey,
-        BatchStopSignal stopSignal)
+        BatchStopSignal stopSignal,
+        IReadOnlyList<Guid>? scopeLibraryIds,
+        IBatchScopeVerifier? scopeVerifier)
     {
         if (stopSignal.IsStopped)
         {
@@ -516,7 +531,7 @@ public sealed class StrmPlaybackOptimizer
             return BatchSourceOutcome.Missing;
         }
 
-        return await CheckBatchSourceAsync(native, projectItemId, sourceItem, current, sourceKey, stopSignal)
+        return await CheckBatchSourceAsync(native, projectItemId, sourceItem, current, sourceKey, stopSignal, scopeLibraryIds, scopeVerifier)
             .ConfigureAwait(false);
     }
 
@@ -527,16 +542,33 @@ public sealed class StrmPlaybackOptimizer
         MediaSourceInfo source,
         string sourceKey,
         ProbeWorkItem shared,
-        BatchStopSignal stopSignal)
+        BatchStopSignal stopSignal,
+        bool isRunning,
+        IReadOnlyList<Guid>? scopeLibraryIds,
+        IBatchScopeVerifier? scopeVerifier)
     {
         BatchSharedJoinBarrier?.Invoke();
         try
         {
-            await shared.Result.WaitAsync(stopSignal.CancellationToken).ConfigureAwait(false);
+            if (isRunning)
+            {
+                // A same-source probe that actually started is not cancelled by the batch stop. Wait for it to
+                // settle (native save, verification, conditional commit) before this candidate returns, even when
+                // the batch stop was already confirmed. CancellationToken.None keeps the batch stop out of the
+                // already started execution, exactly like playback.
+                await shared.Result.ConfigureAwait(false);
+            }
+            else
+            {
+                // The shared owner is still preparing and has not reached the matching native call. Waiting for a
+                // preparing owner is not sharing a running probe, so the batch stop may end this wait without
+                // cancelling the other caller's work.
+                await shared.Result.WaitAsync(stopSignal.CancellationToken).ConfigureAwait(false);
+            }
         }
-        catch (OperationCanceledException) when (stopSignal.IsStopped)
+        catch (OperationCanceledException) when (!isRunning && stopSignal.IsStopped)
         {
-            // The batch stopped while waiting. The already started probe is not cancelled and still completes.
+            // The batch stopped while waiting for a preparing owner. The other caller's work is not cancelled.
             return BatchSourceOutcome.Revoked;
         }
         catch (Exception)
@@ -544,9 +576,23 @@ public sealed class StrmPlaybackOptimizer
             // The shared probe failed. Re-evaluate the current version below instead of reusing its failure.
         }
 
+        if (isRunning && shared.Committed == true && SharedCommitMatchesCurrentVersion(sourceItem, shared))
+        {
+            // This candidate joined a same-source probe that actually ran, saved and conditionally committed the
+            // current version during this run. Associate that this-run reliable success instead of counting the
+            // wait return or an existing fingerprint as success.
+            return BatchSourceOutcome.Probed;
+        }
+
         if (stopSignal.IsStopped)
         {
             return BatchSourceOutcome.Revoked;
+        }
+
+        // Re-check the current scope after the shared wait; the object may have left the selected libraries.
+        if (scopeVerifier is not null && scopeLibraryIds is not null && !scopeVerifier.IsInScope(sourceItem, scopeLibraryIds))
+        {
+            return BatchSourceOutcome.Missing;
         }
 
         // A shared probe never proves this candidate's own current version. Re-read the current source and
@@ -558,8 +604,16 @@ public sealed class StrmPlaybackOptimizer
             return BatchSourceOutcome.Missing;
         }
 
-        return await CheckBatchSourceAsync(native, projectItemId, sourceItem, current, sourceKey, stopSignal)
+        return await CheckBatchSourceAsync(native, projectItemId, sourceItem, current, sourceKey, stopSignal, scopeLibraryIds, scopeVerifier)
             .ConfigureAwait(false);
+    }
+
+    private bool SharedCommitMatchesCurrentVersion(BaseItem sourceItem, ProbeWorkItem shared)
+    {
+        var readResult = _manifestReader.Read(sourceItem.Path);
+        return readResult.Status == ManifestReadStatus.Supported
+            && readResult.Manifest is { } manifest
+            && string.Equals(manifest.ContentHash, shared.ManifestContentHash, StringComparison.Ordinal);
     }
 
     private async Task<BatchAdmission> AdmitBatchOwnerAsync(
@@ -569,7 +623,9 @@ public sealed class StrmPlaybackOptimizer
         MediaSourceInfo source,
         string sourceKey,
         ProbeWorkItem workItem,
-        BatchStopSignal stopSignal)
+        BatchStopSignal stopSignal,
+        IReadOnlyList<Guid>? scopeLibraryIds,
+        IBatchScopeVerifier? scopeVerifier)
     {
         if (!_settings.Enabled || IsFingerprintStoreUnavailable)
         {
@@ -581,6 +637,12 @@ public sealed class StrmPlaybackOptimizer
             return BatchAdmission.Revoked();
         }
 
+        // Re-check the current library relationship after the execution opportunity was obtained. A candidate that
+        // left the selected scope, was deleted or changed type while queued must not be probed from a stale object.
+        if (scopeVerifier is not null && scopeLibraryIds is not null && !scopeVerifier.IsInScope(sourceItem, scopeLibraryIds))
+        {
+            return BatchAdmission.Missing();
+        }
         var currentSources = native.GetStaticMediaSources(sourceItem, false);
         var currentSource = PickOwnSource(sourceItem, currentSources);
         if (currentSource is null)
@@ -986,6 +1048,7 @@ public sealed class StrmPlaybackOptimizer
             }
 
             MediaSourceInfo result;
+            var committed = false;
             try
             {
                 var outcome = await ExecuteProbeAsync(
@@ -1001,6 +1064,7 @@ public sealed class StrmPlaybackOptimizer
                     previous,
                     workItem).ConfigureAwait(false);
                 result = outcome.Source;
+                committed = outcome.Committed;
             }
             catch (ProbeStartRejectedException)
             {
@@ -1027,7 +1091,7 @@ public sealed class StrmPlaybackOptimizer
                     .ConfigureAwait(false);
             }
 
-            Coordinator.Complete(workItem, result);
+            Coordinator.Complete(workItem, result, committed);
             return result;
         }
         catch (Exception exception)

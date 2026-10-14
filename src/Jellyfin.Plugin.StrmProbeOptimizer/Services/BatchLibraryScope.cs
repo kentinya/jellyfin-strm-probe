@@ -6,6 +6,43 @@ using MediaBrowser.Controller.Library;
 namespace Jellyfin.Plugin.StrmProbeOptimizer.Services;
 
 /// <summary>
+/// Resolves the stable ids of the media libraries that currently exist. It is a narrow seam so configuration
+/// save validation can verify a selection without taking a dependency on the full library manager in tests.
+/// </summary>
+public interface ILibraryIdProvider
+{
+    /// <summary>Gets the stable ids of the libraries that currently exist.</summary>
+    IReadOnlyCollection<Guid> GetAvailableLibraryIds();
+}
+
+/// <summary>
+/// The real library id provider backed by the native library manager.
+/// </summary>
+public sealed class LibraryIdProvider : ILibraryIdProvider
+{
+    private readonly ILibraryManager _libraryManager;
+
+    public LibraryIdProvider(ILibraryManager libraryManager)
+    {
+        _libraryManager = libraryManager;
+    }
+
+    public IReadOnlyCollection<Guid> GetAvailableLibraryIds()
+    {
+        var available = new HashSet<Guid>();
+        foreach (var folder in _libraryManager.GetVirtualFolders())
+        {
+            if (Guid.TryParse(folder.ItemId, out var id))
+            {
+                available.Add(id);
+            }
+        }
+
+        return available;
+    }
+}
+
+/// <summary>
 /// The fixed media library scope captured for one batch run. <see cref="AllLibraries"/> records that the run
 /// resolved the documented default scope; the concrete library ids are always captured so later configuration
 /// changes only apply to the next run.
@@ -80,13 +117,24 @@ public sealed class BatchScopeResolver : IBatchScopeResolver
 /// The native query surface the batch uses. It is separated so the deterministic tests can supply a candidate
 /// identity set and object batches without a real Jellyfin library.
 /// </summary>
-public interface IBatchCandidateSource
+public interface IBatchCandidateSource : IBatchScopeVerifier
 {
     /// <summary>Gets the raw candidate ids for one library using the native library relationship.</summary>
     IReadOnlyList<Guid> GetLibraryCandidateIds(Guid libraryId);
 
     /// <summary>Reads the current objects for one fixed id batch, re-checking the scope through the native relationship.</summary>
     IReadOnlyList<BaseItem> GetBatchItems(IReadOnlyList<Guid> ids, IReadOnlyList<Guid> scopeLibraryIds);
+}
+
+/// <summary>
+/// Re-checks a candidate's current library relationship against the run's fixed scope. It is consulted again at
+/// execution admission so an object that left the selected scope, was deleted or changed type while queued is not
+/// probed from a stale decision.
+/// </summary>
+public interface IBatchScopeVerifier
+{
+    /// <summary>Checks whether the current object still belongs to one of the selected libraries.</summary>
+    bool IsInScope(BaseItem item, IReadOnlyList<Guid> scopeLibraryIds);
 }
 
 public sealed class LibraryBatchCandidateSource : IBatchCandidateSource
@@ -128,5 +176,24 @@ public sealed class LibraryBatchCandidateSource : IBatchCandidateSource
             CollapseBoxSetItems = false,
             EnableTotalRecordCount = false
         });
+    }
+
+    public bool IsInScope(BaseItem item, IReadOnlyList<Guid> scopeLibraryIds)
+    {
+        if (scopeLibraryIds.Count == 0)
+        {
+            return true;
+        }
+
+        try
+        {
+            var folders = _libraryManager.GetCollectionFolders(item);
+            return folders.Any(folder => scopeLibraryIds.Contains(folder.Id));
+        }
+        catch (Exception)
+        {
+            // An item that is no longer resolvable to a collection folder is no longer in scope.
+            return false;
+        }
     }
 }

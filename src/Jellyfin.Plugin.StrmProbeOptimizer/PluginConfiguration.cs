@@ -47,8 +47,13 @@ public sealed class PluginConfiguration : BasePluginConfiguration
     /// Validates the configuration without mutating it.
     /// </summary>
     /// <param name="configuration">The candidate configuration.</param>
+    /// <param name="availableLibraryIds">
+    /// The stable ids of the libraries that currently exist, or <c>null</c> when the caller cannot verify them.
+    /// When supplied, an explicit selection may only reference a library that really exists, so a save can never
+    /// persist a scope that silently resolves to nothing.
+    /// </param>
     /// <returns>An actionable error message, or <c>null</c> when the configuration is valid.</returns>
-    public static string? Validate(PluginConfiguration configuration)
+    public static string? Validate(PluginConfiguration configuration, IReadOnlyCollection<Guid>? availableLibraryIds = null)
     {
         ArgumentNullException.ThrowIfNull(configuration);
         if (configuration.MaxConcurrentProbes < MinMaxConcurrentProbes
@@ -70,6 +75,15 @@ public sealed class PluginConfiguration : BasePluginConfiguration
         if (parsed.Count == 0)
         {
             return "An explicit batch library selection must contain at least one valid Jellyfin library identifier; an empty selection is not silently widened to all libraries.";
+        }
+
+        if (availableLibraryIds is not null)
+        {
+            var missing = parsed.Where(id => !availableLibraryIds.Contains(id)).ToArray();
+            if (missing.Length > 0)
+            {
+                return $"The explicit batch library selection references {missing.Length} library id(s) that do not exist on this server; re-save the plugin configuration with at least one real library.";
+            }
         }
 
         return null;

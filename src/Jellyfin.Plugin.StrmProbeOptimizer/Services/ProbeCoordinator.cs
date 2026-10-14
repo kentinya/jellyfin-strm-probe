@@ -81,6 +81,14 @@ public sealed class ProbeWorkItem
     internal string ManifestContentHash { get; set; }
 
     /// <summary>
+    /// Gets a value indicating whether the owner of this work item conditionally committed the verified
+    /// result for <see cref="ManifestContentHash"/>. It is set exactly once at settlement and lets a same-source
+    /// waiter associate this run's execution with a reliable, committed result instead of reusing a wait return.
+    /// It stays <c>null</c> for a reservation that was abandoned or failed without a commit.
+    /// </summary>
+    public bool? Committed { get; internal set; }
+
+    /// <summary>
     /// Gets or sets the global permit held by this reservation. It is cleared exactly once by
     /// <see cref="ProbeCoordinator.Finish"/> so repeated settlement cannot release twice.
     /// </summary>
@@ -258,10 +266,26 @@ public sealed class ProbeCoordinator : IDisposable
     /// Releases the running registration and the global permit, then publishes the shared result.
     /// Safe on every completion path, including failure and cancellation.
     /// </summary>
+    /// <param name="item">The settled work item.</param>
+    /// <param name="result">The accepted media source, or <c>null</c>.</param>
     public void Complete(ProbeWorkItem item, MediaSourceInfo? result)
     {
         ArgumentNullException.ThrowIfNull(item);
-        Finish(item, result, exception: null);
+        Finish(item, result, exception: null, committed: false);
+    }
+
+    /// <summary>
+    /// Releases the running registration and the global permit, then publishes the shared result together with
+    /// the owner's conditional-commit outcome. A waiter can use <see cref="ProbeWorkItem.Committed"/> to associate
+    /// this run's execution with a reliable success instead of counting a wait return as success.
+    /// </summary>
+    /// <param name="item">The settled work item.</param>
+    /// <param name="result">The accepted media source, or <c>null</c>.</param>
+    /// <param name="committed"><c>true</c> only when the owner conditionally committed the verified result.</param>
+    public void Complete(ProbeWorkItem item, MediaSourceInfo? result, bool committed)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        Finish(item, result, exception: null, committed);
     }
 
     /// <summary>
@@ -271,7 +295,7 @@ public sealed class ProbeCoordinator : IDisposable
     {
         ArgumentNullException.ThrowIfNull(item);
         ArgumentNullException.ThrowIfNull(exception);
-        Finish(item, result: null, exception);
+        Finish(item, result: null, exception, committed: false);
     }
 
     /// <summary>
@@ -281,7 +305,7 @@ public sealed class ProbeCoordinator : IDisposable
     public void Abandon(ProbeWorkItem item)
     {
         ArgumentNullException.ThrowIfNull(item);
-        Finish(item, result: null, exception: null);
+        Finish(item, result: null, exception: null, committed: false);
     }
 
     public void Dispose()
@@ -329,7 +353,7 @@ public sealed class ProbeCoordinator : IDisposable
         }
     }
 
-    private void Finish(ProbeWorkItem item, MediaSourceInfo? result, Exception? exception)
+    private void Finish(ProbeWorkItem item, MediaSourceInfo? result, Exception? exception, bool committed)
     {
         var key = (item.ProjectItemId, item.SourceKey);
         SemaphoreSlim? permit;
@@ -347,6 +371,9 @@ public sealed class ProbeCoordinator : IDisposable
             RemoveIfCurrent(_running, key, item);
         }
 
+        // Publish the commit outcome before resolving the shared result so a waiter that observes the completed
+        // result also observes the owner's this-run conditional-commit association.
+        item.Committed = exception is null && committed;
         try
         {
             if (exception is null)

@@ -55,9 +55,10 @@ public sealed class StrmProbeScheduledTask : IScheduledTask, IConfigurableSchedu
         // The summary is always emitted, independent of DetailedLog, so failure and recovery feedback does not
         // depend on verbose logging. It carries no signed URL, token, cookie or private path.
         _logger.LogInformation(
-            "STRM media information check finished: candidates {Candidates} (raw {RawCandidates}), checked {Checked}, skipped {Skipped}, first trust {FirstTrust}, need probe {NeedProbe}, reliable success {ReliableSuccess}, probe incomplete {ProbeIncomplete}, check-stage incomplete {CheckStageIncomplete}, not processed {NotProcessed}, missing {Missing}, revoked {Revoked}, read incomplete {ReadIncomplete}, unread {Unread}, stop requested {StopRequested}, store unavailable {StoreUnavailable}, scope unavailable {ScopeUnavailable}, candidate fetch failed {CandidateFetchFailed}, disabled {Disabled}.",
+            "STRM media information check finished: candidates {Candidates} (raw {RawCandidates}, duplicates {Duplicates}), checked {Checked}, skipped {Skipped}, first trust {FirstTrust}, need probe {NeedProbe}, reliable success {ReliableSuccess}, probe incomplete {ProbeIncomplete}, check-stage incomplete {CheckStageIncomplete}, not processed {NotProcessed}, missing {Missing}, revoked {Revoked}, read incomplete {ReadIncomplete}, unread {Unread}, actual probe calls {ActualProbeCalls}, candidate fetch {CandidateFetchMs} ms, batch read {BatchReadMs} ms, stop requested {StopRequested}, store unavailable {StoreUnavailable}, scope unavailable {ScopeUnavailable}, candidate fetch failed {CandidateFetchFailed}, disabled {Disabled}.",
             result.CandidateCount,
             result.RawCandidateCount,
+            result.DuplicateIdCount,
             result.Checked,
             result.Skipped,
             result.FirstTrust,
@@ -70,6 +71,9 @@ public sealed class StrmProbeScheduledTask : IScheduledTask, IConfigurableSchedu
             result.Revoked,
             result.ReadIncomplete,
             result.Unread,
+            result.ActualProbeCalls,
+            result.CandidateFetchMilliseconds,
+            result.BatchReadMilliseconds,
             result.StopRequested,
             result.StoreUnavailable,
             result.ScopeUnavailable,

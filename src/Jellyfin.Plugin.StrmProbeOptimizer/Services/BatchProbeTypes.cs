@@ -37,6 +37,7 @@ public sealed class BatchStopSignal : IDisposable
     private readonly CancellationTokenRegistration _registration;
     private int _stopped;
     private int _inFlight;
+    private int _startedCount;
 
     public BatchStopSignal(CancellationToken cancellationToken)
     {
@@ -55,6 +56,12 @@ public sealed class BatchStopSignal : IDisposable
 
     /// <summary>Gets the number of plugin probes whose matching native call actually started and is not yet settled.</summary>
     public int InFlight => Volatile.Read(ref _inFlight);
+
+    /// <summary>
+    /// Gets the total number of matching native probe calls that actually started during this batch run. It lets
+    /// the run report the real native call count separately from the per-candidate reliable outcome counters.
+    /// </summary>
+    public int StartedCount => Volatile.Read(ref _startedCount);
 
     /// <summary>Latches the stop boundary. Idempotent and safe to call from any thread.</summary>
     public void ConfirmStop()
@@ -80,6 +87,7 @@ public sealed class BatchStopSignal : IDisposable
             }
 
             _inFlight++;
+            _startedCount++;
             return true;
         }
     }

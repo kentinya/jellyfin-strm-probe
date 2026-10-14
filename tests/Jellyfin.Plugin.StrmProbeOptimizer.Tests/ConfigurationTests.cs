@@ -22,6 +22,29 @@ public sealed class ConfigurationTests
     }
 
     [TestMethod]
+    public void ExplicitSelectionOfANonexistentLibraryIsRejectedOnSaveWithoutChangingTheFile()
+    {
+        using var fixture = new PluginFixture();
+        var real = Guid.NewGuid();
+        var plugin = fixture.CreatePlugin(new FakeLibraryIdProvider(real));
+        var before = plugin.Configuration;
+        var fileBefore = fixture.ReadConfigurationFileBytes();
+
+        Assert.ThrowsExactly<ArgumentException>(() => plugin.UpdateConfiguration(new PluginConfiguration
+        {
+            BatchAllLibraries = false,
+            BatchLibraryIds = Guid.NewGuid().ToString("N")
+        }));
+
+        Assert.AreSame(before, plugin.Configuration, "A rejected scope must not become effective.");
+        CollectionAssert.AreEqual(fileBefore, fixture.ReadConfigurationFileBytes(), "A rejected scope must not be persisted.");
+
+        // A selection that references a real library is still accepted.
+        plugin.UpdateConfiguration(new PluginConfiguration { BatchAllLibraries = false, BatchLibraryIds = real.ToString("N") });
+        Assert.AreEqual(real, PluginConfiguration.TryParseLibraryIds(plugin.Configuration.BatchLibraryIds, out var parsed) ? parsed[0] : Guid.Empty);
+    }
+
+    [TestMethod]
     public void LegacyConfigurationWithoutNewFieldsLoadsWithDefaults()
     {
         using var fixture = new PluginFixture();
@@ -201,7 +224,14 @@ public sealed class ConfigurationTests
 
         public Plugin CreatePlugin()
         {
-            return new Plugin(Paths, Serializer, NullLogger<Plugin>.Instance);
+            // The real plugin receives a library id provider through DI; the default fixture supplies an empty set so
+            // an explicit selection of an unknown library is rejected through the normal save channel.
+            return new Plugin(Paths, Serializer, NullLogger<Plugin>.Instance, new FakeLibraryIdProvider());
+        }
+
+        public Plugin CreatePlugin(ILibraryIdProvider libraryIdProvider)
+        {
+            return new Plugin(Paths, Serializer, NullLogger<Plugin>.Instance, libraryIdProvider);
         }
 
         public void WriteLegacyConfiguration()
@@ -297,6 +327,18 @@ public sealed class ConfigurationTests
 
             new XmlSerializer(obj.GetType()).Serialize(stream, obj);
         }
+    }
+
+    private sealed class FakeLibraryIdProvider : ILibraryIdProvider
+    {
+        private readonly HashSet<Guid> _available;
+
+        public FakeLibraryIdProvider(params Guid[] available)
+        {
+            _available = [.. available];
+        }
+
+        public IReadOnlyCollection<Guid> GetAvailableLibraryIds() => _available;
     }
 
     private sealed class CapturingLogger<T> : ILogger<T>

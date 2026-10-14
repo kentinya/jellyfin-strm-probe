@@ -38,6 +38,7 @@ public sealed class BatchCheckTests
 
         Assert.AreEqual(4, result.RawCandidateCount, "Every raw native id must be reported.");
         Assert.AreEqual(3, result.CandidateCount, "Duplicate candidate ids must be de-duplicated.");
+        Assert.AreEqual(1, result.DuplicateIdCount, "A repeated raw candidate id must be counted as a duplicate.");
         Assert.AreEqual(1, harness.CandidateFetchCalls, "The candidate identity set must be fetched once per run.");
         Assert.AreEqual(1, harness.BatchReadCalls, "Three candidates fit into one bounded batch.");
         Assert.AreEqual(3, result.Settled, "Every fixed candidate must settle exactly once.");
@@ -60,19 +61,23 @@ public sealed class BatchCheckTests
         }
 
         harness.CandidateIds = ids;
-        // No objects are returned, so every candidate settles as missing without a probe. This proves the fixed
-        // candidate identity set is consumed in bounded batches without a per-candidate task.
+        // Every requested candidate materializes a real complete media object. Ordinary (non-STRM) objects settle
+        // as not processed without a probe, so the test measures the real batch object, consumer and activity bounds
+        // for the full O(N) identity set without depending on 100k probes.
+        harness.SynthesizeBatchObjects = true;
         var result = await harness.RunAsync();
 
         Assert.AreEqual(100_000, result.CandidateCount);
         Assert.AreEqual(100_000, result.Settled);
-        Assert.AreEqual(100_000, result.Missing);
+        Assert.AreEqual(100_000, result.NotProcessed);
         Assert.AreEqual(0, result.ReliableSuccess);
         Assert.AreEqual(0, result.ProbeIncomplete);
         Assert.IsTrue(result.Completed);
         Assert.IsTrue(harness.PeakLoadedObjects <= BatchCheckRunner.BatchSize, "No batch may load more than the fixed batch size of complete media objects.");
-        Assert.IsTrue(harness.ConsumerTaskCount <= 1000, "The batch must not create one task per candidate.");
         var expectedBatches = (100_000 + BatchCheckRunner.BatchSize - 1) / BatchCheckRunner.BatchSize;
+        Assert.IsTrue(harness.ConsumerTaskCount <= expectedBatches * BatchCheckRunner.MaxConsumers, "The batch must not create one task per candidate; consumers are bounded per batch.");
+        Assert.IsTrue(harness.ConsumerTaskCount < 100_000, "The consumer task count must stay far below the candidate count.");
+        Assert.IsTrue(harness.PeakActiveConsumers <= BatchCheckRunner.MaxConsumers, "The fixed consumer count must bound active work.");
         Assert.AreEqual(expectedBatches, harness.BatchReadCalls);
     }
 
@@ -258,24 +263,170 @@ public sealed class BatchCheckTests
         await harness.RunAsync();
         harness.WriteManifest(item, "https://media.example.invalid/a.mp4?sig=changed", ValidSha1, 10);
 
-        // Pre-register a running probe for the same source in the shared coordinator.
+        // A real playback entry point starts the matching native probe, blocks inside it, then the batch joins.
+        harness.BlockProbe = true;
+        harness.AfterProbeStart = () => harness.ProbeStarted.TrySetResult();
+        harness.CreateRunner();
+        var native = harness.ReviewerNative!;
+        var source = native.GetStaticMediaSources(item, false)[0];
+        var playback = harness.ReviewerOptimizer!.CheckSourceAsync(native, item.Id, item, source, Key(item.Id), true, null, false, CancellationToken.None, true);
+        await harness.ProbeStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        var run = harness.RunAsync();
+        await harness.WaitForSharedJoinAsync().WaitAsync(TimeSpan.FromSeconds(10));
+        harness.ReleaseProbe.TrySetResult();
+        await playback.WaitAsync(TimeSpan.FromSeconds(10));
+        var result = await run.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.AreEqual(1, harness.StartedProbes, "Only one matching native probe may actually start.");
+        Assert.AreEqual(1, result.ReliableSuccess, "A same-source probe that actually ran and committed this version must count as this run's reliable success, not as skipped.");
+        Assert.AreEqual(0, result.Skipped, "A shared committed result must not be counted as skipped.");
+        Assert.AreEqual(0, harness.Coordinator.RunningCount);
+        Assert.AreEqual(0, harness.Coordinator.ActivePermits);
+    }
+
+    [TestMethod]
+    public async Task BatchStoppedWhileJoinedToARunningProbeStillWaitsForItsSettlement()
+    {
+        using var harness = new BatchHarness();
+        var item = harness.AddSupported("https://media.example.invalid/a.mp4", ValidSha1, 10);
+        harness.CandidateIds = [item.Id];
+        await harness.RunAsync();
+        harness.WriteManifest(item, "https://media.example.invalid/a.mp4?new", ValidSha1, 10);
         var coordinator = harness.Coordinator;
         var owner = await coordinator.AcquireAsync(item.Id, Key(item.Id), "hash", CancellationToken.None);
         Assert.IsTrue(coordinator.TryMarkStarted(owner.Item, out _));
+        using var stop = new CancellationTokenSource();
+        var run = harness.RunAsync(stop.Token);
+        await harness.WaitForSharedJoinAsync().WaitAsync(TimeSpan.FromSeconds(10));
+        stop.Cancel();
 
-        var run = harness.RunAsync();
-        await harness.WaitForSharedJoinAsync();
-        // The shared owner commits the changed version and completes, so the batch re-reads and reuses it.
-        harness.Repository.TryCommit(
-            new StrmFingerprint(item.Id, Key(item.Id), Hash("https://media.example.invalid/a.mp4?sig=changed"), ValidSha1, 10),
-            harness.Repository.Get(item.Id, Key(item.Id)));
-        coordinator.Complete(owner.Item, new MediaSourceInfo { Path = "https://media.example.invalid/a.mp4?sig=changed" });
+        // The batch must not return while the joined running probe is still executing; the batch stop never
+        // cancels an already started probe.
+        var early = false;
+        try
+        {
+            await run.WaitAsync(TimeSpan.FromSeconds(1));
+            early = true;
+        }
+        catch (TimeoutException)
+        {
+            early = false;
+        }
+
+        Assert.IsFalse(early, "The batch returned while the joined running probe was still executing.");
+        Assert.AreEqual(1, coordinator.RunningCount, "The joined probe must still be running until it settles.");
+
+        // Settle the joined probe and confirm the batch now returns and releases all resources.
+        coordinator.Complete(owner.Item, new MediaSourceInfo { Path = item.ShortcutPath });
         var result = await run.WaitAsync(TimeSpan.FromSeconds(10));
-
-        Assert.AreEqual(0, harness.ProbeCalls, "The batch must join the already running probe instead of starting a duplicate.");
         Assert.AreEqual(0, coordinator.RunningCount);
         Assert.AreEqual(0, coordinator.ActivePermits);
-        Assert.AreEqual(1, result.Skipped, "The joined reliable result must be reused.");
+        Assert.IsTrue(result.StopRequested);
+    }
+
+    [TestMethod]
+    public async Task BatchRefusesExtraReturnedObjectsThatWereNotRequested()
+    {
+        using var harness = new BatchHarness();
+        var requested = harness.AddSupported("https://media.example.invalid/requested.mp4", ValidSha1, 10);
+        var extra = harness.AddSupported("https://media.example.invalid/extra.mp4", ValidSha1, 10);
+        harness.CandidateIds = [requested.Id];
+        harness.ReturnExtraObjects = true;
+
+        var result = await harness.RunAsync();
+
+        Assert.AreEqual(result.CandidateCount, result.Settled, "One requested candidate must not settle two objects.");
+        Assert.AreEqual(1, result.CandidateCount);
+        Assert.IsNull(harness.Repository.Get(extra.Id, Key(extra.Id)), "An extra object that was not requested must never become work.");
+    }
+
+    [TestMethod]
+    public async Task BatchRechecksScopeAtAdmissionAndSettlesObjectsThatLeftTheSelection()
+    {
+        using var harness = new BatchHarness();
+        var kept = harness.AddSupported("https://media.example.invalid/kept.mp4", ValidSha1, 10);
+        var moved = harness.AddSupported("https://media.example.invalid/moved.mp4", ValidSha1, 10);
+        harness.CandidateIds = [kept.Id, moved.Id];
+        await harness.RunAsync();
+        // Both already have a baseline; move the second one out of the selection after the candidate set is fixed.
+        harness.WriteManifest(kept, "https://media.example.invalid/kept.mp4?sig=new", ValidSha1, 10);
+        harness.WriteManifest(moved, "https://media.example.invalid/moved.mp4?sig=new", ValidSha1, 10);
+        harness.InScopeOverride = id => id != moved.Id;
+
+        var result = await harness.RunAsync();
+
+        Assert.AreEqual(1, result.ReliableSuccess, "The in-scope changed source must still be probed.");
+        Assert.AreEqual(1, result.Missing, "An object that left the selected scope must settle as missing without probing.");
+        Assert.AreEqual(1, harness.ProbeCalls, "Only the in-scope source may be probed.");
+    }
+
+    [TestMethod]
+    public async Task BatchAlreadyUnavailableStoreReportsUnavailableWithoutFetchingCandidates()
+    {
+        using var harness = new BatchHarness();
+        var item = harness.AddSupported("https://media.example.invalid/a.mp4", ValidSha1, 10);
+        harness.CandidateIds = [item.Id];
+        harness.Repository = new FaultInjectingRepository { FailGetAfter = 0 };
+        var runner = harness.CreateRunner();
+        var first = await runner.RunAsync(new Progress<double>(), CancellationToken.None);
+        Assert.IsTrue(first.StoreUnavailable);
+
+        var second = await runner.RunAsync(new Progress<double>(), CancellationToken.None);
+
+        Assert.IsTrue(second.StoreUnavailable, "A latched fingerprint store failure must stay reported as unavailable.");
+        Assert.AreEqual(0, second.Unread, "An already unavailable store must not invent unread candidates.");
+        Assert.IsFalse(second.Completed);
+    }
+
+    [TestMethod]
+    public async Task BatchStopDuringIdFetchDoesNotInventACompleteCandidateTotal()
+    {
+        using var harness = new BatchHarness();
+        var item = harness.AddSupported("https://media.example.invalid/a.mp4", ValidSha1, 10);
+        harness.CandidateIds = [item.Id];
+        harness.ScopeLibraryCount = 2;
+        using var stop = new CancellationTokenSource();
+        harness.AfterCandidateFetch = stop.Cancel;
+
+        var result = await harness.RunAsync(stop.Token);
+
+        Assert.AreEqual(1, harness.CandidateFetchCalls, "The interrupted fetch must stop before the second library query.");
+        Assert.IsTrue(result.StopRequested);
+        Assert.AreEqual(0, result.CandidateCount, "An interrupted first-library fetch is only a partial ID set; the complete candidate total is unknown.");
+        Assert.AreEqual(0, harness.ProbeCalls);
+        Assert.IsFalse(result.Completed);
+    }
+
+    [TestMethod]
+    public async Task BatchReportsMonotonicProgressUnderConcurrentConsumers()
+    {
+        using var harness = new BatchHarness();
+        var items = new List<Video>();
+        for (var index = 0; index < 40; index++)
+        {
+            items.Add(harness.AddSupported($"https://media.example.invalid/{index}.mp4", ValidSha1, 10));
+        }
+
+        harness.CandidateIds = items.Select(item => item.Id).ToList();
+        var reported = new List<double>();
+        var progress = new SynchronousProgress(value =>
+        {
+            lock (reported)
+            {
+                reported.Add(value);
+            }
+        });
+
+        await harness.RunWithProgressAsync(progress, CancellationToken.None);
+
+        lock (reported)
+        {
+            for (var index = 1; index < reported.Count; index++)
+            {
+                Assert.IsTrue(reported[index] >= reported[index - 1], $"Progress must be monotonic: {reported[index - 1]} then {reported[index]}.");
+            }
+        }
     }
 
     // ---------- Stop boundary and resource settlement (AC-T5) ----------
@@ -441,6 +592,9 @@ public sealed class BatchCheckTests
         Assert.AreEqual(1, result.Skipped);
         Assert.AreEqual(2, result.NotProcessed, "Ordinary and legacy inputs are not processed.");
         Assert.AreEqual(0, result.FirstTrust);
+        Assert.AreEqual(2, result.ActualProbeCalls, "The reliable success and the failed probe must each count one actual native call.");
+        Assert.IsTrue(result.CandidateFetchMilliseconds >= 0, "The candidate fetch cost must be reported.");
+        Assert.IsTrue(result.BatchReadMilliseconds >= 0, "The batch object read cost must be reported.");
     }
 
     // ---------- Native task surface (AC-T1 / RO-1 / RO-7 backend) ----------
@@ -523,6 +677,23 @@ public sealed class BatchCheckTests
 
     private static string Key(Guid id) => id.ToString("N", CultureInfo.InvariantCulture);
 
+    /// <summary>
+    /// A synchronous <see cref="IProgress{T}"/> that invokes the callback inline. The framework <see cref="Progress{T}"/>
+    /// posts callbacks asynchronously, so it cannot deterministically observe the published order under concurrent
+    /// consumers; this inline implementation records the exact report order.
+    /// </summary>
+    private sealed class SynchronousProgress : IProgress<double>
+    {
+        private readonly Action<double> _callback;
+
+        public SynchronousProgress(Action<double> callback)
+        {
+            _callback = callback;
+        }
+
+        public void Report(double value) => _callback(value);
+    }
+
     private static string Hash(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
 
     private static async Task<TException> AssertThrowsAsync<TException>(Func<Task> action)
@@ -575,6 +746,24 @@ public sealed class BatchCheckTests
         public bool FailCandidateFetch { get; set; }
 
         public bool FailBatchRead { get; set; }
+
+        public bool ReturnExtraObjects { get; set; }
+
+        public bool SynthesizeBatchObjects { get; set; }
+
+        public int PeakActiveConsumers { get; private set; }
+
+        private int _activeConsumers;
+
+        public int ScopeLibraryCount { get; set; } = 1;
+
+        public Action? AfterCandidateFetch { get; set; }
+
+        public Func<Guid, bool>? InScopeOverride { get; set; }
+
+        public IMediaSourceManager? ReviewerNative { get; private set; }
+
+        public StrmPlaybackOptimizer? ReviewerOptimizer { get; private set; }
 
         public Func<Guid, bool>? InScopeFilter { get; set; }
 
@@ -653,9 +842,15 @@ public sealed class BatchCheckTests
             return runner.RunAsync(new Progress<double>(), cancellationToken);
         }
 
+        public Task<BatchRunResult> RunWithProgressAsync(IProgress<double> progress, CancellationToken cancellationToken)
+        {
+            var runner = CreateRunner();
+            return runner.RunAsync(progress, cancellationToken);
+        }
+
         public Task WaitForSharedJoinAsync() => SharedJoinReached.Task;
 
-        private BatchCheckRunner CreateRunner()
+        public BatchCheckRunner CreateRunner()
         {
             var native = PlaybackOptimizerTests.ScriptedManager.Create();
             native.StaticSourceResolver = (item, _) =>
@@ -720,6 +915,8 @@ public sealed class BatchCheckTests
                 BatchSharedJoinBarrier = () => SharedJoinReached.TrySetResult(),
                 BatchDecisionBarrier = () => OnBatchDecision?.Invoke()
             };
+            ReviewerNative = native.Interface;
+            ReviewerOptimizer = optimizer;
             var runner = new BatchCheckRunner(
                 optimizer,
                 new FakeScopeResolver(this),
@@ -729,7 +926,19 @@ public sealed class BatchCheckTests
                 NullLogger<BatchCheckRunner>.Instance)
             {
                 CandidateSetFixed = () => { },
-                ConsumerLimit = ConsumerLimit
+                ConsumerLimit = ConsumerLimit,
+                ConsumerActivityChanged = active =>
+                {
+                    if (active)
+                    {
+                        var current = Interlocked.Increment(ref _activeConsumers);
+                        PeakActiveConsumers = Math.Max(PeakActiveConsumers, current);
+                    }
+                    else
+                    {
+                        Interlocked.Decrement(ref _activeConsumers);
+                    }
+                }
             };
             _runners.Add(runner);
             return runner;
@@ -743,6 +952,7 @@ public sealed class BatchCheckTests
                 throw new IOException("Injected candidate fetch failure.");
             }
 
+            AfterCandidateFetch?.Invoke();
             return CandidateIds;
         }
 
@@ -754,11 +964,24 @@ public sealed class BatchCheckTests
                 throw new IOException("Injected batch read failure.");
             }
 
+            if (SynthesizeBatchObjects)
+            {
+                // Materialize one real complete object per requested id so the large-set test measures the actual
+                // batch object, consumer and activity bounds instead of only the missing-id settlement path.
+                var synthesized = ids
+                    .Where(id => InScopeFilter is null || InScopeFilter(id))
+                    .Select(id => (BaseItem)new Video { Id = id, Path = "/media/synthetic-" + id.ToString("N", CultureInfo.InvariantCulture) + ".mp4" })
+                    .ToList();
+                PeakLoadedObjects = Math.Max(PeakLoadedObjects, synthesized.Count);
+                ConsumerTaskCount += Math.Max(1, Math.Min(ConsumerLimit, synthesized.Count));
+                return synthesized;
+            }
+
             var requested = ids.ToHashSet();
             var result = new List<BaseItem>();
             foreach (var item in _items)
             {
-                if (!requested.Contains(item.Id))
+                if (!requested.Contains(item.Id) && !ReturnExtraObjects)
                 {
                     continue;
                 }
@@ -839,7 +1062,7 @@ public sealed class BatchCheckTests
                     throw new BatchScopeUnavailableException("Injected scope failure.");
                 }
 
-                return new BatchLibraryScope(true, [Guid.NewGuid()]);
+                return new BatchLibraryScope(true, Enumerable.Range(0, _harness.ScopeLibraryCount).Select(_ => Guid.NewGuid()).ToArray());
             }
         }
 
@@ -855,6 +1078,11 @@ public sealed class BatchCheckTests
             public IReadOnlyList<Guid> GetLibraryCandidateIds(Guid libraryId) => _harness.FetchCandidates();
 
             public IReadOnlyList<BaseItem> GetBatchItems(IReadOnlyList<Guid> ids, IReadOnlyList<Guid> scopeLibraryIds) => _harness.ReadBatch(ids);
+
+            public bool IsInScope(BaseItem item, IReadOnlyList<Guid> scopeLibraryIds)
+            {
+                return _harness.InScopeOverride?.Invoke(item.Id) ?? true;
+            }
         }
     }
 
