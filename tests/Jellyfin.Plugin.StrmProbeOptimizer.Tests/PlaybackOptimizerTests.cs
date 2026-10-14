@@ -1858,7 +1858,12 @@ public sealed class PlaybackOptimizerTests
         bool PlaybackAutoCheck,
         bool Enabled = true,
         bool DetailedLog = false,
-        int MaxConcurrentProbes = PluginConfiguration.DefaultMaxConcurrentProbes) : IPlaybackSettings;
+        int MaxConcurrentProbes = PluginConfiguration.DefaultMaxConcurrentProbes) : IPlaybackSettings
+    {
+        public bool BatchAllLibraries => true;
+
+        public string BatchLibraryIds => string.Empty;
+    }
 
     private sealed class MutablePlaybackSettings : IPlaybackSettings
     {
@@ -1869,6 +1874,10 @@ public sealed class PlaybackOptimizerTests
         public bool DetailedLog { get; set; }
 
         public int MaxConcurrentProbes { get; set; } = PluginConfiguration.DefaultMaxConcurrentProbes;
+
+        public bool BatchAllLibraries => true;
+
+        public string BatchLibraryIds => string.Empty;
     }
 
     private sealed class FaultInjectingFingerprintRepository : IStrmFingerprintRepository

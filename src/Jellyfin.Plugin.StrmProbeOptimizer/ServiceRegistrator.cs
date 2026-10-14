@@ -34,6 +34,17 @@ public sealed class ServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<IStrmFingerprintRepository, SqliteStrmFingerprintRepository>();
         serviceCollection.AddSingleton<IPlaybackSettings, PluginPlaybackSettings>();
         serviceCollection.AddSingleton<StrmPlaybackOptimizer>();
+        serviceCollection.AddSingleton<IBatchScopeResolver, BatchScopeResolver>();
+        serviceCollection.AddSingleton<IBatchCandidateSource, LibraryBatchCandidateSource>();
+        // The batch runner must drive the real native media source manager, never the proxy: a batch probe is a
+        // real native call, and routing it through the playback proxy would re-enter the playback entry point.
+        serviceCollection.AddSingleton(provider => new BatchCheckRunner(
+            provider.GetRequiredService<StrmPlaybackOptimizer>(),
+            provider.GetRequiredService<IBatchScopeResolver>(),
+            provider.GetRequiredService<IBatchCandidateSource>(),
+            (IMediaSourceManager)provider.GetRequiredService(mediaSourceRegistration.ImplementationType),
+            provider.GetRequiredService<IPlaybackSettings>(),
+            provider.GetRequiredService<ILogger<BatchCheckRunner>>()));
         CoreServiceRegistration.RehomeImplementation(serviceCollection, mediaEncoderRegistration);
         CoreServiceRegistration.RehomeImplementation(serviceCollection, mediaSourceRegistration);
         CoreServiceRegistration.RehomeImplementation(serviceCollection, mediaStreamRepositoryRegistration);

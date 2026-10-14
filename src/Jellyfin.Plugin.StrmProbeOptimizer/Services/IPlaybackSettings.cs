@@ -12,6 +12,16 @@ public interface IPlaybackSettings
     /// Gets the concurrency limit captured when the server started. Saved changes apply after the next restart.
     /// </summary>
     int MaxConcurrentProbes { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether the batch check covers every media library.
+    /// </summary>
+    bool BatchAllLibraries { get; }
+
+    /// <summary>
+    /// Gets the explicitly selected batch media library identifiers, or an empty string for the all-library default.
+    /// </summary>
+    string BatchLibraryIds { get; }
 }
 
 public sealed class PluginPlaybackSettings : IPlaybackSettings
@@ -72,6 +82,36 @@ public sealed class PluginPlaybackSettings : IPlaybackSettings
             catch
             {
                 return PluginConfiguration.DefaultMaxConcurrentProbes;
+            }
+        }
+    }
+
+    public bool BatchAllLibraries
+    {
+        get
+        {
+            try
+            {
+                return Plugin.Instance?.Configuration.BatchAllLibraries ?? true;
+            }
+            catch
+            {
+                return true;
+            }
+        }
+    }
+
+    public string BatchLibraryIds
+    {
+        get
+        {
+            try
+            {
+                return Plugin.Instance?.Configuration.BatchLibraryIds ?? string.Empty;
+            }
+            catch
+            {
+                return string.Empty;
             }
         }
     }

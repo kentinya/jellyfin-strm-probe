@@ -202,6 +202,468 @@ public sealed class StrmPlaybackOptimizer
             cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Checks one batch candidate source. It reuses the same manifest reader, decision service, coordinator,
+    /// native probe and conditional fingerprint commit as playback, but keeps a batch-specific admission policy:
+    /// it never delegates to a native probe, never elevates probe permission, and stops starting new work when the
+    /// batch stop or the fingerprint store failure is confirmed. It returns exactly one counted outcome per candidate.
+    /// </summary>
+    /// <param name="native">The real Jellyfin media source manager.</param>
+    /// <param name="projectItemId">The stable project identity (the native primary version id when present).</param>
+    /// <param name="sourceItem">The physical candidate item.</param>
+    /// <param name="source">The candidate's current native source.</param>
+    /// <param name="sourceKey">The stable source key (the candidate item id in N format).</param>
+    /// <param name="stopSignal">The batch start/stop boundary for this run.</param>
+    /// <returns>The counted batch outcome for this candidate.</returns>
+    public async Task<BatchSourceOutcome> CheckBatchSourceAsync(
+        IMediaSourceManager native,
+        Guid projectItemId,
+        BaseItem sourceItem,
+        MediaSourceInfo source,
+        string sourceKey,
+        BatchStopSignal stopSignal)
+    {
+        ArgumentNullException.ThrowIfNull(native);
+        ArgumentNullException.ThrowIfNull(sourceItem);
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(stopSignal);
+        if (IsFingerprintStoreUnavailable)
+        {
+            throw new FingerprintStoreUnavailableException();
+        }
+
+        if (stopSignal.IsStopped)
+        {
+            return BatchSourceOutcome.Revoked;
+        }
+
+        if (!IsStrm(sourceItem))
+        {
+            return BatchSourceOutcome.NotProcessed;
+        }
+
+        var readResult = _manifestReader.Read(sourceItem.Path);
+        if (readResult.Status is ManifestReadStatus.Invalid or ManifestReadStatus.Unavailable)
+        {
+            return BatchSourceOutcome.CheckStageIncomplete;
+        }
+
+        if (readResult.Status != ManifestReadStatus.Supported || readResult.Manifest is not { } manifest)
+        {
+            return BatchSourceOutcome.NotProcessed;
+        }
+
+        StrmFingerprint? previous;
+        try
+        {
+            previous = _fingerprintRepository.Get(projectItemId, sourceKey);
+        }
+        catch (Exception exception)
+        {
+            MarkFingerprintStoreFailed(exception, sourceItem.Id);
+            throw new FingerprintStoreUnavailableException(exception);
+        }
+
+        var decision = _decisionService.Decide(
+            manifest,
+            previous,
+            HasPrimaryStream(sourceItem, source),
+            source.Path ?? sourceItem.ShortcutPath);
+
+        BatchDecisionBarrier?.Invoke();
+
+        if (decision.Kind is ProbeDecisionKind.SkipProbe or ProbeDecisionKind.TrustExisting)
+        {
+            if (!ManifestIsStillCurrent(sourceItem.Path, manifest))
+            {
+                // The STRM changed while the decision was being made. Never publish a stale baseline; count the
+                // candidate as an incomplete check so the next run re-evaluates the current version.
+                return BatchSourceOutcome.CheckStageIncomplete;
+            }
+
+            if (decision.Kind == ProbeDecisionKind.TrustExisting)
+            {
+                try
+                {
+                    if (_fingerprintRepository.TryCommit(CreateFingerprint(projectItemId, sourceKey, manifest), expectedPrevious: null))
+                    {
+                        return BatchSourceOutcome.FirstTrust;
+                    }
+                }
+                catch (Exception exception)
+                {
+                    MarkFingerprintStoreFailed(exception, sourceItem.Id);
+                    throw new FingerprintStoreUnavailableException(exception);
+                }
+
+                // Another caller committed a baseline while this candidate was being checked; fall through and
+                // re-evaluate the now-current baseline rather than publishing a stale first trust.
+                try
+                {
+                    previous = _fingerprintRepository.Get(projectItemId, sourceKey);
+                }
+                catch (Exception exception)
+                {
+                    MarkFingerprintStoreFailed(exception, sourceItem.Id);
+                    throw new FingerprintStoreUnavailableException(exception);
+                }
+
+                decision = _decisionService.Decide(
+                    manifest,
+                    previous,
+                    HasPrimaryStream(sourceItem, source),
+                    source.Path ?? sourceItem.ShortcutPath);
+                if (decision.Kind is ProbeDecisionKind.SkipProbe or ProbeDecisionKind.TrustExisting)
+                {
+                    return BatchSourceOutcome.Skipped;
+                }
+            }
+            else
+            {
+                return BatchSourceOutcome.Skipped;
+            }
+        }
+
+        return await RunBatchProbeAsync(
+            native,
+            projectItemId,
+            sourceItem,
+            source,
+            sourceKey,
+            manifest,
+            previous,
+            stopSignal).ConfigureAwait(false);
+    }
+
+    private async Task<BatchSourceOutcome> RunBatchProbeAsync(
+        IMediaSourceManager native,
+        Guid projectItemId,
+        BaseItem sourceItem,
+        MediaSourceInfo source,
+        string sourceKey,
+        StrmManifest manifest,
+        StrmFingerprint? previous,
+        BatchStopSignal stopSignal)
+    {
+        if (stopSignal.IsStopped)
+        {
+            return BatchSourceOutcome.Revoked;
+        }
+
+        if (Coordinator.TryGetRunning(projectItemId, sourceKey, out var running))
+        {
+            return await JoinBatchSharedAsync(native, projectItemId, sourceItem, source, sourceKey, running!, stopSignal)
+                .ConfigureAwait(false);
+        }
+
+        ProbeReservation reservation;
+        try
+        {
+            reservation = await Coordinator.AcquireAsync(projectItemId, sourceKey, manifest.ContentHash, stopSignal.CancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // The stop was confirmed while this candidate waited for a global permit; the work never started.
+            return BatchSourceOutcome.Revoked;
+        }
+
+        if (!reservation.IsOwner)
+        {
+            return await JoinBatchSharedAsync(native, projectItemId, sourceItem, source, sourceKey, reservation.Item, stopSignal)
+                .ConfigureAwait(false);
+        }
+
+        var workItem = reservation.Item;
+        if (stopSignal.IsStopped)
+        {
+            Coordinator.Abandon(workItem);
+            return BatchSourceOutcome.Revoked;
+        }
+
+        try
+        {
+            // Re-read the current native source, manifest and baseline after obtaining the execution opportunity,
+            // exactly like the playback owner loop, so a queued candidate never probes a stale decision.
+            BatchAdmission admission;
+            try
+            {
+                admission = await AdmitBatchOwnerAsync(native, projectItemId, sourceItem, source, sourceKey, workItem, stopSignal)
+                    .ConfigureAwait(false);
+            }
+            catch (FingerprintStoreUnavailableException)
+            {
+                Coordinator.Abandon(workItem);
+                throw;
+            }
+
+            switch (admission.Kind)
+            {
+                case BatchAdmissionKind.Revoked:
+                    Coordinator.Abandon(workItem);
+                    return BatchSourceOutcome.Revoked;
+                case BatchAdmissionKind.NotProcessed:
+                    Coordinator.Abandon(workItem);
+                    return BatchSourceOutcome.NotProcessed;
+                case BatchAdmissionKind.CheckStageIncomplete:
+                    Coordinator.Abandon(workItem);
+                    return BatchSourceOutcome.CheckStageIncomplete;
+                case BatchAdmissionKind.Skipped:
+                    Coordinator.Abandon(workItem);
+                    return BatchSourceOutcome.Skipped;
+                case BatchAdmissionKind.Missing:
+                    Coordinator.Abandon(workItem);
+                    return BatchSourceOutcome.Missing;
+                case BatchAdmissionKind.FirstTrust:
+                    Coordinator.Abandon(workItem);
+                    return BatchSourceOutcome.FirstTrust;
+                case BatchAdmissionKind.Joined:
+                    Coordinator.Abandon(workItem);
+                    return await JoinBatchSharedAsync(native, projectItemId, sourceItem, source, sourceKey, admission.Item!, stopSignal)
+                        .ConfigureAwait(false);
+                default:
+                    manifest = admission.Manifest!;
+                    previous = admission.Previous;
+                    source = admission.Source!;
+                    workItem.ManifestContentHash = manifest.ContentHash;
+                    break;
+            }
+
+            var tracker = new ProbeStartTracker();
+            ProbeExecutionOutcome outcome;
+            try
+            {
+                // The batch stop token is deliberately not passed to the native probe: an actually started probe
+                // always finishes and can still commit its verified result. CancellationToken.None matches playback.
+                outcome = await ExecuteProbeAsync(
+                    native,
+                    projectItemId,
+                    sourceItem,
+                    source,
+                    sourceKey,
+                    null,
+                    false,
+                    CancellationToken.None,
+                    manifest,
+                    previous,
+                    workItem,
+                    stopSignal,
+                    tracker).ConfigureAwait(false);
+            }
+            catch (BatchStopRejectedException)
+            {
+                Coordinator.Abandon(workItem);
+                return BatchSourceOutcome.Revoked;
+            }
+            catch (ProbeStartRejectedException)
+            {
+                // A same-source execution started between registration and the matching call. Re-evaluate the
+                // current version instead of running a duplicate native probe.
+                Coordinator.Abandon(workItem);
+                return await RecheckBatchSourceAsync(native, projectItemId, sourceItem, source, sourceKey, stopSignal)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception exception)
+            {
+                Coordinator.Fail(workItem, exception);
+                return BatchSourceOutcome.ProbeIncomplete;
+            }
+            finally
+            {
+                if (tracker.Started)
+                {
+                    stopSignal.EndProbe();
+                }
+            }
+
+            if (outcome.FingerprintStoreUnavailable)
+            {
+                Coordinator.Complete(workItem, outcome.Source);
+                throw new FingerprintStoreUnavailableException();
+            }
+
+            Coordinator.Complete(workItem, outcome.Source);
+            return outcome.Committed ? BatchSourceOutcome.Probed : BatchSourceOutcome.ProbeIncomplete;
+        }
+        catch (FingerprintStoreUnavailableException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            Coordinator.Fail(workItem, exception);
+            throw;
+        }
+    }
+
+    private async Task<BatchSourceOutcome> RecheckBatchSourceAsync(
+        IMediaSourceManager native,
+        Guid projectItemId,
+        BaseItem sourceItem,
+        MediaSourceInfo source,
+        string sourceKey,
+        BatchStopSignal stopSignal)
+    {
+        if (stopSignal.IsStopped)
+        {
+            return BatchSourceOutcome.Revoked;
+        }
+
+        var currentSources = native.GetStaticMediaSources(sourceItem, false);
+        var current = PickOwnSource(sourceItem, currentSources);
+        if (current is null)
+        {
+            return BatchSourceOutcome.Missing;
+        }
+
+        return await CheckBatchSourceAsync(native, projectItemId, sourceItem, current, sourceKey, stopSignal)
+            .ConfigureAwait(false);
+    }
+
+    private async Task<BatchSourceOutcome> JoinBatchSharedAsync(
+        IMediaSourceManager native,
+        Guid projectItemId,
+        BaseItem sourceItem,
+        MediaSourceInfo source,
+        string sourceKey,
+        ProbeWorkItem shared,
+        BatchStopSignal stopSignal)
+    {
+        BatchSharedJoinBarrier?.Invoke();
+        try
+        {
+            await shared.Result.WaitAsync(stopSignal.CancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (stopSignal.IsStopped)
+        {
+            // The batch stopped while waiting. The already started probe is not cancelled and still completes.
+            return BatchSourceOutcome.Revoked;
+        }
+        catch (Exception)
+        {
+            // The shared probe failed. Re-evaluate the current version below instead of reusing its failure.
+        }
+
+        if (stopSignal.IsStopped)
+        {
+            return BatchSourceOutcome.Revoked;
+        }
+
+        // A shared probe never proves this candidate's own current version. Re-read the current source and
+        // re-evaluate it, so a shared reliable success is not counted from a wait return alone.
+        var currentSources = native.GetStaticMediaSources(sourceItem, false);
+        var current = PickOwnSource(sourceItem, currentSources);
+        if (current is null)
+        {
+            return BatchSourceOutcome.Missing;
+        }
+
+        return await CheckBatchSourceAsync(native, projectItemId, sourceItem, current, sourceKey, stopSignal)
+            .ConfigureAwait(false);
+    }
+
+    private async Task<BatchAdmission> AdmitBatchOwnerAsync(
+        IMediaSourceManager native,
+        Guid projectItemId,
+        BaseItem sourceItem,
+        MediaSourceInfo source,
+        string sourceKey,
+        ProbeWorkItem workItem,
+        BatchStopSignal stopSignal)
+    {
+        if (!_settings.Enabled || IsFingerprintStoreUnavailable)
+        {
+            return BatchAdmission.NotProcessed();
+        }
+
+        if (stopSignal.IsStopped)
+        {
+            return BatchAdmission.Revoked();
+        }
+
+        var currentSources = native.GetStaticMediaSources(sourceItem, false);
+        var currentSource = PickOwnSource(sourceItem, currentSources);
+        if (currentSource is null)
+        {
+            return BatchAdmission.Missing();
+        }
+
+        if (Coordinator.TryGetRunning(projectItemId, sourceKey, out var running))
+        {
+            return BatchAdmission.Joined(running!);
+        }
+
+        var readResult = _manifestReader.Read(sourceItem.Path);
+        if (readResult.Status is ManifestReadStatus.Invalid or ManifestReadStatus.Unavailable)
+        {
+            return BatchAdmission.CheckStageIncomplete();
+        }
+
+        if (readResult.Status != ManifestReadStatus.Supported || readResult.Manifest is not { } currentManifest)
+        {
+            return BatchAdmission.NotProcessed();
+        }
+
+        StrmFingerprint? currentPrevious;
+        try
+        {
+            currentPrevious = _fingerprintRepository.Get(projectItemId, sourceKey);
+        }
+        catch (Exception exception)
+        {
+            MarkFingerprintStoreFailed(exception, sourceItem.Id);
+            throw new FingerprintStoreUnavailableException(exception);
+        }
+
+        var decision = _decisionService.Decide(
+            currentManifest,
+            currentPrevious,
+            HasPrimaryStream(sourceItem, currentSource),
+            currentSource.Path ?? sourceItem.ShortcutPath);
+
+        if (decision.Kind is ProbeDecisionKind.SkipProbe or ProbeDecisionKind.TrustExisting)
+        {
+            if (!ManifestIsStillCurrent(sourceItem.Path, currentManifest))
+            {
+                return BatchAdmission.CheckStageIncomplete();
+            }
+
+            if (decision.Kind == ProbeDecisionKind.TrustExisting)
+            {
+                try
+                {
+                    if (_fingerprintRepository.TryCommit(CreateFingerprint(projectItemId, sourceKey, currentManifest), expectedPrevious: null))
+                    {
+                        return BatchAdmission.FirstTrust();
+                    }
+                }
+                catch (Exception exception)
+                {
+                    MarkFingerprintStoreFailed(exception, sourceItem.Id);
+                    throw new FingerprintStoreUnavailableException(exception);
+                }
+
+                return BatchAdmission.Skipped();
+            }
+
+            return BatchAdmission.Skipped();
+        }
+
+        return BatchAdmission.Start(currentManifest, currentPrevious, currentSource);
+    }
+
+    private static MediaSourceInfo? PickOwnSource(BaseItem sourceItem, IReadOnlyList<MediaSourceInfo> sources)
+    {
+        var ownKey = sourceItem.Id.ToString("N", CultureInfo.InvariantCulture);
+        var own = sources.FirstOrDefault(candidate => HasSourceId(candidate, ownKey));
+        if (own is not null)
+        {
+            return own;
+        }
+
+        return sources.Count == 1 ? sources[0] : null;
+    }
+
     private async Task<MediaSourceInfo?> CheckSourceCoreAsync(
         IMediaSourceManager native,
         Guid projectItemId,
@@ -526,7 +988,7 @@ public sealed class StrmPlaybackOptimizer
             MediaSourceInfo result;
             try
             {
-                result = await ExecuteProbeAsync(
+                var outcome = await ExecuteProbeAsync(
                     native,
                     projectItemId,
                     sourceItem,
@@ -538,6 +1000,7 @@ public sealed class StrmPlaybackOptimizer
                     manifest,
                     previous,
                     workItem).ConfigureAwait(false);
+                result = outcome.Source;
             }
             catch (ProbeStartRejectedException)
             {
@@ -654,7 +1117,7 @@ public sealed class StrmPlaybackOptimizer
             isPlaybackContext).ConfigureAwait(false);
     }
 
-    private async Task<MediaSourceInfo> ExecuteProbeAsync(
+    private async Task<ProbeExecutionOutcome> ExecuteProbeAsync(
         IMediaSourceManager native,
         Guid projectItemId,
         BaseItem sourceItem,
@@ -665,7 +1128,9 @@ public sealed class StrmPlaybackOptimizer
         CancellationToken cancellationToken,
         StrmManifest manifest,
         StrmFingerprint? previous,
-        ProbeWorkItem workItem)
+        ProbeWorkItem workItem,
+        BatchStopSignal? stopSignal = null,
+        ProbeStartTracker? tracker = null)
     {
         var requiredStreamType = GetRequiredStreamType(sourceItem);
         var started = 0;
@@ -677,16 +1142,34 @@ public sealed class StrmPlaybackOptimizer
                 return;
             }
 
+            if (stopSignal is not null && !stopSignal.TryBeginProbe())
+            {
+                // The batch stop was confirmed before the matching native call. Abort the native call so no
+                // plugin probe actually starts; the owner settles this reservation as not started.
+                throw new BatchStopRejectedException(projectItemId, sourceKey);
+            }
+
             if (!Coordinator.TryMarkStarted(workItem, out _))
             {
                 // Another caller owns this key (or this reservation is no longer the current owner). Abort the
                 // native call instead of publishing a duplicate running probe; the exception propagates through
                 // the encoder proxy and this reservation is settled as a failure.
+                if (stopSignal is not null)
+                {
+                    // The stop boundary already counted this probe as in flight, but it never actually started.
+                    stopSignal.EndProbe();
+                }
+
                 _logger.LogWarning(
                     "A duplicate same-source native probe start was rejected for item {ItemId}, source {SourceId}; aborting the redundant native call.",
                     projectItemId,
                     sourceKey);
                 throw new ProbeStartRejectedException(projectItemId, sourceKey);
+            }
+
+            if (tracker is not null)
+            {
+                tracker.Started = true;
             }
 
             _logger.LogInformation(
@@ -760,10 +1243,13 @@ public sealed class StrmPlaybackOptimizer
         }
 
         var candidate = CreateFingerprint(projectItemId, sourceKey, manifest);
+        var committed = false;
+        var storeUnavailable = false;
         try
         {
             if (_fingerprintRepository.TryCommit(candidate, previous))
             {
+                committed = true;
                 _logger.LogInformation(
                     "Native probe accepted for STRM item {ItemId}, source {SourceId}; calls {ProbeCalls}, address persisted {AddressPersisted}, fingerprint committed.",
                     projectItemId,
@@ -780,6 +1266,7 @@ public sealed class StrmPlaybackOptimizer
         {
             // The native result is already persisted and verified. Do not repeat a successful probe because the history write failed.
             MarkFingerprintStoreFailed(exception, sourceItem.Id);
+            storeUnavailable = true;
             _logger.LogWarning(
                 "Native STRM probe completed for item {ItemId}, source {SourceId}, but its SQLite fingerprint write failed; matching calls {ProbeCalls}, fingerprint retained.",
                 projectItemId,
@@ -787,8 +1274,27 @@ public sealed class StrmPlaybackOptimizer
                 probeContext.MatchingCallCount);
         }
 
-        return resultSource!;
+        return new ProbeExecutionOutcome(resultSource!, committed, storeUnavailable);
     }
+
+    /// <summary>
+    /// Gets or sets a test-only hook invoked in the batch decision immediately after the current manifest has
+    /// been read and before its currentness is re-checked. It lets a deterministic regression change the STRM
+    /// during the decision. It is <c>null</c> in production.
+    /// </summary>
+    internal Action? BatchDecisionBarrier { get; set; }
+
+    /// <summary>
+    /// Gets or sets a test-only barrier invoked when a batch caller joins an existing same-source probe. It lets
+    /// a deterministic regression observe the shared wait. It is <c>null</c> in production.
+    /// </summary>
+    internal Action? BatchSharedJoinBarrier { get; set; }
+
+    /// <summary>
+    /// Gets a value indicating whether the SQLite fingerprint store has faulted and optimization is latched off
+    /// until the next restart.
+    /// </summary>
+    public bool IsFingerprintStoreUnavailable => Volatile.Read(ref _fingerprintStoreFailed) != 0;
 
     private async Task<MediaSourceInfo> GetSourceWithNativeAsync(
         IMediaSourceManager native,
@@ -1036,5 +1542,70 @@ public sealed class StrmPlaybackOptimizer
         {
             return new ProbeAdmission(ProbeAdmissionKind.Joined, null, null, null, null, item);
         }
+    }
+
+    private enum BatchAdmissionKind
+    {
+        Start,
+        Joined,
+        Skipped,
+        FirstTrust,
+        NotProcessed,
+        CheckStageIncomplete,
+        Missing,
+        Revoked
+    }
+
+    private sealed record BatchAdmission(
+        BatchAdmissionKind Kind,
+        StrmManifest? Manifest,
+        StrmFingerprint? Previous,
+        MediaSourceInfo? Source,
+        ProbeWorkItem? Item)
+    {
+        public static BatchAdmission Start(StrmManifest manifest, StrmFingerprint? previous, MediaSourceInfo source)
+        {
+            return new BatchAdmission(BatchAdmissionKind.Start, manifest, previous, source, null);
+        }
+
+        public static BatchAdmission Joined(ProbeWorkItem item)
+        {
+            return new BatchAdmission(BatchAdmissionKind.Joined, null, null, null, item);
+        }
+
+        public static BatchAdmission Skipped()
+        {
+            return new BatchAdmission(BatchAdmissionKind.Skipped, null, null, null, null);
+        }
+
+        public static BatchAdmission FirstTrust()
+        {
+            return new BatchAdmission(BatchAdmissionKind.FirstTrust, null, null, null, null);
+        }
+
+        public static BatchAdmission NotProcessed()
+        {
+            return new BatchAdmission(BatchAdmissionKind.NotProcessed, null, null, null, null);
+        }
+
+        public static BatchAdmission CheckStageIncomplete()
+        {
+            return new BatchAdmission(BatchAdmissionKind.CheckStageIncomplete, null, null, null, null);
+        }
+
+        public static BatchAdmission Missing()
+        {
+            return new BatchAdmission(BatchAdmissionKind.Missing, null, null, null, null);
+        }
+
+        public static BatchAdmission Revoked()
+        {
+            return new BatchAdmission(BatchAdmissionKind.Revoked, null, null, null, null);
+        }
+    }
+
+    private sealed class ProbeStartTracker
+    {
+        public bool Started { get; set; }
     }
 }

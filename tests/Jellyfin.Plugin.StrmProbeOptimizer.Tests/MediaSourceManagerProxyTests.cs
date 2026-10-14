@@ -49,6 +49,10 @@ public sealed class MediaSourceManagerProxyTests
         public bool DetailedLog => false;
 
         public int MaxConcurrentProbes => PluginConfiguration.DefaultMaxConcurrentProbes;
+
+        public bool BatchAllLibraries => true;
+
+        public string BatchLibraryIds => string.Empty;
     }
 
     public class NativeManager : DispatchProxy
