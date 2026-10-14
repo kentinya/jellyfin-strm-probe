@@ -5,7 +5,7 @@
 ```text
 Task ID: 2.2
 Parent Slice: 2
-Status: FIX REQUIRED
+Status: READY FOR B REVIEW
 Task Base: 13cb8bdac319fcf0b3e7500661bae1c7455077b0
 Contract Checkpoint: 7e0240cd1cada74f142b7b0afd612943ca991a91
 Slice Base: 924816a84c74f5d79c107478f2d40e621cb8be8d
@@ -154,7 +154,22 @@ python3 scripts/run_isolated_plugin_integration.py
 - 新增客户端停止到探测取消关联、共享执行取消源、成功后额外取消检查、人为执行取消实机验收；原生自身取消异常保留原语义与回归。
 - 改变 Slice／Roadmap／稳定需求、移动 Slice Base、宣称关闭 Slice 或自动实施未授权后续范围。
 
-## Developer Correction Report (R1–R5)
+## Developer Correction Report (R1 / R2 / R5 / R6, current candidate)
+
+- Changed Files：`src/Jellyfin.Plugin.StrmProbeOptimizer/Services/ProbeCoordinator.cs`、`Services/StrmPlaybackOptimizer.cs`；`tests/Jellyfin.Plugin.StrmProbeOptimizer.Tests/ProbeCoordinatorTests.cs`、`PlaybackOptimizerTests.cs`；`scripts/run_isolated_plugin_integration.py`。未改配置字段、依赖锁、`ServiceRegistrator`、解析／决策、SQLite schema 或 `Plugin.UpdateConfiguration`。
+- R1 实际开始边界原子化：`ProbeCoordinator` 改用同一把短时锁包住 running／preparing 查询、preparing 插入、preparing→running 转换与结束移除，消除两次独立查询之间的第二 owner 竞态；`TryMarkStarted` 只有当前 preparing owner 才能转为 running。`StrmPlaybackOptimizer.MarkStarted` 在经核验的匹配 `IMediaEncoder.GetMediaInfo` 调用处回调，`TryMarkStarted` 失败即抛 `ProbeStartRejectedException` 阻止该次原生调用，不再只记警告后继续；失败经 owner 的 catch 结算为 Fail。
+- R2 准入重读当前源：`AdmitQueuedOwnerAsync` 不再按传入旧快照是否有主流决定是否重取，而是始终按本调用者 user／source Id／路径替换重新取当前原生源，再读取当前 Manifest／可信基线／启停并 `Decide`。排队期间已接受版本零重复探测，主流消失仍按需探测；等待同源工作结束后经 `CheckSourceAsync` 重新准入，禁用后按原权限委托。
+- R6 准入清理：owner 取得许可后的全部准入、委托、执行与提前退出纳入同一 try/catch；`AdmitQueuedOwnerAsync` 在每个提前退出（禁用／非 STRM／库故障／复用／加入）前先 `Abandon` 自己的未开始 owner，避免在原生委托期间占用许可；`ProbeCoordinator.Finish` 在同一锁内以 `Interlocked.Exchange` 取空 `Permit` 作为单次结算判据，重复 Complete／Fail／Abandon 不重复释放、不删除同键更新登记；`Abandon` 不再返回，所有释放与通知走 `Finish`。
+- R5 补证：新增确定性用例覆盖开始竞态第二 owner（注入真实协调器 `PermitAcquiredBarrier`）、准入委托异常许可／登记归零并恢复、同源共享两个不同 `User` 各自可见源、上限 1 以实际开始边界、零等待者仍提交且以 `SharedJoinBarrier` 取代 `Task.Delay`；实机脚本新增保存并发 1 后重启前的运行上限仍为 2 的观测。
+- Tests and Results：候选 `b3764f43713bbc22bdc00cab122340e241110484`，本机证据 `.git/validation-evidence/dc62db4661286f2a7fa59e4c53cef1bf8c363614/developer-fix2-t4-20261014-100054/INDEX.md`。locked restore、Release build（0 警告 0 错误）、全套 C# 110/110、format verify、Python 30/30、governance、`git diff --check` 全部 exit 0；聚焦筛选 79/79；默认实机脚本 JSON `status=PASS`（同源一次探测一次提交、默认 2／重启前保存 1 仍为 2／重启后配置 1 串行、池饱和原生刷新独立、配置拒绝／保存／下一请求／重启、既有场景与清理恢复）。独立控制 harness 复现 B 的四个失败观测，全部转为 PASS：R1 `secondOwner=false`、R2 已接受版本 `probes=0`、R2 主流消失 `probes=1`、R6 `ActivePermits=0/PreparingCount=0`。
+- Decisions：`MarkStarted` 在原生调用前同步触发（同一异步链），拒绝时抛异常中止冗余调用；准入统一为“读取当前源／Manifest／基线／启停 → Decide → 行动”，等待后回到同一位置重读；`Abandon` 语义改为幂等结算。
+- Risks / Deviations：控制证据使用测试原生代理与临时 STRM，不是真实 ffprobe 竞态注入；非整数／错误类型配置仍由 Jellyfin 反序列化层拒绝（HTTP 500），插件级越界值为 400，未统一状态码。
+- Head SHA：`b3764f43713bbc22bdc00cab122340e241110484`。
+
+## Developer Correction Report (R1–R5, superseded candidate)
+
+> Historical. This report describes the rejected candidate `dd5f6b80b9bd0bf63e16f2d1923995514ebebf4a`; its
+> R1 start boundary, R2 source re-read and R6 cleanup were found insufficient by B. Retained for traceability.
 
 - Changed Files：`src/Jellyfin.Plugin.StrmProbeOptimizer/Services/ProbeCoordinator.cs`、`Services/ProbeExecutionContext.cs`、`Services/StrmPlaybackOptimizer.cs`、`Plugin.cs`；`tests/Jellyfin.Plugin.StrmProbeOptimizer.Tests/ProbeCoordinatorTests.cs`、`ConfigurationTests.cs`、`PlaybackOptimizerTests.cs`；`scripts/run_isolated_plugin_integration.py`、`scripts/isolated_media_server.py`。未改配置字段、依赖锁、`ServiceRegistrator`、解析／决策或 SQLite。
 - R1 实际开始边界：`ProbeCoordinator` 新增 `_preparing` 状态；`AcquireAsync` 先 `_permits.Wait(0)` 判断是否等待；`TryMarkStarted` 由 `ProbeExecutionContext.MarkCall` 在经核验的匹配 `IMediaEncoder.GetMediaInfo` 调用处（经 `MediaEncoderDispatchProxy`）回调触发，不再在刷新准备前登记。准备中的 owner 可被同源请求等待但 `IsRunning=false`，不会记为“Joined a running”，也不重复实际启动；`TryMarkStarted` 发布 running 后再清除 preparing，避免竞态重复准备；开始失败／委托／放弃路径经 `Abandon` 释放许可与登记。

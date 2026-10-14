@@ -4,7 +4,7 @@
 
 项目：`Jellyfin.Plugin.StrmProbeOptimizer`，C# 插件。SQLite 仅保存最小历史指纹，媒体流继续保存在 Jellyfin 原生库，不维护独立探测状态机。
 
-**Slice 1 核心原型已由 A 最终审查 PASS / CLOSED，完整产品尚未交付。** [最终审查](docs/progress.md#slice-1-closed) 与 [Closure Packet](docs/progress.md#slice-1-closed) 记录构建、加载、探测／保存、失败恢复和重启证据。固定 SDK `10.0.401`、Jellyfin `12.2.0`、源码／依赖与镜像 digest 见 [开发环境](docs/development-environment.md)。ACTIVE 的 [Slice 2](SLICE.md) 已完成 B 接受的 SQLite／真实媒体源持久播放闭环；运行中探测共享、全局并发上限与核心配置（`Enabled`／`PlaybackAutoCheck`／`MaxConcurrentProbes`／`DetailedLog`）的 [Task 2.2](TASK.md) 首轮候选经 B 独立审查为 FIX REQUIRED，Developer 已在同一 Task 内按 R1～R5 修正（实际开始边界、排队准入重查、配置原子持久化、日志脱敏及必要边界证据）并交回 B 审查；[核心配置操作说明](docs/core-configuration.md) 记录候选操作与限制；完整配置页、批量任务、发布包与外部代理联调仍延期。
+**Slice 1 核心原型已由 A 最终审查 PASS / CLOSED，完整产品尚未交付。** [最终审查](docs/progress.md#slice-1-closed) 与 [Closure Packet](docs/progress.md#slice-1-closed) 记录构建、加载、探测／保存、失败恢复和重启证据。固定 SDK `10.0.401`、Jellyfin `12.2.0`、源码／依赖与镜像 digest 见 [开发环境](docs/development-environment.md)。ACTIVE 的 [Slice 2](SLICE.md) 已完成 B 接受的 SQLite／真实媒体源持久播放闭环；运行中探测共享、全局并发上限与核心配置（`Enabled`／`PlaybackAutoCheck`／`MaxConcurrentProbes`／`DetailedLog`）的 [Task 2.2](TASK.md) 首轮与修正候选均经 B 独立审查为 FIX REQUIRED；Developer 已在同一 Task 内按 R1／R2／R5／R6 修正（开始竞态原子化、排队准入重读当前源、准入异常清理与必要边界证据）并交回 B 审查；[核心配置操作说明](docs/core-configuration.md) 记录候选操作与限制；完整配置页、批量任务、发布包与外部代理联调仍延期。
 
 ## 开发基准与范围
 
@@ -19,7 +19,7 @@
 3. 查看 [当前 Slice](SLICE.md)、[当前 Task](TASK.md)、[四个 Slice 路线图](docs/roadmap.md) 和 [进度](docs/progress.md)。
 4. 开发环境执行 `python3 scripts/development_environment.py doctor`；安装与隔离运行见 [环境交接](docs/development-environment.md)。
 
-Slice 1 已证明固定版本上的核心接入、可靠的原生成功信号与最新地址持久化。Slice 2 已由 A 在独立一轮激活，以 Slice 1 关闭提交为 Base；Task 2.1 已经 B 独立复审 PASS，报告与证据见 [进度](docs/progress.md#当前开发指针)。[Task 2.2](TASK.md)（High／T4）负责运行中探测协调、正常收尾与核心配置；B 对首轮候选判 FIX REQUIRED，Developer 已按 R1～R5 修正并交回 B 独立审查。Slice 2 未完成最终验收；Slice 3／4 保持 PLANNED。
+Slice 1 已证明固定版本上的核心接入、可靠的原生成功信号与最新地址持久化。Slice 2 已由 A 在独立一轮激活，以 Slice 1 关闭提交为 Base；Task 2.1 已经 B 独立复审 PASS，报告与证据见 [进度](docs/progress.md#当前开发指针)。[Task 2.2](TASK.md)（High／T4）负责运行中探测协调、正常收尾与核心配置；B 对首轮与修正候选均判 FIX REQUIRED，Developer 已按 R1／R2／R5／R6 再次修正并交回 B 独立审查。Slice 2 未完成最终验收；Slice 3／4 保持 PLANNED。
 
 ## 产品目标
 
