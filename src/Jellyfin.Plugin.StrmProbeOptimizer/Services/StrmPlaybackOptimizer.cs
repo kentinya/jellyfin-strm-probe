@@ -491,7 +491,9 @@ public sealed class StrmPlaybackOptimizer
 
             if (outcome.FingerprintStoreUnavailable)
             {
-                Coordinator.Complete(workItem, outcome.Source);
+                // Propagate the execution-stage store fault to any same-source batch waiter before surfacing it, so
+                // the waiter reports the store as unavailable instead of a generic incomplete probe.
+                Coordinator.Complete(workItem, outcome.Source, committed: false, fingerprintStoreUnavailable: true);
                 throw new FingerprintStoreUnavailableException(FingerprintStoreFailureStage.Execution);
             }
 
@@ -548,9 +550,9 @@ public sealed class StrmPlaybackOptimizer
         IBatchScopeVerifier? scopeVerifier)
     {
         BatchSharedJoinBarrier?.Invoke();
-        try
+        if (isRunning)
         {
-            if (isRunning)
+            try
             {
                 // A same-source probe that actually started is not cancelled by the batch stop. Wait for it to
                 // settle (native save, verification, conditional commit) before this candidate returns, even when
@@ -558,29 +560,51 @@ public sealed class StrmPlaybackOptimizer
                 // already started execution, exactly like playback.
                 await shared.Result.ConfigureAwait(false);
             }
-            else
+            catch (Exception)
             {
-                // The shared owner is still preparing and has not reached the matching native call. Waiting for a
-                // preparing owner is not sharing a running probe, so the batch stop may end this wait without
-                // cancelling the other caller's work.
-                await shared.Result.WaitAsync(stopSignal.CancellationToken).ConfigureAwait(false);
+                // This candidate joined a same-source probe that had actually started and then failed (including
+                // a native cancellation). The batch never ran its own probe, so the candidate must settle as an
+                // incomplete probe for this round instead of being revoked or retried within the same run.
+                return BatchSourceOutcome.ProbeIncomplete;
             }
+
+            // A joined execution that actually started must settle on this run's own outcome only, never on the
+            // wait return. A post-probe fingerprint store fault is preserved as an execution-stage unavailable
+            // result so the batch stops and reports the store rather than misclassifying the candidate.
+            if (shared.FingerprintStoreUnavailable)
+            {
+                throw new FingerprintStoreUnavailableException(FingerprintStoreFailureStage.Execution);
+            }
+
+            if (shared.Committed == true && SharedCommitMatchesCurrentVersion(sourceItem, shared))
+            {
+                // This candidate joined a same-source probe that actually ran, saved and conditionally committed
+                // the current version during this run. Associate that this-run reliable success instead of
+                // counting the wait return or an existing fingerprint as success.
+                return BatchSourceOutcome.Probed;
+            }
+
+            // The joined execution finished without committing this version (conditional-commit refusal, SQLite
+            // write failure or a STRM that changed while waiting). This round already consumed the shared
+            // execution, so it is an incomplete probe: it is never retried within the same round and the batch
+            // stop never turns it into a revoked candidate.
+            return BatchSourceOutcome.ProbeIncomplete;
         }
-        catch (OperationCanceledException) when (!isRunning && stopSignal.IsStopped)
+
+        try
+        {
+            // The shared owner is still preparing and has not reached the matching native call. Waiting for a
+            // preparing owner is not sharing a running probe, so the batch stop may end this wait without
+            // cancelling the other caller's work.
+            await shared.Result.WaitAsync(stopSignal.CancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (stopSignal.IsStopped)
         {
             // The batch stopped while waiting for a preparing owner. The other caller's work is not cancelled.
             return BatchSourceOutcome.Revoked;
         }
         catch (Exception)
         {
-            if (isRunning)
-            {
-                // This candidate joined a same-source probe that had actually started and then failed. The batch
-                // never ran its own probe, so the candidate must settle as an incomplete probe for this round
-                // instead of being revoked or retried within the same run.
-                return BatchSourceOutcome.ProbeIncomplete;
-            }
-
             if (stopSignal.IsStopped)
             {
                 // A preparing owner that was never actually started failed after the batch stop; the batch never
@@ -590,14 +614,6 @@ public sealed class StrmPlaybackOptimizer
 
             // The shared preparing owner failed before the batch's own probe started. Re-evaluate the current
             // version below; a preparing wait is not a shared running probe.
-        }
-
-        if (isRunning && shared.Committed == true && SharedCommitMatchesCurrentVersion(sourceItem, shared))
-        {
-            // This candidate joined a same-source probe that actually ran, saved and conditionally committed the
-            // current version during this run. Associate that this-run reliable success instead of counting the
-            // wait return or an existing fingerprint as success.
-            return BatchSourceOutcome.Probed;
         }
 
         if (stopSignal.IsStopped)
@@ -658,6 +674,21 @@ public sealed class StrmPlaybackOptimizer
         if (scopeVerifier is not null && scopeLibraryIds is not null && !scopeVerifier.IsInScope(sourceItem, scopeLibraryIds))
         {
             return BatchAdmission.Missing();
+        }
+
+        // A candidate can also be re-pointed to a different primary version while it waits for a permit. The
+        // project identity (primary version) captured before waiting must still describe the current object, or the
+        // batch would establish/probe a baseline under the wrong project. Re-read the current object and reject a
+        // changed identity; it is re-discovered in the next round from the current library state.
+        if (scopeVerifier is not null)
+        {
+            var currentIdentity = scopeVerifier.GetCurrentItem(sourceItem);
+            if (currentIdentity is null
+                || currentIdentity.GetType() != sourceItem.GetType()
+                || GetProjectId(currentIdentity) != projectItemId)
+            {
+                return BatchAdmission.Missing();
+            }
         }
         var currentSources = native.GetStaticMediaSources(sourceItem, false);
         var currentSource = PickOwnSource(sourceItem, currentSources);
@@ -1062,6 +1093,7 @@ public sealed class StrmPlaybackOptimizer
 
             MediaSourceInfo result;
             var committed = false;
+            var fingerprintStoreUnavailable = false;
             try
             {
                 var outcome = await ExecuteProbeAsync(
@@ -1078,6 +1110,7 @@ public sealed class StrmPlaybackOptimizer
                     workItem).ConfigureAwait(false);
                 result = outcome.Source;
                 committed = outcome.Committed;
+                fingerprintStoreUnavailable = outcome.FingerprintStoreUnavailable;
             }
             catch (ProbeStartRejectedException)
             {
@@ -1104,7 +1137,7 @@ public sealed class StrmPlaybackOptimizer
                     .ConfigureAwait(false);
             }
 
-            Coordinator.Complete(workItem, result, committed);
+            Coordinator.Complete(workItem, result, committed, fingerprintStoreUnavailable);
             return result;
         }
         catch (Exception exception)

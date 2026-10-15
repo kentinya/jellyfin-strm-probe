@@ -52,6 +52,19 @@ public sealed class BatchRunResult
     /// <summary>Gets the bytes allocated on the runner thread while acquiring, de-duplicating and sorting the candidate identity set.</summary>
     public long CandidateFetchAllocatedBytes { get; set; }
 
+    /// <summary>
+    /// Gets the measured in-memory capacity of the candidate identity structures (the ordered id list plus the
+    /// de-duplication set) for this run. It is reported separately from the thread allocation counter so the O(N)
+    /// identity cost is observable without claiming a constant total memory footprint.
+    /// </summary>
+    public long CandidateSetCapacityBytes { get; set; }
+
+    /// <summary>
+    /// Gets a value indicating whether every selected library was queried, so <see cref="CandidateCount"/> is a
+    /// known complete candidate total. When <c>false</c> the identity set was interrupted and the total is unknown.
+    /// </summary>
+    public bool CandidateTotalKnown { get; set; }
+
     /// <summary>Gets the accumulated wall-clock time spent reading the native batch media objects.</summary>
     public double BatchReadMilliseconds { get; set; }
 
@@ -149,13 +162,14 @@ public sealed class BatchCheckRunner
         var result = new BatchRunResult();
         using var stopSignal = new BatchStopSignal(cancellationToken);
         progress.Report(0);
+        double fetchMilliseconds = 0;
 
         // A fingerprint store that already faulted on an earlier run stays latched off until the next restart.
         // Report it as unavailable and start no candidate fetch, read or probe.
         if (_optimizer.IsFingerprintStoreUnavailable)
         {
             counters.StoreUnavailable = 1;
-            Copy(counters, candidateCount: 0, result, completed: false);
+            Copy(counters, candidateCount: 0, result, completed: false, candidateTotalKnown: true);
             return result;
         }
 
@@ -173,27 +187,33 @@ public sealed class BatchCheckRunner
 
         IReadOnlyList<Guid> ordered;
         bool candidatesComplete;
+        long candidateSetCapacityBytes = 0;
         var fetchTimer = System.Diagnostics.Stopwatch.StartNew();
         var fetchAllocatedBefore = GC.GetAllocatedBytesForCurrentThread();
         try
         {
-            (ordered, candidatesComplete) = FetchCandidates(scope, counters, stopSignal);
+            (ordered, candidatesComplete) = FetchCandidates(scope, counters, stopSignal, out candidateSetCapacityBytes);
         }
         catch (Exception exception)
         {
             result.CandidateFetchFailed = true;
             // A stop or disable confirmed during the synchronous query must not disappear behind the fetch
             // failure: the native task can then report both the administrator cancellation and the failure.
-            result.StopRequested = stopSignal.IsStopped;
-            result.Disabled = !_settings.Enabled;
+            counters.StopRequested |= stopSignal.IsStopped ? 1 : 0;
+            counters.Disabled |= _settings.Enabled ? 0 : 1;
             _logger.LogWarning("The batch candidate identity query failed; no media object was processed. Failure category {FailureType}.", exception.GetType().Name);
+            // Preserve the identity work already measured before the failure (partial raw ids, duplicates, time,
+            // allocation and capacity) so a partial fetch is not reported as an empty, cost-free run.
+            Copy(counters, candidateCount: 0, result, completed: false, candidateTotalKnown: false, candidateFetchMilliseconds: fetchMilliseconds);
             return result;
         }
         finally
         {
             fetchTimer.Stop();
-            result.CandidateFetchMilliseconds = fetchTimer.Elapsed.TotalMilliseconds;
+            fetchMilliseconds = fetchTimer.Elapsed.TotalMilliseconds;
+            result.CandidateFetchMilliseconds = fetchMilliseconds;
             result.CandidateFetchAllocatedBytes = GC.GetAllocatedBytesForCurrentThread() - fetchAllocatedBefore;
+            result.CandidateSetCapacityBytes = candidateSetCapacityBytes;
         }
 
         CandidateSetFixed?.Invoke();
@@ -204,7 +224,7 @@ public sealed class BatchCheckRunner
             // candidate total is unknown, so no complete denominator is published and no object is processed.
             counters.StopRequested |= stopSignal.IsStopped ? 1 : 0;
             counters.Disabled |= _settings.Enabled ? 0 : 1;
-            Copy(counters, candidateCount: 0, result, completed: false);
+            Copy(counters, candidateCount: 0, result, completed: false, candidateTotalKnown: false, candidateFetchMilliseconds: fetchMilliseconds);
             return result;
         }
 
@@ -216,7 +236,7 @@ public sealed class BatchCheckRunner
             counters.StopRequested |= stopSignal.IsStopped ? 1 : 0;
             counters.Disabled |= _settings.Enabled ? 0 : 1;
             counters.Unread = candidateCount;
-            Copy(counters, candidateCount, result, completed: false);
+            Copy(counters, candidateCount, result, completed: false, candidateTotalKnown: true, candidateFetchMilliseconds: fetchMilliseconds);
             return result;
         }
 
@@ -281,7 +301,7 @@ public sealed class BatchCheckRunner
             && counters.Disabled == 0
             && counters.ReadIncomplete == 0
             && counters.Unread == 0;
-        Copy(counters, candidateCount, result, completed, stopSignal.StartedCount, fetchTimer.Elapsed.TotalMilliseconds);
+        Copy(counters, candidateCount, result, completed, stopSignal.StartedCount, candidateFetchMilliseconds: fetchMilliseconds, candidateTotalKnown: true);
         if (completed)
         {
             progress.Report(100);
@@ -290,7 +310,7 @@ public sealed class BatchCheckRunner
         return result;
     }
 
-    private (IReadOnlyList<Guid> Ordered, bool Complete) FetchCandidates(BatchLibraryScope scope, Counters counters, BatchStopSignal stopSignal)
+    private (IReadOnlyList<Guid> Ordered, bool Complete) FetchCandidates(BatchLibraryScope scope, Counters counters, BatchStopSignal stopSignal, out long capacityBytes)
     {
         var candidates = new List<Guid>();
         var seen = new HashSet<Guid>();
@@ -331,6 +351,7 @@ public sealed class BatchCheckRunner
         // A stable, explicit Guid order fixes the identity sequence for this run without depending on media names
         // or the native paging order.
         candidates.Sort();
+        capacityBytes = (long)candidates.Capacity * 16 + (long)seen.Count * 24;
         return (candidates, complete);
     }
 
@@ -406,10 +427,21 @@ public sealed class BatchCheckRunner
 
     private async Task ProcessCandidateAsync(BaseItem item, IReadOnlyList<Guid> scopeLibraryIds, Counters counters, BatchStopSignal stopSignal)
     {
+        // Re-read the current native object first. The candidate identity captured when the fixed set was created
+        // may be stale by the time this consumer actually processes it: the native object may have been deleted,
+        // changed type, moved out of the selected scope or been assigned a different primary version. The current
+        // object is used for the project identity, source key and own-source resolution below.
+        var current = _candidateSource.GetCurrentItem(item);
+        if (current is null || current.GetType() != item.GetType())
+        {
+            Interlocked.Increment(ref counters.Missing);
+            return;
+        }
+
         IReadOnlyList<MediaSourceInfo> sources;
         try
         {
-            sources = _native.GetStaticMediaSources(item, false);
+            sources = _native.GetStaticMediaSources(current, false);
         }
         catch (Exception exception)
         {
@@ -418,20 +450,20 @@ public sealed class BatchCheckRunner
             return;
         }
 
-        var source = ResolveOwnSource(item, sources);
+        var source = ResolveOwnSource(current, sources);
         if (source is null)
         {
             Interlocked.Increment(ref counters.Missing);
             return;
         }
 
-        var projectItemId = item is Video video && video.PrimaryVersionId is { } primaryVersionId
+        var projectItemId = current is Video video && video.PrimaryVersionId is { } primaryVersionId
             ? primaryVersionId
-            : item.Id;
-        var sourceKey = item.Id.ToString("N", CultureInfo.InvariantCulture);
+            : current.Id;
+        var sourceKey = current.Id.ToString("N", CultureInfo.InvariantCulture);
         try
         {
-            var outcome = await _optimizer.CheckBatchSourceAsync(_native, projectItemId, item, source, sourceKey, stopSignal, scopeLibraryIds, _candidateSource)
+            var outcome = await _optimizer.CheckBatchSourceAsync(_native, projectItemId, current, source, sourceKey, stopSignal, scopeLibraryIds, _candidateSource)
                 .ConfigureAwait(false);
             CountOutcome(counters, outcome);
         }
@@ -531,7 +563,7 @@ public sealed class BatchCheckRunner
         }
     }
 
-    private static void Copy(Counters counters, int candidateCount, BatchRunResult result, bool completed, int actualProbeCalls = 0, double candidateFetchMilliseconds = 0)
+    private static void Copy(Counters counters, int candidateCount, BatchRunResult result, bool completed, int actualProbeCalls = 0, double candidateFetchMilliseconds = 0, bool candidateTotalKnown = true)
     {
         result.RawCandidateCount = counters.RawCandidateCount;
         result.CandidateCount = candidateCount;
@@ -549,6 +581,7 @@ public sealed class BatchCheckRunner
         result.DuplicateIdCount = counters.DuplicateIdCount;
         result.ActualProbeCalls = actualProbeCalls;
         result.CandidateFetchMilliseconds = candidateFetchMilliseconds;
+        result.CandidateTotalKnown = candidateTotalKnown;
         result.BatchReadMilliseconds = counters.BatchReadMilliseconds;
         result.BatchReadCount = counters.BatchReadCount;
         result.BatchReadAllocatedBytes = counters.BatchReadAllocatedBytes;

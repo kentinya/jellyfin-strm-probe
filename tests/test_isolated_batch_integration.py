@@ -104,13 +104,39 @@ class BatchScriptGuardTests(unittest.TestCase):
 
     def test_restore_state_reports_not_restored_when_the_api_is_unavailable(self):
         # With no reachable isolated server the restore helper must report the failure instead of claiming success.
-        with patch.object(batch, "CONFIGURATION_FILE", Path("/nonexistent/config.xml")):
+        # The isolated API and restart are stubbed so this guard test has no real server side effect.
+        with patch.object(batch, "CONFIGURATION_FILE", Path("/nonexistent/config.xml")), \
+                patch.object(batch.base, "JellyfinApi", side_effect=RuntimeError("no server")), \
+                patch.object(batch.base, "restart_isolated_server", side_effect=RuntimeError("no server")):
             status = batch.restore_state(b"<x/>", {"task": [{"Type": "DailyTrigger"}]})
         self.assertIn("NOT RESTORED", status)
 
+    def test_slow_request_counts_counts_each_actual_start(self):
+        logs = type("Logs", (), {"returncode": 0, "stdout": "SLOW_MEDIA_REQUEST_STARTED abc\nSLOW_MEDIA_REQUEST_STARTED abc\nSLOW_MEDIA_REQUEST_STARTED def\n", "stderr": ""})()
+        with patch.object(batch.base, "run", return_value=logs):
+            counts = batch.slow_request_counts("container")
+        # A set subtraction cannot detect the same request id starting twice; exact counts must.
+        self.assertEqual(counts, {"abc": 2, "def": 1})
+
+    def test_require_cost_fields_rejects_missing_and_negative_values(self):
+        complete = {field: 1 for field in batch.REQUIRED_COST_FIELDS}
+        batch.require_cost_fields(complete, "summary")
+        missing = dict(complete)
+        missing.pop("candidate_set_capacity_bytes")
+        with self.assertRaises(RuntimeError):
+            batch.require_cost_fields(missing, "summary")
+        negative = dict(complete, batch_reads=-1)
+        with self.assertRaises(RuntimeError):
+            batch.require_cost_fields(negative, "summary")
+
+    def test_parse_summary_float_keeps_fractional_timings(self):
+        line = "STRM media information check finished: candidate fetch 9.4124 ms, batch read 29.7333 ms."
+        self.assertAlmostEqual(batch.parse_summary_float(line, "candidate fetch"), 9.4124)
+        self.assertAlmostEqual(batch.parse_summary_float(line, "batch read"), 29.7333)
+
     def test_scenario_choices_include_stop_sharing_scope_and_failure(self):
         parser_source = (ROOT / "scripts" / "run_isolated_batch_integration.py").read_text(encoding="utf-8")
-        for scenario in ("suite", "discovery", "stop", "sharing", "scope", "failure"):
+        for scenario in ("suite", "discovery", "stop", "sharing", "scope", "failure", "shared_stop", "mixed"):
             self.assertIn(scenario, parser_source)
 
     def test_summary_fields_reads_the_reconciliation_counters(self):

@@ -805,11 +805,219 @@ public sealed class BatchCheckTests
         // The native object changed type after the candidate set was fixed: admission must refuse it.
         manager.Current = new MediaBrowser.Controller.Entities.Audio.Audio { Id = item.Id, Path = item.Path };
         Assert.IsFalse(source.IsInScope(item, [libraryA]), "A candidate that changed type must not remain in scope.");
+
+        // The native object was re-pointed to a different primary version: the captured project identity, source
+        // key and coordination key no longer describe it, so admission must refuse it.
+        manager.Current = new Video { Id = item.Id, Path = item.Path, PrimaryVersionId = Guid.NewGuid() };
+        Assert.IsFalse(source.IsInScope(item, [libraryA]), "A candidate re-pointed to another primary version must not remain in scope.");
     }
 
     [TestMethod]
-    public void BatchStopSignalAbortRollsBackAProvisionalStartCount()
+    public async Task BatchUsesTheCurrentProjectIdentityAfterTheObjectIsReRead()
     {
+        using var harness = new BatchHarness();
+        var item = harness.AddSupported("https://media.example.invalid/a.mp4", ValidSha1, 10);
+        harness.CandidateIds = [item.Id];
+        var newProject = Guid.NewGuid();
+        // The current native object keeps the same id and type but now belongs to another primary version. The
+        // runner must commit the baseline under the current project, never under the stale captured one.
+        harness.CurrentItemOverride = _ => new Video { Id = item.Id, Path = item.Path, ShortcutPath = item.ShortcutPath, IsShortcut = true, PrimaryVersionId = newProject };
+
+        var result = await harness.RunAsync();
+
+        Assert.AreEqual(1, result.FirstTrust);
+        Assert.IsNotNull(harness.Repository.Get(newProject, Key(item.Id)), "The current project identity must be used after the object is re-read.");
+        Assert.IsNull(harness.Repository.Get(item.Id, Key(item.Id)), "The stale captured project identity must not receive the baseline.");
+    }
+
+    [TestMethod]
+    public async Task BatchJoinedRunningUncommittedResultSettlesProbeIncompleteWithoutRetry()
+    {
+        using var harness = new BatchHarness();
+        var item = harness.AddSupported("https://media.example.invalid/a.mp4", ValidSha1, 10);
+        harness.CandidateIds = [item.Id];
+        await harness.RunAsync();
+        harness.WriteManifest(item, "https://media.example.invalid/a.mp4?new", ValidSha1, 10);
+        var currentHash = new StrmManifestReader().Read(item.Path).Manifest!.ContentHash;
+        var owner = await harness.Coordinator.AcquireAsync(item.Id, Key(item.Id), currentHash, CancellationToken.None);
+        Assert.IsTrue(harness.Coordinator.TryMarkStarted(owner.Item, out _));
+
+        var batch = harness.RunAsync();
+        await harness.WaitForSharedJoinAsync().WaitAsync(TimeSpan.FromSeconds(10));
+        // The joined owner actually ran and saved but conditionally refused the commit (the baseline changed or the
+        // write failed). This round already consumed the shared execution, so it must settle as probe incomplete
+        // instead of retrying within the same round or counting a reliable success.
+        harness.Coordinator.Complete(owner.Item, new MediaSourceInfo { Id = Key(item.Id), Path = item.ShortcutPath }, committed: false);
+        var result = await batch.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.AreEqual(0, harness.StartedProbes, "A joined non-commit must not trigger a same-round retry.");
+        Assert.AreEqual(1, result.ProbeIncomplete, "A joined uncommitted execution must settle as probe incomplete.");
+        Assert.AreEqual(0, result.ReliableSuccess);
+        Assert.AreEqual(0, result.Revoked);
+    }
+
+    [TestMethod]
+    public async Task BatchStoppedJoinedRunningUncommittedResultCountsProbeIncomplete()
+    {
+        using var harness = new BatchHarness();
+        var item = harness.AddSupported("https://media.example.invalid/a.mp4", ValidSha1, 10);
+        harness.CandidateIds = [item.Id];
+        await harness.RunAsync();
+        harness.WriteManifest(item, "https://media.example.invalid/a.mp4?new", ValidSha1, 10);
+        var currentHash = new StrmManifestReader().Read(item.Path).Manifest!.ContentHash;
+        var owner = await harness.Coordinator.AcquireAsync(item.Id, Key(item.Id), currentHash, CancellationToken.None);
+        Assert.IsTrue(harness.Coordinator.TryMarkStarted(owner.Item, out _));
+        using var stop = new CancellationTokenSource();
+        var batch = harness.RunAsync(stop.Token);
+        await harness.WaitForSharedJoinAsync().WaitAsync(TimeSpan.FromSeconds(10));
+        stop.Cancel();
+        harness.Coordinator.Complete(owner.Item, new MediaSourceInfo { Id = Key(item.Id), Path = item.ShortcutPath }, committed: false);
+        var result = await batch.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.AreEqual(1, result.ProbeIncomplete, "A stopped joined uncommitted execution must count as probe incomplete, not revoked.");
+        Assert.AreEqual(0, result.Revoked);
+    }
+
+    [TestMethod]
+    public async Task BatchJoinedRunningChangedManifestStillSettlesWithoutRetry()
+    {
+        using var harness = new BatchHarness();
+        var item = harness.AddSupported("https://media.example.invalid/a.mp4", ValidSha1, 10);
+        harness.CandidateIds = [item.Id];
+        await harness.RunAsync();
+        harness.WriteManifest(item, "https://media.example.invalid/a.mp4?version2", ValidSha1, 10);
+        var currentHash = new StrmManifestReader().Read(item.Path).Manifest!.ContentHash;
+        var owner = await harness.Coordinator.AcquireAsync(item.Id, Key(item.Id), currentHash, CancellationToken.None);
+        Assert.IsTrue(harness.Coordinator.TryMarkStarted(owner.Item, out _));
+
+        var batch = harness.RunAsync();
+        await harness.WaitForSharedJoinAsync().WaitAsync(TimeSpan.FromSeconds(10));
+        // The STRM changed again while the joined execution was running, so the owner does not commit. The batch
+        // must settle this round's joined execution as incomplete rather than starting another probe immediately.
+        harness.WriteManifest(item, "https://media.example.invalid/a.mp4?version3", ValidSha1, 10);
+        harness.Coordinator.Complete(owner.Item, new MediaSourceInfo { Id = Key(item.Id), Path = "https://media.example.invalid/a.mp4?version2" }, committed: false);
+        var result = await batch.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.AreEqual(0, harness.StartedProbes, "A manifest change after joining must not trigger a new probe within the same round.");
+        Assert.AreEqual(1, result.ProbeIncomplete);
+    }
+
+    [TestMethod]
+    public async Task BatchPartialFetchFailureRetainsAlreadyFetchedRawIds()
+    {
+        using var harness = new BatchHarness();
+        harness.CandidateIds = [Guid.NewGuid()];
+        harness.ScopeLibraryCount = 2;
+        harness.BeforeCandidateFetch = () =>
+        {
+            if (harness.CandidateFetchCalls == 2)
+            {
+                harness.FailCandidateFetch = true;
+            }
+        };
+
+        var result = await harness.RunAsync();
+
+        Assert.IsTrue(result.CandidateFetchFailed);
+        Assert.AreEqual(1L, result.RawCandidateCount, "The first native query returned one id before the second query failed; that raw count must be retained.");
+        Assert.IsFalse(result.CandidateTotalKnown, "A partial fetch must not publish a complete candidate total.");
+        Assert.AreEqual(0, harness.BatchReadCalls);
+    }
+
+    [TestMethod]
+    public async Task BatchInterruptedFetchReportsUnknownTotalAndKeepsFetchCost()
+    {
+        using var harness = new BatchHarness();
+        var item = harness.AddSupported("https://media.example.invalid/a.mp4", ValidSha1, 10);
+        harness.CandidateIds = [item.Id];
+        harness.ScopeLibraryCount = 2;
+        using var stop = new CancellationTokenSource();
+        harness.AfterCandidateFetch = stop.Cancel;
+
+        var result = await harness.RunAsync(stop.Token);
+
+        Assert.IsTrue(result.StopRequested);
+        Assert.AreEqual(0, result.CandidateCount, "An interrupted first-library fetch is only a partial id set; the complete candidate total is unknown.");
+        Assert.IsFalse(result.CandidateTotalKnown, "The result must mark the candidate total as unknown.");
+        Assert.AreEqual(0, harness.ProbeCalls);
+    }
+
+    [TestMethod]
+    public async Task BatchReportsCandidateSetCapacityForTheFixedIdentitySet()
+    {
+        using var harness = new BatchHarness();
+        var ids = new List<Guid>();
+        for (var index = 0; index < 2000; index++)
+        {
+            ids.Add(Guid.NewGuid());
+        }
+
+        harness.CandidateIds = ids;
+        harness.SynthesizeBatchObjects = true;
+
+        var result = await harness.RunAsync();
+
+        Assert.AreEqual(2000, result.CandidateCount);
+        Assert.IsTrue(result.CandidateSetCapacityBytes > 0, "The O(N) candidate identity capacity must be measured and reported.");
+        Assert.IsTrue(result.CandidateFetchMilliseconds >= 0, "The candidate fetch cost must be reported.");
+        Assert.IsTrue(result.CandidateTotalKnown, "A complete fetch reports a known total.");
+    }
+
+    [TestMethod]
+    public async Task BatchStopConfirmedDuringSynchronousObjectReadDoesNotStartWork()
+    {
+        using var harness = new BatchHarness();
+        var item = harness.AddSupported("https://media.example.invalid/a.mp4", ValidSha1, 10);
+        harness.CandidateIds = [item.Id];
+        await harness.RunAsync();
+        harness.WriteManifest(item, "https://media.example.invalid/a.mp4?sig=changed", ValidSha1, 10);
+        using var stop = new CancellationTokenSource();
+        // A synchronous native object query cannot be interrupted. The stop is confirmed while it is in flight, and
+        // the runner must not continue into a probe after the read returns.
+        harness.DuringBatchRead = stop.Cancel;
+
+        var result = await harness.RunAsync(stop.Token);
+
+        Assert.IsTrue(result.StopRequested);
+        Assert.AreEqual(0, harness.ProbeCalls, "A stop confirmed during the object read must not start a probe afterwards.");
+        Assert.AreEqual(0, harness.StartedProbes);
+        Assert.IsFalse(result.Completed);
+    }
+
+    [TestMethod]
+    public async Task BatchStopWhileWaitingForAPermitRevokesWithoutStarting()
+    {
+        using var harness = new BatchHarness();
+        // Two different sources with a single global permit: the first starts and blocks, the second waits.
+        var first = harness.AddSupported("https://media.example.invalid/a.mp4", ValidSha1, 10);
+        var second = harness.AddSupported("https://media.example.invalid/b.mp4", ValidSha1, 10);
+        harness.CandidateIds = [first.Id, second.Id];
+        await harness.RunAsync();
+        harness.WriteManifest(first, "https://media.example.invalid/a.mp4?sig=changed", ValidSha1, 10);
+        harness.WriteManifest(second, "https://media.example.invalid/b.mp4?sig=changed", ValidSha1, 10);
+        using var coordinator = new ProbeCoordinator(1);
+        harness.ReplaceCoordinator(coordinator);
+        harness.BlockProbe = true;
+        using var stop = new CancellationTokenSource();
+        harness.AfterProbeStart = () =>
+        {
+            harness.ProbeStarted.TrySetResult();
+            stop.Cancel();
+        };
+
+        var run = harness.RunAsync(stop.Token);
+        await harness.ProbeStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        harness.ReleaseProbe.TrySetResult();
+        var result = await run.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.IsTrue(result.StopRequested);
+        Assert.AreEqual(1, result.ReliableSuccess, "The already started probe must still finish and commit.");
+        Assert.AreEqual(1, result.Revoked, "The source waiting for a permit must be revoked without starting.");
+        Assert.AreEqual(1, harness.StartedProbes, "Only the source that actually started may probe.");
+    }
+
+    [TestMethod]
+    public void BatchStopSignalAbortRollsBackAProvisionalStartCount()    {
         using var signal = new BatchStopSignal(CancellationToken.None);
         Assert.IsTrue(signal.TryBeginProbe(), "A probe may start before any stop is confirmed.");
         Assert.AreEqual(1, signal.StartedCount);
@@ -876,7 +1084,13 @@ public sealed class BatchCheckTests
 
         public IStrmFingerprintRepository Repository { get; set; }
 
-        public ProbeCoordinator Coordinator { get; }
+        public ProbeCoordinator Coordinator { get; private set; }
+
+        /// <summary>Replaces the coordinator with one that has a different global limit for a focused test.</summary>
+        public void ReplaceCoordinator(ProbeCoordinator coordinator)
+        {
+            Coordinator = coordinator;
+        }
 
         public List<Guid> CandidateIds { get; set; } = [];
 
@@ -898,6 +1112,9 @@ public sealed class BatchCheckTests
 
         public bool FailBatchRead { get; set; }
 
+        /// <summary>Gets or sets a test-only hook invoked while a synchronous native object read is in flight.</summary>
+        public Action? DuringBatchRead { get; set; }
+
         public bool ReturnExtraObjects { get; set; }
 
         public bool SynthesizeBatchObjects { get; set; }
@@ -917,6 +1134,9 @@ public sealed class BatchCheckTests
         public string? SourceIdOverride { get; set; }
 
         public Func<Guid, bool>? InScopeOverride { get; set; }
+
+        /// <summary>Gets or sets a test-only override for the current native object re-read at admission.</summary>
+        public Func<BaseItem, BaseItem?>? CurrentItemOverride { get; set; }
 
         public IMediaSourceManager? ReviewerNative { get; private set; }
 
@@ -1117,6 +1337,7 @@ public sealed class BatchCheckTests
         internal IReadOnlyList<BaseItem> ReadBatch(IReadOnlyList<Guid> ids)
         {
             BatchReadCalls++;
+            DuringBatchRead?.Invoke();
             if (FailBatchRead)
             {
                 throw new IOException("Injected batch read failure.");
@@ -1241,6 +1462,8 @@ public sealed class BatchCheckTests
             {
                 return _harness.InScopeOverride?.Invoke(item.Id) ?? true;
             }
+
+            public BaseItem? GetCurrentItem(BaseItem item) => _harness.CurrentItemOverride?.Invoke(item) ?? item;
         }
     }
 

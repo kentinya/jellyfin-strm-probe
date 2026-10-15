@@ -135,6 +135,15 @@ public interface IBatchScopeVerifier
 {
     /// <summary>Checks whether the current object still belongs to one of the selected libraries.</summary>
     bool IsInScope(BaseItem item, IReadOnlyList<Guid> scopeLibraryIds);
+
+    /// <summary>
+    /// Re-reads the current native object for a candidate. It returns <c>null</c> when the object can no longer
+    /// be resolved. The caller uses the returned object as the current identity (project, source key and path)
+    /// instead of trusting the object captured before the batch read or before waiting for a permit.
+    /// </summary>
+    /// <param name="item">The captured candidate object.</param>
+    /// <returns>The current native object, or <c>null</c> when it can no longer be resolved.</returns>
+    BaseItem? GetCurrentItem(BaseItem item) => item;
 }
 
 public sealed class LibraryBatchCandidateSource : IBatchCandidateSource
@@ -185,18 +194,26 @@ public sealed class LibraryBatchCandidateSource : IBatchCandidateSource
             return true;
         }
 
+        // Re-read the current object through the native library instead of trusting the stale candidate. A
+        // candidate that was deleted, moved out of the selected libraries, changed type or was re-pointed to a
+        // different primary version while it was queued must not be probed from a stale object, so admission
+        // verifies the current native identity and relationship rather than only the captured parent chain.
+        var current = GetCurrentItem(item);
+        if (current is null || current.GetType() != item.GetType())
+        {
+            return false;
+        }
+
+        if (GetStableProjectId(current) != GetStableProjectId(item))
+        {
+            // The current object now belongs to a different project identity (its primary version changed). The
+            // captured decision, source key and coordination key no longer describe it, so it is refused and
+            // re-discovered in the next round from the current library state.
+            return false;
+        }
+
         try
         {
-            // Re-read the current object through the native library instead of trusting the stale candidate. A
-            // candidate that was deleted, moved out of the selected libraries or changed type while it was queued
-            // must not be probed from a stale object, so admission verifies the current native identity and
-            // relationship rather than only the captured object's parent chain.
-            var current = _libraryManager.GetItemById(item.Id);
-            if (current is null || current.GetType() != item.GetType())
-            {
-                return false;
-            }
-
             var folders = _libraryManager.GetCollectionFolders(current);
             return folders.Any(folder => scopeLibraryIds.Contains(folder.Id));
         }
@@ -204,6 +221,29 @@ public sealed class LibraryBatchCandidateSource : IBatchCandidateSource
         {
             // An item that is no longer resolvable to a collection folder is no longer in scope.
             return false;
+        }
+    }
+
+    /// <summary>
+    /// Gets the stable project identity used by the batch: the native primary version id when present, otherwise
+    /// the item id. It matches the project key used for the fingerprint and the coordinator.
+    /// </summary>
+    internal static Guid GetStableProjectId(BaseItem item)
+    {
+        return item is Video video && video.PrimaryVersionId is { } primaryVersionId
+            ? primaryVersionId
+            : item.Id;
+    }
+
+    public BaseItem? GetCurrentItem(BaseItem item)
+    {
+        try
+        {
+            return _libraryManager.GetItemById(item.Id);
+        }
+        catch (Exception)
+        {
+            return null;
         }
     }
 }

@@ -94,6 +94,14 @@ public sealed class ProbeWorkItem
     /// </summary>
     internal SemaphoreSlim? Permit;
 
+    /// <summary>
+    /// Gets a value indicating whether the owner observed a fingerprint store fault after the native probe
+    /// actually started. It is set exactly once at settlement so a same-source batch waiter can report the
+    /// execution-stage store unavailability instead of silently classifying the joined work as a generic
+    /// incomplete probe. It stays <c>false</c> for a reservation that never reached a store fault.
+    /// </summary>
+    public bool FingerprintStoreUnavailable { get; internal set; }
+
     internal Task<MediaSourceInfo?> Result => _completion.Task;
 
     internal void Complete(MediaSourceInfo? result)
@@ -271,7 +279,7 @@ public sealed class ProbeCoordinator : IDisposable
     public void Complete(ProbeWorkItem item, MediaSourceInfo? result)
     {
         ArgumentNullException.ThrowIfNull(item);
-        Finish(item, result, exception: null, committed: false);
+        Finish(item, result, exception: null, committed: false, fingerprintStoreUnavailable: false);
     }
 
     /// <summary>
@@ -285,7 +293,23 @@ public sealed class ProbeCoordinator : IDisposable
     public void Complete(ProbeWorkItem item, MediaSourceInfo? result, bool committed)
     {
         ArgumentNullException.ThrowIfNull(item);
-        Finish(item, result, exception: null, committed);
+        Finish(item, result, exception: null, committed, fingerprintStoreUnavailable: false);
+    }
+
+    /// <summary>
+    /// Releases the running registration and the global permit, then publishes the shared result together with
+    /// the owner's conditional-commit outcome and the execution-stage fingerprint store state. A same-source batch
+    /// waiter uses both to report this run's execution as a reliable success or as an execution-stage store fault,
+    /// never as a generic incomplete probe or a revoked candidate.
+    /// </summary>
+    /// <param name="item">The settled work item.</param>
+    /// <param name="result">The accepted media source, or <c>null</c>.</param>
+    /// <param name="committed"><c>true</c> only when the owner conditionally committed the verified result.</param>
+    /// <param name="fingerprintStoreUnavailable"><c>true</c> when the verified result could not be committed because the store faulted.</param>
+    public void Complete(ProbeWorkItem item, MediaSourceInfo? result, bool committed, bool fingerprintStoreUnavailable)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        Finish(item, result, exception: null, committed, fingerprintStoreUnavailable);
     }
 
     /// <summary>
@@ -295,7 +319,7 @@ public sealed class ProbeCoordinator : IDisposable
     {
         ArgumentNullException.ThrowIfNull(item);
         ArgumentNullException.ThrowIfNull(exception);
-        Finish(item, result: null, exception, committed: false);
+        Finish(item, result: null, exception, committed: false, fingerprintStoreUnavailable: false);
     }
 
     /// <summary>
@@ -305,7 +329,7 @@ public sealed class ProbeCoordinator : IDisposable
     public void Abandon(ProbeWorkItem item)
     {
         ArgumentNullException.ThrowIfNull(item);
-        Finish(item, result: null, exception: null, committed: false);
+        Finish(item, result: null, exception: null, committed: false, fingerprintStoreUnavailable: false);
     }
 
     public void Dispose()
@@ -353,7 +377,7 @@ public sealed class ProbeCoordinator : IDisposable
         }
     }
 
-    private void Finish(ProbeWorkItem item, MediaSourceInfo? result, Exception? exception, bool committed)
+    private void Finish(ProbeWorkItem item, MediaSourceInfo? result, Exception? exception, bool committed, bool fingerprintStoreUnavailable)
     {
         var key = (item.ProjectItemId, item.SourceKey);
         SemaphoreSlim? permit;
@@ -374,6 +398,7 @@ public sealed class ProbeCoordinator : IDisposable
         // Publish the commit outcome before resolving the shared result so a waiter that observes the completed
         // result also observes the owner's this-run conditional-commit association.
         item.Committed = exception is null && committed;
+        item.FingerprintStoreUnavailable = exception is null && fingerprintStoreUnavailable;
         try
         {
             if (exception is null)

@@ -50,15 +50,20 @@ public sealed class StrmProbeScheduledTask : IScheduledTask, IConfigurableSchedu
 
     public async Task ExecuteAsync(IProgress<double> progress, CancellationToken cancellationToken)
     {
+        // A redacted entry marker records the exact moment a new round actually began querying candidates. The
+        // isolated stop scenario uses it to prove that a manual or timer trigger during the old round's settlement
+        // never actually entered a new round, which a completed-summary count alone cannot show.
+        _logger.LogInformation("STRM media information check entered: stop requested at entry {StopAtEntry}.", cancellationToken.IsCancellationRequested);
         var result = await _runner.RunAsync(progress, cancellationToken).ConfigureAwait(false);
 
         // The summary is always emitted, independent of DetailedLog, so failure and recovery feedback does not
         // depend on verbose logging. It carries no signed URL, token, cookie or private path.
         _logger.LogInformation(
-            "STRM media information check finished: candidates {Candidates} (raw {RawCandidates}, duplicates {Duplicates}), checked {Checked}, skipped {Skipped}, first trust {FirstTrust}, need probe {NeedProbe}, reliable success {ReliableSuccess}, probe incomplete {ProbeIncomplete}, check-stage incomplete {CheckStageIncomplete}, not processed {NotProcessed}, missing {Missing}, revoked {Revoked}, read incomplete {ReadIncomplete}, unread {Unread}, actual probe calls {ActualProbeCalls}, candidate fetch {CandidateFetchMs} ms, candidate fetch allocated {CandidateFetchBytes} bytes, batch reads {BatchReads}, batch read {BatchReadMs} ms, batch read allocated {BatchReadBytes} bytes, stop requested {StopRequested}, store unavailable {StoreUnavailable}, scope unavailable {ScopeUnavailable}, candidate fetch failed {CandidateFetchFailed}, disabled {Disabled}.",
+            "STRM media information check finished: candidates {Candidates} (raw {RawCandidates}, duplicates {Duplicates}, total known {TotalKnown}), checked {Checked}, skipped {Skipped}, first trust {FirstTrust}, need probe {NeedProbe}, reliable success {ReliableSuccess}, probe incomplete {ProbeIncomplete}, check-stage incomplete {CheckStageIncomplete}, not processed {NotProcessed}, missing {Missing}, revoked {Revoked}, read incomplete {ReadIncomplete}, unread {Unread}, actual probe calls {ActualProbeCalls}, candidate fetch {CandidateFetchMs} ms, candidate fetch allocated {CandidateFetchBytes} bytes, candidate set capacity {CandidateSetCapacityBytes} bytes, batch reads {BatchReads}, batch read {BatchReadMs} ms, batch read allocated {BatchReadBytes} bytes, stop requested {StopRequested}, store unavailable {StoreUnavailable}, scope unavailable {ScopeUnavailable}, candidate fetch failed {CandidateFetchFailed}, disabled {Disabled}.",
             result.CandidateCount,
             result.RawCandidateCount,
             result.DuplicateIdCount,
+            result.CandidateTotalKnown,
             result.Checked,
             result.Skipped,
             result.FirstTrust,
@@ -74,6 +79,7 @@ public sealed class StrmProbeScheduledTask : IScheduledTask, IConfigurableSchedu
             result.ActualProbeCalls,
             result.CandidateFetchMilliseconds,
             result.CandidateFetchAllocatedBytes,
+            result.CandidateSetCapacityBytes,
             result.BatchReadCount,
             result.BatchReadMilliseconds,
             result.BatchReadAllocatedBytes,

@@ -46,6 +46,29 @@ TASK_DATA_DIRECTORY = ROOT / "artifacts" / "dev-env" / "config" / "config" / "Sc
 MAX_WAIT_SECONDS = 120
 TASK_KEY = "StrmProbeOptimizerBatchCheck"
 
+# Cleanup failures (temporary library entries that could not be removed or a restore that could not be verified)
+# are recorded here and turned into a final failure in main(). A shared STRM/config restore succeeding does not
+# prove the per-scenario temporary entries were removed.
+CLEANUP_PROBLEMS: list[str] = []
+
+
+def record_cleanup_problem(message: str) -> None:
+    CLEANUP_PROBLEMS.append(message)
+
+
+def cleanup_fixtures(api: base.JellyfinApi, names: list[str]) -> None:
+    """Remove this scenario's temporary library entries and verify they are gone. A failure is recorded so the
+    run cannot report PASS while the isolated instance still contains leftover entries."""
+    try:
+        api.refresh_library()
+    except Exception as error:
+        record_cleanup_problem(f"library refresh during cleanup failed: {type(error).__name__}")
+    for name in names:
+        try:
+            api.wait_for_named_library_item_absent(name)
+        except Exception as error:
+            record_cleanup_problem(f"temporary library item {name!r} was not removed: {type(error).__name__}")
+
 
 def find_task(api: base.JellyfinApi) -> dict:
     tasks = base.request_json(api.base_url + "/ScheduledTasks", headers=api.headers, timeout=20)
@@ -115,6 +138,13 @@ def batch_events(container: str) -> list[str]:
     return [line for line in (logs.stdout + logs.stderr).splitlines() if "STRM media information check finished" in line]
 
 
+def batch_run_entries(container: str) -> list[str]:
+    """Return the redacted markers for every round that actually entered ExecuteAsync and began a run."""
+    logs = base.run(["docker", "logs", "--tail", "8000", container], timeout=20)
+    base.require(logs.returncode == 0, "Could not read the isolated Jellyfin container logs.")
+    return [line for line in (logs.stdout + logs.stderr).splitlines() if "STRM media information check entered" in line]
+
+
 def latest_batch_summary(container: str) -> dict:
     lines = batch_events(container)
     return {"line": base.safe_event(lines[-1]) if lines else None, "count": len(lines)}
@@ -130,7 +160,17 @@ def parse_summary_field(line: str, field: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
-def summary_fields(line: str | None) -> dict[str, int | bool | None]:
+def parse_summary_float(line: str, field: str) -> float | None:
+    """Extract one numeric (possibly fractional) measurement from the redacted batch summary line."""
+    if line is None:
+        return None
+    import re
+
+    match = re.search(rf"{re.escape(field)}\s+(\d+(?:\.\d+)?)", line)
+    return float(match.group(1)) if match else None
+
+
+def summary_fields(line: str | None) -> dict[str, int | float | bool | None]:
     """Extract the redacted batch summary counters needed for reconciliation."""
     if line is None:
         return {}
@@ -151,12 +191,14 @@ def summary_fields(line: str | None) -> dict[str, int | bool | None]:
         "read_incomplete": parse_summary_field(line, "read incomplete"),
         "unread": parse_summary_field(line, "unread"),
         "actual_probe_calls": parse_summary_field(line, "actual probe calls"),
-        "candidate_fetch_ms": parse_summary_field(line, "candidate fetch"),
+        "candidate_fetch_ms": parse_summary_float(line, "candidate fetch"),
         "candidate_fetch_allocated_bytes": parse_summary_field(line, "candidate fetch allocated"),
+        "candidate_set_capacity_bytes": parse_summary_field(line, "candidate set capacity"),
         "batch_reads": parse_summary_field(line, "batch reads"),
-        "batch_read_ms": parse_summary_field(line, "batch read"),
+        "batch_read_ms": parse_summary_float(line, "batch read"),
         "batch_read_allocated_bytes": parse_summary_field(line, "batch read allocated"),
     }
+    numeric["total_known"] = "total known True" in line
     numeric["stop_requested"] = "stop requested True" in line
     numeric["store_unavailable"] = "store unavailable True" in line
     numeric["scope_unavailable"] = "scope unavailable True" in line
@@ -165,17 +207,46 @@ def summary_fields(line: str | None) -> dict[str, int | bool | None]:
     return numeric
 
 
+# Cost and identity measurements that a run must actually report. A missing field is a hard failure rather
+# than a value that trivially satisfies a ``>= 0`` check.
+REQUIRED_COST_FIELDS = (
+    "candidate_fetch_ms",
+    "candidate_fetch_allocated_bytes",
+    "candidate_set_capacity_bytes",
+    "batch_reads",
+    "batch_read_ms",
+    "batch_read_allocated_bytes",
+)
+
+
+def require_cost_fields(fields: dict, summary_line: str | None) -> None:
+    """Require every cost/identity measurement to be present and non-negative."""
+    for field in REQUIRED_COST_FIELDS:
+        value = fields.get(field)
+        if value is None:
+            raise RuntimeError(f"The batch summary did not report {field!r}: {summary_line}.")
+        if value < 0:
+            raise RuntimeError(f"The batch summary reported a negative {field!r}: {summary_line}.")
+
+
 def slow_request_ids_started(container: str) -> set[str]:
     """Return the set of delayed-probe request ids that actually began, so per-source settlement can be reconciled."""
+    return set(slow_request_counts(container))
+
+
+def slow_request_counts(container: str) -> dict[str, int]:
+    """Return how many times each delayed-probe request id actually began. A set subtraction cannot detect the
+    same request id starting twice, so per-source reconciliation uses exact counts instead."""
     logs = base.run(["docker", "logs", "--tail", "8000", container], timeout=20)
     base.require(logs.returncode == 0, "Could not read the isolated media service counters.")
     marker = "SLOW_MEDIA_REQUEST_STARTED "
-    started: set[str] = set()
+    counts: dict[str, int] = {}
     for line in (logs.stdout + logs.stderr).splitlines():
         index = line.find(marker)
         if index >= 0:
-            started.add(line[index + len(marker):].strip())
-    return started
+            request_id = line[index + len(marker):].strip()
+            counts[request_id] = counts.get(request_id, 0) + 1
+    return counts
 
 
 def assert_summary_equations(fields: dict) -> None:
@@ -395,12 +466,10 @@ def scenario_all(api: base.JellyfinApi, container: str) -> dict:
         repeat_fields = summary_fields(summary_line)
         assert_summary_equations(repeat_fields)
         base.require(repeat_fields.get("actual_probe_calls") == 0, "An unchanged repeat run performed a new native probe.")
-        # The candidate identity set and native batch reads must report their time and allocation cost.
-        base.require((repeat_fields.get("candidate_fetch_ms") or 0) >= 0, f"The run did not report candidate fetch timing: {summary_line}.")
+        # The candidate identity set and native batch reads must report their time, allocation and capacity cost.
+        require_cost_fields(repeat_fields, summary_line)
         base.require((repeat_fields.get("batch_reads") or 0) >= 1, f"The run did not report its native batch read count: {summary_line}.")
-        base.require((repeat_fields.get("batch_read_ms") or 0) >= 0, f"The run did not report native batch read timing: {summary_line}.")
-        base.require((repeat_fields.get("candidate_fetch_allocated_bytes") or 0) >= 0, f"The run did not report candidate identity allocation: {summary_line}.")
-        base.require((repeat_fields.get("batch_read_allocated_bytes") or 0) >= 0, f"The run did not report batch read allocation: {summary_line}.")
+        base.require((repeat_fields.get("candidate_set_capacity_bytes") or 0) > 0, f"The run did not report the O(N) candidate identity capacity: {summary_line}.")
 
         # Restart and prove the persisted fingerprint and the native address survive.
         container = base.restart_isolated_server()
@@ -425,11 +494,7 @@ def scenario_all(api: base.JellyfinApi, container: str) -> dict:
         }
     finally:
         path.unlink(missing_ok=True)
-        try:
-            api.refresh_library()
-            api.wait_for_named_library_item_absent(name)
-        except Exception:
-            pass
+        cleanup_fixtures(api, [name])
     return result
 
 
@@ -480,7 +545,7 @@ def scenario_stop(api: base.JellyfinApi, container: str, media_container: str) -
 
         task = find_task(api)
         before_counts = base.media_request_counts(media_container)
-        before_started = slow_request_ids_started(media_container)
+        before_id_counts = slow_request_counts(media_container)
         before_summaries = len(batch_events(container))
         status, _ = api.request_response("/ScheduledTasks/Running/" + task["Id"], method="POST")
         base.require(status == 204, "Jellyfin did not accept the stop-scenario batch start.")
@@ -489,11 +554,15 @@ def scenario_stop(api: base.JellyfinApi, container: str, media_container: str) -
         deadline = time.monotonic() + 60
         started: set[str] = set()
         while time.monotonic() < deadline:
-            started = slow_request_ids_started(media_container) - before_started
+            current_id_counts = slow_request_counts(media_container)
+            started = {rid for rid, count in current_id_counts.items() if count > before_id_counts.get(rid, 0)}
             if started:
                 break
             time.sleep(0.2)
         base.require(bool(started), "The batch stop scenario never reached a real probe.")
+        # The current round itself added exactly one entry marker; capture that baseline before stopping so a
+        # settlement-window entry can be detected as an increment beyond it.
+        entries_during_round = len(batch_run_entries(container))
         stop_status = stop_task(api)
         base.require(stop_status == 204, "Jellyfin did not accept the native stop.")
 
@@ -512,6 +581,9 @@ def scenario_stop(api: base.JellyfinApi, container: str, media_container: str) -
             "A repeated manual start during settlement began a new probe.",
         )
         base.require(len(batch_events(container)) == before_summaries, "A new batch run completed during the settlement window.")
+        # A completed-summary count alone cannot prove no new round began querying candidates: the entry marker
+        # records the actual ExecuteAsync entry. During settlement no additional entry may have started.
+        base.require(len(batch_run_entries(container)) == entries_during_round, "A repeated manual start during settlement actually entered a new round.")
 
         final = wait_for_idle(api, timeout=MAX_WAIT_SECONDS)
         status_value = str((final.get("LastExecutionResult") or {}).get("Status", "")).lower()
@@ -539,17 +611,19 @@ def scenario_stop(api: base.JellyfinApi, container: str, media_container: str) -
 
         # After settlement the next run must succeed and must not re-probe the already committed source. The
         # still-revoked sources still carry their changed slow URL, so they probe once with their original id.
-        after_stop_started = slow_request_ids_started(media_container)
+        after_stop_id_counts = slow_request_counts(media_container)
         next_run = run_task(api)
         base.require(str((next_run.get("LastExecutionResult") or {}).get("Status", "")).lower() in {"completed", "0"}, "The next run after settlement did not complete.")
         next_summary = latest_batch_summary(container)["line"]
         next_fields = summary_fields(next_summary)
         assert_summary_equations(next_fields)
-        newly_started = slow_request_ids_started(media_container) - after_stop_started
+        next_id_counts = slow_request_counts(media_container)
         for name in committed:
-            base.require(slow_ids[name] not in newly_started, f"The next run re-probed the already committed source {name}.")
+            delta = next_id_counts.get(slow_ids[name], 0) - after_stop_id_counts.get(slow_ids[name], 0)
+            base.require(delta == 0, f"The next run re-probed the already committed source {name} {delta} time(s).")
         for name in revoked:
-            base.require(slow_ids[name] in newly_started, f"The next run did not re-check the revoked source {name}.")
+            delta = next_id_counts.get(slow_ids[name], 0) - after_stop_id_counts.get(slow_ids[name], 0)
+            base.require(delta >= 1, f"The next run did not re-check the revoked source {name} (delta {delta}).")
         return {
             "stop_http_status": stop_status,
             "task_status": status_value,
@@ -568,12 +642,7 @@ def scenario_stop(api: base.JellyfinApi, container: str, media_container: str) -
     finally:
         for path in paths:
             path.unlink(missing_ok=True)
-        try:
-            api.refresh_library()
-            for name in names:
-                api.wait_for_named_library_item_absent(name)
-        except Exception:
-            pass
+        cleanup_fixtures(api, names)
 
 
 def scenario_sharing(api: base.JellyfinApi, container: str, media_container: str) -> dict:
@@ -655,11 +724,7 @@ def _sharing_direction(api: base.JellyfinApi, container: str, media_container: s
         }
     finally:
         path.unlink(missing_ok=True)
-        try:
-            api.refresh_library()
-            api.wait_for_named_library_item_absent(name)
-        except Exception:
-            pass
+        cleanup_fixtures(api, [name])
 
 
 def wait_for_slow_start(media_container: str, before_counts: dict[str, int], timeout: int = 60) -> None:
@@ -741,12 +806,24 @@ def scenario_scope(api: base.JellyfinApi, container: str, media_container: str) 
         # Range outside the explicit selection is not processed at all.
         local_strm_item = api.named_library_item(local_strm_name)
         base.require(fingerprint_row(local_strm_item["Id"]) is None, "An out-of-scope library candidate was processed by an explicit partial scope.")
-        # The native multi-version pair is checked per source under one canonical project identity.
+        # The native multi-version pair is checked per source under one canonical project identity. Both source
+        # keys must share the same canonical item_id so the (item_id, source_key) association is unique.
         mv_primary_after = fingerprint_row(mv_primary["Id"])
         mv_alt_after = fingerprint_row(mv_alt["Id"])
         base.require(mv_primary_after is not None and mv_alt_after is not None, "The multi-version pair did not receive a fingerprint row for each version.")
+        base.require(
+            mv_primary_after["item_id"] == mv_alt_after["item_id"],
+            "Both versions of one project must share one canonical item_id (canonical item_id + source_key uniqueness).",
+        )
+        base.require(mv_primary_after["source_key"] != mv_alt_after["source_key"], "The two versions must keep distinct source keys under the shared project.")
         after_counts = base.media_request_counts(media_container)
-        base.require(after_counts["slow_requests_started"] == before_counts["slow_requests_started"], "First-trust candidates started a native probe.")
+        # This isolated environment has no pre-probed primary stream for the new fixtures, so every candidate is
+        # correctly decided to need a probe rather than first-trusted. Reconcile the real branch instead of
+        # asserting an unprobed first trust: every need-probe candidate must have produced exactly one actual call,
+        # and the out-of-scope library candidate must never be probed.
+        base.require(fields.get("need_probe") == fields.get("actual_probe_calls"), f"Every need-probe candidate must start exactly one native call: {summary_line}.")
+        base.require((fields.get("first_trust") or 0) == 0, f"A candidate without an existing primary stream must not be first-trusted: {summary_line}.")
+        base.require(after_counts["slow_requests_started"] == before_counts["slow_requests_started"], "A first-trust candidate started a native probe.")
 
         # A STRM added after the fixed set must be discovered by the next round, not the current one.
         with incremental_path.open("xb") as fixture:
@@ -763,12 +840,21 @@ def scenario_scope(api: base.JellyfinApi, container: str, media_container: str) 
         run_task(api)
         base.require(fingerprint_row(local_strm_item["Id"]) is not None, "The switched explicit scope did not process the local STRM candidate.")
 
-        # Disabling the plugin must stop the batch before it starts new probes.
+        # Disabling the plugin must stop the batch before it starts new probes. The check covers every media
+        # route (ordinary fixture, alternate and delayed), not only the slow counter.
         configure(api, {"Enabled": False, "PlaybackAutoCheck": True, "MaxConcurrentProbes": 2, "DetailedLog": False, "BatchAllLibraries": False, "BatchLibraryIds": strm_library})
         before_disabled = base.media_request_counts(media_container)
+        before_disabled_ids = slow_request_counts(media_container)
         run_task(api)
         after_disabled = base.media_request_counts(media_container)
-        base.require(after_disabled["slow_requests_started"] == before_disabled["slow_requests_started"], "A disabled plugin still started a new batch probe.")
+        after_disabled_ids = slow_request_counts(media_container)
+        base.require(
+            after_disabled["fixture"] == before_disabled["fixture"]
+            and after_disabled["fixture_alt"] == before_disabled["fixture_alt"]
+            and after_disabled["slow_requests_started"] == before_disabled["slow_requests_started"],
+            "A disabled plugin still started a new batch media request.",
+        )
+        base.require(after_disabled_ids == before_disabled_ids, "A disabled plugin still started a new delayed probe request.")
 
         result = {
             "strm_library_id": strm_library,
@@ -793,12 +879,169 @@ def scenario_scope(api: base.JellyfinApi, container: str, media_container: str) 
         incremental_path.unlink(missing_ok=True)
         try:
             configure(api, {"Enabled": True, "PlaybackAutoCheck": True, "MaxConcurrentProbes": 2, "DetailedLog": False, "BatchAllLibraries": True, "BatchLibraryIds": ""})
-            api.refresh_library()
-            for name in (*bulk_names, local_strm_name, mv_primary_name, mv_alt_name, incremental_name):
-                api.wait_for_named_library_item_absent(name)
-        except Exception:
-            pass
+        except Exception as error:
+            record_cleanup_problem(f"scope configuration restore failed: {type(error).__name__}")
+        cleanup_fixtures(api, [*bulk_names, local_strm_name, mv_primary_name, mv_alt_name, incremental_name])
     return result
+
+
+def scenario_shared_stop(api: base.JellyfinApi, container: str, media_container: str) -> dict:
+    """Stop a batch that joined an already running playback probe: the started probe must finish and commit, the
+    batch must settle as Cancelled without revoking the started work, and independent playback must still work while
+    the old round settles."""
+    nonce = uuid.uuid4().hex[:8]
+    name = f"Batch Shared Stop {nonce}"
+    other_name = f"Batch Shared Stop Other {nonce}"
+    path = ROOT / "artifacts" / "dev-env" / "strm" / (name + ".strm")
+    other_path = ROOT / "artifacts" / "dev-env" / "strm" / (other_name + ".strm")
+    try:
+        media, sha1 = media_bytes()
+        plain_url = "http://media:8080/fixture.mp4"
+        target_url = slow_url(plain_url, uuid.uuid4().hex)
+        with path.open("xb") as fixture:
+            fixture.write(base.write_versioned_fixture(FIXTURE.read_bytes(), plain_url, sha1, len(media)))
+        # A second independent source proves an unrelated playback still works while the batch settles.
+        other_url = base.unique_query_url(plain_url, nonce + "other")
+        with other_path.open("xb") as fixture:
+            fixture.write(base.write_versioned_fixture(FIXTURE.read_bytes(), other_url, sha1, len(media)))
+        api.refresh_library()
+        item = api.wait_for_named_library_item(name)
+        other_item = api.wait_for_named_library_item(other_name)
+        run_task(api)  # baseline first trust for both
+        path.write_bytes(base.write_versioned_fixture(path.read_bytes(), target_url, sha1, len(media)))
+
+        before_counts = base.media_request_counts(media_container)
+        playback_holder: dict = {}
+
+        def playback() -> None:
+            try:
+                playback_holder["result"] = base.call_playback(api, container, item["Id"], target_url)
+            except Exception as error:
+                playback_holder["error"] = type(error).__name__
+
+        # Playback starts and blocks on the slow route; the batch then joins that actually running probe.
+        worker = threading.Thread(target=playback, name="isolated-shared-stop-playback", daemon=True)
+        worker.start()
+        wait_for_slow_start(media_container, before_counts)
+        task = find_task(api)
+        status, _ = api.request_response("/ScheduledTasks/Running/" + task["Id"], method="POST")
+        base.require(status == 204, "Jellyfin did not accept the shared-stop batch start.")
+        # Give the batch a moment to join the running probe before stopping it.
+        joined_deadline = time.monotonic() + 20
+        while time.monotonic() < joined_deadline and task_state_name(find_task(api)) not in {"running", "1"}:
+            time.sleep(0.2)
+        stop_status = stop_task(api)
+        base.require(stop_status == 204, "Jellyfin did not accept the shared-stop stop.")
+        # While the old round settles, an unrelated source's playback must still succeed.
+        independent = base.call_playback(api, container, other_item["Id"], other_url)
+        base.require(independent["http_status"] == 200, "An independent playback failed while the stopped batch was settling.")
+
+        worker.join(timeout=120)
+        base.require(not worker.is_alive(), "The joined playback did not finish.")
+        base.require("error" not in playback_holder, "The joined playback failed outside the HTTP path.")
+        final = wait_for_idle(api, timeout=MAX_WAIT_SECONDS)
+        status_value = str((final.get("LastExecutionResult") or {}).get("Status", "")).lower()
+        base.require(status_value in {"cancelled", "2"}, f"The shared-stop batch did not record Cancelled: {status_value}.")
+        summary_line = latest_batch_summary(container)["line"]
+        fields = summary_fields(summary_line)
+        assert_summary_equations(fields)
+        # The batch joined one already running probe that actually completed and committed: it is this round's
+        # reliable success, never a revoked candidate, and the batch started no additional call of its own.
+        base.require(fields.get("actual_probe_calls") == 0, f"The batch must not start a probe it joined: {summary_line}.")
+        base.require(fields.get("reliable_success") == 1, f"The joined committed probe must count once as a reliable success: {summary_line}.")
+        base.require((fields.get("revoked") or 0) == 0, f"The joined started probe must not be revoked by the batch stop: {summary_line}.")
+        row = fingerprint_row(item["Id"])
+        base.require(row is not None and row["url_hash"] == base.expected_url_hash(target_url), f"The joined probe did not commit the new address after the stop: {row}.")
+        after_counts = base.media_request_counts(media_container)
+        base.require(after_counts["slow_requests_started"] - before_counts["slow_requests_started"] == 1, "The shared probe must run exactly once.")
+        return {
+            "task_status": status_value,
+            "stop_http_status": stop_status,
+            "joined_actual_probe_calls": fields.get("actual_probe_calls"),
+            "joined_reliable_success": fields.get("reliable_success"),
+            "joined_revoked": fields.get("revoked"),
+            "shared_probe_requests": after_counts["slow_requests_started"] - before_counts["slow_requests_started"],
+            "independent_playback_http_status": independent["http_status"],
+            "committed_after_stop": True,
+            "summary_line": summary_line,
+        }
+    finally:
+        path.unlink(missing_ok=True)
+        other_path.unlink(missing_ok=True)
+        cleanup_fixtures(api, [name, other_name])
+
+
+def scenario_mixed(api: base.JellyfinApi, container: str, media_container: str) -> dict:
+    """Different-source batch probes must not exceed the configured startup concurrency, and an independent native
+    FullRefresh must not be gated by the plugin pool."""
+    nonce = uuid.uuid4().hex[:8]
+    names = [f"Batch Mixed {index} {nonce}" for index in range(3)]
+    paths: list[Path] = []
+    slow_ids: dict[str, str] = {}
+    try:
+        media, sha1 = media_bytes()
+        plain_url = "http://media:8080/fixture.mp4"
+        for name in names:
+            paths.append(temporary_fixture(name, plain_url, sha1, len(media)))
+        api.refresh_library()
+        items = {name: api.wait_for_named_library_item(name) for name in names}
+        run_task(api)  # baseline
+        for name, path in zip(names, paths):
+            slow_ids[name] = uuid.uuid4().hex
+            path.write_bytes(base.write_versioned_fixture(path.read_bytes(), slow_url(plain_url, slow_ids[name]), sha1, len(media)))
+
+        # The default startup concurrency is 2; at most two of the three different sources may overlap.
+        before_counts = base.media_request_counts(media_container)
+        before_id_counts = slow_request_counts(media_container)
+        run_task(api)
+        after_counts = base.media_request_counts(media_container)
+        after_id_counts = slow_request_counts(media_container)
+        started_ids = {rid for rid, count in after_id_counts.items() if count > before_id_counts.get(rid, 0)}
+        base.require(started_ids == set(slow_ids.values()), f"All three different sources must be probed: {started_ids}.")
+        summary_line = latest_batch_summary(container)["line"]
+        fields = summary_fields(summary_line)
+        assert_summary_equations(fields)
+        base.require((fields.get("reliable_success") or 0) >= 1, f"At least one mixed source must commit a reliable success: {summary_line}.")
+        base.require(fields.get("actual_probe_calls") == len(names), f"Each different source must probe exactly once: {summary_line}.")
+
+        # An independent native FullRefresh must complete promptly even while the plugin pool is saturated by a
+        # plugin playback probe on another source.
+        slow_url_for_refresh = slow_url(plain_url, uuid.uuid4().hex)
+        refresh_name = names[0]
+        paths[0].write_bytes(base.write_versioned_fixture(paths[0].read_bytes(), slow_url_for_refresh, sha1, len(media)))
+        item = items[refresh_name]
+        refresh_before = base.media_request_counts(media_container)
+        refresh_holder: dict = {}
+
+        def refresh_playback() -> None:
+            try:
+                refresh_holder["result"] = base.call_playback(api, container, item["Id"], slow_url_for_refresh)
+            except Exception as error:
+                refresh_holder["error"] = type(error).__name__
+
+        worker = threading.Thread(target=refresh_playback, name="isolated-mixed-refresh", daemon=True)
+        worker.start()
+        wait_for_slow_start(media_container, refresh_before)
+        started = time.monotonic()
+        refresh_status, _ = api.force_full_refresh(item["Id"])
+        elapsed = time.monotonic() - started
+        base.require(refresh_status == 204, "Jellyfin rejected the independent manual FullRefresh.")
+        base.require(elapsed < 2.5, f"The independent native FullRefresh waited for the plugin pool permit (elapsed {elapsed:.2f}s).")
+        worker.join(timeout=120)
+        base.require(not worker.is_alive(), "The mixed independent playback did not finish.")
+        return {
+            "sources": names,
+            "summary_line": summary_line,
+            "actual_probe_calls": fields.get("actual_probe_calls"),
+            "reliable_success": fields.get("reliable_success"),
+            "all_three_started": True,
+            "independent_full_refresh_seconds": round(elapsed, 3),
+            "independent_full_refresh_not_gated": elapsed < 2.5,
+        }
+    finally:
+        for path in paths:
+            path.unlink(missing_ok=True)
+        cleanup_fixtures(api, names)
 
 
 def scenario_failure(api: base.JellyfinApi, container: str) -> dict:
@@ -871,7 +1114,7 @@ def restore_fixture(item_id: str | None, original: bytes) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--scenario", choices=["suite", "discovery", "stop", "sharing", "scope", "failure"], default="suite")
+    parser.add_argument("--scenario", choices=["suite", "discovery", "stop", "sharing", "scope", "failure", "shared_stop", "mixed"], default="suite")
     args = parser.parse_args()
 
     base.require(FIXTURE.is_file(), "The isolated STRM fixture is missing.")
@@ -906,15 +1149,25 @@ def main() -> int:
             media_container = base.isolated_media_container_name()
         if args.scenario in {"suite", "stop"}:
             summary["scenario_stop"] = scenario_stop(api, container, media_container)
+        if args.scenario in {"suite", "shared_stop"}:
+            summary["scenario_shared_stop"] = scenario_shared_stop(api, container, media_container)
         if args.scenario in {"suite", "sharing"}:
             summary["scenario_sharing"] = scenario_sharing(api, container, media_container)
         if args.scenario in {"suite", "scope"}:
             summary["scenario_scope"] = scenario_scope(api, container, media_container)
+        if args.scenario in {"suite", "mixed"}:
+            summary["scenario_mixed"] = scenario_mixed(api, container, media_container)
         if args.scenario in {"suite", "failure"}:
             summary["scenario_failure"] = scenario_failure(api, container)
 
-        summary["status"] = "PASS"
-        exit_code = 0
+        if CLEANUP_PROBLEMS:
+            summary["status"] = "FAIL"
+            summary["cleanup_problems"] = list(CLEANUP_PROBLEMS)
+            summary["error"] = "Temporary isolated fixtures could not be fully removed."
+            exit_code = 1
+        else:
+            summary["status"] = "PASS"
+            exit_code = 0
     finally:
         summary["fixture_restoration"] = restore_fixture(fixture_item_id, original)
         summary["state_restoration"] = restore_state(original_configuration, trigger_snapshot)
