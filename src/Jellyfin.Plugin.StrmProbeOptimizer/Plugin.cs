@@ -7,7 +7,7 @@ using Jellyfin.Plugin.StrmProbeOptimizer.Services;
 
 namespace Jellyfin.Plugin.StrmProbeOptimizer;
 
-public sealed class Plugin : BasePlugin<PluginConfiguration>
+public sealed class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
 {
     private readonly ILogger<Plugin> _logger;
     private readonly ILibraryIdProvider? _libraryIdProvider;
@@ -41,6 +41,29 @@ public sealed class Plugin : BasePlugin<PluginConfiguration>
     public override string Name => "STRM Probe Optimizer";
 
     public override string Description => "Validates a Jellyfin-native STRM playback interception prototype.";
+
+    /// <summary>
+    /// Exposes the plugin's own configuration page through Jellyfin's standard plugin page mechanism. Jellyfin's
+    /// dashboard controller reads the embedded resource by name, so the page is served from the plugin assembly
+    /// without any separate web host or configuration service.
+    /// </summary>
+    /// <returns>The single configuration page descriptor.</returns>
+    public IEnumerable<PluginPageInfo> GetPages()
+    {
+        return
+        [
+            new PluginPageInfo
+            {
+                Name = ConfigurationPageName,
+                EmbeddedResourcePath = GetType().Namespace + ".Configuration.configPage.html"
+            }
+        ];
+    }
+
+    /// <summary>
+    /// Gets the stable page name used by Jellyfin's <c>web/ConfigurationPage</c> endpoint.
+    /// </summary>
+    internal const string ConfigurationPageName = "StrmProbeOptimizer";
 
     /// <summary>
     /// Validates the candidate configuration, persists it atomically, and only then publishes it in memory.

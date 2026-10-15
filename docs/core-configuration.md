@@ -1,19 +1,38 @@
 # 核心配置与故障恢复操作说明
 
-本页记录 Slice 2 已经 A 最终审查接受的核心配置操作：原子保存保护、启动诊断脱敏、行动前重判与首次信任当前性均已验证。详见 [B Review Result](progress.md#slice-2-closed) 与 [A 最终审查](progress.md#slice-2-closed)。配置通过 Jellyfin 现有插件配置通道读写；完整配置页／批量范围尚未实现，现为 [Slice 3](../SLICE.md) 目标；运行／停止／定时使用原生任务界面，发布安装仍在 Slice 4。本页只记录已接受的四项核心配置，不预填新字段或 UI 行为。
+本页记录已经 A 最终审查接受的核心配置操作（原子保存保护、启动诊断脱敏、行动前重判与首次信任当前性），以及 [Slice 3](../SLICE.md) Task 3.2 交付的完整配置页。Slice 2 结果详见 [B Review Result](progress.md#slice-2-closed) 与 [A 最终审查](progress.md#slice-2-closed)。配置通过 Jellyfin 现有插件配置通道读写；运行／停止／定时使用原生任务界面，发布安装仍在 Slice 4。
+
+## 配置页面
+
+插件通过固定版本 Jellyfin 标准插件页面机制（`IHasWebPages` + 嵌入资源）提供一个配置页，无独立网站或第二套配置服务。
+
+1. 打开「控制台 → 插件」，找到 **STRM Probe Optimizer** 并进入插件详情。
+2. 点击页面上的「设置」链接；地址为 `#/configurationpage?name=StrmProbeOptimizer`。
+3. 页面加载当前有效配置与真实媒体库列表，编辑五项配置后点击「保存」。
+
+页面展示媒体库名称，保存时写入其稳定 Jellyfin 库 ID。范围修改只对下一轮批量运行生效。显式选择模式下必须至少选择一个库；空选择、已保存库失效或媒体库列表不可读时给出可操作反馈，不会静默扩大为全部。加载失败时保存被禁用，不会用默认表单覆盖已保存配置。
+
+配置页只做配置；运行、停止、定时、进度仍由 Jellyfin 原生「计划任务」页面负责，本插件不提供第二套入口。
 
 ## 配置字段
 
 | 字段 | 默认 | 说明 | 生效时机 |
 |---|---|---|---|
 | `Enabled` | `true` | 插件是否执行 STRM 优化。关闭后保留调用者原始探测权限并委托 Jellyfin 原生处理。 | 保存成功后，下一次检查请求生效；已实际开始的探测继续收尾。 |
-| `PlaybackAutoCheck` | `true` | 播放入口是否执行自动检查。关闭只影响播放入口，不影响未来批量入口。 | 保存成功后，下一次检查请求生效。 |
-| `MaxConcurrentProbes` | `2` | 插件主动发起的原生探测全局并发上限，合法范围 `1`～`8`。 | 仅在下一次 Jellyfin 启动生效；当前运行的许可池不热调整。 |
+| `PlaybackAutoCheck` | `true` | 播放入口是否执行自动检查。关闭只影响播放入口，不影响独立批量入口。 | 保存成功后，下一次检查请求生效。 |
+| `MaxConcurrentProbes` | `2` | 插件主动发起的原生探测全局并发上限，合法范围 `1`～`8`。 | 仅在下一次 Jellyfin 启动生效；当前运行的许可池不热调整。配置页与保存反馈都会明确提示。 |
 | `DetailedLog` | `false` | 是否输出更详细的复用／加入诊断。必要故障反馈不受此开关影响。 | 下一次检查操作生效。 |
+| `BatchAllLibraries` / `BatchLibraryIds` | 全部 | 批量任务检查全部媒体库，或显式选择部分库（一个用户配置项，以稳定库 ID 表示）。 | 对下一轮批量任务生效。 |
 
-固定业务规则（URL 变化必探测、`allowMediaProbe=false` 不升级、SHA-1／Size 比较等）不作为可关闭开关。
+固定业务规则（URL 变化必探测、`allowMediaProbe=false` 不升级、SHA-1／Size 比较等）不作为可关闭开关，在配置页以说明展示。
 
-## 读取与保存
+## 原生任务与故障恢复
+
+- 原生任务入口：「控制台 → 计划任务 → STRM 媒体信息检查」。可在该处手动运行、停止、查看进度与历史，并设置触发时间。默认没有自动触发时间，新安装不会自动运行。
+- 停止任务只撤销尚未实际开始的工作；已经开始的探测完成保存与指纹提交后任务才以取消结果结束，收尾结束后才能开始下一轮。单项失败修复后可重新运行任务。
+- 状态库故障：指纹状态库不可用时批量任务停止后续优化并报告不可用，不退化为全库强制探测。停止 Jellyfin，修复或替换插件数据目录下的 `strm-fingerprints.db`，重新启动后再运行任务即可重试；插件不自动删库或重建。
+
+## 读取与保存（API 通道）
 
 配置通过 Jellyfin 已有端点读写，插件 ID 为 `b061643e-d17d-4c6e-8ba2-6b57e286bd20`。以下示例只使用占位认证，实际令牌由管理员会话提供：
 
@@ -26,12 +45,13 @@ curl -s -H 'Authorization: MediaBrowser Token="<ADMIN_TOKEN>"' \
 curl -s -o /dev/null -w '%{http_code}\n' -X POST \
   -H 'Authorization: MediaBrowser Token="<ADMIN_TOKEN>"' \
   -H 'Content-Type: application/json' \
-  --data '{"Enabled":true,"PlaybackAutoCheck":true,"MaxConcurrentProbes":4,"DetailedLog":false}' \
+  --data '{"Enabled":true,"PlaybackAutoCheck":true,"MaxConcurrentProbes":4,"DetailedLog":false,"BatchAllLibraries":true,"BatchLibraryIds":""}' \
   http://127.0.0.1:18096/Plugins/b061643e-d17d-4c6e-8ba2-6b57e286bd20/Configuration
 ```
 
 - 合法保存返回 `204`，重新读取可看到新值；并发字段要到下一次 Jellyfin 启动才成为运行上限。
 - 越界并发（`0`、`9`、负数）由插件校验拒绝，返回可识别的 `400`，不落盘、不改变当前有效配置。
+- 显式选择引用不存在或已失效的库、或空选择时同样被拒绝，不扩大为全部、不改变已保存文件。
 - 非整数或字段类型错误由 Jellyfin JSON 反序列化在进入插件前拒绝（`500`），同样不改变有效配置与保存文件。
 - 保存失败时候选不生效：插件先把候选完整写入同目录临时文件，成功后才原子替换正式配置；中途写入失败会保留旧有效文件与旧内存配置，并返回错误反馈，重启后仍是旧有效值。
 

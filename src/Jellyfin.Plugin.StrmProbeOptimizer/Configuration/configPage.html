@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <title>STRM Probe Optimizer</title>
+</head>
+<body>
+    <div id="StrmProbeOptimizerConfigPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-input,emby-button,emby-checkbox">
+        <div data-role="content">
+            <div class="content-primary">
+                <form id="StrmProbeOptimizerConfigForm">
+                    <div class="sectionTitleContainer flex align-items-center">
+                        <h2 class="sectionTitle">STRM Probe Optimizer</h2>
+                    </div>
+                    <p class="fieldDescription">
+                        本页配置 STRM 优化的运行参数。固定判断规则（URL 变化必探测、SHA-1／Size 决策、修改时间不触发探测、
+                        <code>allowMediaProbe=false</code> 不升级、首次信任与批量仅按需处理）始终生效，不作为可关闭的开关。
+                        运行、停止、定时与进度仍由 Jellyfin 原生计划任务负责。
+                    </p>
+
+                    <div class="verticalSection">
+                        <h3 class="sectionTitle">运行配置</h3>
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input id="Enabled" name="Enabled" type="checkbox" is="emby-checkbox" />
+                                <span>启用 STRM 优化</span>
+                            </label>
+                            <div class="fieldDescription">
+                                关闭后不再启动新的优化探测，调用者原始探测权限与 Jellyfin 原生处理保持不变；已实际开始的探测继续收尾。
+                                保存成功后对下一次检查请求生效。
+                            </div>
+                        </div>
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input id="PlaybackAutoCheck" name="PlaybackAutoCheck" type="checkbox" is="emby-checkbox" />
+                                <span>播放时自动检查</span>
+                            </label>
+                            <div class="fieldDescription">
+                                关闭只影响播放入口；关闭后仍可独立运行「STRM 媒体信息检查」批量任务。保存成功后对下一次检查请求生效。
+                            </div>
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="MaxConcurrentProbes">最大并发探测数</label>
+                            <input id="MaxConcurrentProbes" name="MaxConcurrentProbes" type="number" min="1" max="8" step="1" is="emby-input" />
+                            <div class="fieldDescription">
+                                插件主动发起的原生探测全局上限，合法范围 1～8，默认 2。该值仅在<strong>下一次 Jellyfin 启动</strong>时生效，
+                                当前运行的许可池不会热调整；保存后请重启服务器。此上限不影响 Jellyfin 或其他插件独立发起的探测。
+                            </div>
+                        </div>
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input id="DetailedLog" name="DetailedLog" type="checkbox" is="emby-checkbox" />
+                                <span>详细日志</span>
+                            </label>
+                            <div class="fieldDescription">
+                                输出更详细的复用／加入诊断。必要故障反馈不受此开关影响。保存成功后对下一次检查操作生效。
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="verticalSection">
+                        <h3 class="sectionTitle">批量媒体库范围</h3>
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input id="BatchAllLibraries" name="BatchAllLibraries" type="checkbox" is="emby-checkbox" />
+                                <span>检查全部媒体库</span>
+                            </label>
+                            <div class="fieldDescription">
+                                开启时批量任务检查所有媒体库。关闭后可显式选择部分媒体库；此时必须至少选择一个，空选择不会自动扩大为全部。
+                            </div>
+                        </div>
+                        <div id="BatchLibrarySelection" class="inputContainer" style="display: none;">
+                            <label class="inputLabel inputLabelUnfocused">选择要检查的媒体库</label>
+                            <div id="BatchLibraryList" class="fieldDescription"></div>
+                            <div class="fieldDescription">
+                                页面展示媒体库名称，保存时写入其稳定 Jellyfin 库 ID。范围修改只对下一次批量运行生效。
+                                已保存的库被删除或无法识别时，任务会报告范围不可用且不开始探测；请在本页修正后重新保存。
+                            </div>
+                        </div>
+                        <div id="BatchLibraryStatus" class="fieldDescription" style="margin-top: 0.5em;"></div>
+                    </div>
+
+                    <div class="verticalSection">
+                        <h3 class="sectionTitle">运行与恢复</h3>
+                        <div class="fieldDescription">
+                            <p>
+                                <strong>原生任务入口：</strong>「控制台 → 计划任务 → STRM 媒体信息检查」。可在该处手动<strong>运行</strong>、
+                                <strong>停止</strong>、查看<strong>进度</strong>与历史，并设置<strong>触发时间</strong>。默认没有自动触发时间，
+                                新安装不会自动运行。运行／停止／定时始终由 Jellyfin 管理，本插件不提供独立入口。
+                            </p>
+                            <p>
+                                停止任务只撤销尚未实际开始的工作；已经开始的探测会完成保存与指纹提交后，任务才以取消结果结束，
+                                收尾结束后才能开始下一轮。单项失败修复后可重新运行任务。
+                            </p>
+                            <p>
+                                <strong>状态库故障恢复：</strong>若指纹状态库不可用，批量任务会停止后续优化并报告不可用，不会退化为全库强制探测。
+                                停止 Jellyfin，修复或替换插件数据目录下的 <code>strm-fingerprints.db</code>，重新启动后再运行任务即可重试。
+                                插件不会自动删除或重建损坏的状态库。
+                            </p>
+                            <p>
+                                <strong>识别限制：</strong>同 URL 且没有可比 SHA-1 时，只有双侧有效字节 Size 不同才要求探测；信息不足只记录限制，
+                                不凭空认定变化。修改时间本身不触发探测。
+                            </p>
+                        </div>
+                    </div>
+
+                    <div>
+                        <button id="SaveConfiguration" is="emby-button" type="submit" class="raised button-submit block emby-button">
+                            <span>保存</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        <script type="text/javascript">
+            (function () {
+                var pluginUniqueId = 'b061643e-d17d-4c6e-8ba2-6b57e286bd20';
+                var configurationLoaded = false;
+                var availableLibraries = [];
+                var libraryListAvailable = false;
+
+                var page = document.querySelector('#StrmProbeOptimizerConfigPage');
+                var form = document.querySelector('#StrmProbeOptimizerConfigForm');
+                var enabledInput = document.querySelector('#Enabled');
+                var playbackInput = document.querySelector('#PlaybackAutoCheck');
+                var concurrencyInput = document.querySelector('#MaxConcurrentProbes');
+                var detailedLogInput = document.querySelector('#DetailedLog');
+                var allLibrariesInput = document.querySelector('#BatchAllLibraries');
+                var selectionContainer = document.querySelector('#BatchLibrarySelection');
+                var libraryList = document.querySelector('#BatchLibraryList');
+                var statusElement = document.querySelector('#BatchLibraryStatus');
+
+                function normalizeId(value) {
+                    return (value || '').toString().replace(/-/g, '').toLowerCase();
+                }
+
+                function setStatus(message, isError) {
+                    statusElement.textContent = message || '';
+                    statusElement.style.color = isError ? '#f44336' : '';
+                    statusElement.setAttribute('data-save-state', message ? (isError ? 'error' : 'success') : '');
+                }
+
+                function getSelectedLibraryIds() {
+                    return Array.prototype.slice.call(libraryList.querySelectorAll('input[type="checkbox"]:checked'))
+                        .map(function (input) { return input.value; });
+                }
+
+                function updateSelectionVisibility() {
+                    selectionContainer.style.display = allLibrariesInput.checked ? 'none' : '';
+                }
+
+                function escapeHtml(value) {
+                    return (value == null ? '' : String(value)).replace(/[&<>"']/g, function (character) {
+                        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character];
+                    });
+                }
+
+                function renderLibraryList(config) {
+                    libraryList.textContent = '';
+                    if (!availableLibraries.length) {
+                        var empty = document.createElement('div');
+                        empty.textContent = '暂时无法读取媒体库列表。请稍后重新打开本页；显式选择在列表可读之前不会被保存。';
+                        libraryList.appendChild(empty);
+                        return;
+                    }
+
+                    var configured = (config.BatchLibraryIds || '').split(',')
+                        .map(normalizeId)
+                        .filter(function (id) { return id; });
+
+                    // Build the list from escaped markup so the page never injects a library name as HTML and the
+                    // Jellyfin web-components polyfill does not need a programmatic custom element.
+                    libraryList.innerHTML = availableLibraries.map(function (library) {
+                        var checked = configured.indexOf(normalizeId(library.Id)) >= 0 ? ' checked' : '';
+                        return '<label class="checkboxContainer" style="display:block;">'
+                            + '<input type="checkbox" is="emby-checkbox" value="' + escapeHtml(library.Id) + '"' + checked + ' />'
+                            + '<span>' + escapeHtml(library.Name) + '（' + escapeHtml(library.Id) + '）</span>'
+                            + '</label>';
+                    }).join('');
+                }
+
+                function loadConfiguration() {
+                    Dashboard.showLoadingMsg();
+                    setStatus('', false);
+                    return ApiClient.getPluginConfiguration(pluginUniqueId).then(function (config) {
+                        enabledInput.checked = config.Enabled !== false;
+                        playbackInput.checked = config.PlaybackAutoCheck !== false;
+                        concurrencyInput.value = config.MaxConcurrentProbes != null ? config.MaxConcurrentProbes : 2;
+                        detailedLogInput.checked = config.DetailedLog === true;
+                        allLibrariesInput.checked = config.BatchAllLibraries !== false;
+                        renderLibraryList(config);
+                        updateSelectionVisibility();
+                        configurationLoaded = true;
+                        statusElement.setAttribute('data-loaded', 'true');
+                        if (libraryListAvailable) {
+                            setStatus('已加载当前配置。', false);
+                        } else {
+                            // The configuration loaded, but the library list could not be read. Surface that clearly
+                            // instead of showing a plain success; an explicit selection cannot be verified yet.
+                            setStatus('配置已加载，但读取媒体库列表失败。可继续使用「检查全部媒体库」；在列表恢复前请勿保存显式选择，否则会被拒绝。', true);
+                        }
+                    }).catch(function (err) {
+                        configurationLoaded = false;
+                        statusElement.removeAttribute('data-loaded');
+                        setStatus('读取当前配置失败。为避免用默认值覆盖已保存配置，保存已禁用；请重新打开本页重试。', true);
+                        if (window.console && console.error) { console.error('strm-config-load-failed', err && (err.stack || err.message || String(err))); }
+                    }).finally(function () {
+                        Dashboard.hideLoadingMsg();
+                    });
+                }
+
+                function loadLibraries() {
+                    return ApiClient.getVirtualFolders().then(function (folders) {
+                        availableLibraries = (folders || []).map(function (folder) {
+                            return { Id: folder.ItemId, Name: folder.Name || '未命名媒体库' };
+                        });
+                        libraryListAvailable = availableLibraries.length > 0;
+                    }).catch(function () {
+                        availableLibraries = [];
+                        libraryListAvailable = false;
+                    });
+                }
+
+                function validateBeforeSave() {
+                    var concurrency = parseInt(concurrencyInput.value, 10);
+                    if (!(concurrency >= 1 && concurrency <= 8)) {
+                        setStatus('最大并发探测数必须是 1～8 的整数。', true);
+                        return false;
+                    }
+
+                    if (!allLibrariesInput.checked && getSelectedLibraryIds().length === 0) {
+                        setStatus('已关闭「检查全部媒体库」但未选择任何媒体库。请至少选择一个，空选择不会保存为全部。', true);
+                        return false;
+                    }
+
+                    return true;
+                }
+
+                function saveConfiguration() {
+                    if (!configurationLoaded) {
+                        setStatus('配置尚未成功加载，无法保存；请重新打开本页。', true);
+                        return;
+                    }
+
+                    if (!validateBeforeSave()) {
+                        return;
+                    }
+
+                    Dashboard.showLoadingMsg();
+                    ApiClient.getPluginConfiguration(pluginUniqueId).then(function (config) {
+                        config.Enabled = enabledInput.checked;
+                        config.PlaybackAutoCheck = playbackInput.checked;
+                        config.MaxConcurrentProbes = parseInt(concurrencyInput.value, 10);
+                        config.DetailedLog = detailedLogInput.checked;
+                        config.BatchAllLibraries = allLibrariesInput.checked;
+                        config.BatchLibraryIds = allLibrariesInput.checked ? '' : getSelectedLibraryIds().join(',');
+                        return ApiClient.updatePluginConfiguration(pluginUniqueId, config).then(function () {
+                            setStatus('保存成功。启用／播放检查／详细日志对下一次检查请求生效；并发在下次 Jellyfin 启动后生效；批量范围对下一轮任务生效。', false);
+                        }).catch(function () {
+                            setStatus('保存被拒绝或失败，已保存的有效配置未被更改。请修正输入后重试。', true);
+                        });
+                    }).catch(function () {
+                        setStatus('保存请求失败，已保存的有效配置未被更改。请稍后重试。', true);
+                    }).finally(function () {
+                        Dashboard.hideLoadingMsg();
+                    });
+                }
+
+                allLibrariesInput.addEventListener('change', updateSelectionVisibility);
+
+                form.addEventListener('submit', function (e) {
+                    e.preventDefault();
+                    saveConfiguration();
+                    return false;
+                });
+
+                page.addEventListener('pageshow', function () {
+                    loadLibraries().then(loadConfiguration);
+                });
+            })();
+        </script>
+    </div>
+</body>
+</html>
