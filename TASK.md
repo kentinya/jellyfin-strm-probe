@@ -5,7 +5,7 @@
 ```text
 Task ID: 3.2
 Parent Slice: 3
-Status: PLANNED
+Status: READY FOR B REVIEW
 Task Base: 2f74aa83f15707df56c4b15409ba1538a488f83a
 Contract Checkpoint: 2b515f35db7fc8e85d8ac1a8085dd9b8ccc62ef3
 Difficulty: Medium
@@ -108,13 +108,24 @@ git diff --check
 
 ## Developer Completion Report
 
-- Changed Files：NOT IMPLEMENTED。
-- Implemented：NOT IMPLEMENTED。
-- Tests and Results：NOT RUN。提交完整候选索引，分开真实浏览器、模拟失败控制、原生任务／重启与复用证据。
-- Decisions：复用现有配置、库查询及原生任务；若核心变化需要升 T4 先交 B。
-- Remaining In-Slice Work：本 Task 全部验收与随后单独 Slice Final。
-- Risks / Deviations：当前缺浏览器工具，作为本 Task 验证准备处理；不能按无浏览器直接 PASS。
-- Head SHA：NOT SET。
+- Changed Files（相对 Task Base `2f74aa83f15707df56c4b15409ba1538a488f83a`）：
+  - `src/Jellyfin.Plugin.StrmProbeOptimizer/Plugin.cs`：新增 `IHasWebPages`，导出一个 `StrmProbeOptimizer` 页面描述符。
+  - `src/Jellyfin.Plugin.StrmProbeOptimizer/Jellyfin.Plugin.StrmProbeOptimizer.csproj`：嵌入 `Configuration/configPage.html`。
+  - `src/Jellyfin.Plugin.StrmProbeOptimizer/Configuration/configPage.html`：新配置页（五项读写、库范围、失败反馈、说明）。
+  - `scripts/configuration_page_driver.mjs`、`scripts/run_isolated_configuration_integration.py`、`scripts/prepare_browser_tools.py`：真实浏览器隔离验收入口与工具准备。
+  - `tests/Jellyfin.Plugin.StrmProbeOptimizer.Tests/ConfigurationPageTests.cs`、`tests/test_isolated_configuration_integration.py`：页面导出与工具守卫测试。
+  - `docs/core-configuration.md`：补充配置页、第五项范围与恢复说明。
+- Implemented：管理员从原生插件入口打开完整配置页，加载／编辑／保存启用、播放自动检查、最大并发、详细日志、批量范围五项；展示真实媒体库名称并保存稳定库 ID；空选择／失效库／列表不可读／加载失败／保存拒绝均有可操作反馈且不静默扩大或覆盖；页面说明原生任务入口、固定规则、首次信任、仅按需处理、停止收尾与状态库恢复。并发只提示下次启动生效。页面无第二套运行／停止／时间入口。
+- Tests and Results（完整 SHA `dac695e45f8619b6ebcc24327e515fd9413240a1`，索引 `.git/validation-evidence/dac695e45f8619b6ebcc24327e515fd9413240a1/developer-20261015-01/INDEX.md`）：
+  - `restore --locked-mode` PASS；`build` PASS（0 警告 0 错误）；C# `test` PASS 178/178（原 173 + 新增 5）；`format --verify-no-changes` PASS。
+  - `python3 -m unittest discover -s tests -v` PASS 61/61（原 54 + 新增 7）。
+  - `python3 scripts/run_isolated_configuration_integration.py` PASS：真实 Chromium 140（chromium-1187／Playwright 1.55.0）覆盖 AC-U1～U5，含页面加载、五项编辑保存、部分范围、真实重启读回、空选择拒绝、库列表读取失败、保存拒绝、加载失败，以及页面保存的部分范围驱动原生任务库选择；结束后配置与全部触发器已恢复并核对。
+  - `python3 scripts/run_isolated_plugin_integration.py` PASS（同一候选，既有默认播放／失败／竞态／重启回归未回退，夹具与地址已恢复）。
+  - `python3 scripts/check_governance.py` PASS；`git diff --check` PASS。
+- Decisions：复用现有配置保存通道、`ILibraryIdProvider`／原生库查询与原生任务；未改决策、Coordinator、原生刷新、指纹提交或范围／停止语义，故维持 T3，无需升 T4。浏览器工具仅测试依赖，放忽略目录。
+- Remaining In-Slice Work：本 Task 全部验收后由 B 核对全部 RO；满足则单独 Slice Final 与 Closure Packet。
+- Risks / Deviations：本机浏览器工具与系统库属宿主测试依赖，不是插件生产依赖；真实外部代理、真实大库与保存故障实机注入仍 NOT RUN，留 Slice 4／其他 Task。两次默认插件集成早失败源于此前中断运行留下的夹具／指纹库／配置污染，重置后同一候选通过，且该失败在 Task Base 独立复现，与本 Task 改动无关。
+- Head SHA：`dac695e45f8619b6ebcc24327e515fd9413240a1`。
 
 少量经验候选留待 Slice 收尾，不以流水账或新增经验条数作为通过门槛。
 
@@ -124,7 +135,7 @@ git diff --check
 Reviewed: NOT SET
 Decision: PENDING
 Slice Required Outcomes all satisfied: NO
-Next: DEVELOPER IMPLEMENTS TASK 3.2
+Next: B REVIEWS TASK 3.2 (READY FOR B REVIEW)
 ```
 
 本 Task 仅 PLANNED。Task 3.1 PASS 见固定快照；当前页面未实现，未运行本 Task 验收、Slice Final 或 A Final Review。
