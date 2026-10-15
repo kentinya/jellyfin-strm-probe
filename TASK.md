@@ -1,3 +1,7 @@
+# NO ACTIVE IMPLEMENTATION TASK
+
+Task 3.1 已由 B 审查 PASS；以下保留完整计划、报告及决定。Slice 3 尚缺完整配置页／浏览器旅程，下一动作由 B 在治理通过后规划 Task 3.2，不启动本轮插件实施。
+
 # Task 3.1 — 原生按需批量检查与停止收尾闭环
 
 规划／审查依据 [开发流程](docs/development-workflow.md) 与 [B 经验](docs/agent-experience/task-planner-reviewer.md)；实施先读 [Developer 经验](docs/agent-experience/developer-implementation-role.md)。范围 authority 是已提交的 [Slice 3](SLICE.md)，不是后续建议任务。
@@ -5,7 +9,7 @@
 ```text
 Task ID: 3.1
 Parent Slice: 3
-Status: FIX REQUIRED
+Status: PASS
 Task Base: b86d9c17d7f915108072f54ee098f0f5543fe093
 Contract Checkpoint: 2b515f35db7fc8e85d8ac1a8085dd9b8ccc62ef3
 Superseded Plan Snapshot: eb4e272743f4c7e184d45fa48b660b2fef24c685
@@ -82,14 +86,14 @@ B 合法性决定：LEGAL ADJUSTMENT — 同一 Task 3.1 继续规划。保留 I
 
 ## 验收条件
 
-- [ ] **AC-T1 原生入口（RO-1）**：真实实例仅发现一个目标任务、默认触发器为空，手动执行与管理员设置的真实时间触发均有效；触发器重启持久化且无默认／启动意外运行。无需播放会话，手动运行／停止／时间都由原生任务管理。
-- [ ] **AC-T2 范围与有界遍历（RO-2、RO-7 后端）**：默认全部、显式部分、旧配置、空／失效选择保存与运行、每次范围快照及移出／消失安全。确定性覆盖至少两个库、多批、同名／重复 ID／跨库重复、对象返回乱序／重复／缺失、集合获取失败、多版本及音频源；真实至少两个库、完整 ID 获取、多批、多版本按源对账，范围外／普通／旧／未知协议零批量探测。集合固定后增删／移库安全结算、新增下一轮发现；十万模拟候选证明批次／消费者上限，身份集合及查询临时成本单列。
-- [ ] **AC-T3 共用可靠结果（RO-3）**：首次信任及未变零探测、不计真实成功；缺主流、同 SHA-1／Size 换 URL、同 URL 有效 SHA-1 变化、不可比 SHA-1 的 Size 变化使用共用原生链。结果／新地址／主流／SQLite 与重启后 PlaybackInfo 一致。成功计数仅关联本次同源真实成功、保存、稳定 Manifest 及条件提交；提交拒绝／失败不伪报成功，恢复可重试。
-- [ ] **AC-T4 混合共享（RO-4）**：确定性 1／2／8、准备／排队不共享、立即获许可与完成重查、多版本／调用者隔离。实机批量先开始→播放加入、播放先开始→批量加入都仅一次匹配探测，批量成功与实际调用分别统计；同源排队完成后无重复。不同源混合不超启动上限、保存并发下次启动才生效，独立 FullRefresh 正常；false 播放原权限和基线不升级。
-- [ ] **AC-T5 停止与资源（RO-5）**：确定性屏障覆盖同步 ID 获取／对象读取前后、批次未分派、等许可、立即获许可未登记、准备取源 await、准备登记、实际开始／停止双方先发生、已开始仅批量及两方向共享。同步查询中停止等待返回且无后续准入，不泄留后台获取。停止确认后无新实际开始，其他调用者排队不受影响；已开始／已加入工作成功仍提交，原生自身失败／取消异常保留旧基线。任务等到结算／汇总后才抛原生停止异常，最终 Cancelled，非 Completed；批次对象、消费者、候选 ID 引用及本轮 preparing／running／许可释放。真实停止证明未开始撤销与已开始完成；收尾期间重复手动运行及定时触发不实际启动新轮，旧轮结算后可以再次运行并按最新指纹跳过已成功源。独立播放探测不因等待旧批量收尾被禁止。不拿进程杀死或手动 API 的 204 替代真实执行证据。
-- [ ] **AC-T6 故障与汇总（RO-6）**：损坏／不可达、Manifest 再变、独立保存失败控制隔离单项；SQLite 读取／提交故障、全局不可用、候选获取／批次读取异常及时停止准入并收尾。不可用使用脱敏失败结果（管理员同时停止时保留取消原因及不可用汇总），不自动删库，不通过原生委托继续全库探测。修复重启后重跑成功；单项原生取消不得伪造管理员停止。
-- [ ] **AC-T7 可对账反馈（RO-6）**：检查＝跳过＋需要＋检查阶段未完成；需要＝可靠成功＋探测未完成；未完成总数＝检查阶段未完成＋探测未完成。首次信任计跳过，共享源只计一次但必须保留本次成功关联，实际调用次数另计。原生 ID／去重候选／不处理／消失或移出／重复／撤销／读取未完成／未读取分别标注，集合未完成时总数未知；原生进度单调且提前结束不补 100%，正常空库可完成。Completed／Cancelled／Failed、计数、保存／提交和日志一致；必要汇总不依赖 DetailedLog，异常及原生任务历史无秘密／私有路径。
-- [ ] **AC-T8 回归与交接（全部接入表面）**：T4 完整候选门槛与 B 指定关键复现有可核验证据；新增部署依赖实际加载。改动属于本 Task、STRM 产品只读、固定原生委托／播放响应与最小五字段 schema 保持；准确交代 HTML／浏览器旅程仍未完成。未运行／不可用门槛如实记录，不能先 PASS 再延期当前阻塞。
+- [x] **AC-T1 原生入口（RO-1）**：真实实例仅发现一个目标任务、默认触发器为空，手动执行与管理员设置的真实时间触发均有效；触发器重启持久化且无默认／启动意外运行。无需播放会话，手动运行／停止／时间都由原生任务管理。
+- [x] **AC-T2 范围与有界遍历（RO-2、RO-7 后端）**：默认全部、显式部分、旧配置、空／失效选择保存与运行、每次范围快照及移出／消失安全。确定性覆盖至少两个库、多批、同名／重复 ID／跨库重复、对象返回乱序／重复／缺失、集合获取失败、多版本及音频源；真实至少两个库、完整 ID 获取、多批、多版本按源对账，范围外／普通／旧／未知协议零批量探测。集合固定后增删／移库安全结算、新增下一轮发现；十万模拟候选证明批次／消费者上限，身份集合及查询临时成本单列。
+- [x] **AC-T3 共用可靠结果（RO-3）**：首次信任及未变零探测、不计真实成功；缺主流、同 SHA-1／Size 换 URL、同 URL 有效 SHA-1 变化、不可比 SHA-1 的 Size 变化使用共用原生链。结果／新地址／主流／SQLite 与重启后 PlaybackInfo 一致。成功计数仅关联本次同源真实成功、保存、稳定 Manifest 及条件提交；提交拒绝／失败不伪报成功，恢复可重试。
+- [x] **AC-T4 混合共享（RO-4）**：确定性 1／2／8、准备／排队不共享、立即获许可与完成重查、多版本／调用者隔离。实机批量先开始→播放加入、播放先开始→批量加入都仅一次匹配探测，批量成功与实际调用分别统计；同源排队完成后无重复。不同源混合不超启动上限、保存并发下次启动才生效，独立 FullRefresh 正常；false 播放原权限和基线不升级。
+- [x] **AC-T5 停止与资源（RO-5）**：确定性屏障覆盖同步 ID 获取／对象读取前后、批次未分派、等许可、立即获许可未登记、准备取源 await、准备登记、实际开始／停止双方先发生、已开始仅批量及两方向共享。同步查询中停止等待返回且无后续准入，不泄留后台获取。停止确认后无新实际开始，其他调用者排队不受影响；已开始／已加入工作成功仍提交，原生自身失败／取消异常保留旧基线。任务等到结算／汇总后才抛原生停止异常，最终 Cancelled，非 Completed；批次对象、消费者、候选 ID 引用及本轮 preparing／running／许可释放。真实停止证明未开始撤销与已开始完成；收尾期间重复手动运行及定时触发不实际启动新轮，旧轮结算后可以再次运行并按最新指纹跳过已成功源。独立播放探测不因等待旧批量收尾被禁止。不拿进程杀死或手动 API 的 204 替代真实执行证据。
+- [x] **AC-T6 故障与汇总（RO-6）**：损坏／不可达、Manifest 再变、独立保存失败控制隔离单项；SQLite 读取／提交故障、全局不可用、候选获取／批次读取异常及时停止准入并收尾。不可用使用脱敏失败结果（管理员同时停止时保留取消原因及不可用汇总），不自动删库，不通过原生委托继续全库探测。修复重启后重跑成功；单项原生取消不得伪造管理员停止。
+- [x] **AC-T7 可对账反馈（RO-6）**：检查＝跳过＋需要＋检查阶段未完成；需要＝可靠成功＋探测未完成；未完成总数＝检查阶段未完成＋探测未完成。首次信任计跳过，共享源只计一次但必须保留本次成功关联，实际调用次数另计。原生 ID／去重候选／不处理／消失或移出／重复／撤销／读取未完成／未读取分别标注，集合未完成时总数未知；原生进度单调且提前结束不补 100%，正常空库可完成。Completed／Cancelled／Failed、计数、保存／提交和日志一致；必要汇总不依赖 DetailedLog，异常及原生任务历史无秘密／私有路径。
+- [x] **AC-T8 回归与交接（全部接入表面）**：T4 完整候选门槛与 B 指定关键复现有可核验证据；新增部署依赖实际加载。改动属于本 Task、STRM 产品只读、固定原生委托／播放响应与最小五字段 schema 保持；准确交代 HTML／浏览器旅程仍未完成。未运行／不可用门槛如实记录，不能先 PASS 再延期当前阻塞。
 
 ## 必要测试
 
@@ -245,63 +249,6 @@ git diff --check
 
 经验候选（供 A 收尾合并，不写入经验文档）：捕获身份必须与当前原生对象按值比较，不能假定 `GetItemById` 返回独立副本——同一缓存实例的原地主版本变化会被“对象与自身比较”吞掉。
 
-## B Review Result
-
-Reviewed: b86d9c17d7f915108072f54ee098f0f5543fe093..22ba671c44fba2540c62739c824505b52272bcc2
-Fix Reviewed: 5b501e39d6d58948b9d8d92d5c739e6c48b0011e..22ba671c44fba2540c62739c824505b52272bcc2
-Report Checkpoint: 911a0b7a0b0fcc00e61a905ccc9c3fe7ee877f3a
-Decision: FIX REQUIRED
-Slice Required Outcomes all satisfied: NO
-Next: DEVELOPER FIXES THE SAME TASK 3.1
-
-2026-10-15，B 第七轮完成 AGENTS 必读清单与 B 经验；初始工作区 `## main`、无已有改动，治理 PASS。已提交 Slice／Roadmap／稳定需求／流程与上轮相同，Task ID／Base／Goal／Scope／High／T4／AC-T1～T8 继续有效，没有 Contract 无法满足的事实，不交 A RESCOPE。结合 Git 中前轮审查重核完整 Task Base..Head，逐项阅读本轮 optimizer 与 BatchCheckTests 两个文件的实际差异及报告，后继只改 TASK.md。上轮决定保留于 `689692689ef89dd55bfac653365c224c4d14f145:TASK.md`。本轮只提交 TASK.md，不实施产品、不修改上层合同或新增业务规则。
-
-### 上轮阻塞已修复及可复用证据
-
-- 上轮 24 项独立控制全部通过，包括 `ReviewerInPlacePrimaryChangeMustKeepCapturedProjectBaseline`。开始边界现先比较原生当前对象与捕获的不可变 projectItemId，再重核当前库范围；原地修改与替换对象两种生产 verifier 分支回归均在本次聚焦通过。旧关联错写缺陷不再作为当前阻塞，库范围保护没有被移除。
-- 本轮独立补查用户此前讨论的准备阶段启用／状态库资格。使用已有共用 optimizer、固定消费者、原生准备 await 和开始信号验证，不以代码可能性或新增字段清单推导失败；发现的具体结果见下节。原来撤回的“已跨过 TryBeginProbe 后又停止必须撤销”断言仍撤回，不能借本轮修正改变已接受的开始边界。
-- Developer 索引 `.git/validation-evidence/22ba671c44fba2540c62739c824505b52272bcc2/developer-fix6-t4-20261015-190955/INDEX.md`。本次实际测试在已提交候选 22ba671 上进行，workspace.diff 为 0 bytes（SHA-256 `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`）；报告后继仅 TASK.md，47 个可执行／测试／工具／SDK／锁输入与本轮独立运行一致。原始日志＋精确命令／退出码／耗时元数据均存在，已逐项核阅，不凭 INDEX 的 PASS 标签接受结果。
-- 明确复用 Developer 本候选的完整 T4 已运行事实：locked restore、Release build（0 warnings／errors）、170 C#（0 failed／skipped）、format、54 Python、默认播放、批量七场景 suite、治理与 diff 均 exit 0。默认播放包含 false 权限、原生失败／保存／Manifest、并发 1／默认 2／保存后重启生效、池饱和独立 FullRefresh 实际完成（427 ms）。批量 suite 包含本轮 Cancelled、2 成功／1 撤销、收尾期无新轮、结算后排队轮只探撤销源及再次零探测；两方向 sharing 各一次；shared_stop 两方向成功 1／撤销 0，独立播放在 Cancelling 启动；scope 133 候选／2 批、多库多版本和轮内增删／下轮发现；mixed 播放 owner 与批量 owner 重叠、峰值 2／批量调用 2；状态库不可用零请求／修复重启恢复。配置、触发器、夹具恢复结果已核对。
-- Developer 记录的构建 DLL 与当前隔离已部署 DLL 的摘要均为 `7accfc172da16eb9dcc0c1fc0c9a9cac376da8e0ed6a1a075da2a065b31371a9`。B 在纯报告 HEAD 编译得到不同 DLL 身份，单列记录且未部署；不把二者说成同一二进制。十万候选仍为模拟，容量尺寸模型／采样进程堆峰值的已接受限制保留，不宣称真实大库或精确查询内部峰值。内部数据库保存故障实机注入仍 NOT RUN，完整 HTML／浏览器仍是后续单元。
-
-### 当前 P1：原生准备期间变化后，开始准入未重核优化资格且汇总掩盖提前结束（RO-3、RO-5、RO-6／AC-T5、T6、T7）
-
-`AdmitBatchOwnerAsync` 在原生准备之前检查 Enabled／IsFingerprintStoreUnavailable；随后 `ExecuteProbeAsync` 等待原生 `GetPlaybackMediaSources`。恢复到匹配编码器开始回调时，仅检查批量停止、当前对象身份／范围和 coordinator 所有权，没有重核插件启用与已 latch 的全局状态库故障。候选在准备 await 期间已经失去优化资格，仍会开始探测。若它恰好是末批末项，runner 收尾只补 StopRequested，未重新捕获禁用／全局故障，结果可仍 Completed=true、Disabled=false／StoreUnavailable=false，并补满进度。
-
-本轮两个独立控制以屏障停在原生准备 await：已确认 StartedProbes=0、PreparingCount=1，随后改变资格，再放行到 MarkCall；变化均发生在 TryBeginProbe 之前，不是已开始工作被事后要求取消。
-
-1. `ReviewerDisableDuringNativePreparationMustPreventANewProbe`：已有可信基线、URL 改变，在准备 await 内让 optimizer 与 runner 共用的动态 settings.Enabled=false，然后恢复。实际 StartedProbes=1、ReliableSuccess=1、Disabled=false、Completed=true，旧基线被更新。对应 Slice 已有“禁用后……不启动新探测，已开始工作收尾，结果明确为提前结束”及 Task 启停／统计规则。无需改变播放的下一检查请求生效语义，也不把关闭 PlaybackAutoCheck 当作禁止批量。
-2. `ReviewerLatchedStoreFaultDuringNativePreparationMustPreventANewProbe`：同样停在开始前，让另一个调用者经过同一个 optimizer 的真实读取异常处理路径，确认抛 FingerprintStoreUnavailableException 且 IsFingerprintStoreUnavailable=true，再放行准备候选。实际 StartedProbes=1、ReliableSuccess=1、StoreUnavailable=false、Completed=true，仍提交新指纹。控制使用可故障的内存 repository（只读故障，提交仍可用），证明一旦全局不可用已被确认，当前未开始候选未停止；不声称 Jellyfin／SQLite 真实故障注入。对应原合同“状态库故障停止后续批量优化，收尾已开始工作并报告不可用”。
-
-二者按一个连贯准入与结果反馈缺口修正，留在同一 Task：在已有开始边界前统一重核当前优化资格，保留不可变身份、库范围、停止与所有权检查；未实际开始且已禁用／不可用时拒绝探测、保留基线并幂等释放 preparing／许可／临时开始计数。把明确的禁用或全局不可用原因传回本轮汇总，末项也不能漏报，不伪报可靠成功、全量完成或 100%。状态库故障仍使用已有不可用／恢复反馈，不能降为普通跳过或全库原生委托。
-
-已实际开始及已加入 running 的工作仍照常完成保存与成功条件提交，不新增执行取消源，也不在成功返回后因禁用或任务停止否决有效结果。`ReviewerDisableAfterActualStartStillAllowsReliableSettlement` 对照通过（开始 1、成功 1、许可释放）。补充相应前后边界和末项汇总回归，不另造字段 Task、调度器、持久化状态或配置开关；不要求锁住整个原生调用。下一候选保持完整 T4，PASS 前仍需 B 独立真实 stop／sharing。
-
-### B 独立验证
-
-索引：`.git/validation-evidence/22ba671c44fba2540c62739c824505b52272bcc2/b-review7-20261015/INDEX.md`，仅本机可访问。
-
-- PASS：指定 Batch／Coordinator／Context／Playback／Configuration 聚焦 129/129、0 failed／skipped，退出 0；01-focused.log/json。新生产 verifier 回归及新版十万完整对象／消费者测试包含在内。
-- PASS：controls locked restore；02-controls-restore.log/json。Python 54/54、退出 0；04-python.log/json，守护测试 mock 实例 API／重启，不改生产或有效隔离配置。
-- FAIL：最终控制 27 项中 25 PASS／2 FAIL／0 skipped、退出 1；07-controls-final-progress.log/json。包含上轮完整 24 项（全部通过）、新禁用前后边界对照及已 latch 全局故障控制。首次 03 的 26 项中 25 PASS／1 FAIL 也保留，随后 05 补齐状态库同类控制，最终 07 同步记录两例 finalProgress=100。控制工程中的旧快照普通测试不属于指定 filter，不因过时的 Skipped 断言而误判当前产品回归；真实产品 170 项全套已核对。
-- controls 使用临时手写 STRM、fake 原生准备／探测／保存与内存 repository；身份控制复用真实 LibraryBatchCandidateSource，启停控制共用动态 IPlaybackSettings。所有源码／项目／锁、摘要及命令保留于本轮目录；未修改产品或已提交测试／工具。
-- 精确复用身份、全部原始产物、SDK 10.0.401／net10.0、原生源码 `ca0f16eb7c195f720a1493ed469a27c4657db0c6`、构建／部署身份分列见 00-inputs.json 与 06-developer-audit.json。治理／diff／本地链接／提交引用及所有可执行输入未变化检查见本轮索引。
-- NOT RUN（B 本轮）：真实 stop／sharing、其余完整 T4 重跑、Slice Final。已有确定 P1，按流程先拒绝，不能把 Developer 实机冒称 B 独立运行；修正后 PASS 前原计划仍全部有效。本轮未部署，未改有效隔离配置／触发器／媒体或生产实例。
-
-### Slice 全部 Required Outcomes / Surfaces 重核
-
-| Outcome | 本轮判断 |
-|---|---|
-| RO-1 入口／定时 | 本候选发现、手动、真实触发与重启原始证据齐备；Task 未 PASS。 |
-| RO-2 范围／有界对象 | 原捕获项目身份与移库失败已修；多库多批、多版本、增删与十万模拟边界沿用已核对证据。 |
-| RO-3 共用可靠链 | 保存／提交／共享失败覆盖保持；准备期间优化资格丢失仍会开始并提交。 |
-| RO-4 共享／并发 | 两方向共享、跨入口 owner 混合及 1／2／8 有本候选证据；B 实机入口待修正后独立运行。 |
-| RO-5 停止／禁用收尾 | 停止前后边界控制通过；禁用发生在实际开始前仍启动，不满足既有准入规则。 |
-| RO-6 反馈／恢复 | 末项准备期间禁用／状态库 latch 后仍报全完成，掩盖提前结束或全局不可用。 |
-| RO-7 后端／页面 | 范围保存／兼容后端已有；完整 HTML 与浏览器旅程未完成，按原非目标不单独阻塞 3.1。 |
-
-Task 3.1 保持 FIX REQUIRED；不创建下一 Task，不运行 Slice Final／提交 Closure Packet，不代替 A 最终审查或关闭。不凭其他字段可能变化的静态疑点增加阻塞。少量经验候选供 Slice 收尾：原生准备 await 后须重新检查实际开始资格；全局停止原因必须到达末批末项的汇总，不能依赖下一次循环才暴露。
-
 ## Developer Seventh Fix Completion Report（第七轮 FIX REQUIRED 修正后）
 
 - Fix Base：`22ba671c44fba2540c62739c824505b52272bcc2`（上一轮 Developer Head）；同一 Task 3.1 修正，Task Base、Goal、Scope、High／T4、验收与必要测试均不变。
@@ -313,3 +260,52 @@ Task 3.1 保持 FIX REQUIRED；不创建下一 Task，不运行 Slice Final／�
 - Head SHA：`3209bc699544f26ffe7a5e100941edda0b0d275d`。
 
 经验候选（供 A 收尾合并，不写入经验文档）：原生异步准备 await 之后、匹配编码器开始回调之内必须重新检查实际开始资格（启用与全局故障），仅前置准入无法覆盖准备期资格丢失；全局不可用原因必须能到达末批末项的汇总，不能依赖下一轮循环才暴露。
+
+## B Review Result
+
+Reviewed: b86d9c17d7f915108072f54ee098f0f5543fe093..3209bc699544f26ffe7a5e100941edda0b0d275d
+Fix Reviewed: 22ba671c44fba2540c62739c824505b52272bcc2..3209bc699544f26ffe7a5e100941edda0b0d275d
+Report Checkpoint: 983c6216d890290321360cde14ebefb617cb00a2
+Decision: PASS
+P0/P1 Blockers: NONE
+Slice Required Outcomes all satisfied: NO
+Next: PLAN TASK 3.2 — COMPLETE ADMINISTRATOR CONFIGURATION PAGE JOURNEY
+
+2026-10-15，B 第八轮完成 AGENTS 必读清单、开发流程与 B 经验，初始工作区干净、治理 PASS。已提交 Slice／Roadmap／稳定需求／流程未变，Task 3.1 的 ID／Base／Goal／Scope／High／T4 与 AC-T1～T8 保持有效；结合可达前轮审查重核完整 Task Base..Head，逐项阅读本次四个产品／测试文件的实际差异及报告。Developer 报告后继仍留根状态 FIX REQUIRED；本轮用户明确交 B 审查，按实际提交／证据直接裁定，不虚构 READY 状态历史。原第七轮决定保留于 `ceeb4a7f230f41fbe63219362bfe459f5131d0e6:TASK.md`。
+
+### 修正及独立验证
+
+- 开始边界在 TryBeginProbe 前重核 Enabled 与已 latch 状态库故障，分别向 runner 传播禁用／不可用原因，未开始候选保留基线且幂等释放许可／preparing。末项不再把拒绝当成功／Completed／100%。旧两个失败控制通过；B 加强断言确认 Completed=false、可靠成功及实际调用为 0、整个进度序列低于 100%。已实际开始后再禁用的对照仍成功提交，未引入执行取消源或事后否决。
+- PASS：B 指定 Batch／Coordinator／Context／Playback／Configuration 聚焦 132/132、0 failed／skipped；独立控制最终 28/28、0 failed／skipped，含前七轮全部 27 项及新增“关闭 PlaybackAutoCheck 仍允许独立批量”。临时 STRM、fake 原生／保存与内存指纹仅证明确定性分支，真实范围验证器控制和模拟十万 ID 成本分开记录。
+- PASS：B 独立 `python3 scripts/run_isolated_batch_integration.py --scenario stop`。本轮原生 Cancelled；2 个已开始源完成提交、1 个未开始撤销；手动再运行与本轮定时触发没有在收尾期间进入新轮／开始探测；结算后排队轮仅探测被撤销源，再次显式运行零探测。原生调用、逐源指纹、状态与汇总等式一致。
+- PASS：B 独立 `python3 scripts/run_isolated_batch_integration.py --scenario sharing`。批量先开始、播放先开始两个方向各仅一次实际慢媒体请求；批量分别实际调用 1／0、可靠成功均 1；PlaybackInfo HTTP200、必要主流和 URL 摘要匹配，指纹提交关联正确。
+- 两个实机入口退出均 0，夹具地址同步、配置、全部任务触发器及有效内存配置恢复均通过。B 另保存前后文件摘要、有效配置、触发器与容器镜像身份并逐项比较相等；B 构建／部署 DLL 同为 `238ab49c2135ab9568bd9ee2c6a78da926aac174b8be0a3bab20cdc80ccc6625`。只操作仓库隔离实例，无生产操作。
+
+B 索引 `.git/validation-evidence/3209bc699544f26ffe7a5e100941edda0b0d275d/b-review8-20261015/INDEX.md`。00 记录 47 个源码／测试／工具／SDK／锁输入；01 聚焦、02 locked restore、03 原 27 控制、05 stop、07 sharing、08 最终 28 控制均保留精确命令／cwd／退出码／耗时与原始日志；04／09 前后状态、06 Developer 原始证据审计、control-inputs.json 记录最终独立 helper 身份。证据仅本机可访问，保留至 A 决定。
+
+### T4 门槛复用与边界
+
+Developer 索引 `.git/validation-evidence/3209bc699544f26ffe7a5e100941edda0b0d275d/developer-fix7-t4-20261015-205847/INDEX.md` 的十份原始日志及元数据已核阅：locked restore、Release build 0 warnings／errors、C# 173/173、format、Python 54/54、默认播放、批量七场景 suite、治理／diff、前轮 27 控制实际 exit 0。纯报告后继只改 TASK.md；明确复用匹配输入的完整门槛，不声称 B 重跑默认播放／完整 suite。
+
+- Developer INDEX 把完整 22ba671..3209bc6 写成与 workspace.diff 相同，实际上该完整范围另含中间 B 的 TASK.md；真实 `git diff ceeb4a7..3209bc6` 和前一 Developer 起点的产品／测试 diff 均与 workspace.diff 逐字相同，SHA-256 `09c291dadaee7f93c380e54c71890115fdb3626fe189badf6327f9b2a1eeed92`。已由 B 核实该报告范围笔误，不存在可执行输入缺口。
+- Developer 原始构建／部署摘要为 `471fad9c223dd28192e8889bea88f5019327382107eb2cfd3fe588df6f84ea00`，B 在报告 HEAD 重编译后另记身份并用于自己的实机；两者不混称同一二进制。固定 SDK10.0.401／net10.0／Jellyfin12.2.0／原生源码 `ca0f16eb7c195f720a1493ed469a27c4657db0c6` 不变。
+- 复用本候选真实定时／重启、两库 133 候选／2 批、多版本 canonical 关联、轮内增删／新增下轮收敛、两方向 shared_stop、不同库播放 owner＋批量 owner 混合峰值 2、不可用零请求／修复重启。默认播放包含 1／默认2／保存后重启生效、池饱和独立原生刷新实际完成（374 ms）、false 权限和保存／失败／Manifest 回归。mixed 自身的204仍只代表队列受理。
+- 十万为模拟，独立旧 harness 只报告 ID 获取成本；完整对象／固定消费者上限由新版十万聚焦测试证明。实际槽位容量乘尺寸模型及离散进程堆采样不是精确查询内部峰值，不宣称真实大库性能。Jellyfin 内部数据库保存故障实机注入仍 NOT RUN，保留已接受边界。
+- Developer 说明曾因媒体日志累计截断重跑默认播放，本索引只提供最终有效原始日志；该更早反馈首败原始产物未提供，原因判断不单独视为已核验。当前完整最终门槛输入匹配且成功，B 两个独立实机入口也通过；记录此证据保留限制，不把缺失反馈称 PASS，不以此再造产品 Task。
+
+### AC 与 Slice 全部 Required Outcomes / Surfaces 重核
+
+| Task 条件 | 结论／证据 |
+|---|---|
+| AC-T1 | PASS：真实发现、默认无触发、手动／墙钟触发／重启持久化；Developer suite＋B stop 定时收尾。 |
+| AC-T2 | PASS：当前范围、候选／源换算、去重／有界完整对象、失效选择、多版本及增删；本候选聚焦／独立控制＋真实 scope。 |
+| AC-T3 | PASS：共用决策、首次信任与可靠保存／条件提交、原生取消／失败保护、当前地址及重启；本候选全套／独立控制／默认播放及 batch。 |
+| AC-T4 | PASS：准备不共享、结束重判、1／2／8、false 权限、两方向同源及不同源 owner 混合；B sharing＋匹配原始证据。 |
+| AC-T5 | PASS：停止双方先胜、同步查询／等许可／准备 await、已开始收尾、资源释放与新轮边界；确定性控制＋B stop。 |
+| AC-T6 | PASS：单项／保存／全局故障、资格丢失与末项原因、修复恢复；独立控制＋真实 failure。 |
+| AC-T7 | PASS：原生状态、统计等式、进度、实际调用、隐私；本轮拒绝进度断言及真实原始汇总。 |
+| AC-T8 | PASS：完整最终 T4 输入核验、部署加载／恢复、B 两入口独立复现；HTML 非目标明确保留。 |
+
+RO-1～RO-6 的批量后端及相关原生任务／查询／共用执行／SQLite／进度日志表面已经本 Task 交付；RO-7 的范围保存／兼容后端亦完成。RO-7 的完整 HTML 页面、五项可操作加载／保存／错误反馈、媒体库选择和任务入口／恢复说明尚未实现：Plugin 未导出 IHasWebPages，项目没有配置 HTML 资源，现有操作文档仍只写四项 API。对应 Required Surface 与 AC-1 浏览器旅程未满足，所以 Slice Required Outcomes all satisfied=NO。
+
+下一项应为一个完整管理员配置页面旅程，复用现有保存／验证／原生库查询和任务入口，不拆字段或单独造测试 Task。本轮不运行 Slice Final、不提交 Closure Packet、不改 Slice／Roadmap／稳定需求，也不代替 A 最终审查或关闭。经验候选仅供收尾：开始资格与捕获身份在原生准备后重核；未开始拒绝的原因须到达末项汇总。此前撤回的开始后取消断言继续撤回。
