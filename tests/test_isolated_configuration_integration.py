@@ -52,6 +52,22 @@ class ConfigurationScriptGuardTests(unittest.TestCase):
             "url": "http://127.0.0.1:18096/web/configurationpage.abc.chunk.js",
         }))
 
+    def test_scrollbuttons_teardown_race_is_classified_only_by_its_exact_bundle(self):
+        # Jellyfin's own emby-scrollbuttons teardown race is ignored only for the exact scrollbuttons bundle.
+        self.assertTrue(configuration.is_benign_browser_noise({
+            "text": "t.scrollHandler is not a function",
+            "url": "http://127.0.0.1:18096/web/49275.fcf2b77489e84c80e220.chunk.js",
+        }))
+        # The same message from another bundle, or a different message from the scrollbuttons bundle, is not noise.
+        self.assertFalse(configuration.is_benign_browser_noise({
+            "text": "t.scrollHandler is not a function",
+            "url": "http://127.0.0.1:18096/web/configurationpage.abc.chunk.js",
+        }))
+        self.assertFalse(configuration.is_benign_browser_noise({
+            "text": "t.otherHandler is not a function",
+            "url": "http://127.0.0.1:18096/web/49275.fcf2b77489e84c80e220.chunk.js",
+        }))
+
     def test_configuration_payload_from_xml_round_trips_all_five_fields(self):
         xml = (
             "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
@@ -101,6 +117,20 @@ class ConfigurationScriptGuardTests(unittest.TestCase):
             self.assertIn(field, driver)
         self.assertNotIn("ScheduledTasks/Running", driver)
         self.assertNotIn("updatePluginConfiguration(pluginUniqueId, config).then(function (result)", driver)
+        # The driver pins a real locale so headless Chromium never inherits a POSIX locale that breaks Jellyfin.
+        self.assertIn("locale: 'zh-CN'", driver)
+
+    def test_runner_asserts_the_stale_scope_and_unconfirmed_save_behaviour(self):
+        runner = (ROOT / "scripts" / "run_isolated_configuration_integration.py").read_text(encoding="utf-8")
+        # FR-U1: the stale-scope scenario must assert the blocked save sent no POST and the corrected save dropped it.
+        self.assertIn("attemptsAfterBlock", runner)
+        self.assertIn("The stale scope must not produce a configuration POST", runner)
+        # FR-U2: the lost-response scenario must assert an unconfirmed result rather than an unchanged promise.
+        self.assertIn("save-unconfirmed", runner)
+        self.assertIn("The page still promised the configuration was unchanged", runner)
+        # The native-task journey must be driven by page saves and check the real terminal result.
+        self.assertIn("scenario_native_task_journey", runner)
+        self.assertIn("The disabled plugin still processed a new candidate", runner)
 
     def test_restoration_reports_a_problem_when_the_file_differs(self):
         import tempfile

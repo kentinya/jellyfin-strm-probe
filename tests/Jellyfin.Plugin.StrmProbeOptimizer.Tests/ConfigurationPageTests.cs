@@ -83,6 +83,37 @@ public sealed class ConfigurationPageTests
         Assert.Contains("下一次 Jellyfin 启动", html, "The page must state when the concurrency change applies.");
     }
 
+    [TestMethod]
+    public void PageSurfacesStaleLibrariesAndBlocksUntilCorrected()
+    {
+        var html = ReadPage();
+
+        Assert.Contains("data-stale", html, "The page must mark a saved-but-missing library so it is never silently dropped.");
+        Assert.Contains("已失效媒体库", html, "The page must label a stale saved library.");
+        Assert.Contains("不会保存为全部", html, "The page must state an empty or invalid explicit scope is never widened to all libraries.");
+    }
+
+    [TestMethod]
+    public void PageDistinguishesRejectionFromUnconfirmedSaveAndOffersReload()
+    {
+        var html = ReadPage();
+
+        Assert.Contains("保存被拒绝", html, "The page must report a confirmed rejection distinctly.");
+        Assert.Contains("保存结果未确认", html, "The page must not promise a rollback when the save result is unknown.");
+        Assert.DoesNotContain("已保存的有效配置未被更改", html, "The page must not claim the effective configuration was unchanged on a network failure.");
+        Assert.Contains("ReloadConfiguration", html, "The page must offer a reload action after an unconfirmed or failed result.");
+    }
+
+    [TestMethod]
+    public void PageDeclaresTheFormAsClientValidated()
+    {
+        var html = ReadPage();
+
+        // The native number input's max attribute would block the submit event before the page's own validation
+        // feedback runs, so the form is explicitly novalidate and the page reports the actionable message itself.
+        Assert.Contains("novalidate", html, "The page must own its validation feedback instead of the browser's native constraint UI.");
+    }
+
     private static string ReadPage()
     {
         var plugin = (IHasWebPages)CreatePlugin();

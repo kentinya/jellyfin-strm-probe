@@ -6,10 +6,13 @@ hand-written STRM fixtures. It deploys the built plugin, snapshots the plugin co
 scheduled task trigger, then restores and verifies them in a finally block.
 
 It drives the real web UI with a pinned headless browser (scripts/configuration_page_driver.mjs): an administrator
-logs in, opens the native plugin entry, follows the configuration link and edits/saves the page. The browser run
-covers page load, the five editable fields, all/explicit library scope, empty-selection rejection, request and save
-failure feedback, and read-back after a real server restart. A representative native task run then proves the
-page-saved partial scope actually drives which libraries the batch task processes.
+logs in, opens the native plugin entry, follows the configuration link and edits/saves the page. Every scenario is
+run as a separate browser session and writes its own evidence directory (screenshots, driver result, console and
+failed-response raw output). The run covers page load, the five editable fields, all/explicit/stale library scope,
+empty selection, client-side concurrency bounds, rejected saves, request failures, a save whose response is lost
+after the server committed, reload recovery, and legacy configurations without the scope fields. Representative
+native task runs then prove that a page-saved partial scope, a page-disabled playback check and a page-disabled
+plugin actually drive the native batch behaviour.
 
 The browser toolchain is not a plugin production dependency. It is pinned under artifacts/dev-env/browser-tools
 (git-ignored). Prepare it with:
@@ -53,6 +56,7 @@ NODE_MODULES = BROWSER_TOOLS / "node" / "node_modules"
 DRIVER = ROOT / "scripts" / "configuration_page_driver.mjs"
 PLAYWRIGHT_PACKAGE = "playwright@1.55.0"
 CHROMIUM_REVISION = "chromium-1187"
+TASK_SETTLE_SECONDS = 150
 
 # Every problem found while restoring the isolated instance or cleaning temporary entries. A non-empty list turns
 # the run into a failure even when the browser scenarios passed, so a PASS never hides a leaked fixture.
@@ -118,7 +122,14 @@ def configuration_snapshot(api: base.JellyfinApi) -> dict:
     return json.loads(body)
 
 
-def run_browser(scenario: dict, timeout: int = 240) -> dict:
+def redacted_scenario(payload: dict) -> dict:
+    redacted = dict(payload)
+    redacted["username"] = "<redacted>"
+    redacted["password"] = "<redacted>"
+    return redacted
+
+
+def run_browser(scenario: dict, evidence_dir: Path | None = None, timeout: int = 300) -> dict:
     node = node_executable()
     base.require(node is not None, "Node.js is required to run the browser configuration-page driver.")
     with tempfile.TemporaryDirectory(prefix="strm-config-browser-") as workspace:
@@ -136,6 +147,12 @@ def run_browser(scenario: dict, timeout: int = 240) -> dict:
             check=False,
             env=environment,
         )
+    if evidence_dir is not None:
+        evidence_dir.mkdir(parents=True, exist_ok=True)
+        (evidence_dir / "scenario.redacted.json").write_text(json.dumps(redacted_scenario(scenario), ensure_ascii=False, indent=2), encoding="utf-8")
+        (evidence_dir / "driver-stdout.txt").write_text(completed.stdout, encoding="utf-8")
+        (evidence_dir / "driver-stderr.txt").write_text(completed.stderr, encoding="utf-8")
+
     output = completed.stdout.strip().splitlines()
     parsed: dict | None = None
     for line in reversed(output):
@@ -151,11 +168,14 @@ def run_browser(scenario: dict, timeout: int = 240) -> dict:
             + " | ".join((completed.stderr.strip().splitlines() or ["<empty>"])[-3:])
         )
     parsed["exit_code"] = completed.returncode
+    if evidence_dir is not None:
+        (evidence_dir / "driver-result.json").write_text(json.dumps(parsed, ensure_ascii=False, indent=2), encoding="utf-8")
     return parsed
 
 
-def driver_scenario(api: base.JellyfinApi, scenario: str, screenshot_dir: Path, **extra: object) -> dict:
+def driver_scenario(api: base.JellyfinApi, scenario: str, evidence_dir: Path, label: str, **extra: object) -> dict:
     cred = json.loads((ROOT / "artifacts" / "dev-env" / "credentials.local.json").read_text(encoding="utf-8"))
+    scenario_dir = evidence_dir / label
     payload = {
         "scenario": scenario,
         "baseUrl": cred["base_url"],
@@ -163,10 +183,10 @@ def driver_scenario(api: base.JellyfinApi, scenario: str, screenshot_dir: Path, 
         "password": cred["password"],
         "pluginId": PLUGIN_ID,
         "pageName": PAGE_NAME,
-        "screenshotDir": str(screenshot_dir),
+        "screenshotDir": str(scenario_dir),
     }
     payload.update(extra)
-    return run_browser(payload)
+    return run_browser(payload, evidence_dir=scenario_dir)
 
 
 def browser_fingerprint() -> dict:
@@ -195,14 +215,24 @@ def is_benign_browser_noise(entry: dict) -> bool:
         return True
     if "status of 404" in text and "/Packages/" in str(entry.get("url", "")):
         return True
+    # Jellyfin's own `emby-scrollbuttons` web component races its teardown: detachedCallback nulls scrollHandler
+    # while a previously scheduled requestAnimationFrame still calls it. The stack is always Jellyfin's scrollbuttons
+    # bundle, never this plugin's configuration page, so it is classified by exact bundle and exact message.
+    if text == "t.scrollHandler is not a function" and "49275." in url and ".chunk.js" in url:
+        return True
     return False
 
 
-def require_browser_clean(result: dict, label: str, allowed_failed_urls: tuple[str, ...] = (), allow_page_load_marker: bool = False) -> None:
+def require_browser_clean(
+    result: dict,
+    label: str,
+    allowed_failed_urls: tuple[str, ...] = (),
+    allow_page_load_marker: bool = False,
+    allow_network_failure: bool = False,
+) -> None:
     base.require("error" not in result, f"The browser scenario {label} failed: {result.get('error')}.")
     page_errors = [error for error in result.get("pageErrors", []) if not is_benign_browser_noise(error)]
     console_errors = [line for line in result.get("consoleErrors", []) if not is_benign_browser_noise(line)]
-    base.require(not page_errors, f"The browser scenario {label} produced page errors: {page_errors}.")
     # A scenario that deliberately injects a failure may whitelist exactly the endpoint it controls; the console
     # entry for that injected response is allowed, but any other console error still fails the scenario.
     if allowed_failed_urls:
@@ -210,8 +240,20 @@ def require_browser_clean(result: dict, label: str, allowed_failed_urls: tuple[s
             line for line in console_errors
             if not ("status of " in str(line.get("text", "")) and any(marker in str(line.get("url", "")) for marker in allowed_failed_urls))
         ]
+    if allow_network_failure:
+        # A browser-aborted configuration request surfaces as a fetch failure. Only the exact
+        # "Failed to load resource: net::ERR_FAILED" wording is tolerated, and only when it refers to the
+        # configuration endpoint the scenario controls or carries no URL.
+        console_errors = [
+            line for line in console_errors
+            if not (
+                "Failed to load resource: net::ERR_FAILED" in str(line.get("text", ""))
+                and (str(line.get("url", "")) == "" or "/Configuration" in str(line.get("url", "")))
+            )
+        ]
     if allow_page_load_marker:
         console_errors = [line for line in console_errors if "strm-config-load-failed" not in str(line.get("text", ""))]
+    base.require(not page_errors, f"The browser scenario {label} produced page errors: {page_errors}.")
     base.require(not console_errors, f"The browser scenario {label} produced console errors: {console_errors}.")
 
     # The plugin's own page and configuration endpoints must never fail during a successful scenario.
@@ -230,10 +272,14 @@ def require_browser_clean(result: dict, label: str, allowed_failed_urls: tuple[s
         base.require(not marker_errors, f"The configuration page reported its own load failure: {marker_errors}.")
 
 
-def scenario_load(api: base.JellyfinApi, screenshot_dir: Path) -> dict:
+def selected_library_ids(state: dict) -> list[str]:
+    return sorted(entry["id"].replace("-", "").lower() for entry in state["libraries"] if entry["checked"])
+
+
+def scenario_load(api: base.JellyfinApi, evidence_dir: Path) -> dict:
     """AC-U1: open the page from the plugin entry; the five effective values and the real library list load."""
     expected = configuration_snapshot(api)
-    result = driver_scenario(api, "inspect", screenshot_dir)
+    result = driver_scenario(api, "inspect", evidence_dir, "01-load")
     require_browser_clean(result, "load")
     state = result["final"]
     base.require(state["pagePresent"] and state["loaded"], f"The configuration page did not load: {state}.")
@@ -245,14 +291,10 @@ def scenario_load(api: base.JellyfinApi, screenshot_dir: Path) -> dict:
     real_libraries = {str(folder["ItemId"]).replace("-", "").lower() for folder in virtual_folders(api)}
     rendered = {entry["id"].replace("-", "").lower() for entry in state["libraries"]}
     base.require(rendered == real_libraries, f"The page did not render the real library list: {rendered} != {real_libraries}.")
-    return {
-        "loaded_values": state,
-        "real_library_count": len(real_libraries),
-        "screenshots": result["screenshots"],
-    }
+    return {"loaded_values": state, "real_library_count": len(real_libraries), "evidence": "01-load"}
 
 
-def scenario_save_and_restart(api: base.JellyfinApi, screenshot_dir: Path, strm_library: str) -> dict:
+def scenario_save_and_restart(api: base.JellyfinApi, evidence_dir: Path, strm_library: str) -> dict:
     """AC-U2/AC-U3: edit all five fields, save a partial scope, verify persistence and restart read-back."""
     edited = {
         "enabled": False,
@@ -262,18 +304,15 @@ def scenario_save_and_restart(api: base.JellyfinApi, screenshot_dir: Path, strm_
         "batchAllLibraries": False,
         "libraryIds": [strm_library],
     }
-    result = driver_scenario(api, "save_valid", screenshot_dir, edits=edited)
+    result = driver_scenario(api, "save_valid", evidence_dir, "02-save-and-restart", edits=edited)
     require_browser_clean(result, "save_valid")
     final = result["final"]
     base.require(final["saveState"] == "success", f"A valid save did not report success: {final}.")
     base.require(final["enabled"] is False and final["playbackAutoCheck"] is False and final["detailedLog"] is True, f"The saved fields were not reflected: {final}.")
     base.require(int(final["maxConcurrentProbes"]) == 6, f"The saved concurrency was not reflected: {final}.")
     base.require(final["batchAllLibraries"] is False, f"The saved scope toggle was not reflected: {final}.")
-    base.require(
-        [entry["id"] for entry in final["libraries"] if entry["checked"]] == [strm_library]
-        or [e["id"].replace("-", "").lower() for e in final["libraries"] if e["checked"]] == [strm_library.replace("-", "").lower()],
-        f"The saved partial selection was not reflected: {final}.",
-    )
+    base.require(selected_library_ids(final) == [strm_library.replace("-", "").lower()], f"The saved partial selection was not reflected: {final}.")
+    base.require(result["postBodies"] and len(result["postBodies"]) == 1, f"Exactly one configuration POST was expected: {result.get('postBodies')}.")
 
     # The effective configuration and the persisted file must match the page edit.
     effective = configuration_snapshot(api)
@@ -293,74 +332,215 @@ def scenario_save_and_restart(api: base.JellyfinApi, screenshot_dir: Path, strm_
     api = base.JellyfinApi()
     after_restart = configuration_snapshot(api)
     base.require(after_restart == effective, f"The saved configuration did not survive restart: {after_restart} != {effective}.")
-    reload_result = driver_scenario(api, "inspect", screenshot_dir)
+    reload_result = driver_scenario(api, "inspect", evidence_dir, "03-reload-after-restart")
     require_browser_clean(reload_result, "reload_after_restart")
     reload_state = reload_result["final"]
     base.require(reload_state["enabled"] is False and reload_state["detailedLog"] is True, f"The page did not read the persisted values after restart: {reload_state}.")
     base.require(int(reload_state["maxConcurrentProbes"]) == 6, f"The page did not read the persisted concurrency after restart: {reload_state}.")
+    base.require(selected_library_ids(reload_state) == [strm_library.replace("-", "").lower()], f"The page did not read the persisted partial scope after restart: {reload_state}.")
     return {
         "edited": edited,
         "effective": effective,
         "after_restart": after_restart,
-        "screenshots": result["screenshots"] + reload_result["screenshots"],
+        "evidence": ["02-save-and-restart", "03-reload-after-restart"],
         "restart_container": container,
     }
 
 
-def scenario_empty_scope(api: base.JellyfinApi, screenshot_dir: Path) -> dict:
-    """AC-U3: an explicit scope with no library is refused by the page and does not change the saved config."""
+def scenario_stale_scope(api: base.JellyfinApi, evidence_dir: Path, strm_library: str) -> dict:
+    """FR-U1/AC-U3: a saved but missing library is surfaced and blocks saving until the user corrects it."""
+    before = configuration_snapshot(api)
+    stale_library = uuid.uuid4().hex
+    result = driver_scenario(
+        api,
+        "stale_scope",
+        evidence_dir,
+        "04-stale-scope",
+        staleLibraryId=stale_library,
+        realLibraryId=strm_library,
+        baseConfig=before,
+    )
+    require_browser_clean(result, "stale_scope")
+    initial = result["initial"]
+    base.require(initial["staleWarning"], f"The page did not flag the missing saved library: {initial}.")
+    base.require(any(entry["stale"] and entry["checked"] for entry in initial["libraries"]), f"The stale library was not kept visible and selected: {initial}.")
+    blocked = result["blockedSave"]
+    base.require(blocked["saveState"] == "error" and blocked["statusKind"] == "stale", f"The stale scope save was not refused: {blocked}.")
+    base.require(result["attemptsAfterBlock"] == 0, f"The stale scope must not produce a configuration POST, saw {result['attemptsAfterBlock']}.")
+    corrected = result["correctedSave"]
+    base.require(corrected["saveState"] == "success", f"The corrected scope did not save: {corrected}.")
+    base.require(selected_library_ids(corrected) == [strm_library.replace("-", "").lower()], f"The corrected scope still contained the stale library: {corrected}.")
+    base.require(
+        result["postBodies"]
+        and [part.strip().replace("-", "").lower() for part in str(result["postBodies"][-1]["BatchLibraryIds"]).split(",") if part.strip()]
+        == [strm_library.replace("-", "").lower()],
+        f"The corrected POST still carried the stale library: {result.get('postBodies')}.",
+    )
+    effective = configuration_snapshot(api)
+    base.require(stale_library not in str(effective.get("BatchLibraryIds", "")).replace("-", "").lower(), f"The stale library was persisted: {effective}.")
+    return {"stale_library": stale_library, "evidence": "04-stale-scope", "blocked_save": blocked, "corrected_save": corrected}
+
+
+def scenario_lost_save_response(api: base.JellyfinApi, evidence_dir: Path) -> dict:
+    """FR-U2/AC-U4: the server commits the save but the browser loses the response."""
+    result = driver_scenario(api, "lost_save_response", evidence_dir, "05-lost-save-response")
+    require_browser_clean(result, "lost_save_response", allow_network_failure=True)
+    base.require(result["postApplied"] == 1 and result.get("serverStatus") == 204, f"The lost-response scenario did not commit on the server: {result.get('serverStatus')}.")
+    feedback = result["afterSave"]
+    base.require(feedback["saveState"] == "error" and feedback["statusKind"] == "save-unconfirmed", f"The lost response was not reported as unconfirmed: {feedback}.")
+    base.require("未确认" in feedback["statusText"], f"The unconfirmed feedback was not accurate: {feedback}.")
+    base.require("未被更改" not in feedback["statusText"] and "未更改" not in feedback["statusText"], f"The page still promised the configuration was unchanged: {feedback}.")
+    effective = result["effectiveAfter"]
+    base.require(effective["DetailedLog"] != result["initial"]["detailedLog"], f"The server did not actually commit the toggled field: {effective}.")
+    reloaded = result["reloaded"]
+    base.require(reloaded["detailedLog"] == effective["DetailedLog"], f"The reload did not show the real effective value: {reloaded}.")
+    return {"evidence": "05-lost-save-response", "effective_after_lost_save": effective, "feedback": feedback}
+
+
+def scenario_pre_submit_failure(api: base.JellyfinApi, evidence_dir: Path) -> dict:
+    """AC-U4: the save request never reaches the server, so nothing may change."""
+    result = driver_scenario(api, "pre_submit_failure", evidence_dir, "06-pre-submit-failure")
+    require_browser_clean(result, "pre_submit_failure", allow_network_failure=True)
+    base.require(result["postApplied"] == 0, "The pre-submit failure scenario must not reach the server.")
+    feedback = result["afterSave"]
+    base.require(feedback["saveState"] == "error" and feedback["statusKind"] == "save-unconfirmed", f"The pre-submit failure was not reported as unconfirmed: {feedback}.")
+    base.require("未被更改" not in feedback["statusText"] and "未更改" not in feedback["statusText"], f"The page promised the configuration was unchanged on an unconfirmed result: {feedback}.")
+    base.require(result["effectiveAfter"] == result["before"], f"A request that never reached the server changed the effective configuration: {result['effectiveAfter']}.")
+    base.require(result["reloaded"]["saveState"] == "" and result["reloaded"]["loaded"], f"The reload did not recover to a loaded state: {result['reloaded']}.")
+    return {"evidence": "06-pre-submit-failure", "feedback": feedback}
+
+
+def scenario_rejected_save(api: base.JellyfinApi, evidence_dir: Path) -> dict:
+    """AC-U4: a genuine server rejection is reported as a rejection and leaves the configuration unchanged."""
     before = configuration_snapshot(api)
     file_before = CONFIGURATION_FILE.read_bytes()
-    result = driver_scenario(api, "save_empty_scope", screenshot_dir)
-    require_browser_clean(result, "empty_scope")
-    final = result["final"]
-    base.require(final["saveState"] == "error", f"The empty explicit scope was not refused: {final}.")
-    base.require("未选择任何媒体库" in final["statusText"] or "空选择" in final["statusText"], f"The empty-scope feedback was not actionable: {final}.")
-    base.require(configuration_snapshot(api) == before, "A refused empty scope changed the effective configuration.")
-    base.require(CONFIGURATION_FILE.read_bytes() == file_before, "A refused empty scope changed the persisted configuration file.")
-    return {"status_text": final["statusText"], "screenshots": result["screenshots"]}
-
-
-def scenario_library_read_failure(api: base.JellyfinApi, screenshot_dir: Path) -> dict:
-    """AC-U3: when the library list cannot be read, the page reports it and does not fabricate a selection."""
-    result = driver_scenario(api, "library_read_failure", screenshot_dir)
-    require_browser_clean(result, "library_read_failure", allowed_failed_urls=("/Library/VirtualFolders",))
-    final = result["final"]
-    base.require(final["loaded"], f"The page did not load while the library list was unavailable: {final}.")
-    base.require(not final["libraries"], f"The page rendered libraries despite the read failure: {final}.")
-    base.require("媒体库列表失败" in final["statusText"] or "无法读取媒体库列表" in final["statusText"], f"The library read failure was not surfaced: {final}.")
-    return {"status_text": final["statusText"], "screenshots": result["screenshots"]}
-
-
-def scenario_save_failure(api: base.JellyfinApi, screenshot_dir: Path) -> dict:
-    """AC-U4: a rejected save shows an accurate error and leaves the saved configuration unchanged."""
-    before = configuration_snapshot(api)
-    file_before = CONFIGURATION_FILE.read_bytes()
-    result = driver_scenario(api, "save_failure", screenshot_dir, edits={"enabled": True, "detailedLog": False})
-    require_browser_clean(result, "save_failure", allowed_failed_urls=("/Configuration",))
-    final = result["final"]
-    base.require(final["saveState"] == "error", f"A rejected save did not report an error: {final}.")
-    base.require("未被更改" in final["statusText"] or "保存被拒绝" in final["statusText"], f"The save failure feedback was not accurate: {final}.")
-    base.require(configuration_snapshot(api) == before, "A rejected save changed the effective configuration.")
+    result = driver_scenario(api, "save_failure", evidence_dir, "07-rejected-save")
+    require_browser_clean(result, "rejected_save", allowed_failed_urls=("/Configuration",))
+    feedback = result["afterSave"]
+    base.require(feedback["saveState"] == "error" and feedback["statusKind"] == "save-rejected", f"The rejection was not reported as a rejection: {feedback}.")
+    base.require("拒绝" in feedback["statusText"], f"The rejection feedback was not accurate: {feedback}.")
+    base.require(result["effectiveAfter"] == before, "A rejected save changed the effective configuration.")
     base.require(CONFIGURATION_FILE.read_bytes() == file_before, "A rejected save changed the persisted configuration file.")
-    return {"status_text": final["statusText"], "screenshots": result["screenshots"]}
+    base.require(result["reloaded"]["loaded"], f"The page did not recover after a rejected save: {result['reloaded']}.")
+    return {"evidence": "07-rejected-save", "feedback": feedback}
 
 
-def scenario_load_failure(api: base.JellyfinApi, screenshot_dir: Path) -> dict:
-    """AC-U1/AC-U3: a failed configuration load disables saving instead of overwriting with defaults."""
+def scenario_concurrency_bounds(api: base.JellyfinApi, evidence_dir: Path, strm_library: str) -> dict:
+    """AC-U4: an out-of-range concurrency is refused client-side, then recovered by a valid value."""
     before = configuration_snapshot(api)
-    result = driver_scenario(api, "load_failure", screenshot_dir)
+    result = driver_scenario(api, "concurrent_out_of_range", evidence_dir, "08-concurrency-bounds")
+    require_browser_clean(result, "concurrency_bounds")
+    invalid = result["invalidSave"]
+    base.require(invalid["saveState"] == "error" and "1～8" in invalid["statusText"], f"The out-of-range concurrency was not refused: {invalid}.")
+    base.require(result["attemptsAfterInvalid"] == 0, f"An out-of-range concurrency must not produce a POST, saw {result['attemptsAfterInvalid']}.")
+    # No POST was sent, so the effective configuration and the persisted file cannot have changed; the effective
+    # value is re-read through the API immediately after the refusal to prove it.
+    base.require(result["effectiveAfterInvalid"] == before, f"A refused concurrency changed the effective configuration: {result['effectiveAfterInvalid']} != {before}.")
+    corrected = result["correctedSave"]
+    base.require(corrected["saveState"] == "success" and int(corrected["maxConcurrentProbes"]) == 3, f"The corrected concurrency did not save: {corrected}.")
+    base.require(int(configuration_snapshot(api)["MaxConcurrentProbes"]) == 3, "The corrected concurrency was not persisted.")
+    return {"evidence": "08-concurrency-bounds", "invalid": invalid, "corrected": corrected}
+
+
+def scenario_empty_scope(api: base.JellyfinApi, evidence_dir: Path, strm_library: str) -> dict:
+    """AC-U3: an explicit scope with no library is refused, then recovered by selecting a real library."""
+    before = configuration_snapshot(api)
+    result = driver_scenario(api, "empty_scope", evidence_dir, "09-empty-scope", realLibraryId=strm_library)
+    require_browser_clean(result, "empty_scope")
+    refused = result["refusedSave"]
+    base.require(refused["saveState"] == "error" and refused["statusKind"] == "empty-scope", f"The empty explicit scope was not refused: {refused}.")
+    base.require("未选择任何媒体库" in refused["statusText"] or "空选择" in refused["statusText"], f"The empty-scope feedback was not actionable: {refused}.")
+    base.require(result["attemptsAfterRefusal"] == 0, f"An empty scope must not produce a POST, saw {result['attemptsAfterRefusal']}.")
+    base.require(result["effectiveAfterRefusal"] == before, f"A refused empty scope changed the effective configuration: {result['effectiveAfterRefusal']} != {before}.")
+    corrected = result["correctedSave"]
+    base.require(corrected["saveState"] == "success", f"The corrected empty scope did not save: {corrected}.")
+    base.require(selected_library_ids(corrected) == [strm_library.replace("-", "").lower()], f"The corrected selection was not the chosen library: {corrected}.")
+    return {"evidence": "09-empty-scope", "refused": refused, "corrected": corrected}
+
+
+def scenario_load_failure(api: base.JellyfinApi, evidence_dir: Path) -> dict:
+    """AC-U1/AC-U3: a failed configuration load disables saving; "重新读取" recovers."""
+    before = configuration_snapshot(api)
+    result = driver_scenario(api, "load_failure", evidence_dir, "10-load-failure")
     require_browser_clean(result, "load_failure", allowed_failed_urls=("/Configuration",), allow_page_load_marker=True)
-    final = result["final"]
-    base.require(not final["loaded"], f"The page claimed a successful load despite the read failure: {final}.")
-    base.require(final["saveState"] == "error", f"The failed load did not surface an error: {final}.")
-    base.require("保存已禁用" in final["statusText"] or "读取当前配置失败" in final["statusText"], f"The load failure was not actionable: {final}.")
+    initial = result["initial"]
+    base.require(not initial["loaded"], f"The page claimed a successful load despite the read failure: {initial}.")
+    base.require(initial["saveState"] == "error" and initial["saveDisabled"], f"The failed load did not disable saving: {initial}.")
+    base.require("保存已禁用" in initial["statusText"] or "读取当前配置失败" in initial["statusText"], f"The load failure was not actionable: {initial}.")
     base.require(configuration_snapshot(api) == before, "A failed load changed the effective configuration.")
-    return {"status_text": final["statusText"], "screenshots": result["screenshots"]}
+    reloaded = result["reloaded"]
+    base.require(reloaded["loaded"] and not reloaded["saveDisabled"], f"The reload did not recover the page: {reloaded}.")
+    return {"evidence": "10-load-failure", "initial": initial, "reloaded": reloaded}
 
 
-def scenario_native_task_scope(api: base.JellyfinApi, container: str, media_container: str, strm_library: str, local_library: str) -> dict:
-    """AC-U3/AC-U5: the page-saved partial scope actually drives which libraries the native task processes."""
+def scenario_library_read_failure(api: base.JellyfinApi, evidence_dir: Path) -> dict:
+    """AC-U3: when the library list cannot be read, the page reports it and reloading recovers."""
+    result = driver_scenario(api, "library_read_failure", evidence_dir, "11-library-read-failure")
+    require_browser_clean(result, "library_read_failure", allowed_failed_urls=("/Library/VirtualFolders",))
+    initial = result["initial"]
+    base.require(initial["loaded"], f"The page did not load while the library list was unavailable: {initial}.")
+    base.require(initial["libraryListUnavailable"] and not initial["libraries"], f"The page rendered libraries despite the read failure: {initial}.")
+    base.require(initial["statusKind"] == "library-unavailable" and "媒体库列表" in initial["statusText"], f"The library read failure was not surfaced: {initial}.")
+    reloaded = result["reloaded"]
+    base.require(not reloaded["libraryListUnavailable"] and reloaded["libraries"], f"The reload did not restore the library list: {reloaded}.")
+    return {"evidence": "11-library-read-failure", "initial": initial, "reloaded": reloaded}
+
+
+def scenario_legacy_scope(api: base.JellyfinApi, evidence_dir: Path) -> dict:
+    """AC-U1: a legacy configuration without the scope fields loads as the documented all-library default."""
+    result = driver_scenario(api, "legacy_scope", evidence_dir, "12-legacy-scope")
+    require_browser_clean(result, "legacy_scope")
+    state = result["initial"]
+    base.require(state["loaded"], f"The legacy configuration did not load: {state}.")
+    base.require(state["batchAllLibraries"] is True, f"A legacy configuration without the scope fields must default to all libraries: {state}.")
+    base.require(state["enabled"] is True and state["playbackAutoCheck"] is True, f"The legacy configuration did not keep its documented defaults: {state}.")
+    return {"evidence": "12-legacy-scope", "state": state}
+
+
+def configure_via_api(api: base.JellyfinApi, payload: dict) -> int:
+    status, _ = api.request_response(f"/Plugins/{PLUGIN_ID}/Configuration", method="POST", data=json.dumps(payload).encode("utf-8"))
+    return status
+
+
+def run_native_task(api: base.JellyfinApi, container: str) -> dict:
+    """Start the native task and wait for it to settle, returning the real terminal result."""
+    task = next((task for task in base.request_json(api.base_url + "/ScheduledTasks", headers=api.headers, timeout=20) if task.get("Name") == TASK_NAME), None)
+    base.require(task is not None, f"Expected exactly one native task named {TASK_NAME!r}.")
+    previous_start = (task.get("LastExecutionResult") or {}).get("StartTimeUtc")
+    status, _ = api.request_response("/ScheduledTasks/Running/" + task["Id"], method="POST")
+    base.require(status == 204, f"Jellyfin did not accept the manual native task start (status {status}).")
+    deadline = time.monotonic() + TASK_SETTLE_SECONDS
+    while time.monotonic() < deadline:
+        current = next((item for item in base.request_json(api.base_url + "/ScheduledTasks", headers=api.headers, timeout=20) if item.get("Id") == task["Id"]), None)
+        state = str((current or {}).get("State", "")).lower()
+        result = (current or {}).get("LastExecutionResult") or {}
+        if state in {"idle", "0"} and result.get("StartTimeUtc") != previous_start:
+            return current
+        time.sleep(0.5)
+    raise RuntimeError("The native batch task did not settle before the timeout.")
+
+
+def terminal_status(task: dict) -> str:
+    return str((task.get("LastExecutionResult") or {}).get("Status", ""))
+
+
+def page_save_via_browser(api: base.JellyfinApi, evidence_dir: Path, label: str, edits: dict) -> dict:
+    """Save the given edits through the real page and return the driver result after asserting success."""
+    result = driver_scenario(api, "save_valid", evidence_dir, label, edits=edits)
+    require_browser_clean(result, label)
+    base.require(result["final"]["saveState"] == "success", f"The page save {label} did not succeed: {result['final']}.")
+    base.require(result["postAttempts"] == 1, f"The page save {label} did not produce exactly one POST: {result.get('postAttempts')}.")
+    return result
+
+
+def scenario_native_task_journey(
+    api: base.JellyfinApi,
+    container: str,
+    evidence_dir: Path,
+    strm_library: str,
+    local_library: str,
+) -> dict:
+    """AC-U3/AC-U5: page-saved scope, disabled playback check and disabled plugin drive the native task."""
     media = (ROOT / "artifacts" / "dev-env" / "media" / "fixture.mp4").read_bytes()
     sha1 = hashlib.sha1(media).hexdigest()
     plain_url = "http://media:8080/fixture.mp4"
@@ -369,64 +549,101 @@ def scenario_native_task_scope(api: base.JellyfinApi, container: str, media_cont
     local_dir = ROOT / "artifacts" / "dev-env" / "media"
     in_scope_name = f"Config Page InScope {nonce}"
     out_scope_name = f"Config Page OutScope {nonce}"
+    disabled_name = f"Config Page Disabled {nonce}"
     in_scope_path = strm_dir / (in_scope_name + ".strm")
     out_scope_path = local_dir / (out_scope_name + ".strm")
+    disabled_path = strm_dir / (disabled_name + ".strm")
+    created: list[Path] = []
+
+    def write_fixture(path: Path, name: str) -> None:
+        with path.open("xb") as fixture:
+            fixture.write(base.write_versioned_fixture(FIXTURE.read_bytes(), base.unique_query_url(plain_url, name), sha1, len(media)))
+        created.append(path)
+
     try:
-        with in_scope_path.open("xb") as fixture:
-            fixture.write(base.write_versioned_fixture(FIXTURE.read_bytes(), base.unique_query_url(plain_url, nonce + "in"), sha1, len(media)))
-        with out_scope_path.open("xb") as fixture:
-            fixture.write(base.write_versioned_fixture(FIXTURE.read_bytes(), base.unique_query_url(plain_url, nonce + "out"), sha1, len(media)))
+        write_fixture(in_scope_path, nonce + "in")
+        write_fixture(out_scope_path, nonce + "out")
         api.refresh_library()
         in_scope_item = api.wait_for_named_library_item(in_scope_name)
         out_scope_item = api.wait_for_named_library_item(out_scope_name)
 
-        # Scope was already saved to the STRM library through the browser in scenario_save_and_restart; re-save it
-        # through the API so this scenario is self-contained and does not depend on scenario ordering.
-        status = configure_via_api(api, {
-            "Enabled": True,
-            "PlaybackAutoCheck": True,
-            "MaxConcurrentProbes": 2,
-            "DetailedLog": False,
-            "BatchAllLibraries": False,
-            "BatchLibraryIds": strm_library,
-        })
-        base.require(status == 204, f"Jellyfin rejected the representative partial scope ({status}).")
-
-        run_native_task(api, container)
-        base.require(
-            batch_fingerprint_row(in_scope_item["Id"]) is not None,
-            "The native task did not process the in-scope STRM library candidate.",
-        )
-        base.require(
-            batch_fingerprint_row(out_scope_item["Id"]) is None,
-            "The native task processed an out-of-scope library candidate despite the page-saved partial scope.",
-        )
-
-        # Switch back to all libraries and prove the previously out-of-scope candidate is now processed.
-        status = configure_via_api(api, {
+        # Fixture preparation only: start from a known all-library, enabled state so the page edit below is the
+        # value under test. The value that drives each run is always saved through the real page.
+        base.require(configure_via_api(api, {
             "Enabled": True,
             "PlaybackAutoCheck": True,
             "MaxConcurrentProbes": 2,
             "DetailedLog": False,
             "BatchAllLibraries": True,
             "BatchLibraryIds": "",
+        }) == 204, "The fixture-preparation configuration was rejected.")
+
+        # Step 1: the page saves an explicit partial scope; the native task must process only that library.
+        page_save_via_browser(api, evidence_dir, "13-native-partial-scope", {
+            "batchAllLibraries": False,
+            "libraryIds": [strm_library],
         })
-        base.require(status == 204, f"Jellyfin rejected the all-library scope ({status}).")
-        run_native_task(api, container)
-        base.require(
-            batch_fingerprint_row(out_scope_item["Id"]) is not None,
-            "Switching back to all libraries did not process the previously out-of-scope candidate.",
-        )
+        base.require(configuration_snapshot(api)["BatchAllLibraries"] is False, "The page partial scope was not effective.")
+        partial_task = run_native_task(api, container)
+        base.require(terminal_status(partial_task) == "Completed", f"The partial-scope native task did not complete: {terminal_status(partial_task)}.")
+        base.require(base.fingerprint_row(in_scope_item["Id"], in_scope_item["Id"]) is not None, "The native task did not process the in-scope STRM candidate.")
+        base.require(base.fingerprint_row(out_scope_item["Id"], out_scope_item["Id"]) is None, "The native task processed an out-of-scope candidate under a page-saved partial scope.")
+
+        # Step 2: the page switches to all libraries; the previously out-of-scope candidate is processed.
+        page_save_via_browser(api, evidence_dir, "14-native-all-scope", {"batchAllLibraries": True})
+        base.require(configuration_snapshot(api)["BatchAllLibraries"] is True, "The page all-library scope was not effective.")
+        all_task = run_native_task(api, container)
+        base.require(terminal_status(all_task) == "Completed", f"The all-library native task did not complete: {terminal_status(all_task)}.")
+        base.require(base.fingerprint_row(out_scope_item["Id"], out_scope_item["Id"]) is not None, "Switching to all libraries did not process the previously out-of-scope candidate.")
+
+        # Step 3: the page disables the playback check; the independent batch task must still run over the full scope.
+        page_save_via_browser(api, evidence_dir, "15-native-playback-off", {"playbackAutoCheck": False})
+        base.require(configuration_snapshot(api)["PlaybackAutoCheck"] is False, "The page playback check toggle was not effective.")
+        playback_off_task = run_native_task(api, container)
+        base.require(terminal_status(playback_off_task) == "Completed", f"The batch task did not run with the playback check disabled: {terminal_status(playback_off_task)}.")
+
+        # Create the disabled-state fixture only now, so the earlier full-scope runs cannot have processed it. It
+        # must stay unprocessed while the plugin is disabled and be handled after the page re-enables it.
+        write_fixture(disabled_path, nonce + "disabled")
+        api.refresh_library()
+        disabled_item = api.wait_for_named_library_item(disabled_name)
+        base.require(base.fingerprint_row(disabled_item["Id"], disabled_item["Id"]) is None, "The disabled-state fixture was already processed before the disable run.")
+
+        # Step 4: the page disables the plugin; the native task must not start a new probe on the unprocessed item.
+        page_save_via_browser(api, evidence_dir, "16-native-disabled", {"enabled": False})
+        base.require(configuration_snapshot(api)["Enabled"] is False, "The page plugin-disable toggle was not effective.")
+        disabled_task = run_native_task(api, container)
+        disabled_status = terminal_status(disabled_task)
+        base.require(disabled_status == "Cancelled", f"The native task did not end early while the plugin was disabled: {disabled_status}.")
+        base.require(base.fingerprint_row(disabled_item["Id"], disabled_item["Id"]) is None, "The disabled plugin still processed a new candidate.")
+
+        # Step 5: the page re-enables the plugin; the previously unprocessed candidate is now handled.
+        page_save_via_browser(api, evidence_dir, "17-native-reenabled", {"enabled": True})
+        base.require(configuration_snapshot(api)["Enabled"] is True, "The page re-enable toggle was not effective.")
+        reenabled_task = run_native_task(api, container)
+        base.require(terminal_status(reenabled_task) == "Completed", f"The re-enabled native task did not complete: {terminal_status(reenabled_task)}.")
+        base.require(base.fingerprint_row(disabled_item["Id"], disabled_item["Id"]) is not None, "Re-enabling did not process the previously unprocessed candidate.")
+
         return {
+            "evidence": [
+                "13-native-partial-scope",
+                "14-native-all-scope",
+                "15-native-playback-off",
+                "16-native-disabled",
+                "17-native-reenabled",
+            ],
             "in_scope_processed": True,
             "out_of_scope_unprocessed_under_partial": True,
             "out_of_scope_processed_under_all": True,
+            "batch_ran_with_playback_check_disabled": True,
+            "disabled_did_not_process_new_candidate": True,
+            "reenabled_processed_candidate": True,
             "strm_library_id": strm_library,
             "local_library_id": local_library,
         }
     finally:
-        in_scope_path.unlink(missing_ok=True)
-        out_scope_path.unlink(missing_ok=True)
+        for path in created:
+            path.unlink(missing_ok=True)
         try:
             configure_via_api(api, {
                 "Enabled": True,
@@ -442,37 +659,11 @@ def scenario_native_task_scope(api: base.JellyfinApi, container: str, media_cont
             api.refresh_library()
         except Exception:
             pass
-        for name in (in_scope_name, out_scope_name):
+        for name in (in_scope_name, out_scope_name, disabled_name):
             try:
                 api.wait_for_named_library_item_absent(name)
             except Exception as error:
                 record_problem(f"temporary library item {name!r} was not removed: {type(error).__name__}")
-
-
-def configure_via_api(api: base.JellyfinApi, payload: dict) -> int:
-    status, _ = api.request_response(f"/Plugins/{PLUGIN_ID}/Configuration", method="POST", data=json.dumps(payload).encode("utf-8"))
-    return status
-
-
-def run_native_task(api: base.JellyfinApi, container: str) -> dict:
-    task = next((task for task in base.request_json(api.base_url + "/ScheduledTasks", headers=api.headers, timeout=20) if task.get("Name") == TASK_NAME), None)
-    base.require(task is not None, f"Expected exactly one native task named {TASK_NAME!r}.")
-    previous_start = (task.get("LastExecutionResult") or {}).get("StartTimeUtc")
-    status, _ = api.request_response("/ScheduledTasks/Running/" + task["Id"], method="POST")
-    base.require(status == 204, "Jellyfin did not accept the manual native task start.")
-    deadline = time.monotonic() + 120
-    while time.monotonic() < deadline:
-        current = next((item for item in base.request_json(api.base_url + "/ScheduledTasks", headers=api.headers, timeout=20) if item.get("Id") == task["Id"]), None)
-        state = str((current or {}).get("State", "")).lower()
-        if state in {"running", "cancelling", "1", "2"} or (current or {}).get("LastExecutionResult", {}).get("StartTimeUtc") != previous_start:
-            if state in {"idle", "0"}:
-                return current
-        time.sleep(0.5)
-    raise RuntimeError("The native batch task did not settle before the timeout.")
-
-
-def batch_fingerprint_row(item_id: str) -> dict | None:
-    return base.fingerprint_row(item_id, item_id)
 
 
 def main() -> int:
@@ -504,6 +695,7 @@ def main() -> int:
     exit_code = 1
     try:
         summary["deployment"] = base.deploy_plugin()
+        summary["deployment"]["dll_sha256"] = hashlib.sha256(base.PLUGIN_SOURCE.read_bytes()).hexdigest()
         container = base.restart_isolated_server()
         api = base.JellyfinApi()
         base.require(api.public_info().get("Version") == "12.2.0", "The active isolated Jellyfin version is not 12.2.0.")
@@ -519,11 +711,16 @@ def main() -> int:
         api = base.JellyfinApi()
         container = base.isolated_container_name()
         media_container = base.isolated_media_container_name()
-        summary["scenario_empty_scope"] = scenario_empty_scope(api, evidence_dir)
-        summary["scenario_library_read_failure"] = scenario_library_read_failure(api, evidence_dir)
-        summary["scenario_save_failure"] = scenario_save_failure(api, evidence_dir)
+        summary["scenario_stale_scope"] = scenario_stale_scope(api, evidence_dir, strm_library)
+        summary["scenario_lost_save_response"] = scenario_lost_save_response(api, evidence_dir)
+        summary["scenario_pre_submit_failure"] = scenario_pre_submit_failure(api, evidence_dir)
+        summary["scenario_rejected_save"] = scenario_rejected_save(api, evidence_dir)
+        summary["scenario_concurrency_bounds"] = scenario_concurrency_bounds(api, evidence_dir, strm_library)
+        summary["scenario_empty_scope"] = scenario_empty_scope(api, evidence_dir, strm_library)
         summary["scenario_load_failure"] = scenario_load_failure(api, evidence_dir)
-        summary["scenario_native_task_scope"] = scenario_native_task_scope(api, container, media_container, strm_library, local_library)
+        summary["scenario_library_read_failure"] = scenario_library_read_failure(api, evidence_dir)
+        summary["scenario_legacy_scope"] = scenario_legacy_scope(api, evidence_dir)
+        summary["scenario_native_task_journey"] = scenario_native_task_journey(api, container, evidence_dir, strm_library, local_library)
 
         summary["status"] = "PASS" if not RESTORE_PROBLEMS else "FAIL"
         exit_code = 0 if not RESTORE_PROBLEMS else 1

@@ -8,7 +8,7 @@
     <div id="StrmProbeOptimizerConfigPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-input,emby-button,emby-checkbox">
         <div data-role="content">
             <div class="content-primary">
-                <form id="StrmProbeOptimizerConfigForm">
+                <form id="StrmProbeOptimizerConfigForm" novalidate>
                     <div class="sectionTitleContainer flex align-items-center">
                         <h2 class="sectionTitle">STRM Probe Optimizer</h2>
                     </div>
@@ -74,7 +74,8 @@
                             <div id="BatchLibraryList" class="fieldDescription"></div>
                             <div class="fieldDescription">
                                 页面展示媒体库名称，保存时写入其稳定 Jellyfin 库 ID。范围修改只对下一次批量运行生效。
-                                已保存的库被删除或无法识别时，任务会报告范围不可用且不开始探测；请在本页修正后重新保存。
+                                已保存的库被删除或无法识别时，页面会把它标为「已失效媒体库」并阻止保存，请取消勾选失效项并保留至少一个有效库，
+                                或明确切换为「检查全部媒体库」；任务不会自动把失效选择当作全部。
                             </div>
                         </div>
                         <div id="BatchLibraryStatus" class="fieldDescription" style="margin-top: 0.5em;"></div>
@@ -105,6 +106,9 @@
                     </div>
 
                     <div>
+                        <button id="ReloadConfiguration" is="emby-button" type="button" class="raised block emby-button">
+                            <span>重新读取</span>
+                        </button>
                         <button id="SaveConfiguration" is="emby-button" type="submit" class="raised button-submit block emby-button">
                             <span>保存</span>
                         </button>
@@ -118,6 +122,8 @@
                 var configurationLoaded = false;
                 var availableLibraries = [];
                 var libraryListAvailable = false;
+                var savedLibraryIds = [];
+                var saving = false;
 
                 var page = document.querySelector('#StrmProbeOptimizerConfigPage');
                 var form = document.querySelector('#StrmProbeOptimizerConfigForm');
@@ -129,20 +135,36 @@
                 var selectionContainer = document.querySelector('#BatchLibrarySelection');
                 var libraryList = document.querySelector('#BatchLibraryList');
                 var statusElement = document.querySelector('#BatchLibraryStatus');
+                var reloadButton = document.querySelector('#ReloadConfiguration');
+                var saveButton = document.querySelector('#SaveConfiguration');
 
                 function normalizeId(value) {
                     return (value || '').toString().replace(/-/g, '').toLowerCase();
                 }
 
-                function setStatus(message, isError) {
+                function setStatus(message, kind) {
                     statusElement.textContent = message || '';
-                    statusElement.style.color = isError ? '#f44336' : '';
-                    statusElement.setAttribute('data-save-state', message ? (isError ? 'error' : 'success') : '');
+                    statusElement.setAttribute('data-status-kind', kind || '');
+                    var isProblem = kind === 'error' || kind === 'save-rejected' || kind === 'save-unconfirmed'
+                        || kind === 'stale' || kind === 'library-unavailable' || kind === 'empty-scope';
+                    statusElement.style.color = isProblem ? '#f44336' : '';
+                }
+
+                function setSaveState(state) {
+                    if (state) {
+                        statusElement.setAttribute('data-save-state', state);
+                    } else {
+                        statusElement.removeAttribute('data-save-state');
+                    }
                 }
 
                 function getSelectedLibraryIds() {
                     return Array.prototype.slice.call(libraryList.querySelectorAll('input[type="checkbox"]:checked'))
                         .map(function (input) { return input.value; });
+                }
+
+                function hasStaleSelection() {
+                    return libraryList.querySelectorAll('input[type="checkbox"][data-stale="true"]:checked').length > 0;
                 }
 
                 function updateSelectionVisibility() {
@@ -155,58 +177,46 @@
                     });
                 }
 
-                function renderLibraryList(config) {
+                function renderLibraryList() {
                     libraryList.textContent = '';
-                    if (!availableLibraries.length) {
+                    if (!libraryListAvailable) {
                         var empty = document.createElement('div');
-                        empty.textContent = '暂时无法读取媒体库列表。请稍后重新打开本页；显式选择在列表可读之前不会被保存。';
+                        empty.setAttribute('data-library-list', 'unavailable');
+                        empty.textContent = '暂时无法读取媒体库列表。请稍后使用「重新读取」；显式选择在列表可读之前不会被保存。';
                         libraryList.appendChild(empty);
                         return;
                     }
 
-                    var configured = (config.BatchLibraryIds || '').split(',')
-                        .map(normalizeId)
-                        .filter(function (id) { return id; });
+                    var configured = savedLibraryIds.slice();
+                    var availableSet = {};
+                    availableLibraries.forEach(function (library) { availableSet[normalizeId(library.Id)] = true; });
+                    var stale = configured.filter(function (id) { return !availableSet[id]; });
 
                     // Build the list from escaped markup so the page never injects a library name as HTML and the
                     // Jellyfin web-components polyfill does not need a programmatic custom element.
-                    libraryList.innerHTML = availableLibraries.map(function (library) {
+                    var markup = availableLibraries.map(function (library) {
                         var checked = configured.indexOf(normalizeId(library.Id)) >= 0 ? ' checked' : '';
                         return '<label class="checkboxContainer" style="display:block;">'
-                            + '<input type="checkbox" is="emby-checkbox" value="' + escapeHtml(library.Id) + '"' + checked + ' />'
+                            + '<input type="checkbox" is="emby-checkbox" data-stale="false" value="' + escapeHtml(library.Id) + '"' + checked + ' />'
                             + '<span>' + escapeHtml(library.Name) + '（' + escapeHtml(library.Id) + '）</span>'
                             + '</label>';
                     }).join('');
-                }
 
-                function loadConfiguration() {
-                    Dashboard.showLoadingMsg();
-                    setStatus('', false);
-                    return ApiClient.getPluginConfiguration(pluginUniqueId).then(function (config) {
-                        enabledInput.checked = config.Enabled !== false;
-                        playbackInput.checked = config.PlaybackAutoCheck !== false;
-                        concurrencyInput.value = config.MaxConcurrentProbes != null ? config.MaxConcurrentProbes : 2;
-                        detailedLogInput.checked = config.DetailedLog === true;
-                        allLibrariesInput.checked = config.BatchAllLibraries !== false;
-                        renderLibraryList(config);
-                        updateSelectionVisibility();
-                        configurationLoaded = true;
-                        statusElement.setAttribute('data-loaded', 'true');
-                        if (libraryListAvailable) {
-                            setStatus('已加载当前配置。', false);
-                        } else {
-                            // The configuration loaded, but the library list could not be read. Surface that clearly
-                            // instead of showing a plain success; an explicit selection cannot be verified yet.
-                            setStatus('配置已加载，但读取媒体库列表失败。可继续使用「检查全部媒体库」；在列表恢复前请勿保存显式选择，否则会被拒绝。', true);
-                        }
-                    }).catch(function (err) {
-                        configurationLoaded = false;
-                        statusElement.removeAttribute('data-loaded');
-                        setStatus('读取当前配置失败。为避免用默认值覆盖已保存配置，保存已禁用；请重新打开本页重试。', true);
-                        if (window.console && console.error) { console.error('strm-config-load-failed', err && (err.stack || err.message || String(err))); }
-                    }).finally(function () {
-                        Dashboard.hideLoadingMsg();
-                    });
+                    if (stale.length) {
+                        // Keep a saved-but-missing library visible and selectable instead of silently dropping it, so
+                        // the administrator must explicitly correct the scope before any save can succeed.
+                        markup += '<div data-stale-warning="true" style="color:#f44336; margin:0.25em 0;">'
+                            + '以下已保存的媒体库已失效：请取消勾选失效项并保留至少一个有效库，或明确切换为「检查全部媒体库」；在修正前保存会被拒绝。'
+                            + '</div>';
+                        markup += stale.map(function (id) {
+                            return '<label class="checkboxContainer" data-stale-item="true" style="display:block; color:#f44336;">'
+                                + '<input type="checkbox" is="emby-checkbox" data-stale="true" value="' + escapeHtml(id) + '" checked />'
+                                + '<span>已失效媒体库（' + escapeHtml(id) + '）</span>'
+                                + '</label>';
+                        }).join('');
+                    }
+
+                    libraryList.innerHTML = markup;
                 }
 
                 function loadLibraries() {
@@ -221,24 +231,108 @@
                     });
                 }
 
+                function loadConfiguration() {
+                    configurationLoaded = false;
+                    saveButton.disabled = true;
+                    Dashboard.showLoadingMsg();
+                    setSaveState(null);
+                    setStatus('', '');
+                    return ApiClient.getPluginConfiguration(pluginUniqueId).then(function (config) {
+                        enabledInput.checked = config.Enabled !== false;
+                        playbackInput.checked = config.PlaybackAutoCheck !== false;
+                        concurrencyInput.value = config.MaxConcurrentProbes != null ? config.MaxConcurrentProbes : 2;
+                        detailedLogInput.checked = config.DetailedLog === true;
+                        allLibrariesInput.checked = config.BatchAllLibraries !== false;
+                        savedLibraryIds = (config.BatchLibraryIds || '').split(',')
+                            .map(normalizeId)
+                            .filter(function (id) { return id; });
+                        renderLibraryList();
+                        updateSelectionVisibility();
+                        configurationLoaded = true;
+                        statusElement.setAttribute('data-loaded', 'true');
+                        saveButton.disabled = false;
+                        if (libraryListAvailable) {
+                            setStatus('已加载当前配置。', 'load-success');
+                        } else {
+                            // The configuration loaded, but the library list could not be read. Surface that clearly
+                            // instead of showing a plain success; an explicit selection cannot be verified yet.
+                            setStatus('配置已加载，但读取媒体库列表失败。可继续使用「检查全部媒体库」；在列表恢复前请勿保存显式选择，否则会被拒绝。', 'library-unavailable');
+                        }
+                    }).catch(function (err) {
+                        configurationLoaded = false;
+                        saveButton.disabled = true;
+                        statusElement.removeAttribute('data-loaded');
+                        setSaveState('error');
+                        setStatus('读取当前配置失败。为避免用默认值覆盖已保存配置，保存已禁用；请使用「重新读取」重试。', 'error');
+                        if (window.console && console.error) { console.error('strm-config-load-failed', err && (err.stack || err.message || String(err))); }
+                    }).finally(function () {
+                        Dashboard.hideLoadingMsg();
+                    });
+                }
+
                 function validateBeforeSave() {
                     var concurrency = parseInt(concurrencyInput.value, 10);
                     if (!(concurrency >= 1 && concurrency <= 8)) {
-                        setStatus('最大并发探测数必须是 1～8 的整数。', true);
+                        setSaveState('error');
+                        setStatus('最大并发探测数必须是 1～8 的整数。', 'error');
                         return false;
                     }
 
-                    if (!allLibrariesInput.checked && getSelectedLibraryIds().length === 0) {
-                        setStatus('已关闭「检查全部媒体库」但未选择任何媒体库。请至少选择一个，空选择不会保存为全部。', true);
-                        return false;
+                    if (!allLibrariesInput.checked) {
+                        if (!libraryListAvailable) {
+                            setSaveState('error');
+                            setStatus('媒体库列表尚未成功读取，显式范围无法保存。请使用「重新读取」，或明确切换为「检查全部媒体库」。', 'library-unavailable');
+                            return false;
+                        }
+
+                        if (hasStaleSelection()) {
+                            setSaveState('error');
+                            setStatus('范围仍包含已失效媒体库。请取消勾选失效项并保留至少一个有效库，或明确切换为「检查全部媒体库」后再保存。', 'stale');
+                            return false;
+                        }
+
+                        if (getSelectedLibraryIds().length === 0) {
+                            setSaveState('error');
+                            setStatus('已关闭「检查全部媒体库」但未选择任何媒体库。请至少选择一个，空选择不会保存为全部。', 'empty-scope');
+                            return false;
+                        }
                     }
 
                     return true;
                 }
 
+                function isExplicitRejection(error) {
+                    if (!error) {
+                        return false;
+                    }
+
+                    var status = typeof error.status === 'number'
+                        ? error.status
+                        : (error.response && typeof error.response.status === 'number' ? error.response.status : null);
+                    if (status === null) {
+                        return false;
+                    }
+
+                    return status >= 400 && status < 500;
+                }
+
+                function reportSaveFailure(error) {
+                    setSaveState('error');
+                    if (isExplicitRejection(error)) {
+                        setStatus('保存被拒绝：服务器未接受本次输入。请修正后重试。', 'save-rejected');
+                    } else {
+                        setStatus('保存结果未确认：网络或服务器响应异常，无法确认本次保存是否生效。请点击「重新读取」核对当前有效配置后再决定是否重试。', 'save-unconfirmed');
+                    }
+                }
+
                 function saveConfiguration() {
                     if (!configurationLoaded) {
-                        setStatus('配置尚未成功加载，无法保存；请重新打开本页。', true);
+                        setSaveState('error');
+                        setStatus('配置尚未成功加载，无法保存；请使用「重新读取」。', 'error');
+                        return;
+                    }
+
+                    if (saving) {
                         return;
                     }
 
@@ -246,6 +340,9 @@
                         return;
                     }
 
+                    saving = true;
+                    saveButton.disabled = true;
+                    setSaveState(null);
                     Dashboard.showLoadingMsg();
                     ApiClient.getPluginConfiguration(pluginUniqueId).then(function (config) {
                         config.Enabled = enabledInput.checked;
@@ -255,14 +352,24 @@
                         config.BatchAllLibraries = allLibrariesInput.checked;
                         config.BatchLibraryIds = allLibrariesInput.checked ? '' : getSelectedLibraryIds().join(',');
                         return ApiClient.updatePluginConfiguration(pluginUniqueId, config).then(function () {
-                            setStatus('保存成功。启用／播放检查／详细日志对下一次检查请求生效；并发在下次 Jellyfin 启动后生效；批量范围对下一轮任务生效。', false);
-                        }).catch(function () {
-                            setStatus('保存被拒绝或失败，已保存的有效配置未被更改。请修正输入后重试。', true);
-                        });
-                    }).catch(function () {
-                        setStatus('保存请求失败，已保存的有效配置未被更改。请稍后重试。', true);
-                    }).finally(function () {
+                            setSaveState('success');
+                            setStatus('保存成功。启用／播放检查／详细日志对下一次检查请求生效；并发在下次 Jellyfin 启动后生效；批量范围对下一轮任务生效。', 'save-success');
+                        }).catch(reportSaveFailure);
+                    }).catch(reportSaveFailure).finally(function () {
+                        saving = false;
+                        saveButton.disabled = false;
                         Dashboard.hideLoadingMsg();
+                    });
+                }
+
+                function reloadConfiguration() {
+                    if (saving) {
+                        return;
+                    }
+
+                    reloadButton.disabled = true;
+                    loadLibraries().then(loadConfiguration).finally(function () {
+                        reloadButton.disabled = false;
                     });
                 }
 
@@ -271,6 +378,12 @@
                 form.addEventListener('submit', function (e) {
                     e.preventDefault();
                     saveConfiguration();
+                    return false;
+                });
+
+                reloadButton.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    reloadConfiguration();
                     return false;
                 });
 
