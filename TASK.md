@@ -301,3 +301,15 @@ Next: DEVELOPER FIXES THE SAME TASK 3.1
 | RO-7 后端／页面 | 范围保存／兼容后端已有；完整 HTML 与浏览器旅程未完成，按原非目标不单独阻塞 3.1。 |
 
 Task 3.1 保持 FIX REQUIRED；不创建下一 Task，不运行 Slice Final／提交 Closure Packet，不代替 A 最终审查或关闭。不凭其他字段可能变化的静态疑点增加阻塞。少量经验候选供 Slice 收尾：原生准备 await 后须重新检查实际开始资格；全局停止原因必须到达末批末项的汇总，不能依赖下一次循环才暴露。
+
+## Developer Seventh Fix Completion Report（第七轮 FIX REQUIRED 修正后）
+
+- Fix Base：`22ba671c44fba2540c62739c824505b52272bcc2`（上一轮 Developer Head）；同一 Task 3.1 修正，Task Base、Goal、Scope、High／T4、验收与必要测试均不变。
+- Changed Files：修改 `Services/StrmPlaybackOptimizer.cs`（开始边界在 `TryBeginProbe` 前重核当前优化资格：禁用与已 latch 状态库故障分别中止原生调用）、`Services/BatchProbeTypes.cs`（新增 `BatchDisabledException`）、`Services/BatchCheckRunner.cs`（把开始边界禁用计为 `Disabled`＋撤销、执行阶段状态库故障计 `ProbeIncomplete`＋`StoreUnavailable`）、`tests/.../BatchCheckTests.cs`（新增 3 项回归并把测试夹具 `Settings` 改为动态读取 `Enabled`、新增原生准备屏障）。未提交 `TASK.md` 本身。
+- Fixed：BR-1 `AdmitBatchOwnerAsync` 只在原生准备前检查 `Enabled`／`IsFingerprintStoreUnavailable`，准备 await 期间禁用或全局故障被 latch 后，`MarkStarted` 仅重查停止／身份／范围／所有权，未开始的候选仍会开始探测；若为末批末项，runner 只补停止原因，汇总可报可靠成功、`Completed=true`、`Disabled=false`／`StoreUnavailable=false` 与 100%。现在同一开始边界在 `TryBeginProbe` 之前重核当前优化资格：禁用抛 `BatchDisabledException`，已 latch 状态库故障抛 `FingerprintStoreUnavailableException(Execution)`，二者均中止原生调用、保留旧基线并幂等释放 preparing／许可；优化器把确切原因传回 runner，runner 分别计 `Disabled`（撤销、提前结束）与 `StoreUnavailable`（探测未完成、全局不可用），末项也不再伪报成功／完成／100%。已实际开始或已加入 running 的工作不受影响，仍以 `CancellationToken.None` 完成保存与成功条件提交；不新增执行取消源，不在成功返回后否决有效结果。
+- Tests and Results：证据索引 `.git/validation-evidence/3209bc699544f26ffe7a5e100941edda0b0d275d/developer-fix7-t4-20261015-205847/INDEX.md`。锁定 restore PASS；Release build 0 警告 0 错误；C# 全套 173/173（含 3 项新增 Batch 回归，0 failed／skipped）；format PASS；Python 54/54；治理 PASS；`git diff --check` PASS；默认播放隔离脚本 PASS；批量默认 `suite` 单会话 discovery／stop／shared_stop／sharing／scope／mixed／failure 全部 PASS（stop 本轮 `Cancelled`、收尾期无新轮、下一轮仅重探撤销源；shared_stop 两方向 `Cancelled`、已加入可靠成功 1／撤销 0、独立播放收尾期启动；scope 两库 133 候选／2 批多版本、轮内增删安全、禁用零探测；mixed 峰值 running＝2；failure 状态库不可用无新探测、修复重启 `completed`）。全部夹具、配置、触发器与有效内存配置已恢复并校验；构建产物与部署 DLL SHA-256 一致（`471fad9c…`）。B 第七轮 27 项独立控制（含原失败两项禁用／已 latch 故障控制与正向已开始对照）现 27/27 PASS。
+- Remaining In-Slice Work：完整 HTML 配置页／浏览器交互旅程（后续连贯单元）；十万真实库压力与完整扫描压力留 Slice 4。
+- Risks / Deviations：Jellyfin 内部数据库保存故障实机注入仍 NOT RUN（沿用既有边界）；十万候选为确定性模拟，不代表真实大库性能；B 控制工程内旧快照 `BatchJoinsAnAlreadyRunningSameSourceProbe`（旧断言 Skipped=1，位于 B 过滤器之外）在 Base 同样失败，非本次回归。无产品 PASS 声明。
+- Head SHA：`3209bc699544f26ffe7a5e100941edda0b0d275d`。
+
+经验候选（供 A 收尾合并，不写入经验文档）：原生异步准备 await 之后、匹配编码器开始回调之内必须重新检查实际开始资格（启用与全局故障），仅前置准入无法覆盖准备期资格丢失；全局不可用原因必须能到达末批末项的汇总，不能依赖下一轮循环才暴露。
