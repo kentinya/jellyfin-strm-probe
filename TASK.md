@@ -5,7 +5,7 @@
 ```text
 Task ID: 3.1
 Parent Slice: 3
-Status: FIX REQUIRED
+Status: READY FOR B REVIEW
 Task Base: b86d9c17d7f915108072f54ee098f0f5543fe093
 Contract Checkpoint: 2b515f35db7fc8e85d8ac1a8085dd9b8ccc62ef3
 Superseded Plan Snapshot: eb4e272743f4c7e184d45fa48b660b2fef24c685
@@ -220,6 +220,18 @@ git diff --check
 - Head SHA：`c8fffe3eda2e2806e172ed4128b19965253dc8c3`。
 
 经验候选（供 A 收尾合并，不写入经验文档）：准备期身份变化必须由实际开始边界的当前原生重读发现，仅前置准入检查无法覆盖；实测证据要区分“估算”“实测保留”与“实测延迟”，命名不能把估算冒充峰值。
+
+## Developer Fifth Fix Completion Report（第五轮 FIX REQUIRED 修正后）
+
+- Fix Base：`909ac212678068a2ce1df892ad0ec447928cc0ce`（上一轮 B 审查检查点，产品代码等同 `c8fffe3eda2e2806e172ed4128b19965253dc8c3`）；同一 Task 3.1 修正，Task Base、Goal、Scope、High／T4、验收与必要测试均不变。
+- Changed Files：修改 `Services/StrmPlaybackOptimizer.cs`（开始边界把当前库范围与类型／项目身份作为同一准入重核，修复停止竞态可观察 token 导致的无限重入）、`Services/BatchCheckRunner.cs`（身份成本拆分为尺寸估算／实测后备容量／采样进程堆峰值）、`Tasks/StrmProbeScheduledTask.cs`（脱敏汇总新增实测容量与峰值字段）、`scripts/run_isolated_batch_integration.py`、`tests/.../BatchCheckTests.cs`、`tests/test_isolated_batch_integration.py`。未提交 `TASK.md` 本身。
+- Fixed：BR-3 `CurrentIdentityStillMatches` 现接收本轮 `scopeLibraryIds` 并复用与入口／owner 准入相同的 `IBatchScopeVerifier.IsInScope`，在匹配原生调用处把对象类型、项目身份与**当前库关系**作为一次连贯准入重核；准备期移出所选库的候选中止原生调用、计 `Missing` 且保留已接受基线。BR-5 身份成本改为三个分开命名的量：文档化尺寸估算 `CandidateSetEstimatedBytes`、实测后备容量 `CandidateSetMeasuredCapacityBytes`（真实 `List`／`HashSet.Capacity`×单槽尺寸）、获取期间采样进程堆峰值 `CandidateFetchPeakBytes`，连同累计分配一起输出与断言，不再把进程堆差值当作固定集合的精确保留。BR-5 顺带修复一个间歇性栈溢出：停止竞态可能在停止回调 latch 前观察到取消 token，从通用 catch 落入已取消 token 的重新准入并无限递归；现用统一 `BatchStopConfirmed`（信号或 token）在 preparing 等待路径一致判定。BR-7 stop 收尾窗口改为按轮次时间戳断言：停止轮的 `Cancelled` 完成按时间绑定（不用会被 `--tail` 截断的位置索引），后续 Execute 入口不得早于结算时间，`[stop, settled)` 内不得有新探测开始；`batch_events`／`batch_run_entries`／`probe_start_entries` 新增 `since` 过滤。BR-7 mixed 把并发播放源置于 local 库、批量限定 STRM 库，批量不再处理播放源；峰值按 owner 归属，要求播放开始行 `running probes 2` 证明播放 owner 与运行中批量 owner 真实重叠，`actual_probe_calls` 严格等于所限库源数。BR-7 shared_stop 两方向的 `Cancelled` 均按停止时间绑定本轮。BR-7 scope 新增固定集合后运行期间增删：长延迟运行中新增 STRM 并删除已捕获候选，证明新增本轮不处理、删除安全结算、下一轮发现新增。
+- Tests and Results：证据索引 `.git/validation-evidence/work-fix5/INDEX.md`（经 `current-run.txt` 指向 `developer-fix5-t4-20261015-173816/`）。锁定 restore PASS；Release build 0 警告 0 错误；C# 全套 168/168（含 55 项 `TestCategory=Batch`）；format PASS；Python 54/54；治理 PASS；`git diff --check` PASS；默认播放隔离脚本 PASS；批量默认 `suite` 单会话 discovery／stop／shared_stop／sharing／scope／mixed／failure 全部 PASS。真实观测：stop 本轮 `Cancelled`、`new_probe_during_settlement=0`、排队轮仅在结算后进入；shared_stop 两方向 `Cancelled`、已加入可靠成功 1／撤销 0、独立播放确在收尾期启动新探测；mixed `peak_running_probes=2`、`playback_start_running=2`、批量实际调用 2；scope 运行中新增本轮不处理、删除安全结算、下一轮发现；failure 任务 `failed` 无新探测、修复重启 `completed`。全部夹具、配置、触发器与有效内存配置已恢复并校验；构建产物与部署 DLL SHA-256 一致（`eca0e19f…`）。B 第五轮控制 `ReviewerPreparingScopeMoveMustKeepTheAcceptedBaseline` 及全部 20 项 B 控制独立复现 20/20 PASS。
+- Remaining In-Slice Work：完整 HTML 配置页／浏览器交互旅程（后续连贯单元）；十万真实库压力与完整扫描压力留 Slice 4。
+- Risks / Deviations：Jellyfin 内部数据库保存故障实机注入仍 NOT RUN（沿用既有边界）；十万候选为确定性模拟，身份测量为采样／估算并已如实标注；mixed 独立 FullRefresh 仅记原生排队受理，真实池饱和刷新完成证据复用默认播放脚本。无产品 PASS 声明。
+- Head SHA：`5b501e39d6d58948b9d8d92d5c739e6c48b0011e`。
+
+经验候选（供 A 收尾合并，不写入经验文档）：当前库范围必须与类型／项目身份在同一开始边界重核，且复用与入口相同的范围验证；取消 token 与停止信号需在一次判定中一致检查，否则 token 先取消的窗口会把等待路径变成无限重入。
 
 ## B Review Result
 
