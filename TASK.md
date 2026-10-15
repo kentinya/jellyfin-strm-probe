@@ -5,7 +5,7 @@
 ```text
 Task ID: 3.2
 Parent Slice: 3
-Status: FIX REQUIRED
+Status: READY FOR B REVIEW
 Task Base: 2f74aa83f15707df56c4b15409ba1538a488f83a
 Contract Checkpoint: 2b515f35db7fc8e85d8ac1a8085dd9b8ccc62ef3
 Difficulty: Medium
@@ -128,6 +128,28 @@ git diff --check
 - Head SHA：`dac695e45f8619b6ebcc24327e515fd9413240a1`。
 
 少量经验候选留待 Slice 收尾，不以流水账或新增经验条数作为通过门槛。
+
+## Developer Fix Report（FR-U1／FR-U2／FR-U3）
+
+- 修正 Head SHA：`dd5acfa19984955c8730eab5f212d485a65780c9`（Task Base 与 Task ID 不变，未改合同、范围或测试门槛）。
+- Changed Files（相对 Task Base `2f74aa83f15707df56c4b15409ba1538a488f83a`）：
+  - `src/Jellyfin.Plugin.StrmProbeOptimizer/Configuration/configPage.html`：失效库可见并阻止保存、保存反馈区分拒绝与未确认、新增「重新读取」、表单 `novalidate` 以让页面自身给出并发越界反馈。
+  - `scripts/configuration_page_driver.mjs`：每场景独立会话与结果，新增失效范围、丢失响应、提交前失败、拒绝保存、并发越界、空范围恢复、加载／库列表失败恢复、旧配置缺字段，以及页面保存值驱动原生任务的场景；固定浏览器 `locale: 'zh-CN'`。
+  - `scripts/run_isolated_configuration_integration.py`：每场景独立证据目录；断言失效范围 0 POST、未确认反馈不承诺回滚、并发越界不改有效值、真实原生任务终态与指纹行；原生任务旅程由页面保存值驱动。
+  - `tests/Jellyfin.Plugin.StrmProbeOptimizer.Tests/ConfigurationPageTests.cs`、`tests/test_isolated_configuration_integration.py`：新增页面与守卫断言。
+  - `docs/core-configuration.md`：补充失效范围、重新读取与保存反馈区分说明。
+- FR-U1：失效库保留为「已失效媒体库」并阻止保存，未修正前保存 0 POST；取消失效项后保存只写入有效库 ID（场景 04）。
+- FR-U2：服务器已提交但响应丢失时页面提示「保存结果未确认」，不再承诺「未被更改」；重新读取显示真实有效值（场景 05、06）。
+- FR-U3：补齐原计划缺项与端到端旅程；B 复现的 `scrollHandler`／locale 失败经定位为 Jellyfin 自身 web 组件竞态与宿主 POSIX locale，分别按精确 bundle／消息归类与固定浏览器 locale 处理（见证据 `development-feedback/`）。
+- Tests and Results（完整 SHA `dd5acfa19984955c8730eab5f212d485a65780c9`，索引 `.git/validation-evidence/dd5acfa19984955c8730eab5f212d485a65780c9/developer-20261016-01/INDEX.md`）：
+  - `restore --locked-mode` PASS；`build` PASS（0 警告 0 错误）；C# `test` PASS 181/181（0 skipped）；`format --verify-no-changes` PASS。
+  - `python3 -m unittest discover -s tests -v` PASS 63/63。
+  - `python3 scripts/run_isolated_configuration_integration.py` PASS：真实 Chromium（chromium-1187／Playwright 1.55.0）17 个场景覆盖 AC-U1～U5 及 FR-U1／FR-U2，含真实重启读回、失效范围、响应丢失、拒绝／网络失败恢复、并发越界、旧配置缺字段，以及页面保存值驱动的原生任务部分／全部范围、关闭播放检查仍批量、禁用不新增探测、再启用恢复；结束后配置与全部触发器恢复并核对。
+  - `python3 scripts/run_isolated_plugin_integration.py` PASS（同一候选，既有默认播放／失败／竞态／重启回归未回退）。
+  - `python3 scripts/check_governance.py` PASS；`git diff --check` PASS。
+- Decisions：仍复用现有配置保存通道、`ILibraryIdProvider`／原生库查询与原生任务；未改决策、Coordinator、原生刷新、指纹提交或范围／停止语义，维持 T3。
+- Remaining In-Slice Work：本 Task 全部验收后由 B 核对全部 RO；满足则单独 Slice Final 与 Closure Packet。
+- Risks / Deviations：真实外部代理、真实大库与保存故障实机注入仍 NOT RUN，留 Slice 4／其他 Task。证据仅本机可读，未推送。
 
 ## B Review Result
 
