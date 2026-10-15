@@ -1017,7 +1017,8 @@ public sealed class BatchCheckTests
     }
 
     [TestMethod]
-    public void BatchStopSignalAbortRollsBackAProvisionalStartCount()    {
+    public void BatchStopSignalAbortRollsBackAProvisionalStartCount()
+    {
         using var signal = new BatchStopSignal(CancellationToken.None);
         Assert.IsTrue(signal.TryBeginProbe(), "A probe may start before any stop is confirmed.");
         Assert.AreEqual(1, signal.StartedCount);
