@@ -114,6 +114,18 @@ public sealed class ConfigurationPageTests
         Assert.Contains("novalidate", html, "The page must own its validation feedback instead of the browser's native constraint UI.");
     }
 
+    [TestMethod]
+    public void PageValidatesTheWholeConcurrencyNumberWithoutTruncating()
+    {
+        var html = ReadPage();
+
+        // FR-U4: parseInt would silently turn "2.5" into 2 and "1e1" into 1 and then save a different value than
+        // the one shown. The page must read the full number and require an integer in range before saving.
+        Assert.Contains("valueAsNumber", html, "The page must read the full number the administrator typed.");
+        Assert.Contains("Number.isInteger", html, "The page must require an integer concurrency value.");
+        Assert.DoesNotContain("parseInt(concurrencyInput", html, "The page must not truncate the concurrency input with parseInt.");
+    }
+
     private static string ReadPage()
     {
         var plugin = (IHasWebPages)CreatePlugin();

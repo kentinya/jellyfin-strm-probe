@@ -270,35 +270,50 @@
                     });
                 }
 
+                function readConcurrencyValue() {
+                    // Judge the full number the administrator typed. parseInt would silently turn "2.5" into 2 and
+                    // "1e1" into 1, then save a different value than the one shown. valueAsNumber keeps the whole
+                    // number so non-integers and out-of-range exponents are rejected instead of truncated.
+                    var raw = concurrencyInput.value;
+                    if (raw === null || String(raw).trim() === '') {
+                        return Number.NaN;
+                    }
+
+                    var value = typeof concurrencyInput.valueAsNumber === 'number'
+                        ? concurrencyInput.valueAsNumber
+                        : Number(String(raw).trim());
+                    return value;
+                }
+
                 function validateBeforeSave() {
-                    var concurrency = parseInt(concurrencyInput.value, 10);
-                    if (!(concurrency >= 1 && concurrency <= 8)) {
+                    var concurrency = readConcurrencyValue();
+                    if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > 8) {
                         setSaveState('error');
-                        setStatus('最大并发探测数必须是 1～8 的整数。', 'error');
-                        return false;
+                        setStatus('最大并发探测数必须是 1～8 的整数，例如 2。小数、指数或其他非整数输入不会被接受。', 'error');
+                        return null;
                     }
 
                     if (!allLibrariesInput.checked) {
                         if (!libraryListAvailable) {
                             setSaveState('error');
                             setStatus('媒体库列表尚未成功读取，显式范围无法保存。请使用「重新读取」，或明确切换为「检查全部媒体库」。', 'library-unavailable');
-                            return false;
+                            return null;
                         }
 
                         if (hasStaleSelection()) {
                             setSaveState('error');
                             setStatus('范围仍包含已失效媒体库。请取消勾选失效项并保留至少一个有效库，或明确切换为「检查全部媒体库」后再保存。', 'stale');
-                            return false;
+                            return null;
                         }
 
                         if (getSelectedLibraryIds().length === 0) {
                             setSaveState('error');
                             setStatus('已关闭「检查全部媒体库」但未选择任何媒体库。请至少选择一个，空选择不会保存为全部。', 'empty-scope');
-                            return false;
+                            return null;
                         }
                     }
 
-                    return true;
+                    return { concurrency: concurrency };
                 }
 
                 function isExplicitRejection(error) {
@@ -336,7 +351,8 @@
                         return;
                     }
 
-                    if (!validateBeforeSave()) {
+                    var validated = validateBeforeSave();
+                    if (!validated) {
                         return;
                     }
 
@@ -347,7 +363,7 @@
                     ApiClient.getPluginConfiguration(pluginUniqueId).then(function (config) {
                         config.Enabled = enabledInput.checked;
                         config.PlaybackAutoCheck = playbackInput.checked;
-                        config.MaxConcurrentProbes = parseInt(concurrencyInput.value, 10);
+                        config.MaxConcurrentProbes = validated.concurrency;
                         config.DetailedLog = detailedLogInput.checked;
                         config.BatchAllLibraries = allLibrariesInput.checked;
                         config.BatchLibraryIds = allLibrariesInput.checked ? '' : getSelectedLibraryIds().join(',');

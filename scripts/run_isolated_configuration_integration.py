@@ -425,6 +425,37 @@ def scenario_rejected_save(api: base.JellyfinApi, evidence_dir: Path) -> dict:
     return {"evidence": "07-rejected-save", "feedback": feedback}
 
 
+def scenario_numeric_boundary(api: base.JellyfinApi, evidence_dir: Path) -> dict:
+    """FR-U4/AC-U2/AC-U4: the whole typed number is validated, so parseInt-style truncation cannot save a
+    different value. Invalid inputs are refused with no POST and no file/effective change; legal values save and
+    are reflected. The invalid and valid inputs run in separate browser sessions so a valid save cannot mask the
+    file/effective-value assertions for the invalid inputs."""
+    before = configuration_snapshot(api)
+    file_before = CONFIGURATION_FILE.read_bytes()
+
+    invalid_result = driver_scenario(api, "numeric_boundary_invalid", evidence_dir, "18-numeric-invalid")
+    require_browser_clean(invalid_result, "numeric_boundary_invalid")
+    invalid = invalid_result["invalidResults"]
+    base.require(len(invalid) == 6, f"All six invalid concurrency inputs must be attempted: {invalid}.")
+    for entry in invalid:
+        base.require(entry["state"]["saveState"] == "error", f"The invalid concurrency {entry['input']!r} was not refused: {entry}.")
+        base.require(entry["newPosts"] == 0, f"The invalid concurrency {entry['input']!r} produced a POST: {entry}.")
+        base.require("1～8" in entry["state"]["statusText"], f"The invalid concurrency {entry['input']!r} feedback was not actionable: {entry}.")
+    # No invalid input reached the server, so neither the effective configuration nor the persisted file changed.
+    base.require(configuration_snapshot(api) == before, "A refused concurrency changed the effective configuration.")
+    base.require(CONFIGURATION_FILE.read_bytes() == file_before, "A refused concurrency changed the persisted configuration file.")
+
+    valid_result = driver_scenario(api, "numeric_boundary_valid", evidence_dir, "19-numeric-valid")
+    require_browser_clean(valid_result, "numeric_boundary_valid")
+    valid = valid_result["validResults"]
+    expected = {"1": 1, "8": 8, "2": 2}
+    for entry in valid:
+        base.require(entry["state"]["saveState"] == "success", f"The valid concurrency {entry['input']!r} did not save: {entry}.")
+        base.require(int(entry["state"]["maxConcurrentProbes"]) == expected[entry["input"]], f"The page did not reflect the valid concurrency {entry['input']!r}: {entry}.")
+        base.require(int(entry["effectiveConcurrency"]) == expected[entry["input"]], f"The effective concurrency for {entry['input']!r} was not {expected[entry['input']]}: {entry}.")
+    return {"evidence": ["18-numeric-invalid", "19-numeric-valid"], "invalid": invalid, "valid": valid}
+
+
 def scenario_concurrency_bounds(api: base.JellyfinApi, evidence_dir: Path, strm_library: str) -> dict:
     """AC-U4: an out-of-range concurrency is refused client-side, then recovered by a valid value."""
     before = configuration_snapshot(api)
@@ -716,6 +747,7 @@ def main() -> int:
         summary["scenario_pre_submit_failure"] = scenario_pre_submit_failure(api, evidence_dir)
         summary["scenario_rejected_save"] = scenario_rejected_save(api, evidence_dir)
         summary["scenario_concurrency_bounds"] = scenario_concurrency_bounds(api, evidence_dir, strm_library)
+        summary["scenario_numeric_boundary"] = scenario_numeric_boundary(api, evidence_dir)
         summary["scenario_empty_scope"] = scenario_empty_scope(api, evidence_dir, strm_library)
         summary["scenario_load_failure"] = scenario_load_failure(api, evidence_dir)
         summary["scenario_library_read_failure"] = scenario_library_read_failure(api, evidence_dir)

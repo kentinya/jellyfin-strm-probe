@@ -128,6 +128,9 @@ class ConfigurationScriptGuardTests(unittest.TestCase):
         # FR-U2: the lost-response scenario must assert an unconfirmed result rather than an unchanged promise.
         self.assertIn("save-unconfirmed", runner)
         self.assertIn("The page still promised the configuration was unchanged", runner)
+        # FR-U4: the numeric-boundary scenario must assert no POST for invalid inputs and reflected legal values.
+        self.assertIn("scenario_numeric_boundary", runner)
+        self.assertIn("The invalid concurrency {entry['input']!r} produced a POST", runner)
         # The native-task journey must be driven by page saves and check the real terminal result.
         self.assertIn("scenario_native_task_journey", runner)
         self.assertIn("The disabled plugin still processed a new candidate", runner)

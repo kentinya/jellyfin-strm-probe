@@ -447,6 +447,68 @@ const scenarios = {
     };
   },
 
+  // FR-U4/AC-U2/AC-U4: the full number the administrator typed is judged, so parseInt-style truncation cannot
+  // save a different value than the one shown. This scenario only submits invalid inputs so the caller can prove
+  // no POST, no effective change and no file change; a separate scenario covers the legal values.
+  async numeric_boundary_invalid(page, recorder) {
+    await attachConfigRoute(page, recorder, {});
+    await openPage(page);
+    const initial = await readState(page);
+    const screenshots = [await capture(page, 'page-loaded')];
+    const invalidInputs = ['2.5', '8.9', '1e1', '', '0', '9'];
+    const invalidResults = [];
+    let attemptsSoFar = recorder.postAttempts;
+    for (const value of invalidInputs) {
+      await page.fill('#MaxConcurrentProbes', value);
+      const state = await submitAndWait(page, 30000);
+      const attemptsAfter = recorder.postAttempts;
+      invalidResults.push({
+        input: value,
+        state,
+        attemptsAfter,
+        newPosts: attemptsAfter - attemptsSoFar,
+        inputValue: await page.inputValue('#MaxConcurrentProbes'),
+      });
+      attemptsSoFar = attemptsAfter;
+      screenshots.push(await capture(page, 'invalid-' + (value === '' ? 'empty' : value)));
+    }
+
+    return {
+      initial,
+      invalidResults,
+      postAttempts: recorder.postAttempts,
+      postBodies: recorder.postBodies,
+      postApplied: recorder.postApplied,
+      screenshots,
+    };
+  },
+
+  // FR-U4/AC-U2: a corrected legal concurrency saves, is reflected on the page and is read back as effective.
+  async numeric_boundary_valid(page, recorder) {
+    await attachConfigRoute(page, recorder, {});
+    await openPage(page);
+    const initial = await readState(page);
+    const screenshots = [await capture(page, 'page-loaded')];
+    const validResults = [];
+    for (const value of ['1', '8', '2']) {
+      await page.fill('#MaxConcurrentProbes', value);
+      const state = await submitAndWait(page);
+      const effective = await page.evaluate(async (id) => await ApiClient.getPluginConfiguration(id), cfg.pluginId);
+      validResults.push({ input: value, state, effectiveConcurrency: effective.MaxConcurrentProbes });
+      screenshots.push(await capture(page, 'valid-' + value));
+    }
+
+    return {
+      initial,
+      validResults,
+      final: validResults[validResults.length - 1].state,
+      postAttempts: recorder.postAttempts,
+      postBodies: recorder.postBodies,
+      postApplied: recorder.postApplied,
+      screenshots,
+    };
+  },
+
   // AC-U4: an out-of-range concurrency is rejected client-side before any request is sent, then recovered.
   async concurrent_out_of_range(page, recorder) {
     await attachConfigRoute(page, recorder, {});
