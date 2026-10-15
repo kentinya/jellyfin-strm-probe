@@ -5,7 +5,7 @@
 ```text
 Task ID: 3.1
 Parent Slice: 3
-Status: READY FOR B REVIEW
+Status: FIX REQUIRED
 Task Base: b86d9c17d7f915108072f54ee098f0f5543fe093
 Contract Checkpoint: 2b515f35db7fc8e85d8ac1a8085dd9b8ccc62ef3
 Superseded Plan Snapshot: eb4e272743f4c7e184d45fa48b660b2fef24c685
@@ -235,59 +235,52 @@ git diff --check
 
 ## B Review Result
 
-Reviewed: b86d9c17d7f915108072f54ee098f0f5543fe093..c8fffe3eda2e2806e172ed4128b19965253dc8c3
-Fix Reviewed: 5d7b48f03b566e0253d397be74c1eabbe11cdda5..c8fffe3eda2e2806e172ed4128b19965253dc8c3
-Report Checkpoint: 192020637362cf64d2ac183c7b7c9ad1a0df79e8
+Reviewed: b86d9c17d7f915108072f54ee098f0f5543fe093..5b501e39d6d58948b9d8d92d5c739e6c48b0011e
+Fix Reviewed: c8fffe3eda2e2806e172ed4128b19965253dc8c3..5b501e39d6d58948b9d8d92d5c739e6c48b0011e
+Report Checkpoint: c7a952fafa0e284a7f64bca462efc4bbe2cb48a4
 Decision: FIX REQUIRED
 Slice Required Outcomes all satisfied: NO
 Next: DEVELOPER FIXES THE SAME TASK 3.1
 
-2026-10-15，B 完成 AGENTS 必读清单与 B 经验；初始工作区 `## main`、无已有改动，治理 PASS。已提交 Slice／Roadmap／稳定需求／流程自上轮 B 检查点后未变，当前 Task ID／Base／Goal／Scope／High／T4／AC-T1～T8 保持有效，没有 Contract 无法满足的实证，不交 A RESCOPE。完整 Task Base..Head 结合前轮审查重核，本轮 9 个可执行源码／测试／工具文件及报告逐项审阅；实现之后仅 TASK.md 报告后继。上轮 B 决定保留于 `10c0c9bd82ec66072220e2cf65c73cb08b5ad1cf:TASK.md`。本轮只提交 TASK.md，不实施产品、不修改 Slice／Roadmap／稳定需求。
+2026-10-15，B 第六轮完成 AGENTS 必读清单与 B 经验；初始工作区 `## main`、无已有改动，治理 PASS。已提交 Slice／Roadmap／稳定需求／流程与上轮一致，Task ID／Base／Goal／Scope／High／T4／AC-T1～T8 保持有效，无需 A 修改 Contract。结合 Git 中前轮审查重核完整 Task Base..Head，逐项阅读本轮六个可执行源码／测试／工具文件的实际差异及报告；实现后继只修改 TASK.md。上轮决定保留于 `909ac212678068a2ce1df892ad0ec447928cc0ce:TASK.md`。本轮只提交 TASK.md，不实施产品、不改变合同。
 
-### 已确认的修正
+### 已确认的修正及证据复用
 
-- 前四轮 19 项独立控制全部通过。原生准备期主版本身份变化已在匹配调用处被拒绝，旧关联基线保留；状态库 latch 后未知总数与完整空集合已区分。上轮这两项实际缺陷不再作为当前失败。
-- 许可等待控制新增 PermitWaitBarrier，先确认第二源到达等待后再停止。同步查询停止延迟有独立回归；身份尺寸明确标为估算，并增加进程托管堆前后保留量差值。旧“capacity 实测”误名已移除，但不代表原峰值门槛已满足。
-- stop 安排收尾窗口内的 DailyTrigger，并用 Execute 入口计数核对手动再运行；原始结果记载停止轮 2 成功／1 撤销、收尾后排队轮只重探撤销源、再运行零探测。shared_stop 增加两方向，范围外独立源实际启动新探测时记录原任务 Cancelling，成功后 200；原始计数为目标源各一次、可靠成功 1、撤销 0。保留这些实机改进，不重复上轮“完全没有场景”的描述。
-- mixed 新增 running 峰值 2 的观测，FullRefresh 已明确只记队列受理，实际完成证据明确复用默认播放脚本；不再把 204 延迟称作完成耗时。仍须满足不同入口实际发起探测的混合要求，见当前阻塞。
-- Developer 证据位于 `.git/validation-evidence/work-fix4/developer-fix4-t4-20261015-125309/`，根 INDEX 通过 current-run.txt 指向它。workspace.diff 与 `git diff 10c0c9b..c8fffe3` SHA-256 均为 `0e0afbf80e6886a746023dd68b9a51d406c90e87302f83524dac329bee415fd5`，已核对实际被测改动和提交一致。原始日志实际有 restore／build（0 warnings／errors）／165 C#／format／51 Python／默认播放／七场景 suite／治理／diff 结果，exit 均 0；build／deployed DLL 摘要记录一致。B 自己编译含报告 HEAD 身份，单独记录，未部署或声称相同二进制。
+- 上轮 20 项独立控制全部通过，包括准备期间移出所选库、当前对象替换为另一个主版本、共享失败／未提交不重试、提交故障阶段、未知总数、额外返回对象及失效范围保存拒绝。原移库缺陷已修，不再作为当前失败。新增立即获许可未登记与仅 preparing 等待的批量停止测试通过；统一检查停止 token 与信号避免递归重入。
+- mixed 现把播放源放在 local 库、批量仅选 STRM 库；原始实机结果批量调用／成功各 2，播放自身开始时 running=2、峰值=2，两个入口的不同源 owner 重叠成立。独立 FullRefresh 在 mixed 中仍只证明队列受理；默认播放脚本另有池饱和时刷新实际完成证据（484 ms），明确复用，不把 204 当完成。
+- stop／shared_stop 现按本轮时间过滤入口、汇总、探测开始和 Cancelled，不再只查容器全部历史是否出现过取消。stop 有新 arm 及时间断言、旧轮结束前无新轮／探测、收尾后排队轮只探测撤销源、再次显式运行零探测；原始结果 2 成功／1 撤销。shared_stop 两方向本轮 Cancelled，目标各一次、可靠成功 1／撤销 0，独立播放启动新探测时仍为 Cancelling。scope 原始结果 133 候选／2 批及多版本关联；新增运行中增删、当轮不处理新增、下轮发现的代表性实机证据。删除例的结果为已开始 2、成功 1／探测未完成 1，不把它称作未开始候选删除或事务快照证明。未开始删除／移出由确定性控制覆盖。
+- 身份成本现分开报告数量、容量尺寸模型、累计线程分配及离散采样的进程托管堆峰值。B 另对十万 ID 输出实际数值：76.7605 ms、累计分配 12,647,096 bytes、采样峰值增量 8,664,600 bytes、数量估算 4,000,000 bytes、实际槽位容量乘尺寸模型 5,851,640 bytes。容量 bytes 仍依赖每槽尺寸模型，采样会漏掉查询内部已回收的瞬时峰值，进程堆差值不精确归属于候选集合；这些限制保留，不宣称精确总峰值／真实十万库性能。该独立旧 harness 只测 ID 获取；完整对象／固定消费者上限由本次 127 项聚焦中的新版十万测试证明。不再将上轮“未报告身份成本”列为当前 P1。
+- Developer 原始证据位于 `.git/validation-evidence/work-fix5/developer-fix5-t4-20261015-173816/`，根 INDEX／current-run.txt 指向该目录。workspace.diff 与 `git diff 909ac21..5b501e3` 的 SHA-256 均为 `e9fa4beaca1d20779a895d47f95ee7f8fcb416258fcbd1061e7ce78752c9cc4d`。原始 restore、build（0 warnings／errors）、168 C#（0 failed／skipped）、format、54 Python、默认播放、七场景 suite、治理／diff 均有实际 exit 0；全部可执行输入与报告后继一致。Developer 构建／部署 DLL 摘要同为 `eca0e19fa3879267c68ea429a693666530184f684e2e41f79da265e4963402a0`。B 本轮编译的报告 HEAD 身份单列，未部署，不声称同一个二进制。核验后复用上述门槛事实，不能由此抹去新增控制的失败。
 
-### 当前 P1 阻塞（原 BR／AC 内）
+### 当前唯一 P1：缓存对象原地改变主版本时，开始检查仍接受旧关联（BR-3／RO-2、RO-3／AC-T2、T3、T5）
 
-1. **BR-3／RO-2：准备期间移出所选库仍可开始探测（AC-T2／T5）**。新增 `CurrentIdentityStillMatches` 只比较当前类型和 GetProjectId；执行开始验证没有本轮 scopeLibraryIds，也不重新使用 IsInScope。独立 `ReviewerPreparingScopeMoveMustKeepTheAcceptedBaseline` 先在选定库建立指纹，再改变 URL；fake 原生准备阶段、匹配编码器调用前，让真实 LibraryBatchCandidateSource 看到的当前原生库关系改为另一个未选库（ID／类型／路径／主版本均不变），复现 StartedProbes=1、ReliableSuccess=1，范围外候选仍被探测并更新指纹。旧 19 项同时通过；这与已修复的主版本变化不同，是原合同已要求的当前库范围重核。须把当前候选的身份／所属源／路径与本轮库关系作为连贯的开始准入检查，复用现有原生范围验证，避免只补主版本字段。候选在实际开始前已确认越界时安全结算、保留基线；已实际开始工作仍正常收尾。不要求库事务快照、独立调度或回滚原生媒体数据，也不增加执行取消机制。
+`StrmPlaybackOptimizer.CurrentIdentityStillMatches` 在有本轮 scopeLibraryIds 的生产分支只返回 `verifier.IsInScope(sourceItem, scopeLibraryIds)`（约第 825～829 行），跳过此前与捕获的 `projectItemId` 值比较。`LibraryBatchCandidateSource.IsInScope` 比较当前对象与传入对象的主版本（约第 201～207 行）；原生重读若返回同一个可变缓存实例，这等于对象与自身比较，不能验证本轮已捕获的协调／指纹身份。
 
-2. **BR-5／AC-T8：十万身份结构与查询峰值证据仍未提供**。原要求的身份数量／容量、原生查询与去重／排序临时成本、峰值内存不能由尺寸估算和一次 GC 后差值代替。`GC.GetTotalMemory(true)` 前后测量的是整个进程托管堆差值，受其他活动影响，已被回收的 query／HashSet 临时对象不在该数值中，也不是查询期间峰值；不能归因为固定 ID 集合的精确保留成本。十万测试仍只断言批次／消费者上限，没有输出相应测量数据。可在隔离测试／稳定证据中测量并披露模型、采样与限制，不要求产品扩展；不把它延期为 Slice 4 的十万真实库基准。估算、累计分配、进程堆差值和实测峰值保持不同含义。同步停止延迟控制已补，不作为完全未运行重提。
+独立 `ReviewerInPlacePrimaryChangeMustKeepCapturedProjectBaseline` 使用真实范围验证器＋fake ILibraryManager，先建立旧项目指纹，再改变 URL；匹配开始前原地改变同一个 Video 的 PrimaryVersionId，保持对象 ID、类型、路径和所选库关系。结果实际开始 1、可靠成功 1，旧项目关联的可信 URL 指纹被新值覆盖。不是上轮“另一个对象移到库外”的失败，也不是要求媒体库事务快照。固定原生源码 `LibraryManager.GetItemById` 第 1689 行起直接返回缓存实例，`VideosController` 合并／拆分通过 SetPrimaryVersionId 原地修改对象，故不能假设重读必定得到独立对象；本轮仍只声称确定性复现，未声称真实合并并发复现。
 
-3. **BR-7／BR-8：原实机／覆盖门槛仍有以下具体缺口（AC-T2／T4／T5／T8）**：
+同一 Task 修正：在开始准入中同时保留本轮不可变捕获的项目／源身份校验和当前库范围校验，不能以两个可变对象此刻相等替代与捕获身份比较。当前身份已不匹配时不实际探测、不更新旧关联、按现有 missing／未开始结算并释放许可；下一轮从当前身份重读。保留已修好的库范围保护、首次信任及已实际开始工作正常收尾，不引入取消执行源、事务快照、回滚原生媒体数据或新状态机。新增能覆盖“同一缓存对象原地改变”与“替换成另一对象”的回归；测试专用 CurrentIdentityGuard 分支通过不能代替生产 verifier 分支。
 
-   - mixed 把“播放源”也放入默认全部库，batch 会处理它；原始日志 actual_probe_calls=4、可靠成功=4，恰为四个变化源全部由批量发起。播放请求可只加入批量已开始的同源工作或复用完成结果，`concurrent_playback_probed=true` 仅证明这个 URL 被请求。峰值 2 因而可完全来自两个批量 owner，不能证明不同源的播放 owner 与批量 owner 共同占用全局池。可复用 shared_stop 已有的分库范围做法，明确观测两个入口各自实际开始并重叠，核对当前启动值和峰值；不要求重跑已有相同覆盖。
-   - scope 新增仍在前一轮 run_task 完成之后，尚无固定集合后运行期间增删／移库与下一轮收敛的代表性实机证据；源范围在准备期间漏核已动态复现。原确定性集合控制和实机代表场景须按计划补齐，不是要求 Slice 4 的完整扫描压力。
-   - stop 的 `settlement_trigger_fired` 仅由 arm 日志时间已过去计算，且没有 require 断言该布尔值；`Cancelled` 只判断整个容器历史 completion 列表中存在，未绑定当前停止轮。真实日志有新轮、统计和共享结果，这是有效改进；但旧历史／旧 arm 记录不能证明当前触发或当前 Cancelled。须保存并核对本轮前后时间线与事件身份，收尾后新轮实际入口需对应本轮请求。配置／触发器／夹具恢复及原生地址／主流、进度／逐源对账仍按原证据规则记录。
-   - 原批量立即获许可未登记／原生准备 await、仅 preparing 等待、保存拒绝／自身取消与 1／2／8 的必要覆盖仍须给出准确用例／运行映射。已接受的 Coordinator／Playback／保存失败用例允许明确复用；总套件绿色不能替代新增批量分支的证据。下一修正候选改变可执行输入后保持完整 T4 门槛。
+### B 独立验证与覆盖关系
 
-### B 独立验证
+索引：`.git/validation-evidence/5b501e39d6d58948b9d8d92d5c739e6c48b0011e/b-review6-20261015/INDEX.md`，仅本机可访问。
 
-索引：`.git/validation-evidence/c8fffe3eda2e2806e172ed4128b19965253dc8c3/b-review5-20261015/INDEX.md`（仅本机可访问）。
-
-- PASS：原指定 Batch／Coordinator／Context／Playback／Configuration 聚焦 124/124、0 failed／skipped、退出 0；01-focused.log/json。
-- PASS：独立 controls locked restore；02-controls-restore.log/json。
-- FAIL：03-controls.log/json，旧控制 19 PASS、新范围控制 1 FAIL、0 skipped，退出 1。源码／项目／锁留在 controls；使用临时 STRM、fake 原生取源／保存和内存指纹，库范围判断调用真实 LibraryBatchCandidateSource＋fake ILibraryManager，不称实机复现。
-- PASS：Python 51/51、退出 0；04-python.log/json。Developer 实测 diff 与提交身份核对、日志摘要及编译／部署不同身份分列见 00-inputs.json 和 05-developer-evidence-audit.json。
-- 原始 Developer 01～09 全部日志／退出码／suite JSON 与实际脚本已核阅；165 C#／51 Python 及新的定时／共享停止／峰值观测是 Developer 已运行事实，未扩张为全部 AC 通过。治理、差异、本地链接和所有可执行输入一致性检查见本轮索引。
-- NOT RUN（B 本轮）：真实 stop／sharing、其余完整 T4、Slice Final。已有确定 P1，按流程先拒绝；修正后 PASS 前仍须按原计划独立运行两个入口及关键控制。本轮未改产品源码、已提交测试／工具、部署、隔离配置或生产实例。
+- PASS：指定 Batch／Coordinator／Context／Playback／Configuration 聚焦 127/127、0 failed／skipped，退出 0；01-focused.log/json。Python 54/54、退出 0；04-python.log/json。controls locked restore PASS。
+- FAIL：最终独立控制 24 项中 23 PASS／1 FAIL／0 skipped，退出 1；10-controls-final-contract.log/json。包含旧 20 项、异步原生准备 await 时停止撤销并释放全部资源、开始边界已先胜出后停止仍可提交、十万 ID 成本，以及上述唯一身份失败。全部 helper／项目／锁和摘要留于 controls／control-inputs.json，未改已提交的测试或产品。
+- 明确撤回一次错误预期：03／05／08 控制曾在 TryBeginProbe 已先胜出、随后范围重读内停止，断言不得执行。已提交合同把匹配编码器回调定为开始边界，不能改为等待原生方法体／ffprobe 进程才算开始；该原断言越过合同，不作为缺陷或修正要求。修正预期后的 `ReviewerStopAfterWinningStartBoundaryStillSettles` 通过。所有首次失败日志保留，未隐藏。06 成本输出首次运行因旧 helper 没有 PeakActiveConsumers 字段而编译失败；07／最终 10 修正 reviewer helper 后通过成本测量，不归因为产品失败。
+- 开始／准备覆盖：`BatchStopAfterAcquiringAPermitBeforeRegisteringRevokesWithoutStarting`、`BatchStopWhileWaitingForAPreparingOwnerRevokesWithoutCancellingTheOwner`、独立 `ReviewerStopWhileNativePreparationAwaitsRevokesAndReleasesResources`；原开始双方先胜由 `BatchStopConfirmedBeforeTheMatchingNativeCallDoesNotStartTheProbe`／`BatchStopAndStartRaceIsDecidedAtOneBoundary` 覆盖。1／2／8 复用本次聚焦的 `GlobalLimitCapsConcurrentStartedProbes`／`GlobalLimitOneSerializesAndGlobalLimitEightAllowsEight`；实机 2／保存 1 重启前后及池饱和独立刷新复用本次默认播放原始日志。
+- 保存／取消／提交覆盖：本次聚焦包含 `FailedNativeStreamSaveLeavesChangedAddressFingerprintRetryable`、`PersistenceProxyDoesNotConfirmNativeSavesThatThrow`、`CancellationDoesNotReplaceTheAcceptedFingerprint`、`BatchCommitFailureAfterActualProbeCountsProbeIncomplete` 及共享失败／未提交控制；原生保存代理／事务边界沿用固定源码与前轮审查。Jellyfin 内部数据库故障实机注入继续 NOT RUN，属于已接受限制。
+- NOT RUN（B 本轮）：真实 stop／sharing、其余完整 T4 重跑、Slice Final。发现确定 P1 后按流程先拒绝；修正候选仍须完整指定 T4，PASS 前 B 独立执行两个实机入口。Developer 当前七场景实机事实与 B 独立运行分开记录。本轮未部署、未改隔离有效配置／触发器／媒体或生产实例。
 
 ### Slice 全部 Required Outcomes / Surfaces 重核
 
-| Outcome | 本轮结果 |
+| Outcome | 当前判断 |
 |---|---|
-| RO-1 入口／定时 | 发现／普通定时已有证据，新增收尾定时场景；本轮触发与取消事件仍须绑定。 |
-| RO-2 范围／有界对象 | 已有多批／多版本及当前项目身份保护；准备期间移库仍越界，运行中集合变化和身份峰值未闭合。 |
-| RO-3 可靠结果 | 原主版本与非提交共享缺陷已修；越界候选仍被探测并提交，需同一准入规则保护。 |
-| RO-4 共享／并发 | 两方向共享与峰值 2 观测已补；日志实际全由批量发起，尚未证明不同源入口混合。 |
-| RO-5 停止收尾 | 两方向独立新播放和等许可屏障已补；当前轮原生状态／触发绑定及准备期间范围验证仍欠。 |
-| RO-6 反馈／恢复 | 未查询总数误报已修，恢复／计数已有改进；峰值／进度与本轮证据未完整。 |
-| RO-7 后端／完整页面 | 范围后端已有保存／恢复；HTML／浏览器仍未实施，按原非目标不单独阻塞 3.1。 |
+| RO-1 入口／定时 | 有本次发现／手动／真实触发及重启证据；Task 尚未 PASS。 |
+| RO-2 范围／有界对象 | 原移库控制、代表性多库多批增删及身份成本已补；同一缓存对象的捕获身份保护仍失败。 |
+| RO-3 可靠结果 | 共享、保存及提交故障已有覆盖；原地主版本变化可覆盖旧关联指纹，尚未闭合。 |
+| RO-4 共享／并发 | 两方向共享／停止、不同入口 owner 混合峰值及 1／2／8 覆盖已核对；B 实机独立入口待修正后运行。 |
+| RO-5 停止收尾 | 原生准备 await、仅 preparing、立即获许可及已开始收尾控制通过；本轮事件绑定已补，不要求改变已先胜出的开始语义。 |
+| RO-6 反馈／恢复 | 单项／全局失败、计数、进度及恢复有证据；身份误接纳仍会把错误关联计成可靠成功。 |
+| RO-7 后端／完整页面 | 范围后端已有证据；完整 HTML／浏览器仍未实施，按原非目标不单独阻塞 3.1。 |
 
-Required Surfaces 尚未全部满足，没有 Task PASS；不创建 3.2，不运行 Slice Final／提交 Closure Packet，不代替 A 最终审查或关闭。经验候选：当前候选的身份与库范围宜作为完整的准入检查；混合峰值须区分实际执行 owner，进程堆差值不能冒充阶段峰值。仅供收尾，不向经验文件写历史。
-
-Developer 继续同一 Task 3.1 修正以上 P1，保留 Base／Goal／Scope／High／T4，提交完整候选证据再交 READY FOR B REVIEW。若实证 Contract 无法满足再交 A；当前不删减或延期原验收。
+保持同一 Task 3.1 FIX REQUIRED，不创建下一 Task，不提交 Closure Packet，不代替 A 最终审查或关闭。少量经验候选留待 Slice 收尾：当前对象与捕获身份必须按值比较，不能假定原生重读返回对象副本；独立控制也必须核对合同的线性化边界，撤回不适用断言并保留原始证据。
