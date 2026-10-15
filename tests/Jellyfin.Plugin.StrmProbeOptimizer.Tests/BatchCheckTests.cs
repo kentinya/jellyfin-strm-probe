@@ -516,6 +516,112 @@ public sealed class BatchCheckTests
         Assert.IsNotNull(harness.Repository.Get(item.Id, Key(item.Id)));
     }
 
+    [TestMethod]
+    public async Task BatchDisableDuringNativePreparationPreventsANewProbeAndReportsEarlyEnd()
+    {
+        using var harness = new BatchHarness();
+        var item = harness.AddSupported("https://media.example.invalid/a.mp4", ValidSha1, 10);
+        harness.CandidateIds = [item.Id];
+        await harness.RunAsync();
+        var accepted = harness.Repository.Get(item.Id, Key(item.Id));
+        Assert.IsNotNull(accepted);
+        harness.WriteManifest(item, "https://media.example.invalid/a.mp4?new", ValidSha1, 10);
+
+        // Hold native preparation before the matching encoder call, then disable the shared settings. The change
+        // happens before the actual start boundary, so the unstarted candidate must be refused and the run must
+        // report the early end instead of a reliable success, full completion or 100% progress.
+        harness.BlockNativePreparation = true;
+        var progress = new SynchronousProgress(_ => { });
+        var run = harness.RunWithProgressAsync(progress, CancellationToken.None);
+        await harness.NativePreparationReached.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.AreEqual(0, harness.StartedProbes, "Native preparation has not reached the matching encoder call.");
+        Assert.AreEqual(1, harness.Coordinator.PreparingCount);
+        harness.Enabled = false;
+        harness.ReleaseNativePreparation.TrySetResult();
+
+        var result = await run.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.AreEqual(0, harness.StartedProbes, "A plugin disabled during native preparation must abort the native call before it starts.");
+        Assert.AreEqual(0, result.ReliableSuccess);
+        Assert.IsTrue(result.Disabled, "The final-item summary must carry the disable reason.");
+        Assert.IsFalse(result.Completed);
+        Assert.AreEqual(accepted, harness.Repository.Get(item.Id, Key(item.Id)), "The accepted baseline must survive a disable during preparation.");
+        Assert.AreEqual(0, harness.Coordinator.ActivePermits);
+        Assert.AreEqual(0, harness.Coordinator.PreparingCount);
+        Assert.AreEqual(0, harness.Coordinator.RunningCount);
+    }
+
+    [TestMethod]
+    public async Task BatchDisableAfterActualStartStillAllowsReliableSettlement()
+    {
+        using var harness = new BatchHarness();
+        var item = harness.AddSupported("https://media.example.invalid/a.mp4", ValidSha1, 10);
+        harness.CandidateIds = [item.Id];
+        await harness.RunAsync();
+        harness.WriteManifest(item, "https://media.example.invalid/a.mp4?new", ValidSha1, 10);
+        // The disable is observed only after the matching native call actually started: the started work must
+        // still save, verify and commit its valid result, and the disable must not veto that success.
+        harness.AfterProbeStart = () => harness.Enabled = false;
+
+        var result = await harness.RunAsync();
+
+        Assert.AreEqual(1, harness.StartedProbes);
+        Assert.AreEqual(1, result.ReliableSuccess, "Disabling must not veto an already-started valid success.");
+        Assert.AreEqual(0, harness.Coordinator.ActivePermits);
+    }
+
+    [TestMethod]
+    public async Task BatchLatchedStoreFaultDuringNativePreparationPreventsANewProbeAndReportsUnavailable()
+    {
+        using var harness = new BatchHarness();
+        var item = harness.AddSupported("https://media.example.invalid/a.mp4", ValidSha1, 10);
+        var other = harness.AddSupported("https://media.example.invalid/other.mp4", ValidSha1, 10);
+        harness.CandidateIds = [item.Id];
+        await harness.RunAsync();
+        var backing = harness.Repository;
+        var accepted = backing.Get(item.Id, Key(item.Id));
+        Assert.IsNotNull(accepted);
+        var faulting = new FaultInjectingRepository(backing) { FailGetAfter = int.MaxValue };
+        harness.Repository = faulting;
+        harness.WriteManifest(item, "https://media.example.invalid/a.mp4?new", ValidSha1, 10);
+
+        // Hold native preparation before the matching encoder call, then have a different caller exercise the
+        // same optimizer and latch the real global store-unavailable state. The latch happens before the actual
+        // start boundary, so the unstarted candidate must be refused and the run must report the store unavailable.
+        harness.BlockNativePreparation = true;
+        var run = harness.RunWithProgressAsync(new SynchronousProgress(_ => { }), CancellationToken.None);
+        await harness.NativePreparationReached.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.AreEqual(0, harness.StartedProbes, "Native preparation has not reached the matching encoder call.");
+        faulting.FailGetAfter = 0;
+        using var otherStop = new BatchStopSignal(CancellationToken.None);
+        var latched = false;
+        try
+        {
+            await harness.ReviewerOptimizer!.CheckBatchSourceAsync(
+                harness.ReviewerNative!, other.Id, other,
+                new MediaSourceInfo { Id = Key(other.Id), Path = other.ShortcutPath }, Key(other.Id), otherStop);
+        }
+        catch (FingerprintStoreUnavailableException)
+        {
+            latched = true;
+        }
+
+        Assert.IsTrue(latched, "A different caller must observe and latch the shared optimizer's repository fault.");
+        Assert.IsTrue(harness.ReviewerOptimizer!.IsFingerprintStoreUnavailable);
+        harness.ReleaseNativePreparation.TrySetResult();
+
+        var result = await run.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.AreEqual(0, harness.StartedProbes, "A latched global store fault must abort the native call before it starts.");
+        Assert.AreEqual(0, result.ReliableSuccess);
+        Assert.IsTrue(result.StoreUnavailable);
+        Assert.IsFalse(result.Completed);
+        Assert.AreEqual(accepted, backing.Get(item.Id, Key(item.Id)), "The accepted baseline must survive a store fault during preparation.");
+        Assert.AreEqual(0, harness.Coordinator.ActivePermits);
+        Assert.AreEqual(0, harness.Coordinator.PreparingCount);
+        Assert.AreEqual(0, harness.Coordinator.RunningCount);
+    }
+
     // ---------- Global failure (AC-T6) ----------
 
     [TestMethod]
@@ -1414,6 +1520,20 @@ public sealed class BatchCheckTests
 
         public Action? AfterProbeStart { get; set; }
 
+        /// <summary>
+        /// Gets or sets a value indicating whether the scripted native probe preparation blocks before the matching
+        /// encoder call. It lets a deterministic regression change the plugin enablement or latch a global store
+        /// fault while native preparation awaits, before the actual probe start boundary.
+        /// </summary>
+        public bool BlockNativePreparation { get; set; }
+
+        /// <summary>Gets or sets a dynamic enablement value read by the shared settings during a run.</summary>
+        public bool Enabled { get; set; } = true;
+
+        public TaskCompletionSource NativePreparationReached { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource ReleaseNativePreparation { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
         public TaskCompletionSource ProbeStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public TaskCompletionSource ReleaseProbe { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -1468,7 +1588,7 @@ public sealed class BatchCheckTests
         public StrmProbeScheduledTask CreateTask()
         {
             var runner = CreateRunner();
-            return new StrmProbeScheduledTask(runner, new Settings(), NullLogger<StrmProbeScheduledTask>.Instance);
+            return new StrmProbeScheduledTask(runner, new Settings(this), NullLogger<StrmProbeScheduledTask>.Instance);
         }
 
         public Task<BatchRunResult> RunAsync(CancellationToken cancellationToken = default)
@@ -1506,6 +1626,12 @@ public sealed class BatchCheckTests
             {
                 ProbeCalls++;
                 BeforeProbeStart?.Invoke();
+                if (BlockNativePreparation)
+                {
+                    NativePreparationReached.TrySetResult();
+                    await ReleaseNativePreparation.Task;
+                }
+
                 var url = item.ShortcutPath;
                 var result = new MediaInfo { MediaStreams = [new MediaStream { Type = item is Audio ? MediaStreamType.Audio : MediaStreamType.Video, Codec = "h264" }] };
                 var context = ProbeExecutionContext.Current!;
@@ -1541,7 +1667,7 @@ public sealed class BatchCheckTests
                 new StrmManifestReader(),
                 new ProbeDecisionService(),
                 Repository,
-                new Settings(),
+                new Settings(this),
                 NullLogger<StrmPlaybackOptimizer>.Instance,
                 null,
                 Coordinator)
@@ -1558,7 +1684,7 @@ public sealed class BatchCheckTests
                 new FakeScopeResolver(this),
                 new FakeCandidateSource(this),
                 native.Interface,
-                new Settings(),
+                new Settings(this),
                 NullLogger<BatchCheckRunner>.Instance)
             {
                 CandidateSetFixed = () => AfterFixedSet?.Invoke(),
@@ -1671,7 +1797,14 @@ public sealed class BatchCheckTests
 
         private sealed class Settings : IPlaybackSettings
         {
-            public bool Enabled => true;
+            private readonly BatchHarness _harness;
+
+            public Settings(BatchHarness harness)
+            {
+                _harness = harness;
+            }
+
+            public bool Enabled => _harness.Enabled;
 
             public bool PlaybackAutoCheck => true;
 
@@ -1788,7 +1921,7 @@ public sealed class BatchCheckTests
             _inner = inner ?? new InMemoryStrmFingerprintRepository();
         }
 
-        public int FailGetAfter { get; init; }
+        public int FailGetAfter { get; set; }
 
         public bool FailCommit { get; init; }
 

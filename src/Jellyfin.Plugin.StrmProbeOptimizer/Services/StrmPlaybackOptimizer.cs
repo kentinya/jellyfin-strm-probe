@@ -473,6 +473,21 @@ public sealed class StrmPlaybackOptimizer
                 Coordinator.Abandon(workItem);
                 return BatchSourceOutcome.Missing;
             }
+            catch (BatchDisabledException)
+            {
+                // The plugin was disabled during native preparation, before the probe actually started. The native
+                // call was aborted, the old baseline is preserved and the reservation/permit is released. The exact
+                // reason is surfaced to the runner so the final-item summary reports the early end, not a success.
+                Coordinator.Abandon(workItem);
+                throw;
+            }
+            catch (FingerprintStoreUnavailableException)
+            {
+                // The fingerprint store faulted during native preparation, before the probe actually started. The
+                // reservation/permit is released and the exact global-unavailable reason is surfaced to the runner.
+                Coordinator.Abandon(workItem);
+                throw;
+            }
             catch (BatchStopRejectedException)
             {
                 Coordinator.Abandon(workItem);
@@ -1329,6 +1344,25 @@ public sealed class StrmPlaybackOptimizer
             if (Interlocked.Exchange(ref started, 1) != 0)
             {
                 return;
+            }
+
+            if (stopSignal is not null)
+            {
+                // The plugin may have been disabled or the fingerprint store may have faulted during native
+                // preparation, after the pre-start admission check but before the matching native call. Re-check
+                // the current optimization eligibility inside the same start boundary so an unstarted candidate is
+                // refused instead of probing under a stale authorization. This check runs before TryBeginProbe, so
+                // no provisional start is counted and the old baseline is preserved. An execution-stage store fault
+                // keeps the candidate in the need-probe denominator while reporting the store as unavailable.
+                if (IsFingerprintStoreUnavailable)
+                {
+                    throw new FingerprintStoreUnavailableException(FingerprintStoreFailureStage.Execution);
+                }
+
+                if (!_settings.Enabled)
+                {
+                    throw new BatchDisabledException(projectItemId, sourceKey);
+                }
             }
 
             if (stopSignal is not null && !stopSignal.TryBeginProbe())

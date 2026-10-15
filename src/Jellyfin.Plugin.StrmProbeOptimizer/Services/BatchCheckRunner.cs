@@ -535,6 +535,14 @@ public sealed class BatchCheckRunner
                 .ConfigureAwait(false);
             CountOutcome(counters, outcome);
         }
+        catch (BatchDisabledException)
+        {
+            // The plugin was disabled during native preparation, before the matching native call. No probe started,
+            // the old baseline is preserved and the reservation/permit was released. Surface the exact reason so the
+            // final-item summary reports the early end instead of faking reliable success, completion or 100%.
+            Interlocked.Exchange(ref counters.Disabled, 1);
+            Interlocked.Increment(ref counters.Revoked);
+        }
         catch (FingerprintStoreUnavailableException exception)
         {
             // A global store fault is reported as unavailable and stops further batch work. The counter depends on

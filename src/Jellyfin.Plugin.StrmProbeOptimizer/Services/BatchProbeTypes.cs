@@ -28,6 +28,20 @@ public sealed class BatchIdentityChangedException : InvalidOperationException
 }
 
 /// <summary>
+/// Thrown from the verified matching native probe call when the plugin was disabled during native preparation,
+/// after the pre-start admission check but before the probe actually started. The native call is aborted, the old
+/// baseline is preserved and the candidate is revoked; the run reports the early end instead of faking reliable
+/// success, full completion or 100% progress. It is not a probe execution cancellation: no probe actually started.
+/// </summary>
+public sealed class BatchDisabledException : InvalidOperationException
+{
+    public BatchDisabledException(Guid projectItemId, string sourceKey)
+        : base($"The plugin was disabled during native preparation for item {projectItemId}, source {sourceKey}; the batch probe was not started.")
+    {
+    }
+}
+
+/// <summary>
 /// The stage at which a batch candidate observed a fingerprint store fault. A decision-stage read fault means
 /// the probe decision was never reached, so the candidate is a check-stage failure. An execution-stage fault
 /// means the native probe already ran and the candidate had been decided to need a probe, so it must be counted
