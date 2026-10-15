@@ -5,7 +5,7 @@
 ```text
 Task ID: 3.1
 Parent Slice: 3
-Status: FIX REQUIRED
+Status: READY FOR B REVIEW
 Task Base: b86d9c17d7f915108072f54ee098f0f5543fe093
 Contract Checkpoint: 2b515f35db7fc8e85d8ac1a8085dd9b8ccc62ef3
 Superseded Plan Snapshot: eb4e272743f4c7e184d45fa48b660b2fef24c685
@@ -196,6 +196,18 @@ git diff --check
 - Head SHA：`71a397007827fe9b086838d6a4495e63b7d20485`。
 
 经验候选（供 A 收尾合并，不写入经验文档）：同源共享失败的结算取决于开始边界而非等待结果——已实际开始的失败按本轮探测未完成结算且不在同轮重试，仅准备阶段的失败才可重判；状态库故障必须携带发生阶段，否则会把已决定需要探测的候选错误移出分母。
+
+## Developer Third Fix Completion Report（第三轮 FIX REQUIRED 修正后）
+
+- Fix Base：`71a397007827fe9b086838d6a4495e63b7d20485`（上一轮 Developer Head）；同一 Task 3.1 修正，Task Base、Goal、Scope、High／T4、验收与必要测试均不变。
+- Changed Files：修改 `Services/ProbeCoordinator.cs`（`ProbeWorkItem.FingerprintStoreUnavailable` 与 `Complete(..., fingerprintStoreUnavailable)` 重载，结算时发布执行阶段状态库故障）、`Services/StrmPlaybackOptimizer.cs`（`JoinBatchSharedAsync` 以本轮实际执行结果结算已加入 running 的候选；owner 准入重读当前项目身份；播放 owner 传递执行阶段状态库状态）、`Services/BatchCheckRunner.cs`（消费者先重读当前对象并使用当前项目／源键、部分获取保留已测计数与耗时、`CandidateSetCapacityBytes`／`CandidateTotalKnown`、获取失败保留停止原因）、`Services/BatchLibraryScope.cs`（`IBatchScopeVerifier.GetCurrentItem` 与 `LibraryBatchCandidateSource` 实现、`IsInScope` 拒绝主版本变更）、`Tasks/StrmProbeScheduledTask.cs`（脱敏汇总新增 `total known`／`candidate set capacity`，新增 `STRM media information check entered` 入口标记）、`tests/.../BatchCheckTests.cs`、`scripts/run_isolated_batch_integration.py`、`tests/test_isolated_batch_integration.py`。未提交 `TASK.md` 本身。
+- Fixed：BR-1／BR-2 已加入 running 的探测现完全按本轮执行结果结算：`Committed=false`、文件再变或执行阶段状态库故障均计探测未完成（故障同时置 `StoreUnavailable`），停止不把已开始结果改为撤销，且不在同轮重试；仅 preparing 等待仍独立重判，正常共享成功与后续新请求的最新输入检查保持。BR-3 消费者先经 `GetCurrentItem` 重读当前对象，用当前项目（PrimaryVersionId）／源键／自身源进行决策、协调与提交；`IsInScope` 拒绝主版本变更；owner 准入也重读当前项目身份。BR-5 部分获取失败保留已取得的 raw／重复数与真实耗时，`CandidateTotalKnown=false` 明确未知总数，完整获取后停止保留 N0／未读；新增 O(N) 身份容量测量并随汇总输出；`AbortProbe` 保留。BR-7 新脚本用逐 ID 计数而非集合差集核对下一轮不重复；stop 场景加入 `batch_run_entries` 入口时间线证明收尾期未实际启动新轮；新增 `--scenario shared_stop`（已加入播放探测时停止、已开始提交、独立播放继续）与 `--scenario mixed`（不同源各探测一次、独立 FullRefresh 不被池阻塞）；scope 场景核对真实分支（need_probe＝actual_probe_calls、FirstTrust=0）与 canonical item_id＋source_key 唯一；禁用分支核对所有媒体路由；清理失败不再 `except: pass`，而是进入最终失败。BR-8 新候选重新生成完整原始证据。
+- Tests and Results：证据索引 `.git/validation-evidence/5d7b48f03b566e0253d397be74c1eabbe11cdda5/developer-fix3-t4-20261015-104716/INDEX.md`。锁定 restore PASS；Release build 0 警告 0 错误；C# 全套 162/162（含 47 项 `TestCategory=Batch`）；format PASS；Python 46/46；治理 PASS；`git diff --check` PASS；B 原 17 项 ReviewerControl／RereviewControl／Review3Control 独立复现 17/17 PASS。真实隔离：默认播放脚本 PASS；批量默认 `suite` 单会话运行 discovery／stop／shared_stop／sharing／scope／mixed／failure 全部 PASS（真实 `cancelled` 后已开始提交／未开始撤销、收尾期零新入口、下一轮仅重检撤销源；共享停止中已加入成功计可靠成功且撤销 0、独立播放 200；混合 3 源各一次实际调用、独立 FullRefresh 0.026 s；133 候选 2 批多版本 canonical 关联；状态库故障任务 `failed` 无任何媒体请求、修复重启 `completed`）。全部夹具、配置、触发器与有效内存配置已恢复并校验，清理失败会进入最终失败。
+- Remaining In-Slice Work：完整 HTML 配置页／浏览器交互旅程（后续连贯单元）；十万真实库压力与完整扫描压力留 Slice 4。
+- Risks / Deviations：Jellyfin 内部数据库保存故障实机注入仍 NOT RUN（沿用既有边界）；十万候选为确定性模拟，不代表真实大库性能；本次未单独运行 `--scenario` 分场景入口（由同一 `suite` 会话覆盖）。无产品 PASS 声明。
+- Head SHA：`5d7b48f03b566e0253d397be74c1eabbe11cdda5`。
+
+经验候选（供 A 收尾合并，不写入经验文档）：已加入运行中探测的结算必须以执行 owner 发布的本次提交／故障结果为准，等待返回或文件再变都不能作为同轮重试或撤销的依据；原生对象重读只有把返回对象用于后续项目身份、源键与取源，才构成有效身份重核。
 
 ## B Review Result
 
