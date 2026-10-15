@@ -5,7 +5,7 @@
 ```text
 Task ID: 3.2
 Parent Slice: 3
-Status: READY FOR B REVIEW
+Status: FIX REQUIRED
 Task Base: 2f74aa83f15707df56c4b15409ba1538a488f83a
 Contract Checkpoint: 2b515f35db7fc8e85d8ac1a8085dd9b8ccc62ef3
 Difficulty: Medium
@@ -132,10 +132,34 @@ git diff --check
 ## B Review Result
 
 ```text
-Reviewed: NOT SET
-Decision: PENDING
+Reviewed: 2f74aa83f15707df56c4b15409ba1538a488f83a..dac695e45f8619b6ebcc24327e515fd9413240a1
+Report Checkpoint: 047fc9444c51807ab7e766cfff0808952b1a27d9
+Decision: FIX REQUIRED
 Slice Required Outcomes all satisfied: NO
-Next: B REVIEWS TASK 3.2 (READY FOR B REVIEW)
+Next: DEVELOPER FIXES THE SAME TASK 3.2
 ```
 
-本 Task 已实现并交为 READY FOR B REVIEW；Task 3.1 PASS 见固定快照。Slice Final 与 A Final Review 仍未运行，待 B 审查全部 RO。
+2026-10-16，B 完成必读、治理及真实 Base..Head 审查，开始时工作区干净。报告后继仅改变 TASK.md，可执行源码与上述 Developer Head 一致。页面导出／嵌入资源、已有配置通道复用及产品文件范围合法，未修改已接受的决策／协调／刷新／提交核心；维持 T3。以下都是当前合同内的阻塞，保留 Task ID、Base、Goal、Scope、验收和测试计划，不另建修正 Task，不交 A 改合同。
+
+### 当前阻塞（P1）
+
+1. **FR-U1：失效库选择被静默丢弃（AC-U3／RO-7）**。`configPage.html:167–196` 只渲染当前库，没有比较已保存 ID 与可用 ID 的差集；加载仍显示“已加载当前配置”。B 通过真实页面的配置 GET 响应控制提供“一个真实库＋一个已失效 ID”的已保存范围，未编辑范围直接保存，捕获 POST 发现仅剩真实库 ID，页面报告成功。该控制不修改真实库或服务器范围；它证明页面会静默改写已保存选择，不能当作失效库反馈已经验收。须明确标识失效选择并给出修正路径；在用户明确修正前不能因保存其他字段而静默丢弃。补真实浏览器失效选择／修正重试回归。
+2. **FR-U2：响应丢失时错误承诺配置未变（AC-U4／RO-7）**。`configPage.html:257–263` 将保存请求错误统一解释为“已保存的有效配置未被更改”。B 在真实隔离服务器已处理 POST 并返回 204 后，于浏览器网络层丢弃响应：页面显示该错误，API 读回 `DetailedLog` 却已从 false 变为 true。须区分可确认的拒绝与结果未知，必要时重读有效值；不能对网络中断承诺回滚。补提交前网络失败、提交后响应丢失及恢复／重试的浏览器证据，不要求改变后端原子保存合同。
+3. **FR-U3：验收覆盖和证据不足（AC-U1～U6）**。现有默认浏览器入口只检查了部分指定行为：缺失失效库、旧配置缺范围字段的页面加载、浏览器并发越界、失败后的实际重试恢复，以及由页面关闭播放检查仍能批量／禁用后无新批量探测／再启用恢复的端到端核对。`scenario_native_task_scope` 在运行前用 API 把 Enabled／PlaybackAutoCheck 都改回 true，又用 API 切全部范围，不能声称这些任务由相应页面保存值驱动；`run_native_task` 还须核对实际终态／结果而非仅等 Idle。完成现有计划要求的浏览器操作后直接运行原生任务并核对真实结果，不能用 API 重写被验收值代替页面旅程。
+
+   Developer 索引只有标签与两个摘要 JSON，没有 restore／build／178 项 C#／format／61 项 Python／治理／差异门槛的原始日志；浏览器截图仍引用 `/tmp`，各场景同名截图相互覆盖，console／响应的原始结果被摘要丢弃，已声明的首次失败／Base 复现也无相应产物。本轮不能据此复用完整候选门槛。须在稳定忽略目录为修正候选保存准确输入／工具／锁／部署产物身份、每条门槛命令／退出码／耗时／计数及原始日志，浏览器每场景独立保存交互／截图／console／响应与恢复证据；历史缺失如实说明，不补造旧日志。修正涉及 HTML／脚本等可执行输入，按原计划重新完成最终候选门槛。
+
+### B 独立验证与证据
+
+本机证据根目录：`.git/validation-evidence/dac695e45f8619b6ebcc24327e515fd9413240a1/b-review-20261016/`，索引 `INDEX.md`。该目录仅本机可读，未推送。
+
+- 配置／注册／页面聚焦：18 passed、0 failed、0 skipped，原始 `focused.log`、`b-focused.trx`；验收工具守卫：7 passed、0 failed，`python-focused.log`。这些通过不证明上述遗漏旅程。
+- 真实浏览器独立边界：`boundaries.json`、`boundaries.log`、控制脚本及三张独立截图，复现 FR-U1／U2；FR-U1 为真实页面的受控读取／截获保存，FR-U2 为真实服务器提交后的传输失败，不冒充物理磁盘故障。配置文件与有效值恢复均核对一致，触发器恢复并重启验证。
+- 指定浏览器入口首次因 shell PATH 缺 Node 未执行交互，退出 1，保留 `configuration-integration.log`；补入已安装 Node 的 PATH 后重跑仍退出 1：load 场景通过，save_valid 捕获 `t.scrollHandler is not a function` 和 `Invalid language tag: en-us@posix` 页面错误，见 `configuration-integration-retry.log`。错误来源尚未判定，不据此另宣称产品回归，也不忽略异常标 PASS；两次实例配置／触发器均恢复成功。修正交审须提供可复现的工具／locale 环境及匹配门槛结果。
+- 未独立重跑完整 restore／build／C#／format／Python／默认播放／完整批量套件；已有 P1，且本候选完整证据不满足复用规则，均不作为本轮 PASS。修正后的候选仍须通过原计划全部门槛。未执行 Slice Final 或 A Final Review。
+
+### Slice 停止规则核对
+
+Task 3.1 已接受的 RO-1～RO-6 核心事实和审查快照保留；本次变更未重做这些核心行为。RO-7、RO-2 的范围页面及配置交互／证据 Surface 尚不满足，AC-U3／U4 已有反例，U1／U2／U5／U6 的完整证据仍缺。不创建新 Task，不提交 Closure Packet，不改变 Slice／Roadmap／稳定需求，也不宣布 Slice 关闭。Developer 在同一 Task 修正并重新交审；PASS 后 B 再核对全部 RO／Surfaces，满足才执行完整 Slice Final 并提交 A。
+
+供 Slice 收尾评估的一条经验候选：请求失败被误当作服务端回滚 → 用“服务端已提交、客户端丢失响应”的传输控制核对有效值与反馈 → 适用于配置保存等有持久化副作用的页面审查；不是新增验收或经验条数门槛。
