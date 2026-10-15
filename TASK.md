@@ -5,7 +5,7 @@
 ```text
 Task ID: 3.1
 Parent Slice: 3
-Status: READY FOR B REVIEW
+Status: FIX REQUIRED
 Task Base: b86d9c17d7f915108072f54ee098f0f5543fe093
 Contract Checkpoint: 2b515f35db7fc8e85d8ac1a8085dd9b8ccc62ef3
 Superseded Plan Snapshot: eb4e272743f4c7e184d45fa48b660b2fef24c685
@@ -247,52 +247,57 @@ git diff --check
 
 ## B Review Result
 
-Reviewed: b86d9c17d7f915108072f54ee098f0f5543fe093..5b501e39d6d58948b9d8d92d5c739e6c48b0011e
-Fix Reviewed: c8fffe3eda2e2806e172ed4128b19965253dc8c3..5b501e39d6d58948b9d8d92d5c739e6c48b0011e
-Report Checkpoint: c7a952fafa0e284a7f64bca462efc4bbe2cb48a4
+Reviewed: b86d9c17d7f915108072f54ee098f0f5543fe093..22ba671c44fba2540c62739c824505b52272bcc2
+Fix Reviewed: 5b501e39d6d58948b9d8d92d5c739e6c48b0011e..22ba671c44fba2540c62739c824505b52272bcc2
+Report Checkpoint: 911a0b7a0b0fcc00e61a905ccc9c3fe7ee877f3a
 Decision: FIX REQUIRED
 Slice Required Outcomes all satisfied: NO
 Next: DEVELOPER FIXES THE SAME TASK 3.1
 
-2026-10-15，B 第六轮完成 AGENTS 必读清单与 B 经验；初始工作区 `## main`、无已有改动，治理 PASS。已提交 Slice／Roadmap／稳定需求／流程与上轮一致，Task ID／Base／Goal／Scope／High／T4／AC-T1～T8 保持有效，无需 A 修改 Contract。结合 Git 中前轮审查重核完整 Task Base..Head，逐项阅读本轮六个可执行源码／测试／工具文件的实际差异及报告；实现后继只修改 TASK.md。上轮决定保留于 `909ac212678068a2ce1df892ad0ec447928cc0ce:TASK.md`。本轮只提交 TASK.md，不实施产品、不改变合同。
+2026-10-15，B 第七轮完成 AGENTS 必读清单与 B 经验；初始工作区 `## main`、无已有改动，治理 PASS。已提交 Slice／Roadmap／稳定需求／流程与上轮相同，Task ID／Base／Goal／Scope／High／T4／AC-T1～T8 继续有效，没有 Contract 无法满足的事实，不交 A RESCOPE。结合 Git 中前轮审查重核完整 Task Base..Head，逐项阅读本轮 optimizer 与 BatchCheckTests 两个文件的实际差异及报告，后继只改 TASK.md。上轮决定保留于 `689692689ef89dd55bfac653365c224c4d14f145:TASK.md`。本轮只提交 TASK.md，不实施产品、不修改上层合同或新增业务规则。
 
-### 已确认的修正及证据复用
+### 上轮阻塞已修复及可复用证据
 
-- 上轮 20 项独立控制全部通过，包括准备期间移出所选库、当前对象替换为另一个主版本、共享失败／未提交不重试、提交故障阶段、未知总数、额外返回对象及失效范围保存拒绝。原移库缺陷已修，不再作为当前失败。新增立即获许可未登记与仅 preparing 等待的批量停止测试通过；统一检查停止 token 与信号避免递归重入。
-- mixed 现把播放源放在 local 库、批量仅选 STRM 库；原始实机结果批量调用／成功各 2，播放自身开始时 running=2、峰值=2，两个入口的不同源 owner 重叠成立。独立 FullRefresh 在 mixed 中仍只证明队列受理；默认播放脚本另有池饱和时刷新实际完成证据（484 ms），明确复用，不把 204 当完成。
-- stop／shared_stop 现按本轮时间过滤入口、汇总、探测开始和 Cancelled，不再只查容器全部历史是否出现过取消。stop 有新 arm 及时间断言、旧轮结束前无新轮／探测、收尾后排队轮只探测撤销源、再次显式运行零探测；原始结果 2 成功／1 撤销。shared_stop 两方向本轮 Cancelled，目标各一次、可靠成功 1／撤销 0，独立播放启动新探测时仍为 Cancelling。scope 原始结果 133 候选／2 批及多版本关联；新增运行中增删、当轮不处理新增、下轮发现的代表性实机证据。删除例的结果为已开始 2、成功 1／探测未完成 1，不把它称作未开始候选删除或事务快照证明。未开始删除／移出由确定性控制覆盖。
-- 身份成本现分开报告数量、容量尺寸模型、累计线程分配及离散采样的进程托管堆峰值。B 另对十万 ID 输出实际数值：76.7605 ms、累计分配 12,647,096 bytes、采样峰值增量 8,664,600 bytes、数量估算 4,000,000 bytes、实际槽位容量乘尺寸模型 5,851,640 bytes。容量 bytes 仍依赖每槽尺寸模型，采样会漏掉查询内部已回收的瞬时峰值，进程堆差值不精确归属于候选集合；这些限制保留，不宣称精确总峰值／真实十万库性能。该独立旧 harness 只测 ID 获取；完整对象／固定消费者上限由本次 127 项聚焦中的新版十万测试证明。不再将上轮“未报告身份成本”列为当前 P1。
-- Developer 原始证据位于 `.git/validation-evidence/work-fix5/developer-fix5-t4-20261015-173816/`，根 INDEX／current-run.txt 指向该目录。workspace.diff 与 `git diff 909ac21..5b501e3` 的 SHA-256 均为 `e9fa4beaca1d20779a895d47f95ee7f8fcb416258fcbd1061e7ce78752c9cc4d`。原始 restore、build（0 warnings／errors）、168 C#（0 failed／skipped）、format、54 Python、默认播放、七场景 suite、治理／diff 均有实际 exit 0；全部可执行输入与报告后继一致。Developer 构建／部署 DLL 摘要同为 `eca0e19fa3879267c68ea429a693666530184f684e2e41f79da265e4963402a0`。B 本轮编译的报告 HEAD 身份单列，未部署，不声称同一个二进制。核验后复用上述门槛事实，不能由此抹去新增控制的失败。
+- 上轮 24 项独立控制全部通过，包括 `ReviewerInPlacePrimaryChangeMustKeepCapturedProjectBaseline`。开始边界现先比较原生当前对象与捕获的不可变 projectItemId，再重核当前库范围；原地修改与替换对象两种生产 verifier 分支回归均在本次聚焦通过。旧关联错写缺陷不再作为当前阻塞，库范围保护没有被移除。
+- 本轮独立补查用户此前讨论的准备阶段启用／状态库资格。使用已有共用 optimizer、固定消费者、原生准备 await 和开始信号验证，不以代码可能性或新增字段清单推导失败；发现的具体结果见下节。原来撤回的“已跨过 TryBeginProbe 后又停止必须撤销”断言仍撤回，不能借本轮修正改变已接受的开始边界。
+- Developer 索引 `.git/validation-evidence/22ba671c44fba2540c62739c824505b52272bcc2/developer-fix6-t4-20261015-190955/INDEX.md`。本次实际测试在已提交候选 22ba671 上进行，workspace.diff 为 0 bytes（SHA-256 `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`）；报告后继仅 TASK.md，47 个可执行／测试／工具／SDK／锁输入与本轮独立运行一致。原始日志＋精确命令／退出码／耗时元数据均存在，已逐项核阅，不凭 INDEX 的 PASS 标签接受结果。
+- 明确复用 Developer 本候选的完整 T4 已运行事实：locked restore、Release build（0 warnings／errors）、170 C#（0 failed／skipped）、format、54 Python、默认播放、批量七场景 suite、治理与 diff 均 exit 0。默认播放包含 false 权限、原生失败／保存／Manifest、并发 1／默认 2／保存后重启生效、池饱和独立 FullRefresh 实际完成（427 ms）。批量 suite 包含本轮 Cancelled、2 成功／1 撤销、收尾期无新轮、结算后排队轮只探撤销源及再次零探测；两方向 sharing 各一次；shared_stop 两方向成功 1／撤销 0，独立播放在 Cancelling 启动；scope 133 候选／2 批、多库多版本和轮内增删／下轮发现；mixed 播放 owner 与批量 owner 重叠、峰值 2／批量调用 2；状态库不可用零请求／修复重启恢复。配置、触发器、夹具恢复结果已核对。
+- Developer 记录的构建 DLL 与当前隔离已部署 DLL 的摘要均为 `7accfc172da16eb9dcc0c1fc0c9a9cac376da8e0ed6a1a075da2a065b31371a9`。B 在纯报告 HEAD 编译得到不同 DLL 身份，单列记录且未部署；不把二者说成同一二进制。十万候选仍为模拟，容量尺寸模型／采样进程堆峰值的已接受限制保留，不宣称真实大库或精确查询内部峰值。内部数据库保存故障实机注入仍 NOT RUN，完整 HTML／浏览器仍是后续单元。
 
-### 当前唯一 P1：缓存对象原地改变主版本时，开始检查仍接受旧关联（BR-3／RO-2、RO-3／AC-T2、T3、T5）
+### 当前 P1：原生准备期间变化后，开始准入未重核优化资格且汇总掩盖提前结束（RO-3、RO-5、RO-6／AC-T5、T6、T7）
 
-`StrmPlaybackOptimizer.CurrentIdentityStillMatches` 在有本轮 scopeLibraryIds 的生产分支只返回 `verifier.IsInScope(sourceItem, scopeLibraryIds)`（约第 825～829 行），跳过此前与捕获的 `projectItemId` 值比较。`LibraryBatchCandidateSource.IsInScope` 比较当前对象与传入对象的主版本（约第 201～207 行）；原生重读若返回同一个可变缓存实例，这等于对象与自身比较，不能验证本轮已捕获的协调／指纹身份。
+`AdmitBatchOwnerAsync` 在原生准备之前检查 Enabled／IsFingerprintStoreUnavailable；随后 `ExecuteProbeAsync` 等待原生 `GetPlaybackMediaSources`。恢复到匹配编码器开始回调时，仅检查批量停止、当前对象身份／范围和 coordinator 所有权，没有重核插件启用与已 latch 的全局状态库故障。候选在准备 await 期间已经失去优化资格，仍会开始探测。若它恰好是末批末项，runner 收尾只补 StopRequested，未重新捕获禁用／全局故障，结果可仍 Completed=true、Disabled=false／StoreUnavailable=false，并补满进度。
 
-独立 `ReviewerInPlacePrimaryChangeMustKeepCapturedProjectBaseline` 使用真实范围验证器＋fake ILibraryManager，先建立旧项目指纹，再改变 URL；匹配开始前原地改变同一个 Video 的 PrimaryVersionId，保持对象 ID、类型、路径和所选库关系。结果实际开始 1、可靠成功 1，旧项目关联的可信 URL 指纹被新值覆盖。不是上轮“另一个对象移到库外”的失败，也不是要求媒体库事务快照。固定原生源码 `LibraryManager.GetItemById` 第 1689 行起直接返回缓存实例，`VideosController` 合并／拆分通过 SetPrimaryVersionId 原地修改对象，故不能假设重读必定得到独立对象；本轮仍只声称确定性复现，未声称真实合并并发复现。
+本轮两个独立控制以屏障停在原生准备 await：已确认 StartedProbes=0、PreparingCount=1，随后改变资格，再放行到 MarkCall；变化均发生在 TryBeginProbe 之前，不是已开始工作被事后要求取消。
 
-同一 Task 修正：在开始准入中同时保留本轮不可变捕获的项目／源身份校验和当前库范围校验，不能以两个可变对象此刻相等替代与捕获身份比较。当前身份已不匹配时不实际探测、不更新旧关联、按现有 missing／未开始结算并释放许可；下一轮从当前身份重读。保留已修好的库范围保护、首次信任及已实际开始工作正常收尾，不引入取消执行源、事务快照、回滚原生媒体数据或新状态机。新增能覆盖“同一缓存对象原地改变”与“替换成另一对象”的回归；测试专用 CurrentIdentityGuard 分支通过不能代替生产 verifier 分支。
+1. `ReviewerDisableDuringNativePreparationMustPreventANewProbe`：已有可信基线、URL 改变，在准备 await 内让 optimizer 与 runner 共用的动态 settings.Enabled=false，然后恢复。实际 StartedProbes=1、ReliableSuccess=1、Disabled=false、Completed=true，旧基线被更新。对应 Slice 已有“禁用后……不启动新探测，已开始工作收尾，结果明确为提前结束”及 Task 启停／统计规则。无需改变播放的下一检查请求生效语义，也不把关闭 PlaybackAutoCheck 当作禁止批量。
+2. `ReviewerLatchedStoreFaultDuringNativePreparationMustPreventANewProbe`：同样停在开始前，让另一个调用者经过同一个 optimizer 的真实读取异常处理路径，确认抛 FingerprintStoreUnavailableException 且 IsFingerprintStoreUnavailable=true，再放行准备候选。实际 StartedProbes=1、ReliableSuccess=1、StoreUnavailable=false、Completed=true，仍提交新指纹。控制使用可故障的内存 repository（只读故障，提交仍可用），证明一旦全局不可用已被确认，当前未开始候选未停止；不声称 Jellyfin／SQLite 真实故障注入。对应原合同“状态库故障停止后续批量优化，收尾已开始工作并报告不可用”。
 
-### B 独立验证与覆盖关系
+二者按一个连贯准入与结果反馈缺口修正，留在同一 Task：在已有开始边界前统一重核当前优化资格，保留不可变身份、库范围、停止与所有权检查；未实际开始且已禁用／不可用时拒绝探测、保留基线并幂等释放 preparing／许可／临时开始计数。把明确的禁用或全局不可用原因传回本轮汇总，末项也不能漏报，不伪报可靠成功、全量完成或 100%。状态库故障仍使用已有不可用／恢复反馈，不能降为普通跳过或全库原生委托。
 
-索引：`.git/validation-evidence/5b501e39d6d58948b9d8d92d5c739e6c48b0011e/b-review6-20261015/INDEX.md`，仅本机可访问。
+已实际开始及已加入 running 的工作仍照常完成保存与成功条件提交，不新增执行取消源，也不在成功返回后因禁用或任务停止否决有效结果。`ReviewerDisableAfterActualStartStillAllowsReliableSettlement` 对照通过（开始 1、成功 1、许可释放）。补充相应前后边界和末项汇总回归，不另造字段 Task、调度器、持久化状态或配置开关；不要求锁住整个原生调用。下一候选保持完整 T4，PASS 前仍需 B 独立真实 stop／sharing。
 
-- PASS：指定 Batch／Coordinator／Context／Playback／Configuration 聚焦 127/127、0 failed／skipped，退出 0；01-focused.log/json。Python 54/54、退出 0；04-python.log/json。controls locked restore PASS。
-- FAIL：最终独立控制 24 项中 23 PASS／1 FAIL／0 skipped，退出 1；10-controls-final-contract.log/json。包含旧 20 项、异步原生准备 await 时停止撤销并释放全部资源、开始边界已先胜出后停止仍可提交、十万 ID 成本，以及上述唯一身份失败。全部 helper／项目／锁和摘要留于 controls／control-inputs.json，未改已提交的测试或产品。
-- 明确撤回一次错误预期：03／05／08 控制曾在 TryBeginProbe 已先胜出、随后范围重读内停止，断言不得执行。已提交合同把匹配编码器回调定为开始边界，不能改为等待原生方法体／ffprobe 进程才算开始；该原断言越过合同，不作为缺陷或修正要求。修正预期后的 `ReviewerStopAfterWinningStartBoundaryStillSettles` 通过。所有首次失败日志保留，未隐藏。06 成本输出首次运行因旧 helper 没有 PeakActiveConsumers 字段而编译失败；07／最终 10 修正 reviewer helper 后通过成本测量，不归因为产品失败。
-- 开始／准备覆盖：`BatchStopAfterAcquiringAPermitBeforeRegisteringRevokesWithoutStarting`、`BatchStopWhileWaitingForAPreparingOwnerRevokesWithoutCancellingTheOwner`、独立 `ReviewerStopWhileNativePreparationAwaitsRevokesAndReleasesResources`；原开始双方先胜由 `BatchStopConfirmedBeforeTheMatchingNativeCallDoesNotStartTheProbe`／`BatchStopAndStartRaceIsDecidedAtOneBoundary` 覆盖。1／2／8 复用本次聚焦的 `GlobalLimitCapsConcurrentStartedProbes`／`GlobalLimitOneSerializesAndGlobalLimitEightAllowsEight`；实机 2／保存 1 重启前后及池饱和独立刷新复用本次默认播放原始日志。
-- 保存／取消／提交覆盖：本次聚焦包含 `FailedNativeStreamSaveLeavesChangedAddressFingerprintRetryable`、`PersistenceProxyDoesNotConfirmNativeSavesThatThrow`、`CancellationDoesNotReplaceTheAcceptedFingerprint`、`BatchCommitFailureAfterActualProbeCountsProbeIncomplete` 及共享失败／未提交控制；原生保存代理／事务边界沿用固定源码与前轮审查。Jellyfin 内部数据库故障实机注入继续 NOT RUN，属于已接受限制。
-- NOT RUN（B 本轮）：真实 stop／sharing、其余完整 T4 重跑、Slice Final。发现确定 P1 后按流程先拒绝；修正候选仍须完整指定 T4，PASS 前 B 独立执行两个实机入口。Developer 当前七场景实机事实与 B 独立运行分开记录。本轮未部署、未改隔离有效配置／触发器／媒体或生产实例。
+### B 独立验证
+
+索引：`.git/validation-evidence/22ba671c44fba2540c62739c824505b52272bcc2/b-review7-20261015/INDEX.md`，仅本机可访问。
+
+- PASS：指定 Batch／Coordinator／Context／Playback／Configuration 聚焦 129/129、0 failed／skipped，退出 0；01-focused.log/json。新生产 verifier 回归及新版十万完整对象／消费者测试包含在内。
+- PASS：controls locked restore；02-controls-restore.log/json。Python 54/54、退出 0；04-python.log/json，守护测试 mock 实例 API／重启，不改生产或有效隔离配置。
+- FAIL：最终控制 27 项中 25 PASS／2 FAIL／0 skipped、退出 1；07-controls-final-progress.log/json。包含上轮完整 24 项（全部通过）、新禁用前后边界对照及已 latch 全局故障控制。首次 03 的 26 项中 25 PASS／1 FAIL 也保留，随后 05 补齐状态库同类控制，最终 07 同步记录两例 finalProgress=100。控制工程中的旧快照普通测试不属于指定 filter，不因过时的 Skipped 断言而误判当前产品回归；真实产品 170 项全套已核对。
+- controls 使用临时手写 STRM、fake 原生准备／探测／保存与内存 repository；身份控制复用真实 LibraryBatchCandidateSource，启停控制共用动态 IPlaybackSettings。所有源码／项目／锁、摘要及命令保留于本轮目录；未修改产品或已提交测试／工具。
+- 精确复用身份、全部原始产物、SDK 10.0.401／net10.0、原生源码 `ca0f16eb7c195f720a1493ed469a27c4657db0c6`、构建／部署身份分列见 00-inputs.json 与 06-developer-audit.json。治理／diff／本地链接／提交引用及所有可执行输入未变化检查见本轮索引。
+- NOT RUN（B 本轮）：真实 stop／sharing、其余完整 T4 重跑、Slice Final。已有确定 P1，按流程先拒绝，不能把 Developer 实机冒称 B 独立运行；修正后 PASS 前原计划仍全部有效。本轮未部署，未改有效隔离配置／触发器／媒体或生产实例。
 
 ### Slice 全部 Required Outcomes / Surfaces 重核
 
-| Outcome | 当前判断 |
+| Outcome | 本轮判断 |
 |---|---|
-| RO-1 入口／定时 | 有本次发现／手动／真实触发及重启证据；Task 尚未 PASS。 |
-| RO-2 范围／有界对象 | 原移库控制、代表性多库多批增删及身份成本已补；同一缓存对象的捕获身份保护仍失败。 |
-| RO-3 可靠结果 | 共享、保存及提交故障已有覆盖；原地主版本变化可覆盖旧关联指纹，尚未闭合。 |
-| RO-4 共享／并发 | 两方向共享／停止、不同入口 owner 混合峰值及 1／2／8 覆盖已核对；B 实机独立入口待修正后运行。 |
-| RO-5 停止收尾 | 原生准备 await、仅 preparing、立即获许可及已开始收尾控制通过；本轮事件绑定已补，不要求改变已先胜出的开始语义。 |
-| RO-6 反馈／恢复 | 单项／全局失败、计数、进度及恢复有证据；身份误接纳仍会把错误关联计成可靠成功。 |
-| RO-7 后端／完整页面 | 范围后端已有证据；完整 HTML／浏览器仍未实施，按原非目标不单独阻塞 3.1。 |
+| RO-1 入口／定时 | 本候选发现、手动、真实触发与重启原始证据齐备；Task 未 PASS。 |
+| RO-2 范围／有界对象 | 原捕获项目身份与移库失败已修；多库多批、多版本、增删与十万模拟边界沿用已核对证据。 |
+| RO-3 共用可靠链 | 保存／提交／共享失败覆盖保持；准备期间优化资格丢失仍会开始并提交。 |
+| RO-4 共享／并发 | 两方向共享、跨入口 owner 混合及 1／2／8 有本候选证据；B 实机入口待修正后独立运行。 |
+| RO-5 停止／禁用收尾 | 停止前后边界控制通过；禁用发生在实际开始前仍启动，不满足既有准入规则。 |
+| RO-6 反馈／恢复 | 末项准备期间禁用／状态库 latch 后仍报全完成，掩盖提前结束或全局不可用。 |
+| RO-7 后端／页面 | 范围保存／兼容后端已有；完整 HTML 与浏览器旅程未完成，按原非目标不单独阻塞 3.1。 |
 
-保持同一 Task 3.1 FIX REQUIRED，不创建下一 Task，不提交 Closure Packet，不代替 A 最终审查或关闭。少量经验候选留待 Slice 收尾：当前对象与捕获身份必须按值比较，不能假定原生重读返回对象副本；独立控制也必须核对合同的线性化边界，撤回不适用断言并保留原始证据。
+Task 3.1 保持 FIX REQUIRED；不创建下一 Task，不运行 Slice Final／提交 Closure Packet，不代替 A 最终审查或关闭。不凭其他字段可能变化的静态疑点增加阻塞。少量经验候选供 Slice 收尾：原生准备 await 后须重新检查实际开始资格；全局停止原因必须到达末批末项的汇总，不能依赖下一次循环才暴露。
