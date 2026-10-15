@@ -5,7 +5,7 @@
 ```text
 Task ID: 3.1
 Parent Slice: 3
-Status: FIX REQUIRED
+Status: READY FOR B REVIEW
 Task Base: b86d9c17d7f915108072f54ee098f0f5543fe093
 Contract Checkpoint: 2b515f35db7fc8e85d8ac1a8085dd9b8ccc62ef3
 Superseded Plan Snapshot: eb4e272743f4c7e184d45fa48b660b2fef24c685
@@ -184,6 +184,18 @@ git diff --check
 - Head SHA：`753f7952bd9eac2857f9dc1b98c0ad92a8a33021`。
 
 经验候选（供 A 收尾合并，不写入经验文档）：共享等待返回不等于本次可靠成功，必须由执行 owner 在结算时把本次条件提交结果与稳定版本一起传播给等待者；旧指纹行存在不能证明新版本已提交。
+
+## Developer Second Fix Completion Report（第二轮 FIX REQUIRED 修正后）
+
+- Fix Base：`753f7952bd9eac2857f9dc1b98c0ad92a8a33021`（上一轮 Developer Head）；同一 Task 3.1 修正，Task Base、Goal、Scope、High／T4、验收与必要测试均不变。
+- Changed Files：修改 `Services/BatchProbeTypes.cs`（`FingerprintStoreFailureStage` 阶段化故障异常、`BatchStopSignal.AbortProbe` 回滚被协调器拒绝的临时开始计数）、`Services/BatchCheckRunner.cs`（状态库故障按阶段计数、集合完整后停止保留 N0／未读取、获取失败保留停止原因、`ResolveOwnSource` 拒绝不匹配单源、获取／批次读取耗时与分配及批次读取次数）、`Services/StrmPlaybackOptimizer.cs`（已加入运行中探测失败结算为探测未完成且不在同轮重试、`PickOwnSource` 拒绝不匹配单源、开始计数回滚）、`Services/BatchLibraryScope.cs`（`IsInScope` 经原生 `GetItemById` 重读当前对象并拒绝删除／改类型／移出范围）、`Tasks/StrmProbeScheduledTask.cs`（汇总新增分配与批次次数）、`tests/.../BatchCheckTests.cs`、`scripts/run_isolated_batch_integration.py`、`tests/test_isolated_batch_integration.py`。未提交 `TASK.md` 本身。
+- Fixed：BR-1／BR-2 已加入 running 的同源共享失败现按探测未完成结算（不撤销、不重试、不计成功），停止后已加入失败亦计探测未完成；BR-3 `ResolveOwnSource`／`PickOwnSource` 不再把唯一但 ID 不匹配的源认领为自身源，`IsInScope` 经原生当前对象重核范围（删除／改类型／移库均拒绝）；BR-4 状态库故障按阶段区分，探测已实际开始后的提交／执行故障计探测未完成并保留在需要分母，决策读取故障仍计检查阶段未完成；BR-5 完整集合后停止保留候选总数并把未读取候选计 `Unread`，同步查询中确认停止后的获取失败保留 `StopRequested`，`AbortProbe` 避免被拒开始虚增实际调用数，汇总新增候选获取／批次读取耗时与分配及批次读取次数；BR-6 `--scenario scope` 现覆盖真实两库显式部分范围、133 候选多批、合并多版本、范围外库零处理、固定集合后新增下一轮发现、切换范围、失效库拒绝（400）与禁用零探测，`restore_state` 重新发布有效配置并重启校验有效内存配置；BR-7 `--scenario stop` 用独立延迟请求 ID 逐源对账已开始提交／未开始撤销／下一轮不重复，收尾窗口核对任务状态、查询入口时间线与探测计数，默认 `suite` 在同一会话运行全部场景，`--scenario failure` 核对任何媒体请求均未启动；BR-8 新候选重新生成完整原始证据。
+- Tests and Results：证据索引 `.git/validation-evidence/71a397007827fe9b086838d6a4495e63b7d20485/developer-fix2-t4-20261015-082721/INDEX.md`。锁定 restore PASS；Release build 0 警告 0 错误；C# 全套 153/153；format PASS；Python 43/43；治理 PASS；`git diff --check` PASS；B 原六项 ReviewerControl 与六项 RereviewControl 独立复现 12/12 PASS。真实隔离：默认播放脚本 PASS；批量默认 `suite` 单会话运行 discovery／stop／sharing／scope／failure 全部 PASS（逐源对账、多批 133 候选、两方向共享各一次实际调用、状态库故障无任何媒体请求、恢复重启 completed）。全部夹具、配置、触发器与有效内存配置已恢复并校验。
+- Remaining In-Slice Work：完整 HTML 配置页／浏览器交互旅程（后续连贯单元）；十万真实库压力与完整扫描压力留 Slice 4。
+- Risks / Deviations：Jellyfin 内部数据库保存故障实机注入仍 NOT RUN（沿用既有边界）；十万候选为确定性模拟，不代表真实大库性能。无产品 PASS 声明。
+- Head SHA：`71a397007827fe9b086838d6a4495e63b7d20485`。
+
+经验候选（供 A 收尾合并，不写入经验文档）：同源共享失败的结算取决于开始边界而非等待结果——已实际开始的失败按本轮探测未完成结算且不在同轮重试，仅准备阶段的失败才可重判；状态库故障必须携带发生阶段，否则会把已决定需要探测的候选错误移出分母。
 
 ## B Review Result
 
