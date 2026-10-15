@@ -888,6 +888,79 @@ public sealed class BatchCheckTests
     }
 
     [TestMethod]
+    public async Task BatchPreparingInPlacePrimaryChangeThroughRealVerifierKeepsTheCapturedBaseline()
+    {
+        using var harness = new BatchHarness();
+        var item = harness.AddSupported("https://media.example.invalid/a.mp4", ValidSha1, 10);
+        var oldProject = Guid.NewGuid();
+        item.PrimaryVersionId = oldProject;
+        var libraryId = Guid.NewGuid();
+        // The native GetItemById returns the very same mutable instance, as Jellyfin's LibraryManager does for a
+        // cached object. Comparing the current object with the captured candidate would therefore be a
+        // self-comparison that cannot observe an in-place primary-version change. The production scope verifier is
+        // wired in deliberately so this regression cannot pass through the test-only current-object guard.
+        var manager = ScopeLibraryManager.Create(item, libraryId);
+        harness.VerifierOverride = new LibraryBatchCandidateSource(manager.Interface);
+        harness.ScopeLibraryIdsOverride = [libraryId];
+        harness.CandidateIds = [item.Id];
+
+        var first = await harness.RunAsync();
+        Assert.AreEqual(1, first.FirstTrust);
+        var accepted = harness.Repository.Get(oldProject, Key(item.Id));
+        Assert.IsNotNull(accepted);
+
+        // The URL changes so the next run would probe. During native preparation the same cached object is
+        // re-pointed to a different primary version in place, keeping id, type, path and library relationship.
+        harness.WriteManifest(item, "https://media.example.invalid/a.mp4?new", ValidSha1, 10);
+        harness.BeforeProbeStart = () => item.PrimaryVersionId = Guid.NewGuid();
+
+        var result = await harness.RunAsync();
+
+        Assert.AreEqual(0, harness.StartedProbes, "An in-place primary change during preparation must abort the probe before it starts.");
+        Assert.AreEqual(0, result.ReliableSuccess, "An in-place primary change must not be counted as a reliable success.");
+        Assert.AreEqual(1, result.Missing, "A candidate whose captured project changed in place must settle as missing.");
+        Assert.AreEqual(accepted, harness.Repository.Get(oldProject, Key(item.Id)), "The captured-project baseline must survive an in-place primary change during preparation.");
+        Assert.AreEqual(0, harness.Coordinator.RunningCount);
+        Assert.AreEqual(0, harness.Coordinator.ActivePermits);
+    }
+
+    [TestMethod]
+    public async Task BatchPreparingReplacedObjectThroughRealVerifierKeepsTheCapturedBaseline()
+    {
+        using var harness = new BatchHarness();
+        var item = harness.AddSupported("https://media.example.invalid/a.mp4", ValidSha1, 10);
+        var oldProject = Guid.NewGuid();
+        item.PrimaryVersionId = oldProject;
+        var libraryId = Guid.NewGuid();
+        var manager = ScopeLibraryManager.Create(item, libraryId);
+        harness.VerifierOverride = new LibraryBatchCandidateSource(manager.Interface);
+        harness.ScopeLibraryIdsOverride = [libraryId];
+        harness.CandidateIds = [item.Id];
+
+        var first = await harness.RunAsync();
+        Assert.AreEqual(1, first.FirstTrust);
+        var accepted = harness.Repository.Get(oldProject, Key(item.Id));
+        Assert.IsNotNull(accepted);
+
+        harness.WriteManifest(item, "https://media.example.invalid/a.mp4?new", ValidSha1, 10);
+        harness.BeforeProbeStart = () => manager.Current = new Video
+        {
+            Id = item.Id,
+            Path = item.Path,
+            ShortcutPath = item.ShortcutPath,
+            IsShortcut = true,
+            PrimaryVersionId = Guid.NewGuid()
+        };
+
+        var result = await harness.RunAsync();
+
+        Assert.AreEqual(0, harness.StartedProbes, "A replaced current object during preparation must abort the probe before it starts.");
+        Assert.AreEqual(0, result.ReliableSuccess, "A replaced current object must not be counted as a reliable success.");
+        Assert.AreEqual(1, result.Missing, "A candidate whose current object was replaced must settle as missing.");
+        Assert.AreEqual(accepted, harness.Repository.Get(oldProject, Key(item.Id)), "The captured-project baseline must survive a replaced current object during preparation.");
+    }
+
+    [TestMethod]
     public async Task BatchUsesTheCurrentProjectIdentityAfterTheObjectIsReRead()
     {
         using var harness = new BatchHarness();
@@ -1297,6 +1370,10 @@ public sealed class BatchCheckTests
 
         public int ScopeLibraryCount { get; set; } = 1;
 
+        /// <summary>Gets or sets explicit scope library ids for a regression that must exercise a real production
+        /// scope verifier against a fixed library relationship instead of random ids.</summary>
+        public IReadOnlyList<Guid>? ScopeLibraryIdsOverride { get; set; }
+
         public Action? AfterCandidateFetch { get; set; }
 
         public Action? AfterFixedSet { get; set; }
@@ -1313,6 +1390,11 @@ public sealed class BatchCheckTests
         /// <summary>Gets or sets a test-only override for the current native object identity re-read at the matching
         /// native probe start boundary, so a regression can change the current object during native preparation.</summary>
         public Func<BaseItem, BaseItem?>? IdentityGuardOverride { get; set; }
+
+        /// <summary>Gets or sets a real production <see cref="IBatchScopeVerifier"/> (for example a
+        /// <see cref="LibraryBatchCandidateSource"/> over a mutable native library manager) so a regression exercises
+        /// the production verifier branch instead of the test-only current-object guard.</summary>
+        public IBatchScopeVerifier? VerifierOverride { get; set; }
 
         public IMediaSourceManager? ReviewerNative { get; private set; }
 
@@ -1618,7 +1700,8 @@ public sealed class BatchCheckTests
                     throw new BatchScopeUnavailableException("Injected scope failure.");
                 }
 
-                return new BatchLibraryScope(true, Enumerable.Range(0, _harness.ScopeLibraryCount).Select(_ => Guid.NewGuid()).ToArray());
+                return new BatchLibraryScope(true, _harness.ScopeLibraryIdsOverride
+                    ?? Enumerable.Range(0, _harness.ScopeLibraryCount).Select(_ => Guid.NewGuid()).ToArray());
             }
         }
 
@@ -1637,10 +1720,23 @@ public sealed class BatchCheckTests
 
             public bool IsInScope(BaseItem item, IReadOnlyList<Guid> scopeLibraryIds)
             {
+                if (_harness.VerifierOverride is not null)
+                {
+                    return _harness.VerifierOverride.IsInScope(item, scopeLibraryIds);
+                }
+
                 return _harness.InScopeOverride?.Invoke(item.Id) ?? true;
             }
 
-            public BaseItem? GetCurrentItem(BaseItem item) => _harness.CurrentItemOverride?.Invoke(item) ?? item;
+            public BaseItem? GetCurrentItem(BaseItem item)
+            {
+                if (_harness.VerifierOverride is not null)
+                {
+                    return _harness.VerifierOverride.GetCurrentItem(item);
+                }
+
+                return _harness.CurrentItemOverride?.Invoke(item) ?? item;
+            }
         }
     }
 

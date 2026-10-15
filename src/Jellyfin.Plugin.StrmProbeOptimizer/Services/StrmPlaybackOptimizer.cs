@@ -796,11 +796,15 @@ public sealed class StrmPlaybackOptimizer
 
     /// <summary>
     /// Re-reads the current native object at the matching native probe start boundary and checks that the whole
-    /// captured association still describes it: object type, project identity and the run's current library scope.
-    /// Native preparation may have re-pointed the object to a different primary version or moved it out of the
-    /// selected libraries after the pre-start admission check, so a probe must never commit a fingerprint under an
-    /// association that no longer describes the current object. It reuses the same scope verifier as the entry and
-    /// owner admission instead of checking only the primary-version field.
+    /// captured association still describes it: object type, the captured project identity and the run's current
+    /// library scope. Native preparation may have re-pointed the object to a different primary version or moved it
+    /// out of the selected libraries after the pre-start admission check, so a probe must never commit a fingerprint
+    /// under an association that no longer describes the current object. The captured project identity is compared
+    /// against the current native object even when the scope verifier is supplied: native GetItemById may return the
+    /// same mutable cached instance, so comparing the current object with the captured candidate object would be a
+    /// self-comparison that cannot observe an in-place primary-version change. It reuses the same scope verifier as
+    /// the entry and owner admission for the library-relationship part instead of checking only the primary-version
+    /// field.
     /// </summary>
     private bool CurrentIdentityStillMatches(
         BaseItem sourceItem,
@@ -822,17 +826,25 @@ public sealed class StrmPlaybackOptimizer
             return true;
         }
 
+        // Always compare the current native object's project identity against the immutable captured project id.
+        // The native re-read can return the very same mutable instance whose primary version was changed in place,
+        // so the captured value must be the comparison target rather than the (possibly identical) candidate object.
+        var current = verifier.GetCurrentItem(sourceItem);
+        if (current is null
+            || current.GetType() != sourceItem.GetType()
+            || GetProjectId(current) != projectItemId)
+        {
+            return false;
+        }
+
         if (scopeLibraryIds is not null)
         {
-            // One coherent admission: the scope verifier re-reads the current object and rechecks its type,
-            // project identity and current library relationship together.
+            // Recheck the current library relationship in the same admission; the scope verifier re-reads the
+            // current object and its collection folders so a move out of the selected libraries is also refused.
             return verifier.IsInScope(sourceItem, scopeLibraryIds);
         }
 
-        var current = verifier.GetCurrentItem(sourceItem);
-        return current is not null
-            && current.GetType() == sourceItem.GetType()
-            && GetProjectId(current) == projectItemId;
+        return true;
     }
 
     private async Task<MediaSourceInfo?> CheckSourceCoreAsync(
