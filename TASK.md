@@ -5,7 +5,7 @@
 ```text
 Task ID: 3.1
 Parent Slice: 3
-Status: FIX REQUIRED
+Status: READY FOR B REVIEW
 Task Base: b86d9c17d7f915108072f54ee098f0f5543fe093
 Contract Checkpoint: 2b515f35db7fc8e85d8ac1a8085dd9b8ccc62ef3
 Superseded Plan Snapshot: eb4e272743f4c7e184d45fa48b660b2fef24c685
@@ -208,6 +208,18 @@ git diff --check
 - Head SHA：`5d7b48f03b566e0253d397be74c1eabbe11cdda5`。
 
 经验候选（供 A 收尾合并，不写入经验文档）：已加入运行中探测的结算必须以执行 owner 发布的本次提交／故障结果为准，等待返回或文件再变都不能作为同轮重试或撤销的依据；原生对象重读只有把返回对象用于后续项目身份、源键与取源，才构成有效身份重核。
+
+## Developer Fourth Fix Completion Report（第四轮 FIX REQUIRED 修正后）
+
+- Fix Base：`5d7b48f03b566e0253d397be74c1eabbe11cdda5`（上一轮 Developer Head）；同一 Task 3.1 修正，Task Base、Goal、Scope、High／T4、验收与必要测试均不变。
+- Changed Files：修改 `Services/StrmPlaybackOptimizer.cs`（匹配编码器调用处重读当前原生项目身份并在准备期变化时中止批量探测）、`Services/BatchProbeTypes.cs`（`BatchIdentityChangedException`、`BatchStopSignal.StoppedTimestamp`）、`Services/BatchCheckRunner.cs`（状态库 latch 报未知总数、身份成本估算／保留内存／同步查询停止延迟测量）、`Services/ProbeCoordinator.cs`（`PermitWaitBarrier`）、`Tasks/StrmProbeScheduledTask.cs`（脱敏汇总改用估算／保留／停止延迟字段）、`scripts/isolated_media_server.py`（参数化延迟路由）、`scripts/run_isolated_batch_integration.py`、`tests/.../BatchCheckTests.cs`、`tests/test_isolated_batch_integration.py`。未提交 `TASK.md` 本身。
+- Fixed：BR-3 `ExecuteProbeAsync` 在 `TryBeginProbe` 后、`TryMarkStarted` 前重读当前原生对象；对象消失／改类型／主版本变化即中止原生调用（`BatchIdentityChangedException`），放弃预留并计 `Missing`，旧项目基线不再被覆盖。BR-5 latch 状态库报 `CandidateTotalKnown=false`，与完整空集合区分；用文档化尺寸模型 `CandidateSetEstimatedBytes` 与实测 `CandidateSetRetainedBytes`（`GC.GetTotalMemory(true)` 前后差）替代误导性的 capacity 命名，并新增实测 `StopQueryReturnLatencyMilliseconds`。BR-7 `--scenario stop` 改用参数化长延迟路由、在收尾窗口内装载真实墙钟触发器，证明手动与定时均不提前进入新轮、排队轮仅在结算后实际运行且只重探被撤销源；`--scenario shared_stop` 覆盖两方向、独立源置于 local 库使批量不处理、证明独立播放确在旧轮 `Cancelling` 期间启动新探测；`--scenario mixed` 用插件自身 running 计数测量批量＋播放跨源重叠峰值并要求恰好达到且不超过默认 2，独立 FullRefresh 仅记排队受理并显式复用默认播放脚本的池饱和刷新完成证据。BR-5 补充准备期身份变化、已知空总数、同步查询停止延迟三个确定性回归，并加 `PermitWaitBarrier` 使等许可用例先确认第二源到达等待。
+- Tests and Results：证据索引 `.git/validation-evidence/work-fix4/INDEX.md`。锁定 restore PASS；Release build 0 警告 0 错误；C# 全套 165/165（含 53 项 `TestCategory=Batch`）；format PASS；Python 51/51；治理 PASS；`git diff --check` PASS；默认播放隔离脚本 PASS；批量默认 `suite` 单会话 discovery／stop／shared_stop／sharing／scope／mixed／failure 全部 PASS（stop 原生 `Cancelled` 后已开始提交／未开始撤销、收尾窗口定时不启动新轮、结算后排队轮只重探撤销源；shared_stop 两方向独立播放实际启动新探测、已加入计可靠成功／撤销 0；mixed 峰值 running＝2 不超默认；scope 133 候选／2 批、范围外零处理、多版本 canonical；failure 状态库不可用任务 `failed` 无新探测、修复重启 `completed`）。全部夹具、配置、触发器与有效内存配置已恢复并校验；构建产物与部署 DLL SHA-256 一致（`9b0f0c36…`）。
+- Remaining In-Slice Work：完整 HTML 配置页／浏览器交互旅程（后续连贯单元）；十万真实库压力与完整扫描压力留 Slice 4。
+- Risks / Deviations：Jellyfin 内部数据库保存故障实机注入仍 NOT RUN（沿用既有边界）；十万候选为确定性模拟；mixed 独立 FullRefresh 仅记原生排队受理，真实池饱和刷新完成证据复用默认播放脚本。无产品 PASS 声明。
+- Head SHA：`c8fffe3eda2e2806e172ed4128b19965253dc8c3`。
+
+经验候选（供 A 收尾合并，不写入经验文档）：准备期身份变化必须由实际开始边界的当前原生重读发现，仅前置准入检查无法覆盖；实测证据要区分“估算”“实测保留”与“实测延迟”，命名不能把估算冒充峰值。
 
 ## B Review Result
 
