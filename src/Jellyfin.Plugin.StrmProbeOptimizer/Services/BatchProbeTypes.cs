@@ -14,15 +14,39 @@ public sealed class BatchStopRejectedException : InvalidOperationException
 }
 
 /// <summary>
+/// The stage at which a batch candidate observed a fingerprint store fault. A decision-stage read fault means
+/// the probe decision was never reached, so the candidate is a check-stage failure. An execution-stage fault
+/// means the native probe already ran and the candidate had been decided to need a probe, so it must be counted
+/// as a probe-incomplete instead of being moved out of the need-probe denominator.
+/// </summary>
+public enum FingerprintStoreFailureStage
+{
+    /// <summary>The fault happened while reading the decision input, before the candidate needed a probe.</summary>
+    Decision,
+
+    /// <summary>The fault happened while executing or committing an already-required probe.</summary>
+    Execution
+}
+
+/// <summary>
 /// Thrown by the batch source entry when the SQLite fingerprint store has faulted. The batch stops starting
 /// further work and reports the store as unavailable instead of delegating to a full-library native probe.
 /// </summary>
 public sealed class FingerprintStoreUnavailableException : InvalidOperationException
 {
     public FingerprintStoreUnavailableException(Exception? innerException = null)
-        : base("The STRM fingerprint store is unavailable; batch optimization stopped.", innerException)
+        : this(FingerprintStoreFailureStage.Decision, innerException)
     {
     }
+
+    public FingerprintStoreUnavailableException(FingerprintStoreFailureStage stage, Exception? innerException = null)
+        : base("The STRM fingerprint store is unavailable; batch optimization stopped.", innerException)
+    {
+        Stage = stage;
+    }
+
+    /// <summary>Gets the stage at which the store fault was observed.</summary>
+    public FingerprintStoreFailureStage Stage { get; }
 }
 
 /// <summary>
@@ -100,6 +124,26 @@ public sealed class BatchStopSignal : IDisposable
             if (_inFlight > 0)
             {
                 _inFlight--;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Rolls back a start that <see cref="TryBeginProbe"/> provisionally counted but that the coordinator then
+    /// rejected (a duplicate same-source start), so <see cref="StartedCount"/> never inflates the real native call count.
+    /// </summary>
+    public void AbortProbe()
+    {
+        lock (_gate)
+        {
+            if (_inFlight > 0)
+            {
+                _inFlight--;
+            }
+
+            if (_startedCount > 0)
+            {
+                _startedCount--;
             }
         }
     }

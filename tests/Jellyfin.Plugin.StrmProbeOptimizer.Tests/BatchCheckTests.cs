@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using Jellyfin.Plugin.StrmProbeOptimizer.Interceptors;
@@ -673,6 +674,156 @@ public sealed class BatchCheckTests
         CollectionAssert.AreEqual(new[] { second, first }, parsed.ToArray());
     }
 
+    [TestMethod]
+    public async Task BatchJoinedRunningProbeFailureSettlesAsProbeIncompleteWithoutRetry()
+    {
+        using var harness = new BatchHarness();
+        var item = harness.AddSupported("https://media.example.invalid/a.mp4", ValidSha1, 10);
+        harness.CandidateIds = [item.Id];
+        await harness.RunAsync();
+        harness.WriteManifest(item, "https://media.example.invalid/a.mp4?new", ValidSha1, 10);
+        var currentHash = new StrmManifestReader().Read(item.Path).Manifest!.ContentHash;
+        var owner = await harness.Coordinator.AcquireAsync(item.Id, Key(item.Id), currentHash, CancellationToken.None);
+        Assert.IsTrue(harness.Coordinator.TryMarkStarted(owner.Item, out _));
+
+        var batch = harness.RunAsync();
+        await harness.WaitForSharedJoinAsync().WaitAsync(TimeSpan.FromSeconds(10));
+        harness.Coordinator.Fail(owner.Item, new IOException("Controlled shared probe failure."));
+        var result = await batch.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.AreEqual(0, harness.StartedProbes, "A same-version shared failure must not be retried within the same round.");
+        Assert.AreEqual(1, result.ProbeIncomplete, "A joined running failure must settle as probe incomplete.");
+        Assert.AreEqual(0, result.Revoked);
+        Assert.AreEqual(0, result.ReliableSuccess);
+    }
+
+    [TestMethod]
+    public async Task BatchStoppedJoinedRunningProbeFailureCountsProbeIncomplete()
+    {
+        using var harness = new BatchHarness();
+        var item = harness.AddSupported("https://media.example.invalid/a.mp4", ValidSha1, 10);
+        harness.CandidateIds = [item.Id];
+        await harness.RunAsync();
+        harness.WriteManifest(item, "https://media.example.invalid/a.mp4?new", ValidSha1, 10);
+        var currentHash = new StrmManifestReader().Read(item.Path).Manifest!.ContentHash;
+        var owner = await harness.Coordinator.AcquireAsync(item.Id, Key(item.Id), currentHash, CancellationToken.None);
+        Assert.IsTrue(harness.Coordinator.TryMarkStarted(owner.Item, out _));
+        using var stop = new CancellationTokenSource();
+        var batch = harness.RunAsync(stop.Token);
+        await harness.WaitForSharedJoinAsync().WaitAsync(TimeSpan.FromSeconds(10));
+        stop.Cancel();
+        harness.Coordinator.Fail(owner.Item, new IOException("Controlled shared probe failure."));
+        var result = await batch.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.AreEqual(1, result.ProbeIncomplete, "A stopped joined running failure must count as probe incomplete, not revoked.");
+        Assert.AreEqual(0, result.Revoked);
+    }
+
+    [TestMethod]
+    public async Task BatchCommitFailureAfterActualProbeCountsProbeIncomplete()
+    {
+        using var harness = new BatchHarness();
+        var item = harness.AddSupported("https://media.example.invalid/a.mp4", ValidSha1, 10);
+        harness.CandidateIds = [item.Id];
+        await harness.RunAsync();
+        harness.WriteManifest(item, "https://media.example.invalid/a.mp4?new", ValidSha1, 10);
+        harness.Repository = new FaultInjectingRepository(harness.Repository) { FailGetAfter = int.MaxValue, FailCommit = true };
+
+        var result = await harness.RunAsync();
+
+        Assert.AreEqual(1, harness.StartedProbes);
+        Assert.IsTrue(result.StoreUnavailable);
+        Assert.AreEqual(1, result.ProbeIncomplete, "A post-probe commit fault must stay in the need-probe denominator.");
+        Assert.AreEqual(0, result.CheckStageIncomplete);
+        Assert.AreEqual(0, result.ReliableSuccess);
+    }
+
+    [TestMethod]
+    public async Task BatchStopAfterCompleteFixedSetKeepsTheKnownCandidateTotal()
+    {
+        using var harness = new BatchHarness();
+        var item = harness.AddSupported("https://media.example.invalid/a.mp4", ValidSha1, 10);
+        harness.CandidateIds = [item.Id];
+        using var stop = new CancellationTokenSource();
+        harness.AfterFixedSet = stop.Cancel;
+
+        var result = await harness.RunAsync(stop.Token);
+
+        Assert.IsTrue(result.StopRequested);
+        Assert.AreEqual(1, result.CandidateCount, "Every id was captured before the stop; the complete denominator must not be discarded.");
+        Assert.AreEqual(1, result.Unread, "The not-yet-read candidate must be counted as unread.");
+        Assert.AreEqual(0, harness.ProbeCalls);
+    }
+
+    [TestMethod]
+    public async Task BatchConcurrentFetchFailureAndStopKeepsTheStopReason()
+    {
+        using var harness = new BatchHarness();
+        harness.CandidateIds = [Guid.NewGuid()];
+        harness.FailCandidateFetch = true;
+        using var stop = new CancellationTokenSource();
+        harness.BeforeCandidateFetch = stop.Cancel;
+
+        var result = await harness.RunAsync(stop.Token);
+
+        Assert.IsTrue(result.CandidateFetchFailed);
+        Assert.IsTrue(result.StopRequested, "A confirmed administrator stop must not disappear on the fetch-error return.");
+    }
+
+    [TestMethod]
+    public async Task BatchMismatchedSingleSourceIsNotClaimedAsTheOwnSource()
+    {
+        using var harness = new BatchHarness();
+        var item = harness.AddSupported("https://media.example.invalid/a.mp4", ValidSha1, 10);
+        harness.CandidateIds = [item.Id];
+        harness.SourceIdOverride = Guid.NewGuid().ToString("N");
+
+        var result = await harness.RunAsync();
+
+        Assert.AreEqual(0, result.FirstTrust, "A single source keyed by another owner's id must not establish this item's baseline.");
+        Assert.IsNull(harness.Repository.Get(item.Id, Key(item.Id)));
+        Assert.AreEqual(1, result.Missing, "A candidate whose own source cannot be identified must settle as missing.");
+        Assert.AreEqual(0, harness.ProbeCalls);
+    }
+
+    [TestMethod]
+    public void NativeCandidateSourceRechecksTheCurrentObjectAgainstTheScope()
+    {
+        var libraryA = Guid.NewGuid();
+        var libraryB = Guid.NewGuid();
+        var item = new Video { Id = Guid.NewGuid(), Path = "/media/a.mp4" };
+        var manager = ScopeLibraryManager.Create(item, libraryA);
+        var source = new LibraryBatchCandidateSource(manager.Interface);
+
+        Assert.IsTrue(source.IsInScope(item, [libraryA]), "A current object still in the selected library must stay in scope.");
+        Assert.IsFalse(source.IsInScope(item, [libraryB]), "An object moved to another library must leave the scope.");
+
+        // The native object is deleted after the candidate set was fixed: admission must refuse it.
+        manager.Current = null;
+        Assert.IsFalse(source.IsInScope(item, [libraryA]), "A deleted candidate must not remain in scope.");
+
+        // The native object changed type after the candidate set was fixed: admission must refuse it.
+        manager.Current = new MediaBrowser.Controller.Entities.Audio.Audio { Id = item.Id, Path = item.Path };
+        Assert.IsFalse(source.IsInScope(item, [libraryA]), "A candidate that changed type must not remain in scope.");
+    }
+
+    [TestMethod]
+    public void BatchStopSignalAbortRollsBackAProvisionalStartCount()
+    {
+        using var signal = new BatchStopSignal(CancellationToken.None);
+        Assert.IsTrue(signal.TryBeginProbe(), "A probe may start before any stop is confirmed.");
+        Assert.AreEqual(1, signal.StartedCount);
+        Assert.AreEqual(1, signal.InFlight);
+
+        // A coordinator-rejected duplicate start must not leave the reported real native call count inflated.
+        signal.AbortProbe();
+        Assert.AreEqual(0, signal.StartedCount, "An aborted provisional start must not inflate the actual probe call count.");
+        Assert.AreEqual(0, signal.InFlight);
+
+        Assert.IsTrue(signal.TryBeginProbe(), "A real start after an aborted provisional start must still be counted.");
+        Assert.AreEqual(1, signal.StartedCount);
+    }
+
     // ---------- Helpers ----------
 
     private static string Key(Guid id) => id.ToString("N", CultureInfo.InvariantCulture);
@@ -758,6 +909,12 @@ public sealed class BatchCheckTests
         public int ScopeLibraryCount { get; set; } = 1;
 
         public Action? AfterCandidateFetch { get; set; }
+
+        public Action? AfterFixedSet { get; set; }
+
+        public Action? BeforeCandidateFetch { get; set; }
+
+        public string? SourceIdOverride { get; set; }
 
         public Func<Guid, bool>? InScopeOverride { get; set; }
 
@@ -861,7 +1018,7 @@ public sealed class BatchCheckTests
                 [
                     new MediaSourceInfo
                     {
-                        Id = item.Id.ToString("N", CultureInfo.InvariantCulture),
+                        Id = SourceIdOverride ?? item.Id.ToString("N", CultureInfo.InvariantCulture),
                         Path = item.ShortcutPath,
                         MediaStreams = [new MediaStream { Type = streamType, Codec = "h264" }]
                     }
@@ -925,7 +1082,7 @@ public sealed class BatchCheckTests
                 new Settings(),
                 NullLogger<BatchCheckRunner>.Instance)
             {
-                CandidateSetFixed = () => { },
+                CandidateSetFixed = () => AfterFixedSet?.Invoke(),
                 ConsumerLimit = ConsumerLimit,
                 ConsumerActivityChanged = active =>
                 {
@@ -947,6 +1104,7 @@ public sealed class BatchCheckTests
         internal IReadOnlyList<Guid> FetchCandidates()
         {
             CandidateFetchCalls++;
+            BeforeCandidateFetch?.Invoke();
             if (FailCandidateFetch)
             {
                 throw new IOException("Injected candidate fetch failure.");
@@ -1086,6 +1244,44 @@ public sealed class BatchCheckTests
         }
     }
 
+    private class ScopeLibraryManager : DispatchProxy
+    {
+        public BaseItem? Current { get; set; }
+
+        public Guid FolderId { get; set; }
+
+        public ILibraryManager Interface { get; private set; } = null!;
+
+        public static ScopeLibraryManager Create(BaseItem? current, Guid folderId)
+        {
+            var proxy = DispatchProxy.Create<ILibraryManager, ScopeLibraryManager>();
+            var lookup = (ScopeLibraryManager)(object)proxy;
+            lookup.Interface = proxy;
+            lookup.Current = current;
+            lookup.FolderId = folderId;
+            return lookup;
+        }
+
+        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
+        {
+            if (targetMethod?.Name.StartsWith(nameof(ILibraryManager.GetItemById), StringComparison.Ordinal) == true)
+            {
+                return Current;
+            }
+
+            if (targetMethod?.Name == nameof(ILibraryManager.GetCollectionFolders))
+            {
+                return new List<Folder> { new Folder { Id = FolderId } };
+            }
+
+            return targetMethod?.ReturnType == typeof(void)
+                ? null
+                : targetMethod?.ReturnType.IsValueType == true
+                    ? Activator.CreateInstance(targetMethod.ReturnType)
+                    : null;
+        }
+    }
+
     private sealed class FaultInjectingRepository : IStrmFingerprintRepository
     {
         private readonly IStrmFingerprintRepository _inner;
@@ -1097,6 +1293,8 @@ public sealed class BatchCheckTests
         }
 
         public int FailGetAfter { get; init; }
+
+        public bool FailCommit { get; init; }
 
         public StrmFingerprint? Get(Guid itemId, string sourceKey)
         {
@@ -1110,6 +1308,11 @@ public sealed class BatchCheckTests
 
         public bool TryCommit(StrmFingerprint candidate, StrmFingerprint? expectedPrevious)
         {
+            if (FailCommit)
+            {
+                throw new IOException("Injected fingerprint commit failure.");
+            }
+
             return _inner.TryCommit(candidate, expectedPrevious);
         }
     }

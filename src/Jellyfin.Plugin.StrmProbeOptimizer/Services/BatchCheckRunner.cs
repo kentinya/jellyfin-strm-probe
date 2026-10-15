@@ -49,8 +49,17 @@ public sealed class BatchRunResult
     /// <summary>Gets the wall-clock time spent acquiring the native candidate identity set.</summary>
     public double CandidateFetchMilliseconds { get; set; }
 
+    /// <summary>Gets the bytes allocated on the runner thread while acquiring, de-duplicating and sorting the candidate identity set.</summary>
+    public long CandidateFetchAllocatedBytes { get; set; }
+
     /// <summary>Gets the accumulated wall-clock time spent reading the native batch media objects.</summary>
     public double BatchReadMilliseconds { get; set; }
+
+    /// <summary>Gets the number of native batch object reads performed for the fixed candidate set.</summary>
+    public int BatchReadCount { get; set; }
+
+    /// <summary>Gets the bytes allocated on the runner thread while reading the native batch media objects.</summary>
+    public long BatchReadAllocatedBytes { get; set; }
 
     public bool StopRequested { get; set; }
 
@@ -165,6 +174,7 @@ public sealed class BatchCheckRunner
         IReadOnlyList<Guid> ordered;
         bool candidatesComplete;
         var fetchTimer = System.Diagnostics.Stopwatch.StartNew();
+        var fetchAllocatedBefore = GC.GetAllocatedBytesForCurrentThread();
         try
         {
             (ordered, candidatesComplete) = FetchCandidates(scope, counters, stopSignal);
@@ -172,19 +182,23 @@ public sealed class BatchCheckRunner
         catch (Exception exception)
         {
             result.CandidateFetchFailed = true;
+            // A stop or disable confirmed during the synchronous query must not disappear behind the fetch
+            // failure: the native task can then report both the administrator cancellation and the failure.
+            result.StopRequested = stopSignal.IsStopped;
+            result.Disabled = !_settings.Enabled;
             _logger.LogWarning("The batch candidate identity query failed; no media object was processed. Failure category {FailureType}.", exception.GetType().Name);
             return result;
         }
         finally
         {
             fetchTimer.Stop();
+            result.CandidateFetchMilliseconds = fetchTimer.Elapsed.TotalMilliseconds;
+            result.CandidateFetchAllocatedBytes = GC.GetAllocatedBytesForCurrentThread() - fetchAllocatedBefore;
         }
-
-        result.CandidateFetchMilliseconds = fetchTimer.Elapsed.TotalMilliseconds;
 
         CandidateSetFixed?.Invoke();
 
-        if (stopSignal.IsStopped || !_settings.Enabled)
+        if (!candidatesComplete)
         {
             // The candidate identity set was interrupted before every selected library was queried. The complete
             // candidate total is unknown, so no complete denominator is published and no object is processed.
@@ -194,16 +208,18 @@ public sealed class BatchCheckRunner
             return result;
         }
 
-        if (!candidatesComplete)
+        var candidateCount = ordered.Count;
+        if (stopSignal.IsStopped || !_settings.Enabled)
         {
-            // A library query failed to complete the fixed set without an exception path (for example a stop was
-            // confirmed while a synchronous query was returning). Do not invent a complete total.
+            // Every selected library was queried before the stop/disable, so the complete identity set is known.
+            // Keep the real denominator and count every not-yet-read candidate as unread instead of discarding it.
             counters.StopRequested |= stopSignal.IsStopped ? 1 : 0;
-            Copy(counters, candidateCount: 0, result, completed: false);
+            counters.Disabled |= _settings.Enabled ? 0 : 1;
+            counters.Unread = candidateCount;
+            Copy(counters, candidateCount, result, completed: false);
             return result;
         }
 
-        var candidateCount = ordered.Count;
         for (var batchStart = 0; batchStart < ordered.Count; batchStart += BatchSize)
         {
             if (stopSignal.IsStopped || !_settings.Enabled || _optimizer.IsFingerprintStoreUnavailable)
@@ -222,6 +238,7 @@ public sealed class BatchCheckRunner
 
             IReadOnlyList<BaseItem> items;
             var readTimer = System.Diagnostics.Stopwatch.StartNew();
+            var readAllocatedBefore = GC.GetAllocatedBytesForCurrentThread();
             try
             {
                 items = _candidateSource.GetBatchItems(batchIds, scope.LibraryIds);
@@ -236,6 +253,8 @@ public sealed class BatchCheckRunner
             {
                 readTimer.Stop();
                 counters.BatchReadMilliseconds += readTimer.Elapsed.TotalMilliseconds;
+                counters.BatchReadCount++;
+                counters.BatchReadAllocatedBytes += GC.GetAllocatedBytesForCurrentThread() - readAllocatedBefore;
             }
 
             await ProcessBatchAsync(items, batchIds, scope.LibraryIds, counters, stopSignal, settled =>
@@ -416,12 +435,21 @@ public sealed class BatchCheckRunner
                 .ConfigureAwait(false);
             CountOutcome(counters, outcome);
         }
-        catch (FingerprintStoreUnavailableException)
+        catch (FingerprintStoreUnavailableException exception)
         {
-            // A global store fault is a check-stage failure, not a proven "needs probe": the decision was never
-            // reached. Stop further batch work and report the store as unavailable.
+            // A global store fault is reported as unavailable and stops further batch work. The counter depends on
+            // the stage: a decision-stage read fault never reached "needs probe", while an execution/commit-stage
+            // fault happened after the candidate was already decided to need a probe and must stay in that denominator.
             Interlocked.Exchange(ref counters.StoreUnavailable, 1);
-            Interlocked.Increment(ref counters.CheckStageIncomplete);
+            if (exception.Stage == FingerprintStoreFailureStage.Execution)
+            {
+                Interlocked.Increment(ref counters.ProbeIncomplete);
+            }
+            else
+            {
+                Interlocked.Increment(ref counters.CheckStageIncomplete);
+            }
+
             Interlocked.Increment(ref counters.Checked);
         }
         catch (Exception exception)
@@ -472,16 +500,8 @@ public sealed class BatchCheckRunner
     internal static MediaSourceInfo? ResolveOwnSource(BaseItem item, IReadOnlyList<MediaSourceInfo> sources)
     {
         var ownKey = item.Id.ToString("N", CultureInfo.InvariantCulture);
-        foreach (var source in sources)
-        {
-            if (Guid.TryParse(source.Id, out var parsed)
-                && string.Equals(parsed.ToString("N", CultureInfo.InvariantCulture), ownKey, StringComparison.OrdinalIgnoreCase))
-            {
-                return source;
-            }
-        }
-
-        return sources.Count == 1 ? sources[0] : null;
+        return sources.FirstOrDefault(source => Guid.TryParse(source.Id, out var parsed)
+            && string.Equals(parsed.ToString("N", CultureInfo.InvariantCulture), ownKey, StringComparison.OrdinalIgnoreCase));
     }
 
     private static int Settled(Counters counters)
@@ -530,6 +550,8 @@ public sealed class BatchCheckRunner
         result.ActualProbeCalls = actualProbeCalls;
         result.CandidateFetchMilliseconds = candidateFetchMilliseconds;
         result.BatchReadMilliseconds = counters.BatchReadMilliseconds;
+        result.BatchReadCount = counters.BatchReadCount;
+        result.BatchReadAllocatedBytes = counters.BatchReadAllocatedBytes;
         result.StopRequested = counters.StopRequested != 0;
         result.StoreUnavailable = counters.StoreUnavailable != 0;
         result.Disabled = counters.Disabled != 0;
@@ -552,6 +574,8 @@ public sealed class BatchCheckRunner
         public int Unread;
         public int DuplicateIdCount;
         public double BatchReadMilliseconds;
+        public int BatchReadCount;
+        public long BatchReadAllocatedBytes;
         public int LastProgressMilli;
         public readonly object ProgressGate = new();
         public int StopRequested;

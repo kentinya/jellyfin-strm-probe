@@ -110,8 +110,64 @@ class BatchScriptGuardTests(unittest.TestCase):
 
     def test_scenario_choices_include_stop_sharing_scope_and_failure(self):
         parser_source = (ROOT / "scripts" / "run_isolated_batch_integration.py").read_text(encoding="utf-8")
-        for scenario in ("stop", "sharing", "scope", "failure"):
+        for scenario in ("suite", "discovery", "stop", "sharing", "scope", "failure"):
             self.assertIn(scenario, parser_source)
+
+    def test_summary_fields_reads_the_reconciliation_counters(self):
+        line = (
+            "STRM media information check finished: candidates 130 (raw 131, duplicates 1), checked 130, "
+            "skipped 120, first trust 120, need probe 10, reliable success 8, probe incomplete 2, "
+            "check-stage incomplete 0, not processed 0, missing 0, revoked 0, read incomplete 0, unread 0, "
+            "actual probe calls 8, candidate fetch 12 ms, candidate fetch allocated 4096 bytes, batch reads 2, "
+            "batch read 30 ms, batch read allocated 8192 bytes, stop requested False, store unavailable False."
+        )
+        fields = batch.summary_fields(line)
+        self.assertEqual(fields["candidates"], 130)
+        self.assertEqual(fields["raw_candidates"], 131)
+        self.assertEqual(fields["duplicates"], 1)
+        self.assertEqual(fields["actual_probe_calls"], 8)
+        self.assertEqual(fields["candidate_fetch_allocated_bytes"], 4096)
+        self.assertEqual(fields["batch_reads"], 2)
+        self.assertFalse(fields["stop_requested"])
+        self.assertFalse(fields["store_unavailable"])
+
+    def test_assert_summary_equations_accepts_consistent_counters_and_rejects_inconsistent_ones(self):
+        good = {
+            "checked": 10,
+            "skipped": 6,
+            "need_probe": 4,
+            "check_stage_incomplete": 0,
+            "reliable_success": 3,
+            "probe_incomplete": 1,
+        }
+        batch.assert_summary_equations(good)
+        bad = dict(good, checked=11)
+        with self.assertRaises(RuntimeError):
+            batch.assert_summary_equations(bad)
+
+    def test_configuration_payload_from_xml_round_trips_the_five_fields(self):
+        xml = (
+            '<?xml version="1.0" encoding="utf-8"?>\n'
+            '<PluginConfiguration>\n'
+            "  <Enabled>false</Enabled>\n"
+            "  <PlaybackAutoCheck>true</PlaybackAutoCheck>\n"
+            "  <MaxConcurrentProbes>4</MaxConcurrentProbes>\n"
+            "  <DetailedLog>true</DetailedLog>\n"
+            "  <BatchAllLibraries>false</BatchAllLibraries>\n"
+            "  <BatchLibraryIds>11111111-1111-1111-1111-111111111111</BatchLibraryIds>\n"
+            "</PluginConfiguration>\n"
+        ).encode("utf-8")
+        payload = batch.configuration_payload_from_xml(xml)
+        self.assertFalse(payload["Enabled"])
+        self.assertEqual(payload["MaxConcurrentProbes"], 4)
+        self.assertFalse(payload["BatchAllLibraries"])
+        self.assertEqual(payload["BatchLibraryIds"], "11111111-1111-1111-1111-111111111111")
+
+    def test_slow_request_ids_started_reads_only_request_ids(self):
+        logs = type("Logs", (), {"returncode": 0, "stdout": "SLOW_MEDIA_REQUEST_STARTED abc123\nSLOW_MEDIA_REQUEST_STARTED def456\n", "stderr": ""})()
+        with patch.object(batch.base, "run", return_value=logs):
+            started = batch.slow_request_ids_started("container")
+        self.assertEqual(started, {"abc123", "def456"})
 
 
 if __name__ == "__main__":

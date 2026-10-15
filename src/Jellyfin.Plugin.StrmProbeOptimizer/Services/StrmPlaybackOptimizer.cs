@@ -492,7 +492,7 @@ public sealed class StrmPlaybackOptimizer
             if (outcome.FingerprintStoreUnavailable)
             {
                 Coordinator.Complete(workItem, outcome.Source);
-                throw new FingerprintStoreUnavailableException();
+                throw new FingerprintStoreUnavailableException(FingerprintStoreFailureStage.Execution);
             }
 
             Coordinator.Complete(workItem, outcome.Source, outcome.Committed);
@@ -573,7 +573,23 @@ public sealed class StrmPlaybackOptimizer
         }
         catch (Exception)
         {
-            // The shared probe failed. Re-evaluate the current version below instead of reusing its failure.
+            if (isRunning)
+            {
+                // This candidate joined a same-source probe that had actually started and then failed. The batch
+                // never ran its own probe, so the candidate must settle as an incomplete probe for this round
+                // instead of being revoked or retried within the same run.
+                return BatchSourceOutcome.ProbeIncomplete;
+            }
+
+            if (stopSignal.IsStopped)
+            {
+                // A preparing owner that was never actually started failed after the batch stop; the batch never
+                // began this candidate's probe.
+                return BatchSourceOutcome.Revoked;
+            }
+
+            // The shared preparing owner failed before the batch's own probe started. Re-evaluate the current
+            // version below; a preparing wait is not a shared running probe.
         }
 
         if (isRunning && shared.Committed == true && SharedCommitMatchesCurrentVersion(sourceItem, shared))
@@ -717,13 +733,10 @@ public sealed class StrmPlaybackOptimizer
     private static MediaSourceInfo? PickOwnSource(BaseItem sourceItem, IReadOnlyList<MediaSourceInfo> sources)
     {
         var ownKey = sourceItem.Id.ToString("N", CultureInfo.InvariantCulture);
-        var own = sources.FirstOrDefault(candidate => HasSourceId(candidate, ownKey));
-        if (own is not null)
-        {
-            return own;
-        }
-
-        return sources.Count == 1 ? sources[0] : null;
+        // Only a source that is actually keyed by this item's own id may be claimed. A single returned source with
+        // another owner's id (for example an alternate version) must never be adopted as this item's own source,
+        // or the batch would establish or probe a baseline for the wrong physical source.
+        return sources.FirstOrDefault(candidate => HasSourceId(candidate, ownKey));
     }
 
     private async Task<MediaSourceInfo?> CheckSourceCoreAsync(
@@ -1220,8 +1233,10 @@ public sealed class StrmPlaybackOptimizer
                 // the encoder proxy and this reservation is settled as a failure.
                 if (stopSignal is not null)
                 {
-                    // The stop boundary already counted this probe as in flight, but it never actually started.
-                    stopSignal.EndProbe();
+                    // The stop boundary provisionally counted this probe as in flight, but the coordinator
+                    // rejected the start, so it never actually ran. Roll back both the in-flight and started
+                    // counters so the reported real native call count never inflates.
+                    stopSignal.AbortProbe();
                 }
 
                 _logger.LogWarning(

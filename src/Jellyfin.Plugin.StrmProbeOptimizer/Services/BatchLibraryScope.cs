@@ -187,7 +187,17 @@ public sealed class LibraryBatchCandidateSource : IBatchCandidateSource
 
         try
         {
-            var folders = _libraryManager.GetCollectionFolders(item);
+            // Re-read the current object through the native library instead of trusting the stale candidate. A
+            // candidate that was deleted, moved out of the selected libraries or changed type while it was queued
+            // must not be probed from a stale object, so admission verifies the current native identity and
+            // relationship rather than only the captured object's parent chain.
+            var current = _libraryManager.GetItemById(item.Id);
+            if (current is null || current.GetType() != item.GetType())
+            {
+                return false;
+            }
+
+            var folders = _libraryManager.GetCollectionFolders(current);
             return folders.Any(folder => scopeLibraryIds.Contains(folder.Id));
         }
         catch (Exception)
