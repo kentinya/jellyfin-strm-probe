@@ -59,7 +59,7 @@ public sealed class StrmProbeScheduledTask : IScheduledTask, IConfigurableSchedu
         // The summary is always emitted, independent of DetailedLog, so failure and recovery feedback does not
         // depend on verbose logging. It carries no signed URL, token, cookie or private path.
         _logger.LogInformation(
-            "STRM media information check finished: candidates {Candidates} (raw {RawCandidates}, duplicates {Duplicates}, total known {TotalKnown}), checked {Checked}, skipped {Skipped}, first trust {FirstTrust}, need probe {NeedProbe}, reliable success {ReliableSuccess}, probe incomplete {ProbeIncomplete}, check-stage incomplete {CheckStageIncomplete}, not processed {NotProcessed}, missing {Missing}, revoked {Revoked}, read incomplete {ReadIncomplete}, unread {Unread}, actual probe calls {ActualProbeCalls}, candidate fetch {CandidateFetchMs} ms, candidate fetch allocated {CandidateFetchBytes} bytes, candidate set estimated {CandidateSetEstimatedBytes} bytes, candidate set retained {CandidateSetRetainedBytes} bytes, stop query return {StopQueryReturnMs} ms, batch reads {BatchReads}, batch read {BatchReadMs} ms, batch read allocated {BatchReadBytes} bytes, stop requested {StopRequested}, store unavailable {StoreUnavailable}, scope unavailable {ScopeUnavailable}, candidate fetch failed {CandidateFetchFailed}, disabled {Disabled}.",
+            "STRM media information check finished: candidates {Candidates} (raw {RawCandidates}, duplicates {Duplicates}, total known {TotalKnown}), checked {Checked}, skipped {Skipped}, first trust {FirstTrust}, need probe {NeedProbe}, reliable success {ReliableSuccess}, probe incomplete {ProbeIncomplete}, check-stage incomplete {CheckStageIncomplete}, not processed {NotProcessed}, missing {Missing}, revoked {Revoked}, read incomplete {ReadIncomplete}, unread {Unread}, actual probe calls {ActualProbeCalls}, candidate fetch {CandidateFetchMs} ms, candidate fetch allocated {CandidateFetchBytes} bytes, candidate fetch peak {CandidateFetchPeakBytes} bytes, candidate set estimated {CandidateSetEstimatedBytes} bytes, candidate set measured capacity {CandidateSetMeasuredCapacityBytes} bytes, candidate set retained {CandidateSetRetainedBytes} bytes, stop query return {StopQueryReturnMs} ms, batch reads {BatchReads}, batch read {BatchReadMs} ms, batch read allocated {BatchReadBytes} bytes, stop requested {StopRequested}, store unavailable {StoreUnavailable}, scope unavailable {ScopeUnavailable}, candidate fetch failed {CandidateFetchFailed}, disabled {Disabled}.",
             result.CandidateCount,
             result.RawCandidateCount,
             result.DuplicateIdCount,
@@ -79,7 +79,9 @@ public sealed class StrmProbeScheduledTask : IScheduledTask, IConfigurableSchedu
             result.ActualProbeCalls,
             result.CandidateFetchMilliseconds,
             result.CandidateFetchAllocatedBytes,
+            result.CandidateFetchPeakBytes,
             result.CandidateSetEstimatedBytes,
+            result.CandidateSetMeasuredCapacityBytes,
             result.CandidateSetRetainedBytes,
             result.StopQueryReturnLatencyMilliseconds,
             result.BatchReadCount,

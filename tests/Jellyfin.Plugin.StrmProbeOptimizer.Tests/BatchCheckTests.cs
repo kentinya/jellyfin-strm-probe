@@ -80,6 +80,14 @@ public sealed class BatchCheckTests
         Assert.IsTrue(harness.ConsumerTaskCount < 100_000, "The consumer task count must stay far below the candidate count.");
         Assert.IsTrue(harness.PeakActiveConsumers <= BatchCheckRunner.MaxConsumers, "The fixed consumer count must bound active work.");
         Assert.AreEqual(expectedBatches, harness.BatchReadCalls);
+        // The O(N) identity cost must be reported with distinct meanings: a size-model estimate, a measured
+        // backing capacity, a sampled process-heap peak and a cumulative thread allocation. The measured capacity
+        // is the real List/HashSet slot count at the end of the fetch, so it must be at least the size model.
+        Assert.IsTrue(result.CandidateSetEstimatedBytes > 0, "The identity size model must be reported for the large set.");
+        Assert.IsTrue(result.CandidateSetMeasuredCapacityBytes >= result.CandidateSetEstimatedBytes, $"The measured backing capacity ({result.CandidateSetMeasuredCapacityBytes}) must be at least the size model ({result.CandidateSetEstimatedBytes}).");
+        Assert.IsTrue(result.CandidateFetchAllocatedBytes > 0, "The cumulative identity allocation must be reported for the large set.");
+        Assert.IsTrue(result.CandidateFetchMilliseconds >= 0, "The identity fetch time must be reported for the large set.");
+        Assert.IsTrue(result.CandidateFetchPeakBytes >= 0, "The sampled process-heap peak must be reported (>= 0) for the large set.");
     }
 
     [TestMethod]
@@ -850,6 +858,36 @@ public sealed class BatchCheckTests
     }
 
     [TestMethod]
+    public async Task BatchPreparingScopeMoveKeepsTheOldBaselineAndDoesNotStartTheProbe()
+    {
+        using var harness = new BatchHarness();
+        var item = harness.AddSupported("https://media.example.invalid/a.mp4", ValidSha1, 10);
+        harness.CandidateIds = [item.Id];
+
+        // Establish the accepted baseline while the candidate is inside the selected scope.
+        var first = await harness.RunAsync();
+        Assert.AreEqual(1, first.FirstTrust);
+        var accepted = harness.Repository.Get(item.Id, Key(item.Id));
+        Assert.IsNotNull(accepted);
+
+        // The URL now changes so the next run would require a probe. During native preparation (before the
+        // matching encoder call) the candidate leaves the selected scope: the item id, type, path and primary
+        // project stay the same, only its current library relationship changes. The probe must not start and the
+        // accepted baseline must survive.
+        harness.WriteManifest(item, "https://media.example.invalid/a.mp4?new", ValidSha1, 10);
+        var moved = false;
+        harness.InScopeOverride = _ => !moved;
+        harness.BeforeProbeStart = () => moved = true;
+
+        var result = await harness.RunAsync();
+
+        Assert.AreEqual(0, harness.StartedProbes, "No actual probe may begin for a candidate that left the selected scope before native probe start.");
+        Assert.AreEqual(0, result.ReliableSuccess, "An out-of-scope candidate must not be counted as a reliable success.");
+        Assert.AreEqual(1, result.Missing, "A candidate that left the scope during preparation must settle as missing.");
+        Assert.AreEqual(accepted, harness.Repository.Get(item.Id, Key(item.Id)), "The accepted baseline must survive a scope move during native preparation.");
+    }
+
+    [TestMethod]
     public async Task BatchUsesTheCurrentProjectIdentityAfterTheObjectIsReRead()
     {
         using var harness = new BatchHarness();
@@ -1030,6 +1068,7 @@ public sealed class BatchCheckTests
 
         Assert.AreEqual(2000, result.CandidateCount);
         Assert.IsTrue(result.CandidateSetEstimatedBytes > 0, "The O(N) candidate identity size estimate must be measured and reported.");
+        Assert.IsTrue(result.CandidateSetMeasuredCapacityBytes >= result.CandidateSetEstimatedBytes, "The measured backing capacity must be at least the size model.");
         Assert.IsTrue(result.CandidateSetRetainedBytes >= 0, "The retained identity memory measurement must be reported.");
         Assert.IsTrue(result.CandidateFetchMilliseconds >= 0, "The candidate fetch cost must be reported.");
         Assert.IsTrue(result.CandidateTotalKnown, "A complete fetch reports a known total.");
@@ -1088,6 +1127,64 @@ public sealed class BatchCheckTests
         Assert.AreEqual(1, result.ReliableSuccess, "The already started probe must still finish and commit.");
         Assert.AreEqual(1, result.Revoked, "The source waiting for a permit must be revoked without starting.");
         Assert.AreEqual(1, harness.StartedProbes, "Only the source that actually started may probe.");
+    }
+
+    [TestMethod]
+    public async Task BatchStopAfterAcquiringAPermitBeforeRegisteringRevokesWithoutStarting()
+    {
+        using var harness = new BatchHarness();
+        var item = harness.AddSupported("https://media.example.invalid/a.mp4", ValidSha1, 10);
+        harness.CandidateIds = [item.Id];
+        await harness.RunAsync();
+        harness.WriteManifest(item, "https://media.example.invalid/a.mp4?sig=changed", ValidSha1, 10);
+        using var coordinator = new ProbeCoordinator(1);
+        var permitAcquired = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releasePermit = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        // The owner acquires the permit immediately but is held before it registers as preparing. A stop confirmed
+        // in that window must abort the reservation so no probe starts.
+        coordinator.PermitAcquiredBarrier = () =>
+        {
+            permitAcquired.TrySetResult();
+            releasePermit.Task.Wait(TimeSpan.FromSeconds(10));
+        };
+        harness.ReplaceCoordinator(coordinator);
+        using var stop = new CancellationTokenSource();
+
+        var run = harness.RunAsync(stop.Token);
+        await permitAcquired.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        stop.Cancel();
+        releasePermit.TrySetResult();
+        var result = await run.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.AreEqual(0, harness.StartedProbes, "A stop confirmed after acquiring a permit but before registration must not start the probe.");
+        Assert.AreEqual(0, harness.ProbeCalls);
+        Assert.AreEqual(1, result.Revoked, "The unregistered owner must settle as revoked.");
+        Assert.AreEqual(0, harness.Coordinator.RunningCount);
+        Assert.AreEqual(0, harness.Coordinator.ActivePermits);
+    }
+
+    [TestMethod]
+    public async Task BatchStopWhileWaitingForAPreparingOwnerRevokesWithoutCancellingTheOwner()
+    {
+        using var harness = new BatchHarness();
+        var item = harness.AddSupported("https://media.example.invalid/a.mp4", ValidSha1, 10);
+        harness.CandidateIds = [item.Id];
+        await harness.RunAsync();
+        harness.WriteManifest(item, "https://media.example.invalid/a.mp4?new", ValidSha1, 10);
+        // Another caller holds a preparing reservation that has not reached the matching native call. The batch
+        // joins that preparing owner (not a running probe) and waits; a stop must end the batch wait without
+        // cancelling the other caller's preparation.
+        var owner = await harness.Coordinator.AcquireAsync(item.Id, Key(item.Id), "hash", CancellationToken.None);
+        using var stop = new CancellationTokenSource();
+        var run = harness.RunAsync(stop.Token);
+        await harness.WaitForSharedJoinAsync().WaitAsync(TimeSpan.FromSeconds(10));
+        stop.Cancel();
+        var result = await run.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.AreEqual(0, harness.StartedProbes, "The batch must not start its own probe while waiting for a preparing owner.");
+        Assert.AreEqual(1, result.Revoked, "A stop while waiting for a preparing owner must revoke the candidate.");
+        // The other caller's preparing reservation is untouched and can still be abandoned by its own lifecycle.
+        harness.Coordinator.Abandon(owner.Item);
     }
 
     [TestMethod]
@@ -1370,7 +1467,7 @@ public sealed class BatchCheckTests
                 SharedJoinBarrier = () => SharedJoinReached.TrySetResult(),
                 BatchSharedJoinBarrier = () => SharedJoinReached.TrySetResult(),
                 BatchDecisionBarrier = () => OnBatchDecision?.Invoke(),
-                CurrentIdentityGuard = item => IdentityGuardOverride is null ? item : IdentityGuardOverride(item)
+                CurrentIdentityGuard = IdentityGuardOverride is null ? null : item => IdentityGuardOverride(item)
             };
             ReviewerNative = native.Interface;
             ReviewerOptimizer = optimizer;

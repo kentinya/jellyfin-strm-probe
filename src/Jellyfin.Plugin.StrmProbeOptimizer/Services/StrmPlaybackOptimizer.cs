@@ -462,7 +462,8 @@ public sealed class StrmPlaybackOptimizer
                     workItem,
                     stopSignal,
                     tracker,
-                    scopeVerifier).ConfigureAwait(false);
+                    scopeVerifier,
+                    scopeLibraryIds).ConfigureAwait(false);
             }
             catch (BatchIdentityChangedException)
             {
@@ -607,14 +608,17 @@ public sealed class StrmPlaybackOptimizer
             // cancelling the other caller's work.
             await shared.Result.WaitAsync(stopSignal.CancellationToken).ConfigureAwait(false);
         }
-        catch (OperationCanceledException) when (stopSignal.IsStopped)
+        catch (OperationCanceledException) when (BatchStopConfirmed(stopSignal))
         {
             // The batch stopped while waiting for a preparing owner. The other caller's work is not cancelled.
+            // The token can be observed as cancelled in the tiny window before the stop callback latches the
+            // signal, so the token state is checked alongside IsStopped; otherwise this wait would throw, the
+            // generic catch would fall through and re-enter with an already-cancelled token, recursing forever.
             return BatchSourceOutcome.Revoked;
         }
         catch (Exception)
         {
-            if (stopSignal.IsStopped)
+            if (BatchStopConfirmed(stopSignal))
             {
                 // A preparing owner that was never actually started failed after the batch stop; the batch never
                 // began this candidate's probe.
@@ -625,7 +629,7 @@ public sealed class StrmPlaybackOptimizer
             // version below; a preparing wait is not a shared running probe.
         }
 
-        if (stopSignal.IsStopped)
+        if (BatchStopConfirmed(stopSignal))
         {
             return BatchSourceOutcome.Revoked;
         }
@@ -655,6 +659,17 @@ public sealed class StrmPlaybackOptimizer
         return readResult.Status == ManifestReadStatus.Supported
             && readResult.Manifest is { } manifest
             && string.Equals(manifest.ContentHash, shared.ManifestContentHash, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether the batch stop is in effect. The stop signal latches synchronously through
+    /// its cancellation registration, but a wait can observe the token as cancelled in the tiny window before that
+    /// callback runs, so the token state is checked alongside <see cref="BatchStopSignal.IsStopped"/> to keep every
+    /// stop decision consistent and to prevent an unbounded re-entry on an already-cancelled token.
+    /// </summary>
+    private static bool BatchStopConfirmed(BatchStopSignal stopSignal)
+    {
+        return stopSignal.IsStopped || stopSignal.CancellationToken.IsCancellationRequested;
     }
 
     private async Task<BatchAdmission> AdmitBatchOwnerAsync(
@@ -780,22 +795,44 @@ public sealed class StrmPlaybackOptimizer
     }
 
     /// <summary>
-    /// Re-reads the current native object at the matching native probe start boundary and checks that its project
-    /// identity still matches the association the batch captured before native preparation. Native preparation may
-    /// have re-pointed the object to a different primary version after the pre-start admission check, so a probe
-    /// must never commit a fingerprint under an association that no longer describes the current object.
+    /// Re-reads the current native object at the matching native probe start boundary and checks that the whole
+    /// captured association still describes it: object type, project identity and the run's current library scope.
+    /// Native preparation may have re-pointed the object to a different primary version or moved it out of the
+    /// selected libraries after the pre-start admission check, so a probe must never commit a fingerprint under an
+    /// association that no longer describes the current object. It reuses the same scope verifier as the entry and
+    /// owner admission instead of checking only the primary-version field.
     /// </summary>
-    private bool CurrentIdentityStillMatches(BaseItem sourceItem, Guid projectItemId, IBatchScopeVerifier? verifier)
+    private bool CurrentIdentityStillMatches(
+        BaseItem sourceItem,
+        Guid projectItemId,
+        IReadOnlyList<Guid>? scopeLibraryIds,
+        IBatchScopeVerifier? verifier)
     {
-        var current = CurrentIdentityGuard is not null
-            ? CurrentIdentityGuard(sourceItem)
-            : verifier?.GetCurrentItem(sourceItem);
-        if (current is null)
+        if (CurrentIdentityGuard is not null)
         {
-            return false;
+            // Test-only current-object override: still enforce the type/project identity.
+            var guarded = CurrentIdentityGuard(sourceItem);
+            return guarded is not null
+                && guarded.GetType() == sourceItem.GetType()
+                && GetProjectId(guarded) == projectItemId;
         }
 
-        return current.GetType() == sourceItem.GetType() && GetProjectId(current) == projectItemId;
+        if (verifier is null)
+        {
+            return true;
+        }
+
+        if (scopeLibraryIds is not null)
+        {
+            // One coherent admission: the scope verifier re-reads the current object and rechecks its type,
+            // project identity and current library relationship together.
+            return verifier.IsInScope(sourceItem, scopeLibraryIds);
+        }
+
+        var current = verifier.GetCurrentItem(sourceItem);
+        return current is not null
+            && current.GetType() == sourceItem.GetType()
+            && GetProjectId(current) == projectItemId;
     }
 
     private async Task<MediaSourceInfo?> CheckSourceCoreAsync(
@@ -1269,7 +1306,8 @@ public sealed class StrmPlaybackOptimizer
         ProbeWorkItem workItem,
         BatchStopSignal? stopSignal = null,
         ProbeStartTracker? tracker = null,
-        IBatchScopeVerifier? identityVerifier = null)
+        IBatchScopeVerifier? identityVerifier = null,
+        IReadOnlyList<Guid>? identityScopeLibraryIds = null)
     {
         var requiredStreamType = GetRequiredStreamType(sourceItem);
         var started = 0;
@@ -1288,14 +1326,14 @@ public sealed class StrmPlaybackOptimizer
                 throw new BatchStopRejectedException(projectItemId, sourceKey);
             }
 
-            if (stopSignal is not null && !CurrentIdentityStillMatches(sourceItem, projectItemId, identityVerifier))
+            if (stopSignal is not null && !CurrentIdentityStillMatches(sourceItem, projectItemId, identityScopeLibraryIds, identityVerifier))
             {
-                // The current native project identity changed during native preparation, after the pre-start
-                // admission check. Abort the native call so the batch never commits a fingerprint under an
-                // association that no longer describes the current object; the old baseline is preserved.
+                // The current native project identity or library scope changed during native preparation, after
+                // the pre-start admission check. Abort the native call so the batch never commits a fingerprint
+                // under an association that no longer describes the current object; the old baseline is preserved.
                 stopSignal.AbortProbe();
                 _logger.LogWarning(
-                    "The current native project identity changed during native preparation for item {ItemId}, source {SourceId}; aborting the batch probe so the old baseline is preserved.",
+                    "The current native identity or library scope changed during native preparation for item {ItemId}, source {SourceId}; aborting the batch probe so the old baseline is preserved.",
                     projectItemId,
                     sourceKey);
                 throw new BatchIdentityChangedException(projectItemId, sourceKey);

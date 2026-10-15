@@ -53,11 +53,28 @@ public sealed class BatchRunResult
     public long CandidateFetchAllocatedBytes { get; set; }
 
     /// <summary>
+    /// Gets the sampled peak of the process managed heap observed during the candidate identity fetch (the maximum
+    /// of <c>GC.GetTotalMemory(false)</c> samples taken before and after each selected-library query and after the
+    /// sort), minus the pre-fetch baseline. It is a sampled process-heap peak, not an exact attribution to the
+    /// identity structures; it is reported separately from the measured backing capacity and the cumulative thread
+    /// allocation so the three are never conflated.
+    /// </summary>
+    public long CandidateFetchPeakBytes { get; set; }
+
+    /// <summary>
+    /// Gets the measured backing capacity in bytes of the candidate identity structures at the end of the fetch:
+    /// the real <c>List&lt;Guid&gt;.Capacity</c> and <c>HashSet&lt;Guid&gt;.Capacity</c> (the actual allocated slot
+    /// counts, including growth slack), multiplied by the documented per-slot size. Unlike the size-model estimate
+    /// this is a measured figure, but it is the final backing capacity, not a sampled peak during growth.
+    /// </summary>
+    public long CandidateSetMeasuredCapacityBytes { get; set; }
+
+    /// <summary>
     /// Gets the estimated in-memory size of the candidate identity structures (the ordered id list plus the
-    /// de-duplication set) for this run, using a documented size model. It is an estimate, not a measured peak:
-    /// it does not include bucket/slack capacity, growth copies or the native query's own temporary allocations.
-    /// It is reported separately from the measured allocation counters so the O(N) identity cost is observable
-    /// without claiming a constant total memory footprint or a measured peak.
+    /// de-duplication set) from the element counts, using a documented size model. It is an estimate, not a
+    /// measured peak: it does not include bucket/slack capacity, growth copies or the native query's own temporary
+    /// allocations. It is reported separately from the measured capacity and allocation counters so the O(N)
+    /// identity cost is observable without claiming a constant total memory footprint or a measured peak.
     /// </summary>
     public long CandidateSetEstimatedBytes { get; set; }
 
@@ -207,12 +224,14 @@ public sealed class BatchCheckRunner
         IReadOnlyList<Guid> ordered;
         bool candidatesComplete;
         long candidateSetEstimatedBytes = 0;
+        long candidateSetMeasuredCapacityBytes = 0;
         var fetchTimer = System.Diagnostics.Stopwatch.StartNew();
         var fetchAllocatedBefore = GC.GetAllocatedBytesForCurrentThread();
         var fetchRetainedBefore = GC.GetTotalMemory(forceFullCollection: true);
+        long fetchPeakSample = fetchRetainedBefore;
         try
         {
-            (ordered, candidatesComplete) = FetchCandidates(scope, counters, stopSignal, out candidateSetEstimatedBytes);
+            (ordered, candidatesComplete) = FetchCandidates(scope, counters, stopSignal, out candidateSetEstimatedBytes, out candidateSetMeasuredCapacityBytes, ref fetchPeakSample);
         }
         catch (Exception exception)
         {
@@ -234,6 +253,8 @@ public sealed class BatchCheckRunner
             result.CandidateFetchMilliseconds = fetchMilliseconds;
             result.CandidateFetchAllocatedBytes = GC.GetAllocatedBytesForCurrentThread() - fetchAllocatedBefore;
             result.CandidateSetEstimatedBytes = candidateSetEstimatedBytes;
+            result.CandidateSetMeasuredCapacityBytes = candidateSetMeasuredCapacityBytes;
+            result.CandidateFetchPeakBytes = Math.Max(0, fetchPeakSample - fetchRetainedBefore);
             // A measured retained-memory delta for the fixed identity set. It is sampled around the fetch with a
             // full collection so it reports retained bytes rather than the transient garbage the native query made.
             result.CandidateSetRetainedBytes = Math.Max(0, GC.GetTotalMemory(forceFullCollection: true) - fetchRetainedBefore);
@@ -336,7 +357,7 @@ public sealed class BatchCheckRunner
         return result;
     }
 
-    private (IReadOnlyList<Guid> Ordered, bool Complete) FetchCandidates(BatchLibraryScope scope, Counters counters, BatchStopSignal stopSignal, out long estimatedBytes)
+    private (IReadOnlyList<Guid> Ordered, bool Complete) FetchCandidates(BatchLibraryScope scope, Counters counters, BatchStopSignal stopSignal, out long estimatedBytes, out long measuredCapacityBytes, ref long peakSample)
     {
         var candidates = new List<Guid>();
         var seen = new HashSet<Guid>();
@@ -351,6 +372,9 @@ public sealed class BatchCheckRunner
 
             var ids = _candidateSource.GetLibraryCandidateIds(libraryId);
             counters.RawCandidateCount += ids.Count;
+            // Sample the process managed heap after the native query returned (its temporary allocations are still
+            // live) so the O(N) query cost is captured as a sampled process-heap peak.
+            peakSample = Math.Max(peakSample, GC.GetTotalMemory(forceFullCollection: false));
 
             // A synchronous native query cannot be interrupted. Re-check the stop/disable state after it returns
             // so a stop confirmed during the call never continues into the next query, object read or probe. The
@@ -379,10 +403,13 @@ public sealed class BatchCheckRunner
         // A stable, explicit Guid order fixes the identity sequence for this run without depending on media names
         // or the native paging order.
         candidates.Sort();
-        // Documented size-model estimate for the fixed identity structures. It counts the element counts (not the
-        // underlying bucket/slack capacity, which is not observable portably) so it must not be called a measured
-        // peak; the retained-memory delta and the thread allocation counter are the measured figures.
+        peakSample = Math.Max(peakSample, GC.GetTotalMemory(forceFullCollection: false));
+        // Documented size-model estimate from the element counts. It must not be called a measured peak; the
+        // measured backing capacity and the retained-memory delta are the measured figures.
         estimatedBytes = candidates.Count * 16L + seen.Count * 24L;
+        // Measured backing capacity: the real List/HashSet capacities (actual allocated slots, including growth
+        // slack) at the end of the fetch, multiplied by the same documented per-slot size.
+        measuredCapacityBytes = candidates.Capacity * 16L + seen.Capacity * 24L;
         return (candidates, complete);
     }
 

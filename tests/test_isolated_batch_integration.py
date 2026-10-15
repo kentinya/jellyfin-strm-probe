@@ -137,17 +137,46 @@ class BatchScriptGuardTests(unittest.TestCase):
 
     def test_required_cost_fields_use_the_estimate_and_retained_identity_measurements(self):
         self.assertIn("candidate_set_estimated_bytes", batch.REQUIRED_COST_FIELDS)
+        self.assertIn("candidate_set_measured_capacity_bytes", batch.REQUIRED_COST_FIELDS)
         self.assertIn("candidate_set_retained_bytes", batch.REQUIRED_COST_FIELDS)
+        self.assertIn("candidate_fetch_peak_bytes", batch.REQUIRED_COST_FIELDS)
         self.assertNotIn("candidate_set_capacity_bytes", batch.REQUIRED_COST_FIELDS)
 
-    def test_max_running_probes_reports_the_peak_from_the_plugin_counter(self):
-        lines = [
-            "[INF] Native STRM probe started for item x; running probes 1, active permits 1.",
-            "[INF] Native STRM probe started for item y; running probes 2, active permits 2.",
-            "[INF] Native STRM probe started for item z; running probes 1, active permits 1.",
-        ]
-        self.assertEqual(batch.max_running_probes(lines), 2)
-        self.assertEqual(batch.max_running_probes([]), 0)
+    def test_parse_log_epoch_reads_the_leading_log_timestamp(self):
+        self.assertAlmostEqual(batch.parse_log_epoch("[04:43:37.205] [INF] x"), 4 * 3600 + 43 * 60 + 37.205)
+        with self.assertRaises(RuntimeError):
+            batch.parse_log_epoch("no timestamp here")
+
+    def test_trigger_arm_time_of_day_seconds_reads_the_local_fire_time(self):
+        logs = type("Logs", (), {
+            "returncode": 0,
+            "stdout": (
+                "[INF] Daily trigger for Other Task set to fire at 2026-10-16 03:00:00.000 +00:00, which is 1h from now.\n"
+                f"[INF] Daily trigger for {batch.TASK_NAME} set to fire at 2026-10-16 07:12:34.000 +00:00, which is 1h from now.\n"
+            ),
+            "stderr": "",
+        })()
+        with patch.object(batch.base, "run", return_value=logs):
+            seconds = batch.trigger_arm_time_of_day_seconds("container")
+        self.assertEqual(seconds, 7 * 3600 + 12 * 60 + 34)
+
+    def test_probe_start_entries_attribute_starts_per_item(self):
+        logs = type("Logs", (), {
+            "returncode": 0,
+            "stdout": (
+                "[04:43:37.205] [INF] Native STRM probe started for item AAAA; running probes 1, active permits 1.\n"
+                "[04:43:38.205] [INF] Native STRM probe started for item BBBB; running probes 2, active permits 2.\n"
+            ),
+            "stderr": "",
+        })()
+        with patch.object(batch.base, "run", return_value=logs):
+            entries = batch.probe_start_entries("container")
+            filtered = batch.probe_start_entries("container", since=4 * 3600 + 43 * 60 + 38)
+        self.assertEqual(entries, [
+            {"item_id": "aaaa", "running": 1, "timestamp": 4 * 3600 + 43 * 60 + 37.205},
+            {"item_id": "bbbb", "running": 2, "timestamp": 4 * 3600 + 43 * 60 + 38.205},
+        ])
+        self.assertEqual([entry["item_id"] for entry in filtered], ["bbbb"])
 
     def test_trigger_arm_times_parse_the_task_specific_daily_trigger(self):
         logs = type("Logs", (), {
@@ -166,15 +195,31 @@ class BatchScriptGuardTests(unittest.TestCase):
         logs = type("Logs", (), {
             "returncode": 0,
             "stdout": (
-                f"[INF] {batch.TASK_NAME} Cancelled after 0 minute(s) and 5 seconds\n"
-                f"[INF] {batch.TASK_NAME} Completed after 0 minute(s) and 1 seconds\n"
-                "[INF] Some Other Task Completed after 0 minute(s) and 1 seconds\n"
+                f"[04:43:37.205] [INF] {batch.TASK_NAME} Cancelled after 0 minute(s) and 5 seconds\n"
+                f"[04:43:38.205] [INF] {batch.TASK_NAME} Completed after 0 minute(s) and 1 seconds\n"
+                "[04:43:39.205] [INF] Some Other Task Completed after 0 minute(s) and 1 seconds\n"
             ),
             "stderr": "",
         })()
         with patch.object(batch.base, "run", return_value=logs):
             events = batch.task_completion_events("container")
-        self.assertEqual(events, ["Cancelled", "Completed"])
+            self.assertEqual(events, ["Cancelled", "Completed"])
+            with_time = batch.task_completion_events_with_time("container")
+        self.assertEqual(with_time, [(4 * 3600 + 43 * 60 + 37.205, "Cancelled"), (4 * 3600 + 43 * 60 + 38.205, "Completed")])
+
+    def test_current_round_completion_binds_by_timestamp(self):
+        logs = type("Logs", (), {
+            "returncode": 0,
+            "stdout": (
+                f"[04:43:37.205] [INF] {batch.TASK_NAME} Completed after 0 minute(s) and 5 seconds\n"
+                f"[04:43:45.205] [INF] {batch.TASK_NAME} Cancelled after 0 minute(s) and 5 seconds\n"
+            ),
+            "stderr": "",
+        })()
+        with patch.object(batch.base, "run", return_value=logs):
+            # The current round started at 04:43:40, so the older Completed must not be attributed to it.
+            self.assertEqual(batch.current_round_completion("container", 4 * 3600 + 43 * 60 + 40), "Cancelled")
+            self.assertEqual(batch.current_round_completion("container", 4 * 3600 + 43 * 60 + 30), "Completed")
 
     def test_parse_summary_float_keeps_fractional_timings(self):
         line = "STRM media information check finished: candidate fetch 9.4124 ms, batch read 29.7333 ms."
