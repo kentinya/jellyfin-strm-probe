@@ -5,7 +5,7 @@
 ```text
 Task ID: 3.1
 Parent Slice: 3
-Status: FIX REQUIRED
+Status: READY FOR B REVIEW
 Task Base: b86d9c17d7f915108072f54ee098f0f5543fe093
 Contract Checkpoint: 2b515f35db7fc8e85d8ac1a8085dd9b8ccc62ef3
 Superseded Plan Snapshot: eb4e272743f4c7e184d45fa48b660b2fef24c685
@@ -232,6 +232,18 @@ git diff --check
 - Head SHA：`5b501e39d6d58948b9d8d92d5c739e6c48b0011e`。
 
 经验候选（供 A 收尾合并，不写入经验文档）：当前库范围必须与类型／项目身份在同一开始边界重核，且复用与入口相同的范围验证；取消 token 与停止信号需在一次判定中一致检查，否则 token 先取消的窗口会把等待路径变成无限重入。
+
+## Developer Sixth Fix Completion Report（第六轮 FIX REQUIRED 修正后）
+
+- Fix Base：`689692689ef89dd55bfac653365c224c4d14f145`（B 第六轮审查检查点，产品代码等同 `5b501e39d6d58948b9d8d92d5c739e6c48b0011e`）；同一 Task 3.1 修正，Task Base、Goal、Scope、High／T4、验收与必要测试均不变。
+- Changed Files：修改 `Services/StrmPlaybackOptimizer.cs`（`CurrentIdentityStillMatches` 开始边界先按不可变捕获项目 ID 比较当前原生对象，再复用范围验证器重核当前库关系）、`tests/.../BatchCheckTests.cs`（新增两个经真实生产验证器分支的回归，并给测试夹具加 `VerifierOverride`／`ScopeLibraryIdsOverride` 注入点）。未提交 `TASK.md` 本身。
+- Fixed：BR-3 原生产分支在存在本轮 `scopeLibraryIds` 时只调用 `verifier.IsInScope(sourceItem, scopeLibraryIds)`。Jellyfin `LibraryManager.GetItemById` 返回缓存的可变实例，`LibraryBatchCandidateSource.IsInScope` 因此把当前对象与捕获候选对象自身比较，无法发现准备期原地改变主版本；旧关联指纹被新值覆盖。现在开始准入先比较当前原生对象的项目身份与不可变捕获 `projectItemId`，不匹配即中止原生调用、计 `Missing`、保留已接受基线并释放许可；随后仍在同一次准入内用同一范围验证器重核当前库关系。未引入取消执行源、事务快照、回滚原生媒体数据或新状态机。新增 `BatchPreparingInPlacePrimaryChangeThroughRealVerifierKeepsTheCapturedBaseline`（同一缓存实例原地改主版本，经真实 `LibraryBatchCandidateSource` 分支）与 `BatchPreparingReplacedObjectThroughRealVerifierKeepsTheCapturedBaseline`（替换为另一对象），测试专用 `CurrentIdentityGuard` 分支通过不能替代生产分支。
+- Tests and Results：证据索引 `.git/validation-evidence/22ba671c44fba2540c62739c824505b52272bcc2/developer-fix6-t4-20261015-190955/INDEX.md`。锁定 restore PASS；Release build 0 警告 0 错误；C# 全套 170/170（含新增 2 项 Batch 回归，0 failed／skipped）；format PASS；Python 54/54；治理 PASS；`git diff --check` PASS；默认播放隔离脚本 PASS；批量默认 `suite` 单会话 discovery／stop／shared_stop／sharing／scope／mixed／failure 全部 PASS（stop 本轮 `Cancelled`、`new_probe_during_settlement=0`、`new_run_during_settlement=false`、`next_run_reprobed_any=false`；sharing 两方向各一次实际探测；shared_stop 两方向 `Cancelled`、已加入可靠成功 1／撤销 0、独立播放收尾期启动；scope 两库多批多版本、轮内增删安全、禁用零探测；mixed 峰值 running＝2；failure 状态库不可用无媒体请求、修复重启 `completed`）。全部夹具、配置、触发器与有效内存配置已恢复并校验；构建产物与部署 DLL SHA-256 一致（`7accfc17…`）。对旧生产分支回退复现：原地改主版本回归在旧代码实际开始 1、覆盖捕获基线，修复后开始 0、基线保留。B 第六轮 24 项独立控制（含原失败 `ReviewerInPlacePrimaryChangeMustKeepCapturedProjectBaseline`）现 24/24 PASS。
+- Remaining In-Slice Work：完整 HTML 配置页／浏览器交互旅程（后续连贯单元）；十万真实库压力与完整扫描压力留 Slice 4。
+- Risks / Deviations：Jellyfin 内部数据库保存故障实机注入仍 NOT RUN（沿用既有边界）；十万候选为确定性模拟，不代表真实大库性能；B 控制工程内另有旧快照 `BatchJoinsAnAlreadyRunningSameSourceProbe`（旧断言 Skipped=1，位于 B 过滤器之外）在 Base 同样失败，非本次回归。无产品 PASS 声明。
+- Head SHA：`22ba671c44fba2540c62739c824505b52272bcc2`。
+
+经验候选（供 A 收尾合并，不写入经验文档）：捕获身份必须与当前原生对象按值比较，不能假定 `GetItemById` 返回独立副本——同一缓存实例的原地主版本变化会被“对象与自身比较”吞掉。
 
 ## B Review Result
 
