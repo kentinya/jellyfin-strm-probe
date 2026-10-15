@@ -14,6 +14,20 @@ public sealed class BatchStopRejectedException : InvalidOperationException
 }
 
 /// <summary>
+/// Thrown from the verified matching native probe call when the current native project identity changed during
+/// native preparation, before the probe actually started. The captured project/source association no longer
+/// describes the object, so the native call is aborted and the candidate is settled without overwriting the old
+/// baseline. It is not a probe execution cancellation: no probe actually started.
+/// </summary>
+public sealed class BatchIdentityChangedException : InvalidOperationException
+{
+    public BatchIdentityChangedException(Guid projectItemId, string sourceKey)
+        : base($"The current native project identity changed before the batch probe for item {projectItemId}, source {sourceKey} started.")
+    {
+    }
+}
+
+/// <summary>
 /// The stage at which a batch candidate observed a fingerprint store fault. A decision-stage read fault means
 /// the probe decision was never reached, so the candidate is a check-stage failure. An execution-stage fault
 /// means the native probe already ran and the candidate had been decided to need a probe, so it must be counted
@@ -82,6 +96,13 @@ public sealed class BatchStopSignal : IDisposable
     public int InFlight => Volatile.Read(ref _inFlight);
 
     /// <summary>
+    /// Gets the <see cref="System.Diagnostics.Stopwatch.GetTimestamp"/> value captured when the stop was first
+    /// confirmed, or <c>0</c> before any stop. It lets the batch measure the unavoidable delay of a synchronous
+    /// native query that could not be interrupted.
+    /// </summary>
+    public long StoppedTimestamp { get; private set; }
+
+    /// <summary>
     /// Gets the total number of matching native probe calls that actually started during this batch run. It lets
     /// the run report the real native call count separately from the per-candidate reliable outcome counters.
     /// </summary>
@@ -92,6 +113,11 @@ public sealed class BatchStopSignal : IDisposable
     {
         lock (_gate)
         {
+            if (_stopped == 0)
+            {
+                StoppedTimestamp = System.Diagnostics.Stopwatch.GetTimestamp();
+            }
+
             _stopped = 1;
         }
     }

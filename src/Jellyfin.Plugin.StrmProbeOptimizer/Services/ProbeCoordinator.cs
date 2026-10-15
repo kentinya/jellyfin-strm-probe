@@ -155,6 +155,13 @@ public sealed class ProbeCoordinator : IDisposable
     /// </summary>
     internal Action? PermitAcquiredBarrier { get; set; }
 
+    /// <summary>
+    /// Gets or sets a test-only barrier that runs when a caller has found no free global permit and is about to
+    /// wait for one. It lets a deterministic regression confirm a caller actually reached the permit wait (not
+    /// merely a same-source preparing wait) before it interleaves a stop. It is <c>null</c> in production.
+    /// </summary>
+    internal Action? PermitWaitBarrier { get; set; }
+
     /// <summary>Gets the number of probes whose matching native call has actually started.</summary>
     public int RunningCount
     {
@@ -198,6 +205,7 @@ public sealed class ProbeCoordinator : IDisposable
         var acquiredImmediately = _permits.Wait(0);
         if (!acquiredImmediately)
         {
+            PermitWaitBarrier?.Invoke();
             await _permits.WaitAsync(cancellationToken).ConfigureAwait(false);
         }
 

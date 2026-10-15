@@ -376,6 +376,7 @@ public sealed class BatchCheckTests
         var second = await runner.RunAsync(new Progress<double>(), CancellationToken.None);
 
         Assert.IsTrue(second.StoreUnavailable, "A latched fingerprint store failure must stay reported as unavailable.");
+        Assert.IsFalse(second.CandidateTotalKnown, "An unqueried library must report an unknown total, not a known-empty total.");
         Assert.AreEqual(0, second.Unread, "An already unavailable store must not invent unread candidates.");
         Assert.IsFalse(second.Completed);
     }
@@ -813,6 +814,42 @@ public sealed class BatchCheckTests
     }
 
     [TestMethod]
+    public async Task BatchPreparingIdentityChangeKeepsTheOldBaselineAndDoesNotStartTheProbe()
+    {
+        using var harness = new BatchHarness();
+        var item = harness.AddSupported("https://media.example.invalid/a.mp4", ValidSha1, 10);
+        var oldProject = Guid.NewGuid();
+        item.PrimaryVersionId = oldProject;
+        harness.CandidateIds = [item.Id];
+
+        // First establish the accepted baseline under the old project.
+        var first = await harness.RunAsync();
+        Assert.AreEqual(1, first.FirstTrust);
+        var accepted = harness.Repository.Get(oldProject, Key(item.Id));
+        Assert.IsNotNull(accepted);
+
+        // The URL now changes so the next run would require a probe. During native preparation (before the
+        // matching encoder call) the current native object is re-pointed to a different primary version. The
+        // probe must not start and the old-project baseline must survive.
+        harness.WriteManifest(item, "https://media.example.invalid/a.mp4?new", ValidSha1, 10);
+        harness.IdentityGuardOverride = _ => new Video
+        {
+            Id = item.Id,
+            Path = item.Path,
+            ShortcutPath = item.ShortcutPath,
+            IsShortcut = true,
+            PrimaryVersionId = Guid.NewGuid()
+        };
+
+        var result = await harness.RunAsync();
+
+        Assert.AreEqual(0, harness.StartedProbes, "A project identity change during native preparation must abort the probe before it starts.");
+        Assert.AreEqual(0, result.ReliableSuccess, "A changed-identity candidate must not be counted as a reliable success.");
+        Assert.AreEqual(1, result.Missing, "A candidate whose identity changed during preparation must settle as missing.");
+        Assert.AreEqual(accepted, harness.Repository.Get(oldProject, Key(item.Id)), "The old-project baseline must survive an identity change during native preparation.");
+    }
+
+    [TestMethod]
     public async Task BatchUsesTheCurrentProjectIdentityAfterTheObjectIsReRead()
     {
         using var harness = new BatchHarness();
@@ -943,6 +980,40 @@ public sealed class BatchCheckTests
     }
 
     [TestMethod]
+    public async Task BatchCompleteEmptyLibraryReportsAKnownEmptyTotal()
+    {
+        using var harness = new BatchHarness();
+        harness.CandidateIds = [];
+
+        var result = await harness.RunAsync();
+
+        Assert.AreEqual(0, result.CandidateCount);
+        Assert.IsTrue(result.CandidateTotalKnown, "A fully queried empty library reports a known empty total, distinct from an unqueried library.");
+        Assert.IsTrue(result.Completed);
+    }
+
+    [TestMethod]
+    public async Task BatchStopDuringSynchronousQueryRecordsTheReturnLatency()
+    {
+        using var harness = new BatchHarness();
+        var item = harness.AddSupported("https://media.example.invalid/a.mp4", ValidSha1, 10);
+        harness.CandidateIds = [item.Id];
+        using var stop = new CancellationTokenSource();
+        // The stop is confirmed while the synchronous native query is still in flight; the query then takes a short
+        // but deterministic time to return. The measured stop-to-return delay must be reported.
+        harness.AfterCandidateFetch = () =>
+        {
+            stop.Cancel();
+            System.Threading.Thread.Sleep(40);
+        };
+
+        var result = await harness.RunAsync(stop.Token);
+
+        Assert.IsTrue(result.StopRequested);
+        Assert.IsTrue(result.StopQueryReturnLatencyMilliseconds >= 20, $"The synchronous stop-to-return latency must be measured: {result.StopQueryReturnLatencyMilliseconds} ms.");
+    }
+
+    [TestMethod]
     public async Task BatchReportsCandidateSetCapacityForTheFixedIdentitySet()
     {
         using var harness = new BatchHarness();
@@ -958,7 +1029,8 @@ public sealed class BatchCheckTests
         var result = await harness.RunAsync();
 
         Assert.AreEqual(2000, result.CandidateCount);
-        Assert.IsTrue(result.CandidateSetCapacityBytes > 0, "The O(N) candidate identity capacity must be measured and reported.");
+        Assert.IsTrue(result.CandidateSetEstimatedBytes > 0, "The O(N) candidate identity size estimate must be measured and reported.");
+        Assert.IsTrue(result.CandidateSetRetainedBytes >= 0, "The retained identity memory measurement must be reported.");
         Assert.IsTrue(result.CandidateFetchMilliseconds >= 0, "The candidate fetch cost must be reported.");
         Assert.IsTrue(result.CandidateTotalKnown, "A complete fetch reports a known total.");
     }
@@ -996,17 +1068,19 @@ public sealed class BatchCheckTests
         harness.WriteManifest(first, "https://media.example.invalid/a.mp4?sig=changed", ValidSha1, 10);
         harness.WriteManifest(second, "https://media.example.invalid/b.mp4?sig=changed", ValidSha1, 10);
         using var coordinator = new ProbeCoordinator(1);
+        var permitWaitReached = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        coordinator.PermitWaitBarrier = () => permitWaitReached.TrySetResult();
         harness.ReplaceCoordinator(coordinator);
         harness.BlockProbe = true;
         using var stop = new CancellationTokenSource();
-        harness.AfterProbeStart = () =>
-        {
-            harness.ProbeStarted.TrySetResult();
-            stop.Cancel();
-        };
+        harness.AfterProbeStart = () => harness.ProbeStarted.TrySetResult();
 
         var run = harness.RunAsync(stop.Token);
         await harness.ProbeStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        // Prove the second source actually reached the global permit wait before the stop is confirmed, rather
+        // than only observing that the first probe started.
+        await permitWaitReached.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        stop.Cancel();
         harness.ReleaseProbe.TrySetResult();
         var result = await run.WaitAsync(TimeSpan.FromSeconds(10));
 
@@ -1138,6 +1212,10 @@ public sealed class BatchCheckTests
 
         /// <summary>Gets or sets a test-only override for the current native object re-read at admission.</summary>
         public Func<BaseItem, BaseItem?>? CurrentItemOverride { get; set; }
+
+        /// <summary>Gets or sets a test-only override for the current native object identity re-read at the matching
+        /// native probe start boundary, so a regression can change the current object during native preparation.</summary>
+        public Func<BaseItem, BaseItem?>? IdentityGuardOverride { get; set; }
 
         public IMediaSourceManager? ReviewerNative { get; private set; }
 
@@ -1291,7 +1369,8 @@ public sealed class BatchCheckTests
             {
                 SharedJoinBarrier = () => SharedJoinReached.TrySetResult(),
                 BatchSharedJoinBarrier = () => SharedJoinReached.TrySetResult(),
-                BatchDecisionBarrier = () => OnBatchDecision?.Invoke()
+                BatchDecisionBarrier = () => OnBatchDecision?.Invoke(),
+                CurrentIdentityGuard = item => IdentityGuardOverride is null ? item : IdentityGuardOverride(item)
             };
             ReviewerNative = native.Interface;
             ReviewerOptimizer = optimizer;

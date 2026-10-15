@@ -53,11 +53,28 @@ public sealed class BatchRunResult
     public long CandidateFetchAllocatedBytes { get; set; }
 
     /// <summary>
-    /// Gets the measured in-memory capacity of the candidate identity structures (the ordered id list plus the
-    /// de-duplication set) for this run. It is reported separately from the thread allocation counter so the O(N)
-    /// identity cost is observable without claiming a constant total memory footprint.
+    /// Gets the estimated in-memory size of the candidate identity structures (the ordered id list plus the
+    /// de-duplication set) for this run, using a documented size model. It is an estimate, not a measured peak:
+    /// it does not include bucket/slack capacity, growth copies or the native query's own temporary allocations.
+    /// It is reported separately from the measured allocation counters so the O(N) identity cost is observable
+    /// without claiming a constant total memory footprint or a measured peak.
     /// </summary>
-    public long CandidateSetCapacityBytes { get; set; }
+    public long CandidateSetEstimatedBytes { get; set; }
+
+    /// <summary>
+    /// Gets the measured managed-memory delta retained after the candidate identity set was built (a
+    /// <c>GC.GetTotalMemory</c> sample after the set minus one taken before the fetch). It is a measured retained
+    /// figure for the fixed identity set and is reported alongside the size-model estimate.
+    /// </summary>
+    public long CandidateSetRetainedBytes { get; set; }
+
+    /// <summary>
+    /// Gets the measured wall-clock latency from the moment the stop was confirmed during a synchronous native
+    /// query to the moment that query returned. A synchronous native query cannot be interrupted, so this is the
+    /// real delay the batch observes before it can stop admission. It is <c>0</c> when no stop was confirmed during
+    /// a synchronous query.
+    /// </summary>
+    public double StopQueryReturnLatencyMilliseconds { get; set; }
 
     /// <summary>
     /// Gets a value indicating whether every selected library was queried, so <see cref="CandidateCount"/> is a
@@ -169,7 +186,9 @@ public sealed class BatchCheckRunner
         if (_optimizer.IsFingerprintStoreUnavailable)
         {
             counters.StoreUnavailable = 1;
-            Copy(counters, candidateCount: 0, result, completed: false, candidateTotalKnown: true);
+            // No candidate query was issued, so the candidate total is unknown: this is distinct from a complete
+            // empty library, which reports a known total of zero.
+            Copy(counters, candidateCount: 0, result, completed: false, candidateTotalKnown: false);
             return result;
         }
 
@@ -187,12 +206,13 @@ public sealed class BatchCheckRunner
 
         IReadOnlyList<Guid> ordered;
         bool candidatesComplete;
-        long candidateSetCapacityBytes = 0;
+        long candidateSetEstimatedBytes = 0;
         var fetchTimer = System.Diagnostics.Stopwatch.StartNew();
         var fetchAllocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+        var fetchRetainedBefore = GC.GetTotalMemory(forceFullCollection: true);
         try
         {
-            (ordered, candidatesComplete) = FetchCandidates(scope, counters, stopSignal, out candidateSetCapacityBytes);
+            (ordered, candidatesComplete) = FetchCandidates(scope, counters, stopSignal, out candidateSetEstimatedBytes);
         }
         catch (Exception exception)
         {
@@ -213,7 +233,11 @@ public sealed class BatchCheckRunner
             fetchMilliseconds = fetchTimer.Elapsed.TotalMilliseconds;
             result.CandidateFetchMilliseconds = fetchMilliseconds;
             result.CandidateFetchAllocatedBytes = GC.GetAllocatedBytesForCurrentThread() - fetchAllocatedBefore;
-            result.CandidateSetCapacityBytes = candidateSetCapacityBytes;
+            result.CandidateSetEstimatedBytes = candidateSetEstimatedBytes;
+            // A measured retained-memory delta for the fixed identity set. It is sampled around the fetch with a
+            // full collection so it reports retained bytes rather than the transient garbage the native query made.
+            result.CandidateSetRetainedBytes = Math.Max(0, GC.GetTotalMemory(forceFullCollection: true) - fetchRetainedBefore);
+            result.StopQueryReturnLatencyMilliseconds = counters.StopQueryReturnLatencyMilliseconds;
         }
 
         CandidateSetFixed?.Invoke();
@@ -275,6 +299,8 @@ public sealed class BatchCheckRunner
                 counters.BatchReadMilliseconds += readTimer.Elapsed.TotalMilliseconds;
                 counters.BatchReadCount++;
                 counters.BatchReadAllocatedBytes += GC.GetAllocatedBytesForCurrentThread() - readAllocatedBefore;
+                // A synchronous native object read cannot be interrupted either; record the stop-to-return delay.
+                RecordStopQueryLatency(counters, stopSignal);
             }
 
             await ProcessBatchAsync(items, batchIds, scope.LibraryIds, counters, stopSignal, settled =>
@@ -310,7 +336,7 @@ public sealed class BatchCheckRunner
         return result;
     }
 
-    private (IReadOnlyList<Guid> Ordered, bool Complete) FetchCandidates(BatchLibraryScope scope, Counters counters, BatchStopSignal stopSignal, out long capacityBytes)
+    private (IReadOnlyList<Guid> Ordered, bool Complete) FetchCandidates(BatchLibraryScope scope, Counters counters, BatchStopSignal stopSignal, out long estimatedBytes)
     {
         var candidates = new List<Guid>();
         var seen = new HashSet<Guid>();
@@ -327,9 +353,11 @@ public sealed class BatchCheckRunner
             counters.RawCandidateCount += ids.Count;
 
             // A synchronous native query cannot be interrupted. Re-check the stop/disable state after it returns
-            // so a stop confirmed during the call never continues into the next query, object read or probe.
+            // so a stop confirmed during the call never continues into the next query, object read or probe. The
+            // stop-to-return latency is measured so the unavoidable delay is disclosed instead of claimed immediate.
             if (stopSignal.IsStopped || !_settings.Enabled)
             {
+                RecordStopQueryLatency(counters, stopSignal);
                 complete = false;
                 break;
             }
@@ -351,8 +379,21 @@ public sealed class BatchCheckRunner
         // A stable, explicit Guid order fixes the identity sequence for this run without depending on media names
         // or the native paging order.
         candidates.Sort();
-        capacityBytes = (long)candidates.Capacity * 16 + (long)seen.Count * 24;
+        // Documented size-model estimate for the fixed identity structures. It counts the element counts (not the
+        // underlying bucket/slack capacity, which is not observable portably) so it must not be called a measured
+        // peak; the retained-memory delta and the thread allocation counter are the measured figures.
+        estimatedBytes = candidates.Count * 16L + seen.Count * 24L;
         return (candidates, complete);
+    }
+
+    private static void RecordStopQueryLatency(Counters counters, BatchStopSignal stopSignal)
+    {
+        if (!stopSignal.IsStopped || stopSignal.StoppedTimestamp == 0 || counters.StopQueryReturnLatencyMilliseconds != 0)
+        {
+            return;
+        }
+
+        counters.StopQueryReturnLatencyMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(stopSignal.StoppedTimestamp).TotalMilliseconds;
     }
 
     private async Task ProcessBatchAsync(
@@ -585,6 +626,7 @@ public sealed class BatchCheckRunner
         result.BatchReadMilliseconds = counters.BatchReadMilliseconds;
         result.BatchReadCount = counters.BatchReadCount;
         result.BatchReadAllocatedBytes = counters.BatchReadAllocatedBytes;
+        result.StopQueryReturnLatencyMilliseconds = counters.StopQueryReturnLatencyMilliseconds;
         result.StopRequested = counters.StopRequested != 0;
         result.StoreUnavailable = counters.StoreUnavailable != 0;
         result.Disabled = counters.Disabled != 0;
@@ -609,6 +651,7 @@ public sealed class BatchCheckRunner
         public double BatchReadMilliseconds;
         public int BatchReadCount;
         public long BatchReadAllocatedBytes;
+        public double StopQueryReturnLatencyMilliseconds;
         public int LastProgressMilli;
         public readonly object ProgressGate = new();
         public int StopRequested;

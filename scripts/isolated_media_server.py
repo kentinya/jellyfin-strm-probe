@@ -21,6 +21,20 @@ class MediaHandler(SimpleHTTPRequestHandler):
             print(f"MEDIA_REQUEST {self.command} " + filename, flush=True)
             return
 
+        # A parameterized delay route lets a scenario hold a probe open for a deterministic settlement window
+        # without changing the fixed slow route the existing playback checks rely on.
+        if len(path_parts) == 4 and path_parts[0] == "delay":
+            try:
+                seconds = min(float(path_parts[1]), 30.0)
+            except ValueError:
+                seconds = 3.0
+            request_id, filename = path_parts[2:]
+            print(f"SLOW_MEDIA_REQUEST_STARTED {request_id}", flush=True)
+            time.sleep(seconds)
+            self.path = "/" + filename
+            print(f"MEDIA_REQUEST {self.command} " + filename, flush=True)
+            return
+
         if len(path_parts) == 3 and path_parts[0] == "independent":
             request_id, filename = path_parts[1:]
             print(f"INDEPENDENT_MEDIA_REQUEST_STARTED {request_id}", flush=True)

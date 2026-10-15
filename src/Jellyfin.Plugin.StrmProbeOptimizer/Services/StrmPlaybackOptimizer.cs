@@ -461,7 +461,16 @@ public sealed class StrmPlaybackOptimizer
                     previous,
                     workItem,
                     stopSignal,
-                    tracker).ConfigureAwait(false);
+                    tracker,
+                    scopeVerifier).ConfigureAwait(false);
+            }
+            catch (BatchIdentityChangedException)
+            {
+                // The current native project identity changed during native preparation, before the probe actually
+                // started. The native call was aborted, so the old baseline must survive and the candidate must be
+                // re-evaluated from the current library state instead of committing under the stale association.
+                Coordinator.Abandon(workItem);
+                return BatchSourceOutcome.Missing;
             }
             catch (BatchStopRejectedException)
             {
@@ -768,6 +777,25 @@ public sealed class StrmPlaybackOptimizer
         // another owner's id (for example an alternate version) must never be adopted as this item's own source,
         // or the batch would establish or probe a baseline for the wrong physical source.
         return sources.FirstOrDefault(candidate => HasSourceId(candidate, ownKey));
+    }
+
+    /// <summary>
+    /// Re-reads the current native object at the matching native probe start boundary and checks that its project
+    /// identity still matches the association the batch captured before native preparation. Native preparation may
+    /// have re-pointed the object to a different primary version after the pre-start admission check, so a probe
+    /// must never commit a fingerprint under an association that no longer describes the current object.
+    /// </summary>
+    private bool CurrentIdentityStillMatches(BaseItem sourceItem, Guid projectItemId, IBatchScopeVerifier? verifier)
+    {
+        var current = CurrentIdentityGuard is not null
+            ? CurrentIdentityGuard(sourceItem)
+            : verifier?.GetCurrentItem(sourceItem);
+        if (current is null)
+        {
+            return false;
+        }
+
+        return current.GetType() == sourceItem.GetType() && GetProjectId(current) == projectItemId;
     }
 
     private async Task<MediaSourceInfo?> CheckSourceCoreAsync(
@@ -1240,7 +1268,8 @@ public sealed class StrmPlaybackOptimizer
         StrmFingerprint? previous,
         ProbeWorkItem workItem,
         BatchStopSignal? stopSignal = null,
-        ProbeStartTracker? tracker = null)
+        ProbeStartTracker? tracker = null,
+        IBatchScopeVerifier? identityVerifier = null)
     {
         var requiredStreamType = GetRequiredStreamType(sourceItem);
         var started = 0;
@@ -1257,6 +1286,19 @@ public sealed class StrmPlaybackOptimizer
                 // The batch stop was confirmed before the matching native call. Abort the native call so no
                 // plugin probe actually starts; the owner settles this reservation as not started.
                 throw new BatchStopRejectedException(projectItemId, sourceKey);
+            }
+
+            if (stopSignal is not null && !CurrentIdentityStillMatches(sourceItem, projectItemId, identityVerifier))
+            {
+                // The current native project identity changed during native preparation, after the pre-start
+                // admission check. Abort the native call so the batch never commits a fingerprint under an
+                // association that no longer describes the current object; the old baseline is preserved.
+                stopSignal.AbortProbe();
+                _logger.LogWarning(
+                    "The current native project identity changed during native preparation for item {ItemId}, source {SourceId}; aborting the batch probe so the old baseline is preserved.",
+                    projectItemId,
+                    sourceKey);
+                throw new BatchIdentityChangedException(projectItemId, sourceKey);
             }
 
             if (!Coordinator.TryMarkStarted(workItem, out _))
@@ -1401,6 +1443,13 @@ public sealed class StrmPlaybackOptimizer
     /// a deterministic regression observe the shared wait. It is <c>null</c> in production.
     /// </summary>
     internal Action? BatchSharedJoinBarrier { get; set; }
+
+    /// <summary>
+    /// Gets or sets a test-only override for the current native object identity re-read at the matching native
+    /// probe start boundary. It lets a deterministic regression change the current native object during native
+    /// preparation. When <c>null</c> the batch admission scope verifier is used. It is <c>null</c> in production.
+    /// </summary>
+    internal Func<BaseItem, BaseItem?>? CurrentIdentityGuard { get; set; }
 
     /// <summary>
     /// Gets a value indicating whether the SQLite fingerprint store has faulted and optimization is latched off

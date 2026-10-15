@@ -22,6 +22,12 @@ class BatchScriptGuardTests(unittest.TestCase):
         result = batch.slow_url("http://media:8080/fixture.mp4", "abc123")
         self.assertEqual(result, "http://media:8080/slow/abc123/fixture.mp4")
 
+    def test_delay_url_encodes_a_parameterized_settlement_window(self):
+        result = batch.delay_url("http://media:8080/fixture.mp4", 8, "abc123")
+        self.assertEqual(result, "http://media:8080/delay/8/abc123/fixture.mp4")
+        fractional = batch.delay_url("http://media:8080/fixture.mp4", 2.5, "def")
+        self.assertEqual(fractional, "http://media:8080/delay/2.5/def/fixture.mp4")
+
     def test_temporary_fixture_refuses_to_overwrite_and_writes_a_versioned_manifest(self):
         name = "Batch Guard Test"
         path = ROOT / "artifacts" / "dev-env" / "strm" / (name + ".strm")
@@ -122,12 +128,53 @@ class BatchScriptGuardTests(unittest.TestCase):
         complete = {field: 1 for field in batch.REQUIRED_COST_FIELDS}
         batch.require_cost_fields(complete, "summary")
         missing = dict(complete)
-        missing.pop("candidate_set_capacity_bytes")
+        missing.pop("candidate_set_estimated_bytes")
         with self.assertRaises(RuntimeError):
             batch.require_cost_fields(missing, "summary")
         negative = dict(complete, batch_reads=-1)
         with self.assertRaises(RuntimeError):
             batch.require_cost_fields(negative, "summary")
+
+    def test_required_cost_fields_use_the_estimate_and_retained_identity_measurements(self):
+        self.assertIn("candidate_set_estimated_bytes", batch.REQUIRED_COST_FIELDS)
+        self.assertIn("candidate_set_retained_bytes", batch.REQUIRED_COST_FIELDS)
+        self.assertNotIn("candidate_set_capacity_bytes", batch.REQUIRED_COST_FIELDS)
+
+    def test_max_running_probes_reports_the_peak_from_the_plugin_counter(self):
+        lines = [
+            "[INF] Native STRM probe started for item x; running probes 1, active permits 1.",
+            "[INF] Native STRM probe started for item y; running probes 2, active permits 2.",
+            "[INF] Native STRM probe started for item z; running probes 1, active permits 1.",
+        ]
+        self.assertEqual(batch.max_running_probes(lines), 2)
+        self.assertEqual(batch.max_running_probes([]), 0)
+
+    def test_trigger_arm_times_parse_the_task_specific_daily_trigger(self):
+        logs = type("Logs", (), {
+            "returncode": 0,
+            "stdout": (
+                "[INF] Daily trigger for Other Task set to fire at 2026-10-16 03:00:00.000 +00:00, which is 1h from now.\n"
+                f"[INF] Daily trigger for {batch.TASK_NAME} set to fire at 2026-10-16 03:00:00.000 +00:00, which is 1h from now.\n"
+            ),
+            "stderr": "",
+        })()
+        with patch.object(batch.base, "run", return_value=logs):
+            times = batch.trigger_arm_times("container")
+        self.assertEqual(len(times), 1)
+
+    def test_task_completion_events_returns_native_statuses_in_order(self):
+        logs = type("Logs", (), {
+            "returncode": 0,
+            "stdout": (
+                f"[INF] {batch.TASK_NAME} Cancelled after 0 minute(s) and 5 seconds\n"
+                f"[INF] {batch.TASK_NAME} Completed after 0 minute(s) and 1 seconds\n"
+                "[INF] Some Other Task Completed after 0 minute(s) and 1 seconds\n"
+            ),
+            "stderr": "",
+        })()
+        with patch.object(batch.base, "run", return_value=logs):
+            events = batch.task_completion_events("container")
+        self.assertEqual(events, ["Cancelled", "Completed"])
 
     def test_parse_summary_float_keeps_fractional_timings(self):
         line = "STRM media information check finished: candidate fetch 9.4124 ms, batch read 29.7333 ms."
@@ -144,8 +191,9 @@ class BatchScriptGuardTests(unittest.TestCase):
             "STRM media information check finished: candidates 130 (raw 131, duplicates 1), checked 130, "
             "skipped 120, first trust 120, need probe 10, reliable success 8, probe incomplete 2, "
             "check-stage incomplete 0, not processed 0, missing 0, revoked 0, read incomplete 0, unread 0, "
-            "actual probe calls 8, candidate fetch 12 ms, candidate fetch allocated 4096 bytes, batch reads 2, "
-            "batch read 30 ms, batch read allocated 8192 bytes, stop requested False, store unavailable False."
+            "actual probe calls 8, candidate fetch 12 ms, candidate fetch allocated 4096 bytes, "
+            "candidate set estimated 2080 bytes, candidate set retained 3072 bytes, stop query return 4.5 ms, "
+            "batch reads 2, batch read 30 ms, batch read allocated 8192 bytes, stop requested False, store unavailable False."
         )
         fields = batch.summary_fields(line)
         self.assertEqual(fields["candidates"], 130)
@@ -153,6 +201,9 @@ class BatchScriptGuardTests(unittest.TestCase):
         self.assertEqual(fields["duplicates"], 1)
         self.assertEqual(fields["actual_probe_calls"], 8)
         self.assertEqual(fields["candidate_fetch_allocated_bytes"], 4096)
+        self.assertEqual(fields["candidate_set_estimated_bytes"], 2080)
+        self.assertEqual(fields["candidate_set_retained_bytes"], 3072)
+        self.assertAlmostEqual(fields["stop_query_return_ms"], 4.5)
         self.assertEqual(fields["batch_reads"], 2)
         self.assertFalse(fields["stop_requested"])
         self.assertFalse(fields["store_unavailable"])
