@@ -152,7 +152,7 @@ B 对全部 Required Outcomes／Surfaces 满足后停止新增 Task，单独执�
 ```text
 Slice: 3 — Jellyfin 原生批量检查任务
 Base: 6da90ab6bd8995d8204ae0b7faf786c823699fe6
-Implementation Head: 5580492a5cacbdc0772dd2f14f9b527ab3851746
+Implementation Checkpoint: 5580492a5cacbdc0772dd2f14f9b527ab3851746
 Reviewed Implementation Range: 6da90ab6bd8995d8204ae0b7faf786c823699fe6..5580492a5cacbdc0772dd2f14f9b527ab3851746
 Final Test Checkout: 678bcf5c3a6ba5c6743402ec27367dd76d0f101d
 B Decision: SLICE READY FOR A REVIEW
