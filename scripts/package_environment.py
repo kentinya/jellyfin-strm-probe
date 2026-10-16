@@ -305,15 +305,6 @@ def bootstrap_fresh_instance(username: str, password: str) -> None:
     require(status in (200, 204), f"Completing the startup wizard failed with HTTP {status}.")
 
 
-def add_library(name: str, paths: list[str]) -> None:
-    body = {"LibraryOptions": {"EnableInternetProviders": False, "EnableRealtimeMonitor": False,
-                               "SaveLocalMetadata": False, "PathInfos": [{"Path": p} for p in paths]}}
-    query = urllib.parse.urlencode({"name": name, "collectionType": "movies", "refreshLibrary": "true"})
-    query += "".join(f"&paths={urllib.parse.quote(p)}" for p in paths)
-    status, _ = request_json("POST", "/Library/VirtualFolders?" + query, body=body)
-    require(status in (200, 204), f"Adding the library {name!r} failed with HTTP {status}.")
-
-
 def write_credentials(base_url: str, username: str, password: str) -> None:
     CREDENTIALS.write_text(json.dumps({"base_url": base_url, "username": username, "password": password}),
                            encoding="utf-8")
@@ -437,10 +428,3 @@ def deployed_payload() -> dict[str, str]:
 def remove_deployed_plugin() -> None:
     """Remove the plugin payload entirely (used for the uninstall/native-recovery scenario)."""
     shutil.rmtree(plugin_directory(), ignore_errors=True)
-
-
-def cleanup() -> None:
-    try:
-        compose("down")
-    except (PackageEnvironmentError, OSError, subprocess.SubprocessError):
-        pass

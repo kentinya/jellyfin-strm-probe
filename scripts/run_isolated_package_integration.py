@@ -52,16 +52,10 @@ PLAYBACK_DRIVER = ROOT / "scripts" / "package_playback_driver.mjs"
 BROWSER_TOOLS = ROOT / "artifacts" / "dev-env" / "browser-tools"
 MAX_WAIT = 120
 
-PROBLEMS: list[str] = []
-
 
 def require(condition: bool, message: str) -> None:
     if not condition:
         raise RuntimeError(message)
-
-
-def record_problem(message: str) -> None:
-    PROBLEMS.append(message)
 
 
 def run(*args: str, timeout: int = 120) -> subprocess.CompletedProcess[str]:
@@ -757,13 +751,8 @@ def main() -> int:
                 pe.deploy_archive(package)
                 restart()
             summary["recovery"] = scenario_recovery(package, evidence_dir)
-        if PROBLEMS:
-            summary["status"] = "FAIL"
-            summary["problems"] = list(PROBLEMS)
-            exit_code = 1
-        else:
-            summary["status"] = "PASS"
-            exit_code = 0
+        summary["status"] = "PASS"
+        exit_code = 0
     except (RuntimeError, OSError, ValueError, KeyError, json.JSONDecodeError, subprocess.SubprocessError,
             zipfile.BadZipFile, package_plugin.PackageError, pe.PackageEnvironmentError) as error:
         summary["status"] = "FAIL"
