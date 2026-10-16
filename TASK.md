@@ -224,13 +224,15 @@ B 审查真实 `Task Base..Developer Head`，并单列 `Correction Start Checkpo
   - `dotnet-local test ...sln -c Release --no-restore`：PASS 192／0 failed／0 skipped（189 + 3）。
   - `dotnet-local format ...sln --verify-no-changes --no-restore`：PASS。
   - `python3 -m unittest discover -s tests -v`：PASS 63。
-  - `python3 scripts/run_isolated_plugin_integration.py`：PASS（703 s）。
-  - `python3 scripts/run_isolated_batch_integration.py`：PASS（311 s），discovery／failure／mixed／scope／
+  - `python3 scripts/run_isolated_plugin_integration.py`：PASS（731 s）。
+  - `python3 scripts/run_isolated_batch_integration.py`：PASS（317 s），discovery／failure／mixed／scope／
     shared_stop／sharing／stop 全跑，配置／触发器／夹具恢复并核验。
-  - `python3 scripts/run_isolated_configuration_integration.py`：PASS（273 s）。
-  - `python3 scripts/check_governance.py`：PASS；`git diff --check`：PASS。
-  - 部署 DLL 身份 `sha256 c3742ea3ab9f8fe86d9f1e2be5231cc7eed69bcf3cca99032e826d88cd9d0aab`，与配置页实机记录一致；
-    隔离入口只部署产品构建产物，不部署测试程序集。
+  - `python3 scripts/run_isolated_configuration_integration.py`：PASS（274 s）。
+  - `python3 scripts/check_governance.py`：PASS；`git diff --check`：PASS；Markdown 140 本地链接／锚点：PASS。
+  - 三项实机入口在清理后的 HEAD 构建（`dotnet-local restore --locked-mode` + `build -c Release`）上重跑，部署 DLL
+    身份 `sha256 d7a4c24ee66026184f332cbf768c74431ab44cd7e9eeee3f7a7bb7537fdb06d9`（配置页实机记录一致）；
+    隔离入口只部署产品构建产物，不部署测试程序集。同源清理重建三次哈希一致；程序集 informational version 含提交号
+    （`0.1.0+<commit>`），故报告提交前后的构建哈希不同而产品源相同（`git diff 97e68dfa HEAD -- src/ tests/` 为空）。
   - 证据索引（仅本机）：`.git/validation-evidence/97e68dfa2f246488174e47e2ba0cf45910a4947f/af1-concurrency-correction-20261016/INDEX.md`。
 - Decisions：原范围纠正，无合同变更；复用既有停止位、异常、runner 原因计数与原生任务结果映射，未新增执行取消源、
   持久化状态、调度机制或生产注入开关；不将准入停止扩散到独立播放、其他调用者或下一轮。
