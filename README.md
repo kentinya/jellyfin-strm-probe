@@ -4,7 +4,7 @@
 
 项目：`Jellyfin.Plugin.StrmProbeOptimizer`，C# 插件。SQLite 仅保存最小历史指纹，媒体流继续保存在 Jellyfin 原生库，不维护独立探测状态机。
 
-**Slice 1／2 已由 A 最终审查 PASS / CLOSED，完整产品尚未交付。** [Slice 2 最终审查](docs/progress.md#slice-2-closed) 接受 SQLite／稳定多源播放闭环、实际开始后的探测共享、全局并发、核心配置及失败／重启恢复；[Closure Packet](docs/progress.md#slice-2-closed) 与 [关闭账本](docs/progress.md) 保留分层证据。固定 SDK `10.0.401`、Jellyfin `12.2.0`、源码／依赖与镜像 digest 见 [开发环境](docs/development-environment.md)。[核心配置操作说明](docs/core-configuration.md) 提供操作与恢复方法。完整配置页与批量任务尚未交付，现已激活 [Slice 3](SLICE.md)；发布包和外部代理联调留在 PLANNED 的 Slice 4。
+**Slice 1／2／3 已由 A 最终审查 PASS / CLOSED，完整产品尚未交付。** [Slice 3 最终审查](SLICE.md#a-final-review) 接受完整配置页、所选库按需批量检查、原生运行／停止／定时、播放混合共享及准确故障反馈；[关闭账本](docs/progress.md#slice-3-closed) 保留范围与分层证据。固定 SDK `10.0.401`、Jellyfin `12.2.0`、源码／依赖与镜像 digest 见 [开发环境](docs/development-environment.md)。操作与恢复见 [配置说明](docs/core-configuration.md)。真实大库／完整扫描压力、外部代理联调和发布包留在 PLANNED 的 Slice 4。
 
 ## 开发基准与范围
 
@@ -19,7 +19,7 @@
 3. 查看 [当前 Slice](SLICE.md)、[当前 Task](TASK.md)、[四个 Slice 路线图](docs/roadmap.md) 和 [进度](docs/progress.md)。
 4. 开发环境执行 `python3 scripts/development_environment.py doctor`；安装与隔离运行见 [环境交接](docs/development-environment.md)。
 
-Slice 1 已证明固定版本上的核心接入、可靠原生成功信号与最新地址持久化；Slice 2 的完整能力与单独 Final 已经 A 接受并关闭。本轮已激活 Slice 3，真实 Base 为 Slice 2 关闭提交 `6da90ab6bd8995d8204ae0b7faf786c823699fe6`，A 已按用户授权将批量读取改为候选 ID 集合＋分批对象，Task 3.1 的合法调整与状态见 [TASK.md](TASK.md)；详细历史／独立审查与本机证据见 [进度](docs/progress.md#当前开发指针)。
+Slice 3 Base 固定为 `6da90ab6bd8995d8204ae0b7faf786c823699fe6`，接受实现 `7c64eb5dcad6e5f20fb7eb41819be2521f65484d`。当前无活动实施任务；下一轮由 A 选择下个 Slice，未授权自动开始后续实施。详细历史与本机证据见 [进度](docs/progress.md#当前开发指针)。
 
 ## 产品目标
 
@@ -29,7 +29,7 @@ Slice 1 已证明固定版本上的核心接入、可靠原生成功信号与最
 - 「控制台 → 计划任务 → STRM 媒体信息检查」支持原生运行／停止／定时，默认无自动触发；固定所选库候选 ID 后分批读取当前对象，只处理需要探测的项目。停止只撤销未开始工作，已开始探测继续完成并按条件提交，收尾报告实际结果，结束后才允许下一轮批量实际运行。候选 ID 内存随数量增长，完整媒体对象和活动工作按批次限制。
 - 播放与批量共用 ProbeCoordinator，只共享已实际开始且仍在执行的探测，排队不共享；插件主动探测并发默认 2、允许 1～8，不限制其他原生任务或插件。
 
-上列描述完整产品目标；当前已接受的播放／指纹／共享和核心配置范围见 Slice 2，原生批量与后续发布仍未交付。兼容性及接口定位见 [compatibility.md](docs/compatibility.md) 和 [references.md](docs/references.md)。
+当前已接受播放／指纹／共享、完整配置页和原生批量；后续压力、外部联调与发布仍未完成。兼容性及接口定位见 [compatibility.md](docs/compatibility.md) 和 [references.md](docs/references.md)。
 
 ## 仓库检查
 

@@ -1,6 +1,6 @@
 # NO ACTIVE IMPLEMENTATION TASK
 
-Task 3.1 已由 B 审查 PASS；本 Slice 不再创建实施 Task。完整原计划、修正指导、Developer 报告与历史拒绝保留于 `1d463f12062de187ba799b5f6602a274ede7a574:TASK.md` 及其可达历史。当前完整交接见 [Slice Closure Packet](SLICE.md#closure-packet)，A 最终审查尚待执行。
+Task 3.1 已由 B 审查 PASS；本 Slice 不再创建实施 Task。完整原计划、修正指导、Developer 报告与历史拒绝保留于 `1d463f12062de187ba799b5f6602a274ede7a574:TASK.md` 及其可达历史。当前完整交接见 [Slice Closure Packet](SLICE.md#closure-packet)，A 已审查完整 Slice 并裁定 PASS / CLOSED；当前无活动实施任务。
 
 ```text
 Task ID: 3.1
@@ -49,6 +49,6 @@ B 本机索引：`.git/validation-evidence/7c64eb5dcad6e5f20fb7eb41819be2521f654
 
 Task PASS 后重新核对七个 Required Outcomes 和六类 Required Surfaces，全部具备交付证据，无新增实施缺口。B 随后单独执行当前合同的 Slice Final，完整结果见 Closure Packet；未用旧 Task 执行替代 Final。Task 3.2 的历史 B PASS 快照 `678bcf5c3a6ba5c6743402ec27367dd76d0f101d:TASK.md` 保留。
 
-本轮不改变稳定需求、Roadmap 或 Slice 合同，不做 A 最终审查或关闭。真实十万库／完整扫描压力、内部数据库物理保存故障注入、外部代理／OpenList、广泛格式／客户端及发布 ZIP 继续按原边界 NOT RUN；原非阻塞 P2 和文档协调项交 A。
+以上为 B 交接时决定；其后的 A 最终审查已 PASS / CLOSED，当前关闭文档同步见 SLICE.md。真实十万库／完整扫描压力、内部数据库物理保存故障注入、外部代理／OpenList、广泛格式／客户端及发布 ZIP 继续按原边界 NOT RUN；原非阻塞 P2 保留，文档协调已由 A 完成。
 
-NEXT ACTION: A RE-REVIEWS THE COMPLETE SLICE; NO NEW IMPLEMENTATION TASK
+NEXT ACTION: A SELECTS THE NEXT LARGE SLICE

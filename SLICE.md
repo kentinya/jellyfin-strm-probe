@@ -4,7 +4,7 @@
 Slice ID: 3
 Name: Jellyfin 原生批量检查任务
 Owner: A
-Status: READY FOR A REVIEW
+Status: PASS / CLOSED
 Base SHA: 6da90ab6bd8995d8204ae0b7faf786c823699fe6
 Implementation Head: 7c64eb5dcad6e5f20fb7eb41819be2521f65484d
 ```
@@ -13,7 +13,7 @@ Implementation Head: 7c64eb5dcad6e5f20fb7eb41819be2521f65484d
 
 2026-10-14，A 在 Slice 2 关闭后的独立一轮选择并激活本 Slice，对应 V4.2 P2，交付管理员配置、原生运行／定时、按需批量检查、停止收尾和结果反馈的完整旅程。本轮只提交能力合同与事实指针，不写实现代码、不规划具体 Task；B 必须在合同提交后先判断合法性并计划首个 Task。
 
-Base 是 Slice 2 的真实关闭提交，固定不随合同、计划或报告移动。该提交接受实现 `59fd3f7e4b6623449a691574fb69b817db72c2ae`：固定 Jellyfin `12.2.0`／源码 `ca0f16eb7c195f720a1493ed469a27c4657db0c6`、`net10.0`／SDK `10.0.401`，完整只读解析／决策、稳定项目／媒体源身份、五字段 SQLite 条件提交、原生探测及事务保存关联、运行中共享／全局并发和四项核心配置。当前没有原生批量任务、批量范围配置或完整 HTML 配置页。
+Base 是 Slice 2 的真实关闭提交，固定不随合同、计划或报告移动。该提交接受实现 `59fd3f7e4b6623449a691574fb69b817db72c2ae`：固定 Jellyfin `12.2.0`／源码 `ca0f16eb7c195f720a1493ed469a27c4657db0c6`、`net10.0`／SDK `10.0.401`，完整只读解析／决策、稳定项目／媒体源身份、五字段 SQLite 条件提交、原生探测及事务保存关联、运行中共享／全局并发和四项核心配置。该 Base 当时没有原生批量任务、批量范围配置或完整 HTML 配置页；本 Slice 接受的新增结果见下方最终审查。
 
 Slice 2 的完整合同、Closure Packet、A Final Review 与 Closure Reconciliation 保留在 Base 的 `SLICE.md`，通过 `git show 6da90ab6bd8995d8204ae0b7faf786c823699fe6:SLICE.md` 读取；Task 与原始证据见 [关闭账本](docs/progress.md#slice-2-closed)。它们是继承事实，不代表本 Slice 的批量、UI、停止或定时验收已经通过。
 
@@ -23,7 +23,7 @@ Slice 2 的完整合同、Closure Packet、A Final Review 与 Closure Reconcilia
 
 保留 Slice ID、Base、ACTIVE、用户目标和全部探测／保存／指纹／权限／隐私不变量。明确允许 O(N) 候选 ID 及原生查询临时分配，完整媒体对象和活动工作仍有批次上限；不再要求全库候选获取本身逐页或总内存恒定。集合只固定本轮候选身份，非事务快照；新增项目留下一轮，消失／移出范围安全结算，当前 STRM／媒体源／指纹仍重查。原生同步 ID 查询无取消参数时停止可能等调用返回，不承诺中断该查询；返回后不得继续取对象或开始探测，不能遗留后台获取并提前结束旧轮。
 
-原 Task 3.1 计划／停止补充快照保留于 `eb4e272743f4c7e184d45fa48b660b2fef24c685:TASK.md`，Task Base `b86d9c17d7f915108072f54ee098f0f5543fe093` 不移动。当前无本 Slice 实现可审查；在 A 合同变更检查点根 Task 暂置无活动实施任务，本合同提交后 B 明确判断合法调整并恢复同一 Task，当前交接状态以 TASK.md 为准，不能沿旧分页测试计划实施。只授权文档修订，不新增产品 PASS／Closure Packet／A Final Review 或插件实施。
+原 Task 3.1 计划／停止补充快照保留于 `eb4e272743f4c7e184d45fa48b660b2fef24c685:TASK.md`，Task Base `b86d9c17d7f915108072f54ee098f0f5543fe093` 不移动。在该次修订时尚无本 Slice 实现可审查；在 A 合同变更检查点根 Task 暂置无活动实施任务，本合同提交后 B 明确判断合法调整并恢复同一 Task，当前交接状态以 TASK.md 为准，不能沿旧分页测试计划实施。只授权文档修订，不新增产品 PASS／Closure Packet／A Final Review 或插件实施。
 
 ## 用户目标
 
@@ -113,7 +113,7 @@ Slice 2 的完整合同、Closure Packet、A Final Review 与 Closure Reconcilia
 | AC-7 | RO-6：原生进度单调、运行不超过 99%、正常遍历收尾才为 100%；停止／禁用／全局失败不补满。上述统计等式、实际探测数、原生 Completed／Cancelled／Failed 与脱敏日志逐项对账，修复后重跑可收敛。关闭播放检查仍可批量、禁用不新增批量探测。对应 B09／B10、T24、X10。 |
 | AC-8 | RO-2／RO-4／全部 Surfaces：十万模拟候选验证单批完整对象／固定消费者／活动 Task 上限；单列全部 ID、去重／排序及原生查询临时分配／耗时，明确总内存随候选增长。覆盖 ID／批次获取错误、提前结束及许可释放；代表性真实 ID 获取和多批加载／停止有证据，不能只测 fake 或工作队列。全部回归、部署、恢复及分层证据完整；不把模拟大库或源码当真实大库／定时／停止通过。对应 B12、X01／X02；真实大库及完整扫描压力留 Slice 4。 |
 
-B01～B10 的批量旅程、B12 有界模拟核心、T24／T26 批量部分及 X08～X10 新表面均属本 Slice；当前全部新增验收仍 NOT RUN。完整产品矩阵保留原 ID 与证据层，激活合同不改变执行结果。
+B01～B10 的批量旅程、B12 有界模拟核心、T24／T26 批量部分及 X08～X10 新表面均属本 Slice；实际结果与保留的 NOT RUN 边界见 Closure Packet 和 A Final Review。完整产品矩阵保留原 ID 与证据层，激活合同不改变执行结果。
 
 ## 最终验证
 
@@ -157,8 +157,8 @@ Reviewed Implementation Range: 6da90ab6bd8995d8204ae0b7faf786c823699fe6..7c64eb5
 Final Test Checkout: 1d463f12062de187ba799b5f6602a274ede7a574
 B Decision: SLICE READY FOR A REVIEW
 B Known P0/P1 Blockers: NONE
-A Decision On Current Candidate: NOT RUN — previous rejection retained below
-Closure Reconciliation On Current Candidate: NOT RUN — A responsibility
+A Decision On Current Candidate: PASS — AF-1 closed; previous rejection retained in Git
+Closure Reconciliation On Current Candidate: COMPLETE — documentation-only closure checkpoint
 ```
 
 ### 实现与 Task 索引
@@ -218,66 +218,62 @@ AF-1 纠正保留 owner 拒绝原因、复用本轮停止位约束已分派未�
 
 - 保留 P2：批量工具的日志关联仅按当天秒数，跨日复用须建立新日志会话；页面对“指数”的泛称比完整数值判断更宽。两项不改变当前正确性验收，也不另建 Task。
 - Slice 4 的真实十万库／完整扫描压力、外部 JellyfinProxy／OpenList、广泛格式／客户端、发布 ZIP／安装材料继续 NOT RUN。逐分支 T09～T11／audio-only 实机、物理数据库保存故障注入、完整镜像构建溯源及通用 FullRefresh 性能证明沿用已接受限制。
-- A 如判 PASS，在关闭检查点统一 README、docs/scope.md／requirements.md／product-experience.md／architecture.md／roadmap.md／progress.md／test-matrix.md 及 SLICE／TASK 的 CURRENT／状态／Next Action。维护文档中旧 TARGET／NOT RUN／FIX REQUIRED 等事实指针待 A 协调；B 本次不修改稳定需求或提前写成已接受 CURRENT。
+- A 如判 PASS，在关闭检查点统一 README、docs/scope.md／requirements.md／product-experience.md／architecture.md／roadmap.md／progress.md／test-matrix.md 及 SLICE／TASK 的 CURRENT／状态／Next Action。本包交接时由 A 协调维护文档中旧 TARGET／NOT RUN／FIX REQUIRED 等事实指针；本次关闭协调已完成，见下方记录。
 - 供 A 合并的 B 经验候选：共享全局故障须覆盖末项正常返回分支；构建版本标识改变时用源码和可复现二进制核对证据；长验收用完整日期／会话关联日志并隔离鉴权身份。只留可复用方法，不记录任务流水账；角色经验文件在 A 收尾时统一审阅。
 
 ```text
-SLICE READY FOR A REVIEW
-NEXT ACTION: A RE-REVIEWS THE COMPLETE SLICE; NO NEW IMPLEMENTATION TASK
+B HANDOFF AT aa78c06216ec30fbefd288ac4c73e9a7d44afa95: SLICE READY FOR A REVIEW
+A REVIEW AND CLOSURE: COMPLETED BELOW
 ```
 
 ## A Final Review
 
-以下为上一候选 `5580492a5cacbdc0772dd2f14f9b527ab3851746` 的历史拒绝记录，原决定和反例保留。当前纠正候选及新 Final 见上方 Closure Packet，等待 A 重新审查；B 不代 A 更新最终裁定。
-
-2026-10-16，A 完成必读清单、真实 Git 状态与治理检查，初始工作区干净。审查完整 Slice Base..Implementation Head，覆盖原生任务、候选 ID／分批／当前范围与多版本身份、共用执行／保存／指纹、共享／停止收尾、配置页、测试工具及文档差异；核阅两项 Task 的 B PASS 快照和本次独立 Slice Final 原始证据。最终决定如下，不改写历史 Task PASS 或 B 的交接决定。
+2026-10-16，A 完成必读清单和 A 经验文档，初始 `main` 工作区干净、治理检查 PASS。审查完整 Slice Base..Implementation Head，覆盖两个 Task 的实际实现、配置页、原生任务生命周期、候选 ID／分批／当前范围与多版本身份、共用执行／保存／指纹、共享／停止收尾、故障统计、测试工具及治理／文档变更；核验 B PASS 快照与新独立 Slice Final 原始产物。
 
 ```text
-Reviewed Range: 6da90ab6bd8995d8204ae0b7faf786c823699fe6..5580492a5cacbdc0772dd2f14f9b527ab3851746
-Review Checkout: 0350747aff4489aa6aed877c7d885d82e0e26ad1
-Decision: FIX REQUIRED
-P0/P1 Blockers: AF-1 (P1)
+Reviewed Range: 6da90ab6bd8995d8204ae0b7faf786c823699fe6..7c64eb5dcad6e5f20fb7eb41819be2521f65484d
+Review Checkout: aa78c06216ec30fbefd288ac4c73e9a7d44afa95
+Decision: PASS
+P0/P1 Blockers: NONE FOUND
+AF-1: CLOSED
 Slice Base / Implementation Checkpoint: UNCHANGED
 Material Contract Change: NO
-Closure Reconciliation: NOT RUN — Slice remains open
 ```
 
-### AF-1 — 准入前失去优化资格被当作普通不处理，末批伪报完成（P1）
+### 必要结果与独立证据
 
-`StrmPlaybackOptimizer.AdmitBatchOwnerAsync` 把 `!Enabled` 和已 latch 的状态库不可用都返回为 `BatchAdmission.NotProcessed()`；runner 只计不处理，没有收到禁用／不可用原因。若这是最后一批的最后一个工作，后面不会再经过下一批的全局检查，`RunAsync` 因而返回 `Completed=true`、`Disabled=false`、`StoreUnavailable=false` 并报告 100%。`StrmProbeScheduledTask.ExecuteAsync` 正常返回，按固定原生 worker 语义会记 Completed，而不是禁用提前结束的 Cancelled 或状态库不可用的 Failed。
+- RO-1／RO-7：原生任务实际发现、默认无触发、手动／定时／触发器重启保留；真实 HTML 页面五项配置、有效库选择、非法／失效选择、保存成功／拒绝／响应丢失／重读及生效时机可操作。核阅 19 个独立浏览器场景原始交互并查看页面截图，页面值驱动原生任务的范围／播放检查／启停结果正确。
+- RO-2：原生 GetItemIds 固定去重候选，完整对象每批 128、固定消费者最多 8；当前范围／项目／物理源身份在入口和执行前重核，多版本源独立。静态漏重、重复 ID／乱序／缺失、范围变化与新增下轮发现有控制和多库多批实机证据。十万模拟的对象／工作上限和 O(N) ID 成本分层明确，不冒充真实十万库性能。
+- RO-3／RO-4：批量复用已有决策器、Coordinator、执行／保存和条件提交；首次信任不算实测成功，URL 优先／有效 SHA-1 与 Size／权限／指纹规则不变。真实两方向同源共享各一次实际探测，批量实际调用 1／0、可靠成功各 1；混合峰值受启动配置约束，外部独立原生刷新沿原行为。
+- RO-5：停止先于实际开始则撤销，已经开始／加入的工作继续保存和有效提交；等待者不取消执行。真实停止为 Cancelled，2 个已开始源完成提交、1 个撤销；收尾期无新轮／新批量探测，独立播放继续，旧轮结算后排队或显式下一轮正确执行。同步查询／等待许可／准备／开始竞争的确定性控制和资源结算通过。
+- RO-6／AF-1：拒绝原因到达结算与原生终态；已观测禁用关闭整轮准入，重新启用不恢复已撤销旧轮；一次 false 观测不被后续读取抹掉。最终结算合入共享状态库故障，末项正常跳过也保留 Skipped／Checked 的真实计数，同时 StoreUnavailable=true、Completed=false、进度最高 99%、ExecuteAsync 报不可用。真实状态库失败报 Failed，零新增探测，修复重启可恢复；单项失败隔离，日志和统计可对账。
 
-A 使用现有测试程序集的 BatchHarness、真实产品 runner／scheduled task、临时 STRM 和原有假原生／指纹仓库独立复现四个控制，不修改产品代码或已提交测试：
+A 独立复跑现有构建的全部 C#：202 passed／0 failed／0 skipped；Python：63 passed。另使用真实产品 runner／scheduled task 和现有测试 harness 独立执行 16 项准入原因、真实许可等待、重新启用、单次观测及末项跳过共享仓库故障控制，全部断言通过；基线、异常／计数、进度和许可／preparing／running 均核验。这些是假原生／仓库控制，不宣称物理 Jellyfin 数据库故障注入。
 
-| 控制 | 实际结果 |
-|---|---|
-| 已建立可信基线、URL 已改变；决策后、owner 准入前禁用；直接 runner | `NotProcessed=1`、`Completed=true`、`Disabled=false`；进度 `[0, 99, 100]`。 |
-| 同一禁用场景，经原生任务实现 `ExecuteAsync` | 正常返回、无取消异常，进度到 100%。 |
-| 同一准入窗口，由另一源通过同一个 optimizer 实际读取故障仓库并 latch 全局不可用；直接 runner | 独立调用确认 `IsFingerprintStoreUnavailable=true`，本轮仍为 `NotProcessed=1`、`Completed=true`、`StoreUnavailable=false`；进度 `[0, 99, 100]`。 |
-| 同一状态库故障场景，经 `ExecuteAsync` | 正常返回、无不可用异常，进度到 100%。 |
+A 验证 Final 的 82 项 tracked 输入，仅 SLICE／TASK 交接文档不同；实现检查点到审查 checkout 也仅改这两份文档。232 项构建产物与 B／Final 清单中 405 个证据文件摘要全部匹配；产品 DLL 与真实配置页部署摘要一致。新 Final 的 locked restore／Release build／format、默认真实 playback、七场景 batch 和 19 场景配置页原始结果完整，精确命令／环境／耗时可核验，全部门槛零失败、无重试；前后配置、全部触发器、夹具／媒体摘要一致，临时条目清理。A 明确复用这次独立 Final，未再次运行实机，不用旧 Task 或旧 Final 代替。
 
-四项均未开始探测，旧指纹未变，许可／preparing／running 最终为零；因此本问题是必要故障反馈与完成语义丢失，不是已开始探测的取消或指纹安全条件变更。已有“原生准备期间禁用／故障”的控制位于更晚窗口，不能覆盖此准入前分支。违反 RO-6、范围／配置约定及 AC-6／AC-7 的明确义务：禁用／全局故障不得补满或伪报完成，状态库不可用须报告不可用。这是 P1，不能按统计措辞或可选证明延期。
+本机 A 索引：`.git/validation-evidence/7c64eb5dcad6e5f20fb7eb41819be2521f65484d/a-final-review-20261016/INDEX.md`。包含完整范围差异、输入／产物／证据摘要核验、精确命令、TRX、控制源码与断言、真实证据再对账及关闭文档检查；仅本机可读、未推送。
 
-纠正须让未开始工作被拒绝的真实原因到达本轮结算、进度与原生结果，覆盖末项及并发资格丢失；已实际开始的工作仍按原合同完成保存／条件提交。B 负责确定同一 Slice 内的纠正 Task、验收与独立复现，A 不指定 Task ID、具体实现或删减原 T4 门槛。
+### 历史决定与非阻塞边界
 
-### 证据、复用与其余范围
+旧候选 `5580492a5cacbdc0772dd2f14f9b527ab3851746` 的 AF-1（P1）拒绝保持原决定：末项 owner 准入前禁用／状态库故障被计普通不处理并伪报 Completed／100%。完整旧 A 审查保留于 `aa78c06216ec30fbefd288ac4c73e9a7d44afa95:SLICE.md` 及旧候选 A 证据目录；不把该拒绝或中间失败改写为 PASS。当前纠正不改变合同，无需 Material Contract Change 或新实施 Task。
 
-- A 核验 Final 的 82 个 tracked 输入，只有 SLICE／TASK 交接文档不同；实现检查点到审查 checkout 也只改这两份文档。37 个构建产物和证据清单中的 234 个文件摘要全部匹配，初始／最终配置、触发器、媒体和 STRM 快照一致。其余已实现旅程及原始 Final 可支持现有实现事实，不能据绿灯排除 AF-1。
-- A 独立运行现有构建的全部 C# 回归：182 passed／0 failed／0 skipped；Python 63 passed。新增四项独立控制的观察收集成功，但必要行为判定为 FAIL；helper 退出 0 不代表产品验收通过。
-- 原始 Final 的 restore／build／format、真实播放、七项 batch 和 19 项配置页保留原始结果及两次 batch 失败／重跑披露；本轮核验并复用这些事实，不声称 A 再次运行实机。AF-1 的真实 Jellyfin 新场景本轮 NOT RUN；已有确定性反例足以拒绝关闭，修正后按当前 T4 合同更新最终候选证据。
-- 本机 A 索引：`.git/validation-evidence/5580492a5cacbdc0772dd2f14f9b527ab3851746/a-final-review-20261016/INDEX.md`。包含精确命令／耗时／退出码、输入与产物核验、四项控制源码／原始结果及早期 helper 调用错误；仅本机可读、未推送。
-- 未发现其他独立 P0/P1 阻塞。原有日志跨日关联、指数措辞等 P2 不阻止验收；真实大库、完整扫描压力、外部代理／OpenList、广泛格式／客户端及发布材料延期不变，未运行项目继续 NOT RUN。
+原有日志按当天秒数关联和页面“指数”泛称保留 P2，不阻止 PASS。真实十万库／完整扫描压力、外部 JellyfinProxy／OpenList、广泛格式／客户端、发布 ZIP／安装材料仍 NOT RUN；逐分支 T09～T11／audio-only 实机、物理数据库保存故障注入、完整镜像构建溯源与通用 FullRefresh 性能证明沿用已接受限制。固定组合证据不构成跨版本支持。
 
-Base、Required Outcomes／Surfaces、验收及全部安全不变量保持不变；无需 Material Contract Change。保持同一 Slice 开放，交 B 计划纠正，不写 Closure Reconciliation、不同步为已接受 CURRENT、不作关闭经验复盘，也不选择 Slice 4。
+## Closure Reconciliation
 
-当前根 Task 无活动实施任务；治理器要求 FIX REQUIRED 必须关联纠正 Task，故在 B 提交合法计划前应拒绝实施准入。A 不为使检查变绿而虚构 Task 或改动治理代码。B 提交纠正计划后重新运行治理检查；Developer 在此之前不得继续。
+本关闭检查点仅协调文档，保持 Base、接受实现、Required Outcomes／Surfaces、验收含义、业务不变量和稳定需求表不变：
+
+- README、scope、requirements、product-experience、architecture 同步原生批量／完整配置页已接受的 CURRENT；保留 Slice 4 的 TARGET 与所有未运行边界。
+- roadmap 的 Slice 3 改为 PASS / CLOSED，Slice 4 保持 PLANNED；progress 添加关闭账本与证据，TASK 保持无活动实施任务并保留 B PASS 身份。
+- test-matrix 按控制／代表实机／十万模拟／真实大库与外部分层更新；旧 Slice／Task 结果标为历史，未运行项不升级。
+- 三份角色经验统一审阅，A／Developer 各补一条、B 补两条可复用方法，不记录任务流水账，不改变授权或测试门槛。
+- 本地 Markdown／锚点、差异及已提交治理检查通过；源代码、测试／工具、依赖、配置和夹具均无变更。完整产品、外部联调与发布仍未完成。
 
 ```text
-NEXT ACTION: B PLANS THE IN-SLICE CORRECTION FOR AF-1
+Closure Reconciliation: COMPLETE
+Final Status: PASS / CLOSED
+NEXT ACTION: A SELECTS THE NEXT LARGE SLICE
 ```
 
-
-## 当前交接
-
-当前 B Closure Packet 已包含 AF-1 纠正及新 Final；上方 A 拒绝仅对应旧候选。Slice 保持开放，等待 A 完整审查。
-
-NEXT ACTION: A RE-REVIEWS THE COMPLETE SLICE; NO NEW IMPLEMENTATION TASK
+本轮到此停止。下一 Slice 的选择与激活另开一轮，不自动开始 Slice 4 或创建新 Task。

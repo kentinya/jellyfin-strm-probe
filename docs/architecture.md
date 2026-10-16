@@ -4,7 +4,7 @@
 
 V4.3 是当前开发基准，仅修订批量扫描方式；V4.2／V3.0 原文与历史合同留在 Git。Slice 1 原型已经 A 最终审查 PASS / CLOSED；[关闭证据](progress.md#slice-1-closed) 保留原始边界。固定 Jellyfin `12.2.0`／源码 `ca0f16eb7c195f720a1493ed469a27c4657db0c6`、Controller／Model `12.2.0`、`net10.0`／SDK `10.0.401`；单版本事实不构成跨版本兼容承诺。
 
-Slice 2 已由 A 审查完整 Base..Implementation Head 并裁定 PASS / CLOSED；接受实现 `59fd3f7e4b6623449a691574fb69b817db72c2ae`，Slice Base 固定为 `924816a84c74f5d79c107478f2d40e621cb8be8d`。Task 2.1／2.2 均 B PASS，单独 Slice Final 经 A 核验输入和原始产物后接受；当前 Slice 3 任务状态另见 [TASK.md](../TASK.md)。完整合同、Closure Packet 和 [A Final Review](progress.md#slice-2-closed) 保留必要结果及证据边界。
+Slice 2 已由 A 审查完整 Base..Implementation Head 并裁定 PASS / CLOSED；接受实现 `59fd3f7e4b6623449a691574fb69b817db72c2ae`，Slice Base 固定为 `924816a84c74f5d79c107478f2d40e621cb8be8d`。Task 2.1／2.2 均 B PASS，单独 Slice Final 经 A 核验输入和原始产物后接受；Slice 3 已另行完成 A 最终审查，当前无活动实施任务。完整合同、Closure Packet 和 [A Final Review](progress.md#slice-2-closed) 保留必要结果及证据边界。
 
 - 只读版本 1 解析及完整决策矩阵、原生所属项目／MediaSourceInfo.Id 的稳定多版本身份、五字段 SQLite 和 expectedPrevious 原子条件提交已接受。失败、原生自身取消异常、文件变化及过期结果保护可信基线；SQLite 异常停止优化，保留原权限与旧库，修复后重启重新检查。
 - 共用 `CheckSourceAsync` 使用已有原生探测／事务保存关联；每个取得许可的 owner 先读本调用者当前源，再核对 Manifest／指纹／启停后行动，立即获许可也重判。首次信任核对当前 Manifest 与原生地址，不称为本次探测成功。
@@ -14,7 +14,15 @@ Slice 2 已由 A 审查完整 Base..Implementation Head 并裁定 PASS / CLOSED�
 
 单独 Slice Final 112 项 C#、30 项 Python 及全部构建／质量／默认隔离实机／补充对照通过；A 核验 40 个可执行输入、27 个产物和八个规范章节，另独立重跑 C# 112/112。真实 Final 明确复用，未声称 A 再次实机运行。本机索引位于 `.git/validation-evidence/59fd3f7e4b6623449a691574fb69b817db72c2ae/` 下的 `slice-final-20261014-09/INDEX.md` 与 `a-final-review-20261014/INDEX.md`，完整结果见 [Closure Packet](progress.md#slice-2-closed)。
 
-控制验证使用假原生／保存代理和临时 STRM；真实 Jellyfin 内部数据库保存故障注入、音频-only 实机、完整镜像构建溯源及通用 FullRefresh 性能证明仍未运行。固定组合事实不构成跨版本承诺。HTML 完整配置页、原生批量、外部代理和发布尚未交付；目标边界不变。
+Slice 3 已由 A 审查完整 `6da90ab6bd8995d8204ae0b7faf786c823699fe6..7c64eb5dcad6e5f20fb7eb41819be2521f65484d` 并裁定 PASS / CLOSED。当前实现包含：
+
+- `StrmProbeScheduledTask` 由原生任务机制发现，默认触发器为空；原生负责运行、停止、定时、进度和终态。范围快照使用稳定库 ID，全部为默认，失效／空显式选择拒绝保存和执行。
+- `LibraryBatchCandidateSource` 用 `GetItemIds` 获取所选库候选，去重排序后固定本轮集合，再用 `GetItemList(ItemIds=...)` 每批最多读取 128 个完整对象、最多 8 个消费者。执行前重读当前对象、所属库和项目／媒体源身份；新增下轮发现，消失／移出安全结算。ID 及原生临时分配随数量增长，不能宣称总内存恒定。
+- 批量使用同一 optimizer、决策器、Coordinator、原生执行／保存和指纹条件提交。`BatchStopSignal` 在匹配编码器调用处协调开始与停止；停止只撤销本轮未开始工作，已开始／已加入探测以 None token 完成保存和有效提交。任务等待结算、汇总和资源释放后抛取消异常，原生收尾结束才允许下轮实际运行。
+- 未开始阶段观测禁用即关闭本轮准入并保留原因，重新启用也不恢复已撤销的旧轮。状态库故障锁定优化不可用，最终结算合入共享 optimizer 的故障标记；末项跳过也不掩盖其他源触发的故障。必要故障反馈不依赖详细日志，停止／全局失败不补成 100%。
+- `IHasWebPages` 嵌入完整 HTML 配置页，使用已有配置通道，提供五项编辑、真实媒体库选择、加载／拒绝／未确认保存／重读反馈和任务／恢复说明；没有独立运行或定时入口。并发仍在下次启动生效，范围对下一轮生效。
+
+新单独 Final 的 locked restore／Release build／format、202 C#／63 Python、默认真实播放、批量七场景和配置页 19 场景均通过。A 核验 82 项输入、232 项构建产物和原始证据，独立复跑全套 C#／Python 及 16 项关键控制，明确复用匹配 Final 的真实运行。七个 Outcomes／六类 Surfaces、原始索引和延期见 [Slice 3 关闭记录](progress.md#slice-3-closed)。控制验证使用假原生／保存代理和临时 STRM，物理数据库保存故障实机注入、audio-only／逐分支实机、真实大库／完整扫描压力、外部代理、发布及完整镜像构建溯源继续按原限制 NOT RUN。
 
 ### Slice 1 关闭时的 Task 1.1 原型边界
 
@@ -28,11 +36,11 @@ Slice 2 已由 A 审查完整 Base..Implementation Head 并裁定 PASS / CLOSED�
 
 播放接入保留原调用的 token 与探测权限。获取 PlaybackInfo 并不保证实际探测；插件未变化复用分支会使用原生不探测取源。当前 PlaybackInfo 传 `CancellationToken.None`，客户端退出及停止播放不连接到本次探测取消；不新增 `RequestAborted` 关联或 PlaybackStopped 事件取消器。客户端退出后，执行仍成功且结果已保存、Manifest 一致时，可继续按条件提交。
 
-批量尚未实现；原生计划任务的停止 token 在目标设计中仅用于候选获取边界、后续批次和未实际开始的工作，不传给已开始探测，也不否决其满足全部成功条件后的提交。已开始工作正常收尾，即使没有其他等待者。用户停止／共享规则已由 A 作为 [Slice 2 Material Contract Change 记录](progress.md#slice-2-closed) 同步；Slice 2 取消人为可取消执行实机门槛，原生取消异常仍保留基线并传播，Slice 3 验证实际批量停止与收尾。固定版本入口见 [兼容性](compatibility.md#播放与批量取消语义)。
+已实现的原生计划任务停止 token 仅用于候选获取边界、后续批次和未实际开始的工作，不传给已开始探测，也不否决其满足全部成功条件后的提交。已开始工作正常收尾，即使没有其他等待者。用户停止／共享规则已由 A 作为 [Slice 2 Material Contract Change 记录](progress.md#slice-2-closed) 同步；Slice 2 取消人为可取消执行实机门槛，原生取消异常仍保留基线并传播，Slice 3 已验证并接受实际批量停止与收尾。固定版本入口见 [兼容性](compatibility.md#播放与批量取消语义)。
 
-## TARGET
+## 已实现的批量与播放结构
 
-[Slice 3 合同](../SLICE.md) 已激活，Base 为 Slice 2 关闭提交 `6da90ab6bd8995d8204ae0b7faf786c823699fe6`，本轮按用户授权实质修订为候选 ID 集合＋分批对象读取，Task 3.1 合法性与状态见 [TASK.md](../TASK.md)。当前代码仍未提供批量任务／范围配置／HTML 页；以下批量设计不是已实现事实。新增入口必须区分批量准入停止与已开始探测收尾，并在批量不可用时停止枚举，不能直接复用现有允许原生委托的播放回退。范围按每次运行固定，候选 ID 集合允许 O(N) 内存，完整媒体对象／活动工作按批次有界；进度、按源统计及配置生效约定见合同；真实任务／定时／停止／页面交互仍 NOT RUN。
+[Slice 3](../SLICE.md) 已关闭，接受实现 `7c64eb5dcad6e5f20fb7eb41819be2521f65484d`。以下为当前结构；外部代理联调、大规模／完整扫描压力和可安装发布包仍为 TARGET，留 Slice 4。固定组合上的真实任务、定时、停止和页面交互结果见 [测试矩阵](test-matrix.md)。
 
 ```mermaid
 flowchart TD
@@ -47,7 +55,7 @@ flowchart TD
     N[Jellyfin 原生主媒体流] --> D
     D --> S[跳过并复用原生媒体流]
     D --> C[ProbeCoordinator 同源共享及全局并发]
-    C --> E[NativeProbeExecutor 原生探测及结果验证]
+    C --> E[共用 ExecuteProbeAsync 原生探测及结果验证]
     E --> N
     E --> V[成功已保存且 Manifest 未变]
     V --> F
@@ -64,33 +72,30 @@ flowchart TD
 | 模块 | 边界 |
 |---|---|
 | Plugin／PluginConfiguration／ServiceRegistrator | 生命周期、有效配置、版本适配注册；不自建调度器 |
-| 播放接入层（候选 IMediaSourceManager 包装） | 受支持 STRM 进入共同检查链，其余完整委托；保留 allowMediaProbe 权限 |
+| 播放接入层（IMediaSourceManager 包装） | 受支持 STRM 进入共同检查链，其余完整委托；保留 allowMediaProbe 权限 |
 | StrmManifestReader | 有界本地只读与纯解析；字段验证无网络、数据库或刷新副作用 |
 | ProbeDecisionService | 纯决策：RequireProbe／SkipProbe／Fallback；没有 UpdatePathOnly |
 | ProbeCoordinator | 以 item_id＋source_key 只共享实际已开始的运行中探测；排队不作为共享执行，已开始工作独立收尾；全局许可默认 2、配置 1～8，播放／批量共用 |
-| NativeProbeExecutor | 版本相关原生探测、关联本次结果、媒体流／地址持久化验证；评估 FullRefresh 附带开销 |
-| StrmProbeScheduledTask | 候选 IScheduledTask／IConfigurableScheduledTask，所选库候选 ID 集合、分批对象／固定消费者、停止收尾、原生进度及统计 |
-| StrmFingerprintRepository | SQLite 最小历史指纹、条件提交与异常保护；不保存媒体信息或持久化探测状态 |
+| StrmPlaybackOptimizer.ExecuteProbeAsync | 播放／批量共用原生探测、关联本次结果、媒体流／地址持久化验证；FullRefresh 通用成本证明未运行 |
+| StrmProbeScheduledTask／BatchCheckRunner／BatchLibraryScope | 已注册的 IScheduledTask／IConfigurableScheduledTask、所选库原生候选 ID 查询、分批对象／固定消费者、停止收尾、原生进度及统计 |
+| SqliteStrmFingerprintRepository | SQLite 最小历史指纹、条件提交与异常保护；不保存媒体信息或持久化探测状态 |
 
-结果验证是 Executor 的必需责任，不因移除独立 Validator／Synchronizer 类而消失。首次验证后才决定具体代码组织，不预建空类。
-
-建议目录均为 TARGET：
+结果验证由 optimizer 的共用执行链与现有编码器／持久化代理承担，没有另建空 Executor／Validator／Synchronizer 类。当前源码目录：
 
 ```text
 src/Jellyfin.Plugin.StrmProbeOptimizer/
   Plugin.cs, PluginConfiguration.cs, ServiceRegistrator.cs
-  Interceptors/                 # 若包装方案验证成立
-  Services/                     # Reader、Decision、Coordinator、NativeExecutor
+  Interceptors/                 # 原生服务包装与实际开始／保存信号
+  Services/                     # Reader、Decision、Coordinator、SQLite、Optimizer、批量读取与执行
   Tasks/                        # StrmProbeScheduledTask
-  Persistence/                  # StrmFingerprintRepository
-  Configuration/                # 配置页，无独立任务管理 UI
+  Configuration/                # 嵌入 HTML 配置页
 tests/Jellyfin.Plugin.StrmProbeOptimizer.Tests/
-tests/Jellyfin.Plugin.StrmProbeOptimizer.IntegrationTests/
+scripts/run_isolated_*_integration.py
 ```
 
 ## 指纹与提交
 
-V4.2 最小表目标：
+V4.2 引入、当前 SQLite 已使用的最小表：
 
 ```sql
 CREATE TABLE strm_fingerprint (
@@ -121,11 +126,11 @@ CREATE TABLE strm_fingerprint (
 
 运行中共享登记只包含实际已进入原生探测调用且尚未结束的工作，开始信号须经接入层核验；仅创建 Task、排队、等待或取得许可都不算。未开始请求各自排队，保留调用者权限／生命周期；不把同键排队任务合并为共享执行。获得执行机会后重读 Manifest 和指纹，若同源已经实际开始才加入，否则按最新决策开始或复用已保存结果。协调开始竞态，避免同源重复实际执行；加入已开始探测不额外占全局许可。不同源独立，共用总上限；执行结束后释放许可／登记，等待者重查版本，不把完成任务缓存成运行中共享。
 
-批量任务的停止在 Slice 3 处理：停止后续候选获取／批次读取，撤销本任务未实际开始的请求；不能取消其他调用者的排队请求。先确认停止的工作不再开始，已实际开始的工作继续完成，任务进入停止收尾并等待其结果结算。停止 token 不传播给已开始探测；原生保存／验证／指纹条件提交继续执行，不用批量停止 token 在成功返回后阻止有效提交。
+批量任务的停止已在 Slice 3 实现并验证：停止后续候选获取／批次读取，撤销本任务未实际开始的请求；不能取消其他调用者的排队请求。先确认停止的工作不再开始，已实际开始的工作继续完成，任务进入停止收尾并等待其结果结算。停止 token 不传播给已开始探测；原生保存／验证／指纹条件提交继续执行，不用批量停止 token 在成功返回后阻止有效提交。
 
 等待者退出或数量为零均不取消已开始探测，不需要按等待者计数取消执行的机制，也不新增独立执行取消源。原生探测自身失败／取消异常仍保留旧基线并传播；成功必须满足本次真实探测、保存、主流和稳定 Manifest 条件。当前公共 PlaybackInfo 沿用 None token，不新增客户端断开／停止播放到探测取消的关联。
 
-核心并发配置默认 2、可保存 1～8，下一次 Jellyfin 启动生效；保存说明须明确，不要求 Slice 2 热调整已有许可池。核心配置通过 Jellyfin 已有保存通道提供，完整配置页仍在 Slice 3。
+核心并发配置默认 2、可保存 1～8，下一次 Jellyfin 启动生效；保存说明须明确，不要求 Slice 2 热调整已有许可池。完整配置页通过 Jellyfin 已有保存通道提供，五项配置和错误反馈已在 Slice 3 接受。
 
 批量使用目标版本原生 `ILibraryManager.GetItemIds`，按所选库关系和同一过滤取得物理媒体项 ID；包含 alternate versions，关闭展示聚合。允许一次取得全部候选身份，去重后以确定顺序固定本轮 ID 序列，不依赖名称／原生 offset 排序。按固定批次使用 `GetItemList(ItemIds=批次ID)` 读取当前对象，并通过原生库关系重核范围；消失／移出者安全结算，新增留下一轮。固定消费者处理当前批次，整批结算后才读取下一批，不要求独立生产者／等待队列，也不为每个 ID 创建 Task。
 
@@ -135,7 +140,7 @@ ID 获取完成前不开始对象处理；任一所选库获取失败时报告�
 
 ## 接入门槛与故障
 
-Slice 1 先验证核心 DI、真正探测结果信号及原生地址持久化；失败时给出调整／阻塞结论，不绕过门槛铺开产品。任务接口源码定位不等于已加载或定时执行通过；实际注册、默认无触发时间、停止／进度在 Slice 3 验证。首版不接 ILibraryPostScanTask。
+Slice 1 先验证核心 DI、真正探测结果信号及原生地址持久化；失败时给出调整／阻塞结论，不绕过门槛铺开产品。任务接口源码定位不等于已加载或定时执行通过；实际注册、默认无触发时间、定时／停止／进度已由 Slice 3 的独立 Final 验证。首版不接 ILibraryPostScanTask。
 
 原生刷新成功返回、ItemUpdateType、旧主流和媒体更新事件均不足以确认本次成功。URL 改变必须实际原生探测，并使用已保存的新地址，不另加路径单独更新服务。
 

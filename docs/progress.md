@@ -6,6 +6,7 @@
 |---|---|---|---|
 | 1 — Jellyfin 核心接入与指纹提交验证 | `8a6a955357a6fe7a6aea9dafead0ec33ffd203f3` | `2b1e1b5bcf77b06997fabed5a31147838db16b47` | PASS / CLOSED；2026-10-13；[关闭快照与证据](#slice-1-closed) |
 | 2 — 播放检查与历史指纹完整闭环 | `924816a84c74f5d79c107478f2d40e621cb8be8d` | `59fd3f7e4b6623449a691574fb69b817db72c2ae` | PASS / CLOSED；2026-10-14；[关闭范围与证据](#slice-2-closed) |
+| 3 — Jellyfin 原生批量检查任务 | `6da90ab6bd8995d8204ae0b7faf786c823699fe6` | `7c64eb5dcad6e5f20fb7eb41819be2521f65484d` | PASS / CLOSED；2026-10-16；[关闭范围与证据](#slice-3-closed) |
 
 <a id="slice-1-closed"></a>
 ## Slice 1 关闭快照与证据
@@ -29,13 +30,22 @@ Slice 2 交付完整版本 1 解析／决策、首次信任、五字段 SQLite �
 - 原始本机索引：`.git/validation-evidence/59fd3f7e4b6623449a691574fb69b817db72c2ae/` 下的 `b-rereview-20261014-08/INDEX.md`、`slice-final-20261014-09/INDEX.md` 与 `a-final-review-20261014/INDEX.md`；Task 2.1 索引位于对应实现 SHA 下的 `b-rereview-20261014-03/INDEX.md`。仅本工作区可读；原始命令、摘要、计数、日志及恢复清理均可核验。
 - 已接受范围不含完整配置页、原生批量／实际停止收尾、大规模／扫描、外部代理、发布或跨版本兼容。逐分支 T09～T11、audio-only 实机、内部数据库故障实机注入、完整镜像构建溯源和通用性能证明仍 NOT RUN；具体分层状态见 [测试矩阵](test-matrix.md)。
 
+<a id="slice-3-closed"></a>
+## Slice 3 关闭范围与证据
+
+Slice 3 交付完整配置页／所选媒体库、Jellyfin 原生「STRM 媒体信息检查」的运行／停止／定时、候选 ID 固定后分批读取及按需检查、播放混合共享、停止收尾和准确故障反馈。首次信任不引起全库重探测；已开始探测不因批量停止取消，满足原成功条件仍提交，旧轮收尾后才允许下一轮实际运行。
+
+- A 审查完整 `6da90ab6bd8995d8204ae0b7faf786c823699fe6..7c64eb5dcad6e5f20fb7eb41819be2521f65484d` 后裁定 PASS / CLOSED，P0/P1 Blockers 为 NONE FOUND，AF-1 CLOSED。审查 checkout `aa78c06216ec30fbefd288ac4c73e9a7d44afa95`；本关闭检查点的 `SLICE.md` 保留完整合同、Closure Packet、A Final Review 和 Closure Reconciliation。只协调文档，不移动 Base、不扩展接受实现、不激活下一 Slice。
+- Task 3.1 Base `b86d9c17d7f915108072f54ee098f0f5543fe093`、接受实现为当前 Slice Head，完整计划／报告／B PASS 在 `aa78c06216ec30fbefd288ac4c73e9a7d44afa95:TASK.md` 及可达历史。Task 3.2 Base `2f74aa83f15707df56c4b15409ba1538a488f83a`、实现 `5580492a5cacbdc0772dd2f14f9b527ab3851746`，历史 B PASS 在 `678bcf5c3a6ba5c6743402ec27367dd76d0f101d:TASK.md`。旧 A 拒绝及历次修正／FAIL 保留，不重写为 PASS。
+- 新单独 Slice Final：locked restore／Release build／format、202 C#／63 Python、默认真实播放、七场景 batch 与配置页 19 个浏览器场景全部 PASS，无 Final 门槛失败／重试。配置／全部触发器／夹具恢复、临时条目清理。A 核验 82 项输入、232 项构建产物及 405 个证据摘要后明确复用真实 Final；另独立复跑全部 C#／Python 与 16 项准入／末项故障控制，全部 PASS，未声称 A 再次实机运行。
+- 本机索引：`.git/validation-evidence/7c64eb5dcad6e5f20fb7eb41819be2521f65484d/` 下的 `slice-final-20261016/INDEX.md`、`b-review-20261016/INDEX.md` 与 `a-final-review-20261016/INDEX.md`。仅本工作区可读；原始命令、身份、日志、计数、交互／截图、恢复和复用范围均可核验。
+- 十万模拟候选验证有界对象／消费者及 O(N) ID 成本，代表实机验证多库多批／多版本；不构成真实十万库或恒定总内存证明。日志跨日关联与指数措辞保留 P2。真实十万库／完整扫描压力、外部代理／OpenList、广泛格式／客户端和发布仍 NOT RUN；逐分支／audio-only 实机、物理数据库保存故障注入、完整镜像构建溯源与通用性能证明沿用既有边界。
+
 ## 当前开发指针
 
-- 开发基准：V4.3；Slice 1／2 PASS / CLOSED，V3.0 与历史失败保留在 Git／原始证据。
-- 当前 [Slice 3](../SLICE.md)：FIX REQUIRED，真实 Base 为 Slice 2 关闭提交 `6da90ab6bd8995d8204ae0b7faf786c823699fe6`，实现检查点 `5580492a5cacbdc0772dd2f14f9b527ab3851746`。路线项仍 ACTIVE，未列入关闭账本。
-- 已有完整配置页和原生批量实现及独立 Final，历史 Task 3.1／3.2 均 B PASS；完整快照分别为 `2f74aa83f15707df56c4b15409ba1538a488f83a:TASK.md`、`678bcf5c3a6ba5c6743402ec27367dd76d0f101d:TASK.md`。七个 Required Outcomes、原始 Final 和失败／重跑披露见当前合同的 Closure Packet，不代表 A 已接受完整能力。
-- 2026-10-16，A 审查完整 Base..实现检查点后判 [FIX REQUIRED](../SLICE.md#a-final-review)：AF-1（P1）为准入前禁用／状态库故障丢失提前结束原因，末批补满 100% 且原生任务实现正常返回。四个独立确定性控制已复现；现有 C# 182／182、Python 63／63 仍通过。根 [TASK.md](../TASK.md) 无活动实施任务，交 B 计划同一 Slice 内纠正；Base／合同不变，无 Material Contract Change。
-- 公共 PlaybackInfo 的 None token、原生取消异常保护、只共享已开始探测及批量仅撤销未开始工作的规则不变；历史 Material Contract Change 见 Slice 2 关闭快照。
-- 本机 A 索引 `.git/validation-evidence/5580492a5cacbdc0772dd2f14f9b527ab3851746/a-final-review-20261016/INDEX.md` 保留输入／产物核验、原始控制与回归；本轮实机未重跑，复用已核验 Final 的分层事实。已有实现尚未 A 关闭；真实大库、完整扫描压力、外部联调与发布仍 NOT RUN，Slice 4 保持 PLANNED。
+- 开发基准 V4.3；Slice 1／2／3 均 PASS / CLOSED，历史失败与合同变更保留在 Git／原始证据。
+- 最新接受实现 `7c64eb5dcad6e5f20fb7eb41819be2521f65484d`；[Slice 3](../SLICE.md) Base 固定，七个 Required Outcomes／六类 Required Surfaces 已接受。当前 [TASK.md](../TASK.md) 无活动实施任务。
+- 本关闭检查点同步全部 CURRENT／状态和角色经验；稳定需求、正确性及取消／共享规则不变，没有 Material Contract Change。
+- Slice 4 保持 PLANNED，真实大库／完整扫描压力、外部联调与发布未完成。本轮停止，下一轮由 A 选择和激活后续 Slice。
 
-NEXT ACTION: B PLANS THE IN-SLICE CORRECTION FOR AF-1
+NEXT ACTION: A SELECTS THE NEXT LARGE SLICE
