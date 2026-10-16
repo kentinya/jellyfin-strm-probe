@@ -238,7 +238,7 @@ public sealed class BatchCheckRunner
             result.CandidateFetchFailed = true;
             // A stop or disable confirmed during the synchronous query must not disappear behind the fetch
             // failure: the native task can then report both the administrator cancellation and the failure.
-            counters.StopRequested |= stopSignal.IsStopped ? 1 : 0;
+            counters.StopRequested |= stopSignal.CancellationToken.IsCancellationRequested ? 1 : 0;
             counters.Disabled |= _settings.Enabled ? 0 : 1;
             _logger.LogWarning("The batch candidate identity query failed; no media object was processed. Failure category {FailureType}.", exception.GetType().Name);
             // Preserve the identity work already measured before the failure (partial raw ids, duplicates, time,
@@ -267,7 +267,7 @@ public sealed class BatchCheckRunner
         {
             // The candidate identity set was interrupted before every selected library was queried. The complete
             // candidate total is unknown, so no complete denominator is published and no object is processed.
-            counters.StopRequested |= stopSignal.IsStopped ? 1 : 0;
+            counters.StopRequested |= stopSignal.CancellationToken.IsCancellationRequested ? 1 : 0;
             counters.Disabled |= _settings.Enabled ? 0 : 1;
             Copy(counters, candidateCount: 0, result, completed: false, candidateTotalKnown: false, candidateFetchMilliseconds: fetchMilliseconds);
             return result;
@@ -278,7 +278,13 @@ public sealed class BatchCheckRunner
         {
             // Every selected library was queried before the stop/disable, so the complete identity set is known.
             // Keep the real denominator and count every not-yet-read candidate as unread instead of discarding it.
-            counters.StopRequested |= stopSignal.IsStopped ? 1 : 0;
+            // A disable closes admission for the whole run so no already-dispatched candidate can start later.
+            if (!_settings.Enabled)
+            {
+                stopSignal.CloseAdmission();
+            }
+
+            counters.StopRequested |= stopSignal.CancellationToken.IsCancellationRequested ? 1 : 0;
             counters.Disabled |= _settings.Enabled ? 0 : 1;
             counters.Unread = candidateCount;
             Copy(counters, candidateCount, result, completed: false, candidateTotalKnown: true, candidateFetchMilliseconds: fetchMilliseconds);
@@ -289,7 +295,12 @@ public sealed class BatchCheckRunner
         {
             if (stopSignal.IsStopped || !_settings.Enabled || _optimizer.IsFingerprintStoreUnavailable)
             {
-                counters.StopRequested |= stopSignal.IsStopped ? 1 : 0;
+                if (!_settings.Enabled)
+                {
+                    stopSignal.CloseAdmission();
+                }
+
+                counters.StopRequested |= stopSignal.CancellationToken.IsCancellationRequested ? 1 : 0;
                 counters.Disabled |= _settings.Enabled ? 0 : 1;
                 counters.StoreUnavailable |= _optimizer.IsFingerprintStoreUnavailable ? 1 : 0;
                 break;
@@ -342,7 +353,7 @@ public sealed class BatchCheckRunner
             Interlocked.Add(ref counters.Unread, unaccounted);
         }
 
-        counters.StopRequested |= stopSignal.IsStopped ? 1 : 0;
+        counters.StopRequested |= stopSignal.CancellationToken.IsCancellationRequested ? 1 : 0;
         var completed = counters.StopRequested == 0
             && counters.StoreUnavailable == 0
             && counters.Disabled == 0
@@ -471,6 +482,11 @@ public sealed class BatchCheckRunner
                         {
                             if (!_settings.Enabled)
                             {
+                                // A disable observed by one consumer must close admission for the whole run, not
+                                // only for the next dequeue. An already-dispatched consumer that later observes a
+                                // re-enabled plugin must still be refused at its start boundary so it never adds a
+                                // new probe after the reason was observed.
+                                stopSignal.CloseAdmission();
                                 Interlocked.Exchange(ref counters.Disabled, 1);
                             }
 

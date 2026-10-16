@@ -127,11 +127,30 @@ public sealed class BatchStopSignal : IDisposable
     {
         lock (_gate)
         {
-            if (_stopped == 0)
+            // Record the administrator-stop timestamp once. A disable may already have closed admission
+            // without a timestamp, so a later real administrator stop must still be measured.
+            if (StoppedTimestamp == 0)
             {
                 StoppedTimestamp = System.Diagnostics.Stopwatch.GetTimestamp();
             }
 
+            _stopped = 1;
+        }
+    }
+
+    /// <summary>
+    /// Closes admission for this run without cancelling the token or recording an administrator stop. It reuses
+    /// the same latch as <see cref="ConfirmStop"/> so a reason already observed by one consumer (a mid-run
+    /// disable) also stops every other already-dispatched but not-yet-started candidate of the same run, even if
+    /// the plugin is re-enabled before those candidates reach their start boundary. It never cancels an already
+    /// started probe, native save, verification or conditional commit, and it does not clear a later real
+    /// administrator stop. The reason itself is recorded by the caller through the existing disabled counter;
+    /// this latch only answers whether the run may still admit new work.
+    /// </summary>
+    public void CloseAdmission()
+    {
+        lock (_gate)
+        {
             _stopped = 1;
         }
     }

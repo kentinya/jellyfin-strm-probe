@@ -873,6 +873,275 @@ public sealed class BatchCheckTests
         Assert.AreEqual(0, harness.Coordinator.ActivePermits);
     }
 
+    [TestMethod]
+    [TestCategory("BatchAdmissionFailure")]
+    public async Task BatchDisabledAfterDecisionStopsAnAlreadyDispatchedConsumerEvenAfterReEnable()
+    {
+        // Two consumers both reach a changed-source decision while enabled. One observes the disable and settles;
+        // the plugin is then re-enabled before the other, already-dispatched consumer resumes. The observed reason
+        // must close admission for the whole run so the second consumer never starts a native probe after the
+        // re-enable. This is the post-decision / before-permit window of the AF-1 concurrency gap.
+        using var harness = new BatchHarness();
+        var first = harness.AddSupported("https://media.example.invalid/a.mp4", ValidSha1, 10);
+        var second = harness.AddSupported("https://media.example.invalid/b.mp4", ValidSha1, 10);
+        harness.CandidateIds = [first.Id, second.Id];
+        await harness.RunAsync();
+        var baselineFirst = harness.Repository.Get(first.Id, Key(first.Id));
+        var baselineSecond = harness.Repository.Get(second.Id, Key(second.Id));
+        Assert.IsNotNull(baselineFirst);
+        Assert.IsNotNull(baselineSecond);
+        harness.WriteManifest(first, "https://media.example.invalid/a.mp4?sig=changed", ValidSha1, 10);
+        harness.WriteManifest(second, "https://media.example.invalid/b.mp4?sig=changed", ValidSha1, 10);
+        harness.ConsumerLimit = 2;
+        using var secondDecided = new ManualResetEventSlim();
+        using var firstSettled = new ManualResetEventSlim();
+        var decisions = 0;
+        var disabledObserved = false;
+        var startsAfterObservedDisable = 0;
+        harness.OnBatchDecision = () =>
+        {
+            var order = Interlocked.Increment(ref decisions);
+            if (order == 1)
+            {
+                Assert.IsTrue(secondDecided.Wait(TimeSpan.FromSeconds(10)), "Both consumers must reach a decision before the disable.");
+                harness.Enabled = false;
+            }
+            else
+            {
+                secondDecided.Set();
+                Assert.IsTrue(firstSettled.Wait(TimeSpan.FromSeconds(10)), "The first refusal must settle before the second consumer resumes.");
+            }
+        };
+        harness.ConsumerActivityHook = active =>
+        {
+            if (!active && !harness.Enabled)
+            {
+                disabledObserved = true;
+                harness.Enabled = true;
+                firstSettled.Set();
+            }
+        };
+        harness.AfterProbeStart = () =>
+        {
+            if (disabledObserved)
+            {
+                Interlocked.Increment(ref startsAfterObservedDisable);
+            }
+        };
+        var reported = new List<double>();
+        var progress = new SynchronousProgress(value =>
+        {
+            lock (reported)
+            {
+                reported.Add(value);
+            }
+        });
+
+        var result = await harness.RunWithProgressAsync(progress, CancellationToken.None);
+
+        Assert.AreEqual(2, decisions, "Both dispatched consumers must reach their decision before the re-enable.");
+        Assert.IsTrue(disabledObserved, "The first consumer must observe and settle the disable before the re-enable.");
+        Assert.AreEqual(0, startsAfterObservedDisable, "An already-dispatched consumer that had not started before the observed disable must not start after a re-enable.");
+        Assert.AreEqual(0, harness.ProbeCalls, "No native probe may start in a run whose admission was closed by an observed disable.");
+        Assert.AreEqual(0, harness.StartedProbes);
+        Assert.AreEqual(baselineFirst, harness.Repository.Get(first.Id, Key(first.Id)), "The first accepted baseline must survive the refusal.");
+        Assert.AreEqual(baselineSecond, harness.Repository.Get(second.Id, Key(second.Id)), "The second accepted baseline must survive the refusal.");
+        Assert.IsTrue(result.Disabled);
+        Assert.IsFalse(result.Completed);
+        Assert.AreEqual(2, result.Revoked, "Both dispatched but unstarted candidates must settle as revoked.");
+        Assert.AreEqual(2, result.Settled, "Each candidate must settle exactly once for this run.");
+        Assert.AreEqual(0, result.NotProcessed);
+        Assert.AreEqual(0, result.ReliableSuccess);
+        Assert.AreEqual(0, result.ActualProbeCalls);
+        Assert.IsTrue(reported.Count > 0 && reported.Max() < 100, "A run whose admission was closed by an observed disable must not fill progress to 100%.");
+        Assert.AreEqual(0, harness.Coordinator.RunningCount);
+        Assert.AreEqual(0, harness.Coordinator.PreparingCount);
+        Assert.AreEqual(0, harness.Coordinator.ActivePermits);
+    }
+
+    [TestMethod]
+    [TestCategory("BatchAdmissionFailure")]
+    public async Task BatchDisabledAfterImmediatePermitStopsAnAlreadyDispatchedConsumerEvenAfterReEnable()
+    {
+        // Both consumers acquire a global permit immediately (limit 2) but have not registered yet. One observes
+        // the disable and settles; the plugin is re-enabled before the other resumes. The observed reason must
+        // still close admission for the whole run so the second consumer never starts a native probe.
+        using var harness = new BatchHarness();
+        var first = harness.AddSupported("https://media.example.invalid/a.mp4", ValidSha1, 10);
+        var second = harness.AddSupported("https://media.example.invalid/b.mp4", ValidSha1, 10);
+        harness.CandidateIds = [first.Id, second.Id];
+        await harness.RunAsync();
+        var baselineFirst = harness.Repository.Get(first.Id, Key(first.Id));
+        var baselineSecond = harness.Repository.Get(second.Id, Key(second.Id));
+        Assert.IsNotNull(baselineFirst);
+        Assert.IsNotNull(baselineSecond);
+        harness.WriteManifest(first, "https://media.example.invalid/a.mp4?sig=changed", ValidSha1, 10);
+        harness.WriteManifest(second, "https://media.example.invalid/b.mp4?sig=changed", ValidSha1, 10);
+        harness.ConsumerLimit = 2;
+        using var coordinator = new ProbeCoordinator(2);
+        using var secondAcquired = new ManualResetEventSlim();
+        using var firstSettled = new ManualResetEventSlim();
+        var acquiredCount = 0;
+        var disabledObserved = false;
+        var startsAfterObservedDisable = 0;
+        coordinator.PermitAcquiredBarrier = () =>
+        {
+            if (Interlocked.Increment(ref acquiredCount) == 1)
+            {
+                Assert.IsTrue(secondAcquired.Wait(TimeSpan.FromSeconds(10)), "Both consumers must acquire a permit before the disable.");
+                harness.Enabled = false;
+            }
+            else
+            {
+                secondAcquired.Set();
+                Assert.IsTrue(firstSettled.Wait(TimeSpan.FromSeconds(10)), "The first refusal must settle before the second consumer resumes.");
+            }
+        };
+        harness.ReplaceCoordinator(coordinator);
+        harness.ConsumerActivityHook = active =>
+        {
+            if (!active && !harness.Enabled)
+            {
+                disabledObserved = true;
+                harness.Enabled = true;
+                firstSettled.Set();
+            }
+        };
+        harness.AfterProbeStart = () =>
+        {
+            if (disabledObserved)
+            {
+                Interlocked.Increment(ref startsAfterObservedDisable);
+            }
+        };
+        var reported = new List<double>();
+        var progress = new SynchronousProgress(value =>
+        {
+            lock (reported)
+            {
+                reported.Add(value);
+            }
+        });
+
+        var result = await harness.RunWithProgressAsync(progress, CancellationToken.None);
+
+        Assert.AreEqual(2, acquiredCount, "Both consumers must actually acquire a permit before the disable.");
+        Assert.IsTrue(disabledObserved, "The first consumer must observe and settle the disable before the re-enable.");
+        Assert.AreEqual(0, startsAfterObservedDisable, "An already-dispatched consumer that had not started before the observed disable must not start after a re-enable.");
+        Assert.AreEqual(0, harness.ProbeCalls);
+        Assert.AreEqual(0, harness.StartedProbes);
+        Assert.AreEqual(baselineFirst, harness.Repository.Get(first.Id, Key(first.Id)));
+        Assert.AreEqual(baselineSecond, harness.Repository.Get(second.Id, Key(second.Id)));
+        Assert.IsTrue(result.Disabled);
+        Assert.IsFalse(result.Completed);
+        Assert.AreEqual(2, result.Revoked);
+        Assert.AreEqual(2, result.Settled, "Each candidate must settle exactly once for this run.");
+        Assert.AreEqual(0, result.NotProcessed);
+        Assert.AreEqual(0, result.ReliableSuccess);
+        Assert.AreEqual(0, result.ActualProbeCalls);
+        Assert.IsTrue(reported.Count > 0 && reported.Max() < 100, "A run whose admission was closed by an observed disable must not fill progress to 100%.");
+        Assert.AreEqual(0, coordinator.RunningCount);
+        Assert.AreEqual(0, coordinator.PreparingCount);
+        Assert.AreEqual(0, coordinator.ActivePermits);
+    }
+
+    [TestMethod]
+    [TestCategory("BatchAdmissionFailure")]
+    public async Task BatchDisabledAfterWaitingForAPermitStopsAnAlreadyDispatchedConsumerEvenAfterReEnable()
+    {
+        // A single global permit is held by an independent reservation, so both consumers actually wait for it.
+        // Once both have reached the real SemaphoreSlim wait the independent permit is released; one consumer
+        // observes the disable and settles, the plugin is re-enabled, and the other resumes. The observed reason
+        // must still close admission for the whole run so no probe starts after the re-enable.
+        using var harness = new BatchHarness();
+        var first = harness.AddSupported("https://media.example.invalid/a.mp4", ValidSha1, 10);
+        var second = harness.AddSupported("https://media.example.invalid/b.mp4", ValidSha1, 10);
+        harness.CandidateIds = [first.Id, second.Id];
+        await harness.RunAsync();
+        var baselineFirst = harness.Repository.Get(first.Id, Key(first.Id));
+        var baselineSecond = harness.Repository.Get(second.Id, Key(second.Id));
+        Assert.IsNotNull(baselineFirst);
+        Assert.IsNotNull(baselineSecond);
+        harness.WriteManifest(first, "https://media.example.invalid/a.mp4?sig=changed", ValidSha1, 10);
+        harness.WriteManifest(second, "https://media.example.invalid/b.mp4?sig=changed", ValidSha1, 10);
+        harness.ConsumerLimit = 2;
+        using var coordinator = new ProbeCoordinator(1);
+        harness.ReplaceCoordinator(coordinator);
+        var blocker = await coordinator.AcquireAsync(Guid.NewGuid(), "independent-permit-holder", "control", CancellationToken.None);
+        using var bothWaiting = new ManualResetEventSlim();
+        using var firstSettled = new ManualResetEventSlim();
+        var waitCount = 0;
+        var acquiredCount = 0;
+        var disabledObserved = false;
+        var startsAfterObservedDisable = 0;
+        coordinator.PermitWaitBarrier = () =>
+        {
+            if (Interlocked.Increment(ref waitCount) == 2)
+            {
+                bothWaiting.Set();
+            }
+        };
+        coordinator.PermitAcquiredBarrier = () =>
+        {
+            if (Interlocked.Increment(ref acquiredCount) == 1)
+            {
+                harness.Enabled = false;
+            }
+            else
+            {
+                Assert.IsTrue(firstSettled.Wait(TimeSpan.FromSeconds(10)), "The first refusal must settle before the second consumer resumes.");
+            }
+        };
+        harness.ConsumerActivityHook = active =>
+        {
+            if (!active && !harness.Enabled)
+            {
+                disabledObserved = true;
+                harness.Enabled = true;
+                firstSettled.Set();
+            }
+        };
+        harness.AfterProbeStart = () =>
+        {
+            if (disabledObserved)
+            {
+                Interlocked.Increment(ref startsAfterObservedDisable);
+            }
+        };
+        var reported = new List<double>();
+        var progress = new SynchronousProgress(value =>
+        {
+            lock (reported)
+            {
+                reported.Add(value);
+            }
+        });
+
+        var run = harness.RunWithProgressAsync(progress, CancellationToken.None);
+        Assert.IsTrue(bothWaiting.Wait(TimeSpan.FromSeconds(10)), "Both consumers must reach the real global permit wait.");
+        coordinator.Abandon(blocker.Item);
+        var result = await run.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.AreEqual(2, waitCount, "Both consumers must actually wait for the global permit.");
+        Assert.IsTrue(disabledObserved, "The first consumer must observe and settle the disable before the re-enable.");
+        Assert.AreEqual(0, startsAfterObservedDisable, "An already-dispatched consumer that had not started before the observed disable must not start after a re-enable.");
+        Assert.AreEqual(0, harness.ProbeCalls);
+        Assert.AreEqual(0, harness.StartedProbes);
+        Assert.AreEqual(baselineFirst, harness.Repository.Get(first.Id, Key(first.Id)));
+        Assert.AreEqual(baselineSecond, harness.Repository.Get(second.Id, Key(second.Id)));
+        Assert.IsTrue(result.Disabled);
+        Assert.IsFalse(result.Completed);
+        Assert.AreEqual(2, result.Revoked);
+        Assert.AreEqual(2, result.Settled, "Each candidate must settle exactly once for this run.");
+        Assert.AreEqual(0, result.NotProcessed);
+        Assert.AreEqual(0, result.ReliableSuccess);
+        Assert.AreEqual(0, result.ActualProbeCalls);
+        Assert.IsTrue(reported.Count > 0 && reported.Max() < 100, "A run whose admission was closed by an observed disable must not fill progress to 100%.");
+        Assert.AreEqual(0, coordinator.RunningCount);
+        Assert.AreEqual(0, coordinator.PreparingCount);
+        Assert.AreEqual(0, coordinator.ActivePermits);
+    }
+
     // ---------- Global failure (AC-T6) ----------
 
     [TestMethod]

@@ -722,7 +722,10 @@ public sealed class StrmPlaybackOptimizer
         {
             // The plugin was disabled before this owner obtained the execution opportunity. The exact reason must
             // reach the run summary so a last-candidate disable reports the early end (Cancelled) instead of an
-            // ordinary not-processed that fakes reliable completion.
+            // ordinary not-processed that fakes reliable completion. Closing admission here also stops every other
+            // already-dispatched candidate of this run, even if the plugin is re-enabled before it reaches its own
+            // start boundary; it never cancels an already started probe or a later administrator stop.
+            stopSignal.CloseAdmission();
             throw new BatchDisabledException(projectItemId, sourceKey);
         }
 
@@ -1384,6 +1387,10 @@ public sealed class StrmPlaybackOptimizer
 
                 if (!_settings.Enabled)
                 {
+                    // The plugin was disabled during native preparation. Close admission for the whole run before
+                    // aborting so an already-dispatched sibling candidate cannot start a probe after a re-enable,
+                    // then surface the exact reason to the runner.
+                    stopSignal.CloseAdmission();
                     throw new BatchDisabledException(projectItemId, sourceKey);
                 }
             }
