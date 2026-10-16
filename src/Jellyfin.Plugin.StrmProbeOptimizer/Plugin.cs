@@ -40,7 +40,7 @@ public sealed class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
 
     public override string Name => "STRM Probe Optimizer";
 
-    public override string Description => "Validates a Jellyfin-native STRM playback interception prototype.";
+    public override string Description => "Optimizes Jellyfin native STRM media probing for versioned STRM files on Jellyfin 12.2.0 (Linux x64).";
 
     /// <summary>
     /// Exposes the plugin's own configuration page through Jellyfin's standard plugin page mechanism. Jellyfin's

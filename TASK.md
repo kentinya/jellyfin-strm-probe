@@ -5,7 +5,7 @@
 ```text
 Task ID: 4.1
 Parent Slice: 4
-Status: PLANNED
+Status: READY FOR B REVIEW
 Task Base: ae265d0dba02aa1c5599871602d4350072b7155f
 Contract Checkpoint: ae265d0dba02aa1c5599871602d4350072b7155f
 Difficulty: High
@@ -134,23 +134,38 @@ B 审查完整 `ae265d0dba02aa1c5599871602d4350072b7155f..Implementation Head`�
 
 ## Developer Completion Report
 
-- Changed Files：NOT IMPLEMENTED。
-- Implemented：NOT IMPLEMENTED；当前仅有计划。
-- Tests and Results：产品／新工具／安装实机 NOT RUN；实施后补真实索引、完整源码与包身份、命令／计数／耗时、失败／重跑和复用边界。
-- Decisions：待实施后记录实际机制和必要取舍，不预填成功。
-- Remaining In-Slice Work：RO-2／RO-3／RO-4 及最终独立 Slice Final。
-- Risks / Deviations：浏览器实际执行链、包 native 依赖解析与升级基线均待验证；后续资源／代理缺口单列，不扩大本 Task。
-- Head SHA：NOT SET。
+- Changed Files：`scripts/package_plugin.py`、`scripts/package_environment.py`、`scripts/run_isolated_package_integration.py`、`scripts/package_playback_driver.mjs`（新增）；`scripts/run_isolated_plugin_integration.py`、`dev/compose.yaml`、`src/.../Jellyfin.Plugin.StrmProbeOptimizer.csproj`、`src/.../Packaging/meta.json`、`src/.../Plugin.cs`、`src/.../packages.lock.json`、`tests/test_package_plugin.py`、`tests/test_isolated_package_integration.py`、`docs/package-installation.md`（新增）；后续文档提交更新 README 与 CURRENT 事实指针。
+- Implemented：
+  - 打包：`package_plugin.py` 从 `dotnet publish`（Release／linux-x64／framework-dependent）与已锁依赖构造最小负载（插件程序集、deps、托管与 linux-x64 native SQLite、`meta.json`、`THIRD-PARTY-NOTICES.txt`），写确定性 ZIP 及清单／SHA-256，并独立验证归档（单顶层目录、GUID／ABI、汇编白名单、native 声明、拒绝越界路径与符号链接）。
+  - 隔离实例：`package_environment.py` 自建 Compose project（`jf-strm-probe-package-*`）、端口 `18097`、工作区 `artifacts/package-env`，服务器容器仅挂载 config／cache／strm／media，不挂源码／SDK／NuGet／bin；用固定 Jellyfin 镜像的 FFmpeg 生成 MP4／MKV 合成媒体；向导／库／凭证自建。
+  - 包验收：`run_isolated_package_integration.py` 仅消费归档，覆盖 clean（首次信任／未变／换 URL／重启／配置页／原生任务／MP4／MKV 原生 Web 播放）、upgrade（从 Slice 3 接受提交 `7c64eb5d…` 构建替换，保留配置与指纹并重检）、recovery（禁用／移除／重装）、invalid（损坏／缺 native／GUID／ABI／越界／符号链接拒绝且不损伤有效安装）。
+  - 元数据／描述与 `RuntimeIdentifiers`（`linux-x64`，使 locked restore 与 RID publish 一致，并新增 `net10.0/linux-x64` 锁段）。
+- Tests and Results：
+  - `bash scripts/dotnet-local restore … --locked-mode` PASS；`build --configuration Release --no-restore` 0 警告／0 错误；`test` 202/202 PASS；`format --verify-no-changes` PASS。
+  - `python3 -m unittest discover -s tests -v` 92/92 PASS（原 63 项加本 Task 29 项工具回归）。
+  - `python3 scripts/package_plugin.py --configuration Release --runtime linux-x64 --output-dir artifacts/releases` PASS；归档 SHA-256 `9c355ee1371fd5f4c65aee263712c98c730aaae9aeff3331dcd306d23266849d`，来源 SHA `6ef0a0f70a80688b586b79e172fdeede2a09b9af`。
+  - `python3 scripts/run_isolated_package_integration.py --package … --baseline-revision 7c64eb5dcad6e5f20fb7eb41819be2521f65484d --scenario all` PASS（clean／upgrade／recovery／invalid 均通过；MP4／MKV 视频时间与解码画面推进；负向包在部署前拒绝且有效安装保留）。
+  - 既有隔离回归：`run_isolated_plugin_integration.py` PASS；`run_isolated_batch_integration.py --scenario suite` PASS；`run_isolated_configuration_integration.py --scenario all` PASS。三者恢复与清理均验证。
+  - 原始证据索引：`.git/validation-evidence/dev/{clean-4,upgrade-1,recovery-1,invalid-1,all-3}/`（Developer 候选，仅本工作区可读；最终按 Implementation Head SHA 归档）。
+- Decisions：
+  - 归档采用框架依赖发布布局（托管 DLL 置根、native SQLite 置根并显式列入白名单／deps），已在隔离实例实证加载与 SQLite 读写；不夹带 Jellyfin 核心库或另一套 FFmpeg。
+  - 包实例使用独立 project／端口／工作区；为让 `JellyfinApi` 支持包实例凭证，给基类构造器增加可选 `credentials_path`（默认不变）。
+  - 首次信任前置改为在插件禁用下由 Jellyfin 原生播放建立主流；库扫描本身不探测 STRM 内容。
+  - `verify_archive` 以内容哈希比较部署负载，仅对 Jellyfin 会重写的 `meta.json` 按身份字段比较。
+  - HLS.js 非致命告警按 Jellyfin 自有 bundle 与 `Fatal: false` 精确白名单，致命或其他来源错误仍失败。
+- Remaining In-Slice Work：RO-2（真实十万库／成本）、RO-3（完整扫描重叠）、RO-4（实际 JellyfinProxy）及最终独立 Slice Final。
+- Risks / Deviations：浏览器执行链依赖仓库内固定 Playwright／Chromium（已在包实例实测）；升级基线需隔离 worktree 重建（本次实际使用 `7c64eb5d…`，记录了其发布文件摘要）；真实代理来源与十万库资源仍是后续 Task 风险，不在本 Task 扩大。
+- Head SHA：待提交后记录；本报告不预填自身提交 SHA。
 
 ## B Review Result
 
 ```text
 Reviewed: NOT SET
 Decision: PENDING
-Slice Required Outcomes all satisfied: NO — all four outcomes still await implementation/evidence
-Next: Developer implements Task 4.1; B reviews actual Base..Head
+Slice Required Outcomes all satisfied: NO — RO-1 implemented and pending independent review; RO-2/3/4 await implementation/evidence
+Next: B reviews Task 4.1 Base..Implementation Head and independently reproduces the key package behaviors
 ```
 
 B PASS 后重核全部 RO；仍按固定方案进入 4.2 时才规划下一 Task。全部 RO 满足则单独 Slice Final 并形成 Closure Packet；不在此关闭 Slice。
 
-NEXT ACTION: DEVELOPER IMPLEMENTS TASK 4.1
+NEXT ACTION: B REVIEWS TASK 4.1

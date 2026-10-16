@@ -5,7 +5,7 @@ services:
     user: "${JF_PROBE_UID:?}:${JF_PROBE_GID:?}"
     restart: "no"
     ports:
-      - "127.0.0.1:18096:8096"
+      - "127.0.0.1:${JF_PROBE_PORT:-18096}:8096"
     volumes:
       - ${JF_PROBE_WORK:?}/config:/config
       - ${JF_PROBE_WORK:?}/cache:/cache

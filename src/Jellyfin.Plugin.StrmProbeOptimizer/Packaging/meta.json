@@ -1,9 +1,9 @@
 {
   "category": "General",
-  "description": "STRM playback interception prototype for Jellyfin 12.2.0.",
+  "description": "Optimizes Jellyfin native STRM media probing for versioned STRM files on Jellyfin 12.2.0 (Linux x64).",
   "guid": "b061643e-d17d-4c6e-8ba2-6b57e286bd20",
   "name": "STRM Probe Optimizer",
-  "overview": "Validates native playback probe decisions and saved results for versioned STRM files.",
+  "overview": "Reuses saved Jellyfin media information for unchanged versioned STRM files and triggers a native probe only when the URL, content SHA-1 or byte size requires it.",
   "owner": "local-development",
   "targetAbi": "12.2.0.0",
   "version": "0.1.0.0",

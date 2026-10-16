@@ -183,8 +183,8 @@ def request_json(url: str, *, headers: dict[str, str] | None = None, data: bytes
 
 
 class JellyfinApi:
-    def __init__(self) -> None:
-        self.credentials_path = ROOT / "artifacts" / "dev-env" / "credentials.local.json"
+    def __init__(self, credentials_path: Path | None = None) -> None:
+        self.credentials_path = credentials_path or (ROOT / "artifacts" / "dev-env" / "credentials.local.json")
         require(self.credentials_path.is_file(), "Isolated Jellyfin credentials are unavailable.")
         require(self.credentials_path.stat().st_mode & 0o777 == 0o600, "Isolated Jellyfin credentials must remain mode 0600.")
         self.credentials = json.loads(self.credentials_path.read_text(encoding="utf-8"))
