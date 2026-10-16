@@ -40,7 +40,7 @@ Slice 3 已由 A 审查完整 `6da90ab6bd8995d8204ae0b7faf786c823699fe6..7c64eb5
 
 ## 已实现的批量与播放结构
 
-[Slice 3](../SLICE.md) 已关闭，接受实现 `7c64eb5dcad6e5f20fb7eb41819be2521f65484d`。以下为当前结构；外部代理联调、大规模／完整扫描压力和可安装发布包仍为 TARGET，留 Slice 4。固定组合上的真实任务、定时、停止和页面交互结果见 [测试矩阵](test-matrix.md)。
+[Slice 3](progress.md#slice-3-closed) 已关闭，接受实现 `7c64eb5dcad6e5f20fb7eb41819be2521f65484d`。以下为当前结构；外部代理联调、大规模／完整扫描压力和可安装发布包仍为 TARGET，已由 ACTIVE 的 [Slice 4 合同](../SLICE.md) 承接，新增验收均 NOT RUN。固定组合上的真实任务、定时、停止和页面交互结果见 [测试矩阵](test-matrix.md)。
 
 ```mermaid
 flowchart TD
@@ -145,3 +145,9 @@ Slice 1 先验证核心 DI、真正探测结果信号及原生地址持久化；
 原生刷新成功返回、ItemUpdateType、旧主流和媒体更新事件均不足以确认本次成功。URL 改变必须实际原生探测，并使用已保存的新地址，不另加路径单独更新服务。
 
 SQLite 运行时异常停止优化并尽可能原生委托，批量报告不可用而不转为全库强制刷新；核心注册失败明确报告，不承诺启动时总能自动回退。所有失败回退保留原调用探测权限。
+
+## TARGET — Slice 4 集成与单版本交付
+
+A 已激活 [Slice 4](../SLICE.md)，Base 为 Slice 3 关闭提交 `03169b07d110964562f7da31d2c3d7add82e5ff5`，尚无本 Slice 实现。以既有原生任务、ID 集合／分批、Coordinator、原生保存及 SQLite 条件提交为起点，补齐真实十万原生库成本、完整扫描重叠、实际 JellyfinProxy 播放链和固定 Jellyfin 12.2.0／Linux x64 包安装／恢复证据；不新建调度／运行状态系统。
+
+现有隔离工具会部署开发构建，`Packaging/meta.json` 仍为原型描述；打包／代理／真实大库入口尚未交付。目标包包含插件及所需 SQLite 托管和 native 依赖，以归档摘要关联源码／构建，干净实例只消费归档验收；不会把开发工具复制产物冒充包安装。代理是固定版本的外部组件，插件保留原生 PlaybackInfo／MediaSourceId／302 契约，受控后端不改变插件只读及无 OpenList 元数据 API 的边界。代表性格式／客户端、未用 OpenList 时的专有行为和其他未测范围均按合同准确报告；这些 TARGET 不构成 CURRENT 或跨版本支持。

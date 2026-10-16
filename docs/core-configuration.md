@@ -1,6 +1,6 @@
 # 核心配置与故障恢复操作说明
 
-本页记录已经 A 最终审查接受的配置操作、原子保存保护、完整配置页及原生任务恢复旅程；Slice 3 已 PASS / CLOSED，结果见 [关闭记录](progress.md#slice-3-closed) 与 [A 最终审查](../SLICE.md#a-final-review)。配置通过 Jellyfin 现有插件配置通道读写；运行／停止／定时使用原生任务界面，发布安装仍在 Slice 4。
+本页记录已经 A 最终审查接受的配置操作、原子保存保护、完整配置页及原生任务恢复旅程；Slice 3 已 PASS / CLOSED，结果见 [关闭记录](progress.md#slice-3-closed) 与 [A 最终审查快照](progress.md#slice-3-closed)。配置通过 Jellyfin 现有插件配置通道读写；运行／停止／定时使用原生任务界面，发布安装仍在 Slice 4。
 
 ## 配置页面
 

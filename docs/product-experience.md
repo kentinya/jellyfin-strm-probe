@@ -1,6 +1,6 @@
 # 用户旅程
 
-以下定义 V4.3 及用户后续授权的完整产品旅程。CURRENT：Slice 1／2／3 已 PASS / CLOSED，播放检查、SQLite 历史指纹、稳定多源、运行中共享／全局并发、完整配置页、原生批量管理和恢复已交付，分项事实见 [Closure Packet](../SLICE.md#closure-packet) 与 [A 最终审查](../SLICE.md#a-final-review)。大规模／完整扫描压力、代理联调和发布安装仍为 TARGET；当前 [TASK.md](../TASK.md) 无活动实施任务。核心能力关闭不表示完整产品交付。
+以下定义 V4.3 及用户后续授权的完整产品旅程。CURRENT：Slice 1／2／3 已 PASS / CLOSED，播放检查、SQLite 历史指纹、稳定多源、运行中共享／全局并发、完整配置页、原生批量管理和恢复已交付，分项事实、最终包与 A 决定见 [Slice 3 关闭快照](progress.md#slice-3-closed)。[Slice 4](../SLICE.md) 已 ACTIVE，承接真实十万库／完整扫描、实际代理播放链及固定 Jellyfin／Linux x64 安装与恢复旅程；这些结果仍为 TARGET／NOT RUN，当前 [TASK.md](../TASK.md) 无活动实施任务，由 B 先规划。核心能力关闭不表示完整产品交付。
 
 ## 安装与首次接管
 

@@ -1,6 +1,6 @@
 # 插件需求
 
-状态：以下为完整产品的稳定需求；Slice 1／2／3 已 PASS / CLOSED，播放／历史指纹／运行中共享、完整配置页及原生批量已交付，真实大库／完整扫描压力、外部联调与发布仍为 TARGET。分层证据见 [Closure Packet](../SLICE.md#closure-packet)，最终决定见 [A 审查](../SLICE.md#a-final-review)。当前来源为 [V4.3 方案](<../Jellyfin STRM Probe Optimizer V4.3 开发方案.md>)、用户后续授权与 [范围说明](scope.md)。保留原需求及矩阵 ID；2026-10-14 按用户授权将批量滑动分页要求替代为候选 ID 集合＋分批对象读取，具体合同变更见 [Slice 3](../SLICE.md#material-contract-change--候选-id-集合与分批读取)。当前 [TASK.md](../TASK.md) 无活动实施任务；Slice 3 的实际验收与延期见 [关闭账本](progress.md#slice-3-closed)。
+状态：以下为完整产品的稳定需求；Slice 1／2／3 已 PASS / CLOSED，播放／历史指纹／运行中共享、完整配置页及原生批量已交付，真实大库／完整扫描压力、外部联调与发布仍为 TARGET。已接受合同、最终包和 A 决定见 [Slice 3 关闭快照](progress.md#slice-3-closed)。当前来源为 [V4.3 方案](<../Jellyfin STRM Probe Optimizer V4.3 开发方案.md>)、用户后续授权与 [范围说明](scope.md)。保留原需求及矩阵 ID；2026-10-14 按用户授权将批量滑动分页要求替代为候选 ID 集合＋分批对象读取，具体合同变更见 [Slice 3 关闭快照](progress.md#slice-3-closed)。[Slice 4](../SLICE.md) 已 ACTIVE，接续真实大库／扫描／代理及单版本安装旅程，新增验收均 NOT RUN；当前 [TASK.md](../TASK.md) 无活动实施任务，B 先规划。Slice 3 的实际验收与延期见关闭账本，本次只调整当前合同及事实指针，不改下方稳定需求。
 
 V4.2 的 URL 改变规则替代 V3.0 路径单独更新规则；STATE 编号现指历史指纹合同，不要求独立状态机。首次信任接管是唯一无需本次探测即可初建指纹的例外，不能计为成功探测。
 

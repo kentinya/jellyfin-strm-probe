@@ -35,7 +35,7 @@ Slice 2 交付完整版本 1 解析／决策、首次信任、五字段 SQLite �
 
 Slice 3 交付完整配置页／所选媒体库、Jellyfin 原生「STRM 媒体信息检查」的运行／停止／定时、候选 ID 固定后分批读取及按需检查、播放混合共享、停止收尾和准确故障反馈。首次信任不引起全库重探测；已开始探测不因批量停止取消，满足原成功条件仍提交，旧轮收尾后才允许下一轮实际运行。
 
-- A 审查完整 `6da90ab6bd8995d8204ae0b7faf786c823699fe6..7c64eb5dcad6e5f20fb7eb41819be2521f65484d` 后裁定 PASS / CLOSED，P0/P1 Blockers 为 NONE FOUND，AF-1 CLOSED。审查 checkout `aa78c06216ec30fbefd288ac4c73e9a7d44afa95`；本关闭检查点的 `SLICE.md` 保留完整合同、Closure Packet、A Final Review 和 Closure Reconciliation。只协调文档，不移动 Base、不扩展接受实现、不激活下一 Slice。
+- A 审查完整 `6da90ab6bd8995d8204ae0b7faf786c823699fe6..7c64eb5dcad6e5f20fb7eb41819be2521f65484d` 后裁定 PASS / CLOSED，P0/P1 Blockers 为 NONE FOUND，AF-1 CLOSED。审查 checkout `aa78c06216ec30fbefd288ac4c73e9a7d44afa95`；A 关闭检查点 `03169b07d110964562f7da31d2c3d7add82e5ff5` 的 `SLICE.md` 保留完整合同、候选 ID 方案修订、Closure Packet、A Final Review 和 Closure Reconciliation，`TASK.md` 保留完整 B PASS 指针。可用 `git show 03169b07d110964562f7da31d2c3d7add82e5ff5:SLICE.md` 读取。只协调文档，不移动 Base、不扩展接受实现、不激活下一 Slice。
 - Task 3.1 Base `b86d9c17d7f915108072f54ee098f0f5543fe093`、接受实现为当前 Slice Head，完整计划／报告／B PASS 在 `aa78c06216ec30fbefd288ac4c73e9a7d44afa95:TASK.md` 及可达历史。Task 3.2 Base `2f74aa83f15707df56c4b15409ba1538a488f83a`、实现 `5580492a5cacbdc0772dd2f14f9b527ab3851746`，历史 B PASS 在 `678bcf5c3a6ba5c6743402ec27367dd76d0f101d:TASK.md`。旧 A 拒绝及历次修正／FAIL 保留，不重写为 PASS。
 - 新单独 Slice Final：locked restore／Release build／format、202 C#／63 Python、默认真实播放、七场景 batch 与配置页 19 个浏览器场景全部 PASS，无 Final 门槛失败／重试。配置／全部触发器／夹具恢复、临时条目清理。A 核验 82 项输入、232 项构建产物及 405 个证据摘要后明确复用真实 Final；另独立复跑全部 C#／Python 与 16 项准入／末项故障控制，全部 PASS，未声称 A 再次实机运行。
 - 本机索引：`.git/validation-evidence/7c64eb5dcad6e5f20fb7eb41819be2521f65484d/` 下的 `slice-final-20261016/INDEX.md`、`b-review-20261016/INDEX.md` 与 `a-final-review-20261016/INDEX.md`。仅本工作区可读；原始命令、身份、日志、计数、交互／截图、恢复和复用范围均可核验。
@@ -43,9 +43,9 @@ Slice 3 交付完整配置页／所选媒体库、Jellyfin 原生「STRM 媒体�
 
 ## 当前开发指针
 
-- 开发基准 V4.3；Slice 1／2／3 均 PASS / CLOSED，历史失败与合同变更保留在 Git／原始证据。
-- 最新接受实现 `7c64eb5dcad6e5f20fb7eb41819be2521f65484d`；[Slice 3](../SLICE.md) Base 固定，七个 Required Outcomes／六类 Required Surfaces 已接受。当前 [TASK.md](../TASK.md) 无活动实施任务。
-- 本关闭检查点同步全部 CURRENT／状态和角色经验；稳定需求、正确性及取消／共享规则不变，没有 Material Contract Change。
-- Slice 4 保持 PLANNED，真实大库／完整扫描压力、外部联调与发布未完成。本轮停止，下一轮由 A 选择和激活后续 Slice。
+- 开发基准 V4.3；Slice 1／2／3 均 PASS / CLOSED，历史失败与合同变更保留在 Git／原始证据；上方账本只记录已关闭能力。
+- 最新接受实现仍是 `7c64eb5dcad6e5f20fb7eb41819be2521f65484d`。Slice 3 的真实关闭提交为 `03169b07d110964562f7da31d2c3d7add82e5ff5`，完整合同／最终包和 Task／B 身份从该快照读取。
+- 2026-10-16，A 在关闭后的独立一轮选择并激活 [Slice 4](../SLICE.md)，Base 固定为上述关闭提交，Implementation Head 为 NOT SET。必要结果为单版本安装与恢复、真实十万原生库／成本、完整扫描重叠和实际代理播放链；[TASK.md](../TASK.md) 无活动实施任务，B 先规划。
+- 本次只提交合同与事实指针，不改产品／测试／工具或稳定需求和正确性规则，不运行产品实机。Slice 4 的新增验收均 NOT RUN；已有模拟／代表性实机与历史延期不升级为 PASS，完整产品和发布尚未完成。
 
-NEXT ACTION: A SELECTS THE NEXT LARGE SLICE
+NEXT ACTION: B PLANS FIRST TASK
