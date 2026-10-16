@@ -11,7 +11,7 @@
 
 ## 当前边界
 
-Slice 1／2 均已经 A 审查完整 Base..Implementation Head 并关闭为 PASS / CLOSED；历史合同／最终决定及不可变快照见 [关闭账本](progress.md)。2026-10-14，A 激活 [Slice 3](../SLICE.md)，其后按用户授权实质修订为候选 ID 集合＋分批读取。Slice ID、ACTIVE、Base `6da90ab6bd8995d8204ae0b7faf786c823699fe6` 不变，Implementation Head 为 NOT SET。原 Task 3.1 计划保留，合同提交后 B 判断合法调整，状态见 [TASK.md](../TASK.md)。Slice 4 保持 PLANNED；文档修订不表示批量／UI／停止或定时通过。
+Slice 1／2 均已经 A 审查完整 Base..Implementation Head 并关闭为 PASS / CLOSED；历史合同／最终决定及不可变快照见 [关闭账本](progress.md)。Slice 3 仍在 ACTIVE 路线项内，当前合同状态为 FIX REQUIRED，Base `6da90ab6bd8995d8204ae0b7faf786c823699fe6`、实现检查点 `5580492a5cacbdc0772dd2f14f9b527ab3851746` 保留。2026-10-16，A 审查完整范围后发现 AF-1（P1）：准入前禁用／状态库故障被计普通不处理，末批伪报 Completed／100%；[最终审查](../SLICE.md#a-final-review) 交 B 计划同一 Slice 内的纠正，根 [TASK.md](../TASK.md) 暂无活动实施任务。历史 B PASS／Final 证据保留，不作为 A 关闭结论；Slice 4 保持 PLANNED。
 
 从 V3.0 的三个 Slice 改为四个 Slice 是实质规划调整；旧规划见重规划前检查点 `4b1d0468c1e43e6e9034ef98e99b6cc44ea59485`。旧生成器 P1 始终排除，当前 P1 专指 V4.2 核心插件。
 

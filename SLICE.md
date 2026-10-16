@@ -4,7 +4,7 @@
 Slice ID: 3
 Name: Jellyfin 原生批量检查任务
 Owner: A
-Status: READY FOR A REVIEW
+Status: FIX REQUIRED
 Base SHA: 6da90ab6bd8995d8204ae0b7faf786c823699fe6
 Implementation Head: 5580492a5cacbdc0772dd2f14f9b527ab3851746
 ```
@@ -157,7 +157,7 @@ Reviewed Implementation Range: 6da90ab6bd8995d8204ae0b7faf786c823699fe6..5580492
 Final Test Checkout: 678bcf5c3a6ba5c6743402ec27367dd76d0f101d
 B Decision: SLICE READY FOR A REVIEW
 B Known P0/P1 Blockers: NONE
-A Decision: NOT RUN
+A Decision: FIX REQUIRED — see A Final Review (2026-10-16)
 ```
 
 最终测试 checkout 只比实现检查点多报告／B 审查文档，可执行源码一致。Final 重新构建的 DLL SHA-256 为 `76c83b3f0d8e6fc5b936aabb9fa41897a6b9b7060819d813bf0b356b7bbc49d8`，与本轮真实部署／配置页验收记录一致；不混称为 Task 阶段的二进制。
@@ -230,8 +230,47 @@ NEXT ACTION: A REVIEWS THE COMPLETE SLICE; NO NEW IMPLEMENTATION TASK
 
 ## A Final Review
 
-NOT RUN。收到 Closure Packet 后审查完整 Slice，不在激活时预填 PASS。
+2026-10-16，A 完成必读清单、真实 Git 状态与治理检查，初始工作区干净。审查完整 Slice Base..Implementation Head，覆盖原生任务、候选 ID／分批／当前范围与多版本身份、共用执行／保存／指纹、共享／停止收尾、配置页、测试工具及文档差异；核阅两项 Task 的 B PASS 快照和本次独立 Slice Final 原始证据。最终决定如下，不改写历史 Task PASS 或 B 的交接决定。
 
 ```text
-NEXT ACTION: A REVIEWS THE COMPLETE SLICE; NO NEW IMPLEMENTATION TASK
+Reviewed Range: 6da90ab6bd8995d8204ae0b7faf786c823699fe6..5580492a5cacbdc0772dd2f14f9b527ab3851746
+Review Checkout: 0350747aff4489aa6aed877c7d885d82e0e26ad1
+Decision: FIX REQUIRED
+P0/P1 Blockers: AF-1 (P1)
+Slice Base / Implementation Checkpoint: UNCHANGED
+Material Contract Change: NO
+Closure Reconciliation: NOT RUN — Slice remains open
+```
+
+### AF-1 — 准入前失去优化资格被当作普通不处理，末批伪报完成（P1）
+
+`StrmPlaybackOptimizer.AdmitBatchOwnerAsync` 把 `!Enabled` 和已 latch 的状态库不可用都返回为 `BatchAdmission.NotProcessed()`；runner 只计不处理，没有收到禁用／不可用原因。若这是最后一批的最后一个工作，后面不会再经过下一批的全局检查，`RunAsync` 因而返回 `Completed=true`、`Disabled=false`、`StoreUnavailable=false` 并报告 100%。`StrmProbeScheduledTask.ExecuteAsync` 正常返回，按固定原生 worker 语义会记 Completed，而不是禁用提前结束的 Cancelled 或状态库不可用的 Failed。
+
+A 使用现有测试程序集的 BatchHarness、真实产品 runner／scheduled task、临时 STRM 和原有假原生／指纹仓库独立复现四个控制，不修改产品代码或已提交测试：
+
+| 控制 | 实际结果 |
+|---|---|
+| 已建立可信基线、URL 已改变；决策后、owner 准入前禁用；直接 runner | `NotProcessed=1`、`Completed=true`、`Disabled=false`；进度 `[0, 99, 100]`。 |
+| 同一禁用场景，经原生任务实现 `ExecuteAsync` | 正常返回、无取消异常，进度到 100%。 |
+| 同一准入窗口，由另一源通过同一个 optimizer 实际读取故障仓库并 latch 全局不可用；直接 runner | 独立调用确认 `IsFingerprintStoreUnavailable=true`，本轮仍为 `NotProcessed=1`、`Completed=true`、`StoreUnavailable=false`；进度 `[0, 99, 100]`。 |
+| 同一状态库故障场景，经 `ExecuteAsync` | 正常返回、无不可用异常，进度到 100%。 |
+
+四项均未开始探测，旧指纹未变，许可／preparing／running 最终为零；因此本问题是必要故障反馈与完成语义丢失，不是已开始探测的取消或指纹安全条件变更。已有“原生准备期间禁用／故障”的控制位于更晚窗口，不能覆盖此准入前分支。违反 RO-6、范围／配置约定及 AC-6／AC-7 的明确义务：禁用／全局故障不得补满或伪报完成，状态库不可用须报告不可用。这是 P1，不能按统计措辞或可选证明延期。
+
+纠正须让未开始工作被拒绝的真实原因到达本轮结算、进度与原生结果，覆盖末项及并发资格丢失；已实际开始的工作仍按原合同完成保存／条件提交。B 负责确定同一 Slice 内的纠正 Task、验收与独立复现，A 不指定 Task ID、具体实现或删减原 T4 门槛。
+
+### 证据、复用与其余范围
+
+- A 核验 Final 的 82 个 tracked 输入，只有 SLICE／TASK 交接文档不同；实现检查点到审查 checkout 也只改这两份文档。37 个构建产物和证据清单中的 234 个文件摘要全部匹配，初始／最终配置、触发器、媒体和 STRM 快照一致。其余已实现旅程及原始 Final 可支持现有实现事实，不能据绿灯排除 AF-1。
+- A 独立运行现有构建的全部 C# 回归：182 passed／0 failed／0 skipped；Python 63 passed。新增四项独立控制的观察收集成功，但必要行为判定为 FAIL；helper 退出 0 不代表产品验收通过。
+- 原始 Final 的 restore／build／format、真实播放、七项 batch 和 19 项配置页保留原始结果及两次 batch 失败／重跑披露；本轮核验并复用这些事实，不声称 A 再次运行实机。AF-1 的真实 Jellyfin 新场景本轮 NOT RUN；已有确定性反例足以拒绝关闭，修正后按当前 T4 合同更新最终候选证据。
+- 本机 A 索引：`.git/validation-evidence/5580492a5cacbdc0772dd2f14f9b527ab3851746/a-final-review-20261016/INDEX.md`。包含精确命令／耗时／退出码、输入与产物核验、四项控制源码／原始结果及早期 helper 调用错误；仅本机可读、未推送。
+- 未发现其他独立 P0/P1 阻塞。原有日志跨日关联、指数措辞等 P2 不阻止验收；真实大库、完整扫描压力、外部代理／OpenList、广泛格式／客户端及发布材料延期不变，未运行项目继续 NOT RUN。
+
+Base、Required Outcomes／Surfaces、验收及全部安全不变量保持不变；无需 Material Contract Change。保持同一 Slice 开放，交 B 计划纠正，不写 Closure Reconciliation、不同步为已接受 CURRENT、不作关闭经验复盘，也不选择 Slice 4。
+
+当前根 Task 无活动实施任务；治理器要求 FIX REQUIRED 必须关联纠正 Task，故在 B 提交合法计划前应拒绝实施准入。A 不为使检查变绿而虚构 Task 或改动治理代码。B 提交纠正计划后重新运行治理检查；Developer 在此之前不得继续。
+
+```text
+NEXT ACTION: B PLANS THE IN-SLICE CORRECTION FOR AF-1
 ```

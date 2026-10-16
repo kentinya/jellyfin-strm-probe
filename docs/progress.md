@@ -32,10 +32,10 @@ Slice 2 交付完整版本 1 解析／决策、首次信任、五字段 SQLite �
 ## 当前开发指针
 
 - 开发基准：V4.3；Slice 1／2 PASS / CLOSED，V3.0 与历史失败保留在 Git／原始证据。
-- 当前 [Slice 3](../SLICE.md)：ACTIVE，真实 Base 为 Slice 2 关闭提交 `6da90ab6bd8995d8204ae0b7faf786c823699fe6`，Implementation Head 为 NOT SET。
-- 用户目标是完整配置／所选库候选 ID 集合／分批按需检查、原生运行／定时／停止收尾、播放混合共享及可对账结果；七个 Required Outcomes 与最终 T4 门槛见当前合同。新能力尚未实现／验收。
-- 用户授权 A 实质调整 Slice 3：一次获取候选 ID、分批读取对象、固定消费者；原 Task 3.1 计划／停止补充保留于 `eb4e272743f4c7e184d45fa48b660b2fef24c685:TASK.md`。A 合同检查点 `2b515f35db7fc8e85d8ac1a8085dd9b8ccc62ef3` 已提交；B 随后判定同一 Task 3.1 合法调整，保留 ID／Task Base，改用固定候选与批次门槛，当前 [TASK.md](../TASK.md) 为 PLANNED。Slice／Task Base 不移动，Slice 4 保持 PLANNED。
+- 当前 [Slice 3](../SLICE.md)：FIX REQUIRED，真实 Base 为 Slice 2 关闭提交 `6da90ab6bd8995d8204ae0b7faf786c823699fe6`，实现检查点 `5580492a5cacbdc0772dd2f14f9b527ab3851746`。路线项仍 ACTIVE，未列入关闭账本。
+- 已有完整配置页和原生批量实现及独立 Final，历史 Task 3.1／3.2 均 B PASS；完整快照分别为 `2f74aa83f15707df56c4b15409ba1538a488f83a:TASK.md`、`678bcf5c3a6ba5c6743402ec27367dd76d0f101d:TASK.md`。七个 Required Outcomes、原始 Final 和失败／重跑披露见当前合同的 Closure Packet，不代表 A 已接受完整能力。
+- 2026-10-16，A 审查完整 Base..实现检查点后判 [FIX REQUIRED](../SLICE.md#a-final-review)：AF-1（P1）为准入前禁用／状态库故障丢失提前结束原因，末批补满 100% 且原生任务实现正常返回。四个独立确定性控制已复现；现有 C# 182／182、Python 63／63 仍通过。根 [TASK.md](../TASK.md) 无活动实施任务，交 B 计划同一 Slice 内纠正；Base／合同不变，无 Material Contract Change。
 - 公共 PlaybackInfo 的 None token、原生取消异常保护、只共享已开始探测及批量仅撤销未开始工作的规则不变；历史 Material Contract Change 见 Slice 2 关闭快照。
-- 完整配置页／真实批量／定时／停止／统计仍 NOT RUN；本轮只有合同与事实指针，不运行产品验收、不修改运行实例。
+- 本机 A 索引 `.git/validation-evidence/5580492a5cacbdc0772dd2f14f9b527ab3851746/a-final-review-20261016/INDEX.md` 保留输入／产物核验、原始控制与回归；本轮实机未重跑，复用已核验 Final 的分层事实。已有实现尚未 A 关闭；真实大库、完整扫描压力、外部联调与发布仍 NOT RUN，Slice 4 保持 PLANNED。
 
-NEXT ACTION: DEVELOPER IMPLEMENTS THE ADJUSTED TASK 3.1
+NEXT ACTION: B PLANS THE IN-SLICE CORRECTION FOR AF-1
