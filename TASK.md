@@ -143,10 +143,10 @@ B 审查完整 `ae265d0dba02aa1c5599871602d4350072b7155f..Implementation Head`�
 - Tests and Results：
   - `bash scripts/dotnet-local restore … --locked-mode` PASS；`build --configuration Release --no-restore` 0 警告／0 错误；`test` 202/202 PASS；`format --verify-no-changes` PASS。
   - `python3 -m unittest discover -s tests -v` 92/92 PASS（原 63 项加本 Task 29 项工具回归）。
-  - `python3 scripts/package_plugin.py --configuration Release --runtime linux-x64 --output-dir artifacts/releases` PASS；归档 SHA-256 `9c355ee1371fd5f4c65aee263712c98c730aaae9aeff3331dcd306d23266849d`，来源 SHA `6ef0a0f70a80688b586b79e172fdeede2a09b9af`。
+  - `python3 scripts/package_plugin.py --configuration Release --runtime linux-x64 --output-dir artifacts/releases --source-revision 6574122be9e2b931fa0acd5d7a6c389da7096c87` PASS；归档 SHA-256 `15b4d570b6669b5555c1646c7fe959a0538f11fe72a88c5c95649b18eb5621c4`，来源 SHA `6574122be9e2b931fa0acd5d7a6c389da7096c87`。
   - `python3 scripts/run_isolated_package_integration.py --package … --baseline-revision 7c64eb5dcad6e5f20fb7eb41819be2521f65484d --scenario all` PASS（clean／upgrade／recovery／invalid 均通过；MP4／MKV 视频时间与解码画面推进；负向包在部署前拒绝且有效安装保留）。
   - 既有隔离回归：`run_isolated_plugin_integration.py` PASS；`run_isolated_batch_integration.py --scenario suite` PASS；`run_isolated_configuration_integration.py --scenario all` PASS。三者恢复与清理均验证。
-  - 原始证据索引：`.git/validation-evidence/dev/{clean-4,upgrade-1,recovery-1,invalid-1,all-3}/`（Developer 候选，仅本工作区可读；最终按 Implementation Head SHA 归档）。
+  - 原始证据索引：`.git/validation-evidence/6574122be9e2b931fa0acd5d7a6c389da7096c87/dev-final-1/INDEX.md`（最终候选，仅本工作区可读）；早期候选 `492b37da25222a7dd1f7071d27c84cbb3f65825d` 的证据集已标 SUPERSEDED，因死代码清理改变可执行输入。
 - Decisions：
   - 归档采用框架依赖发布布局（托管 DLL 置根、native SQLite 置根并显式列入白名单／deps），已在隔离实例实证加载与 SQLite 读写；不夹带 Jellyfin 核心库或另一套 FFmpeg。
   - 包实例使用独立 project／端口／工作区；为让 `JellyfinApi` 支持包实例凭证，给基类构造器增加可选 `credentials_path`（默认不变）。
@@ -155,7 +155,7 @@ B 审查完整 `ae265d0dba02aa1c5599871602d4350072b7155f..Implementation Head`�
   - HLS.js 非致命告警按 Jellyfin 自有 bundle 与 `Fatal: false` 精确白名单，致命或其他来源错误仍失败。
 - Remaining In-Slice Work：RO-2（真实十万库／成本）、RO-3（完整扫描重叠）、RO-4（实际 JellyfinProxy）及最终独立 Slice Final。
 - Risks / Deviations：浏览器执行链依赖仓库内固定 Playwright／Chromium（已在包实例实测）；升级基线需隔离 worktree 重建（本次实际使用 `7c64eb5d…`，记录了其发布文件摘要）；真实代理来源与十万库资源仍是后续 Task 风险，不在本 Task 扩大。
-- Head SHA：待提交后记录；本报告不预填自身提交 SHA。
+- Head SHA：`6574122be9e2b931fa0acd5d7a6c389da7096c87`（功能检查点 `492b37da25222a7dd1f7071d27c84cbb3f65825d`；本报告在后续文档提交记录，不预填自身 SHA）。
 
 ## B Review Result
 
