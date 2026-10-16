@@ -184,6 +184,14 @@ public sealed class BatchCheckRunner
     internal int ConsumerLimit { get; set; } = MaxConsumers;
 
     /// <summary>
+    /// Gets or sets a test-only hook invoked at the consumer dequeue boundary immediately before the runner
+    /// observes the live enablement for that candidate. It lets a deterministic regression arm a scripted
+    /// single-false-then-true enablement read at the exact consumer precheck instead of relying on timing. It is
+    /// <c>null</c> in production.
+    /// </summary>
+    internal Action? ConsumerPrecheckEntered { get; set; }
+
+    /// <summary>
     /// Gets the number of fixed consumer tasks created so far. It is only observed by deterministic tests to prove
     /// the batch never creates one task per candidate.
     /// </summary>
@@ -239,7 +247,7 @@ public sealed class BatchCheckRunner
             // A stop or disable confirmed during the synchronous query must not disappear behind the fetch
             // failure: the native task can then report both the administrator cancellation and the failure.
             counters.StopRequested |= stopSignal.CancellationToken.IsCancellationRequested ? 1 : 0;
-            counters.Disabled |= _settings.Enabled ? 0 : 1;
+            ObserveDisabled(counters, stopSignal);
             _logger.LogWarning("The batch candidate identity query failed; no media object was processed. Failure category {FailureType}.", exception.GetType().Name);
             // Preserve the identity work already measured before the failure (partial raw ids, duplicates, time,
             // allocation and capacity) so a partial fetch is not reported as an empty, cost-free run.
@@ -268,24 +276,18 @@ public sealed class BatchCheckRunner
             // The candidate identity set was interrupted before every selected library was queried. The complete
             // candidate total is unknown, so no complete denominator is published and no object is processed.
             counters.StopRequested |= stopSignal.CancellationToken.IsCancellationRequested ? 1 : 0;
-            counters.Disabled |= _settings.Enabled ? 0 : 1;
+            ObserveDisabled(counters, stopSignal);
             Copy(counters, candidateCount: 0, result, completed: false, candidateTotalKnown: false, candidateFetchMilliseconds: fetchMilliseconds);
             return result;
         }
 
         var candidateCount = ordered.Count;
-        if (stopSignal.IsStopped || !_settings.Enabled)
+        if (stopSignal.IsStopped || ObserveDisabled(counters, stopSignal))
         {
             // Every selected library was queried before the stop/disable, so the complete identity set is known.
             // Keep the real denominator and count every not-yet-read candidate as unread instead of discarding it.
             // A disable closes admission for the whole run so no already-dispatched candidate can start later.
-            if (!_settings.Enabled)
-            {
-                stopSignal.CloseAdmission();
-            }
-
             counters.StopRequested |= stopSignal.CancellationToken.IsCancellationRequested ? 1 : 0;
-            counters.Disabled |= _settings.Enabled ? 0 : 1;
             counters.Unread = candidateCount;
             Copy(counters, candidateCount, result, completed: false, candidateTotalKnown: true, candidateFetchMilliseconds: fetchMilliseconds);
             return result;
@@ -293,15 +295,9 @@ public sealed class BatchCheckRunner
 
         for (var batchStart = 0; batchStart < ordered.Count; batchStart += BatchSize)
         {
-            if (stopSignal.IsStopped || !_settings.Enabled || _optimizer.IsFingerprintStoreUnavailable)
+            if (stopSignal.IsStopped || ObserveDisabled(counters, stopSignal) || _optimizer.IsFingerprintStoreUnavailable)
             {
-                if (!_settings.Enabled)
-                {
-                    stopSignal.CloseAdmission();
-                }
-
                 counters.StopRequested |= stopSignal.CancellationToken.IsCancellationRequested ? 1 : 0;
-                counters.Disabled |= _settings.Enabled ? 0 : 1;
                 counters.StoreUnavailable |= _optimizer.IsFingerprintStoreUnavailable ? 1 : 0;
                 break;
             }
@@ -375,7 +371,7 @@ public sealed class BatchCheckRunner
         var complete = true;
         foreach (var libraryId in scope.LibraryIds)
         {
-            if (stopSignal.IsStopped || !_settings.Enabled)
+            if (stopSignal.IsStopped || ObserveDisabled(counters, stopSignal))
             {
                 complete = false;
                 break;
@@ -390,7 +386,7 @@ public sealed class BatchCheckRunner
             // A synchronous native query cannot be interrupted. Re-check the stop/disable state after it returns
             // so a stop confirmed during the call never continues into the next query, object read or probe. The
             // stop-to-return latency is measured so the unavoidable delay is disclosed instead of claimed immediate.
-            if (stopSignal.IsStopped || !_settings.Enabled)
+            if (stopSignal.IsStopped || ObserveDisabled(counters, stopSignal))
             {
                 RecordStopQueryLatency(counters, stopSignal);
                 complete = false;
@@ -422,6 +418,27 @@ public sealed class BatchCheckRunner
         // slack) at the end of the fetch, multiplied by the same documented per-slot size.
         measuredCapacityBytes = candidates.Capacity * 16L + seen.Capacity * 24L;
         return (candidates, complete);
+    }
+
+    /// <summary>
+    /// Reads the current enablement exactly once at one decision boundary. When that single read observes the
+    /// plugin disabled, it immediately closes admission for the whole run and latches the existing disabled
+    /// reason before any later read of the live configuration could see a re-enable. The latched reason is then
+    /// preserved to the round summary instead of being reconstructed by re-reading the settings after a return.
+    /// The method returns <c>true</c> once any consumer of this run has observed a disable, so the caller never
+    /// resumes work that a previously observed reason must keep revoked. It adds no new state field, enum or
+    /// cancellation source: it reuses <see cref="BatchStopSignal.CloseAdmission"/> and the existing disabled counter.
+    /// </summary>
+    private bool ObserveDisabled(Counters counters, BatchStopSignal stopSignal)
+    {
+        var enabled = _settings.Enabled;
+        if (!enabled)
+        {
+            stopSignal.CloseAdmission();
+            Interlocked.Exchange(ref counters.Disabled, 1);
+        }
+
+        return Volatile.Read(ref counters.Disabled) != 0;
     }
 
     private static void RecordStopQueryLatency(Counters counters, BatchStopSignal stopSignal)
@@ -478,18 +495,9 @@ public sealed class BatchCheckRunner
                     ConsumerActivityChanged?.Invoke(true);
                     try
                     {
-                        if (stopSignal.IsStopped || !_settings.Enabled || counters.StoreUnavailable != 0 || counters.Disabled != 0)
+                        ConsumerPrecheckEntered?.Invoke();
+                        if (stopSignal.IsStopped || ObserveDisabled(counters, stopSignal) || counters.StoreUnavailable != 0)
                         {
-                            if (!_settings.Enabled)
-                            {
-                                // A disable observed by one consumer must close admission for the whole run, not
-                                // only for the next dequeue. An already-dispatched consumer that later observes a
-                                // re-enabled plugin must still be refused at its start boundary so it never adds a
-                                // new probe after the reason was observed.
-                                stopSignal.CloseAdmission();
-                                Interlocked.Exchange(ref counters.Disabled, 1);
-                            }
-
                             Interlocked.Increment(ref counters.Revoked);
                             onSettled(Settled(counters));
                             continue;

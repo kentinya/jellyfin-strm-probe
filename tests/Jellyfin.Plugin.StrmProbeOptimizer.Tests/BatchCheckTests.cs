@@ -1142,6 +1142,153 @@ public sealed class BatchCheckTests
         Assert.AreEqual(0, coordinator.ActivePermits);
     }
 
+    [TestMethod]
+    [TestCategory("BatchAdmissionFailure")]
+    public async Task BatchDisabledObservedOnceAtTheConsumerBoundarySurvivesAReEnableBeforeTheNextRead()
+    {
+        // The live configuration can legitimately change between two independent property reads: one read returns
+        // false, then the administrator re-enables before the next read. The reason observed by the first read must
+        // still end the run early instead of being forgotten by a later true read. This is the last candidate of a
+        // single-batch run, so no later global check can recover the reason.
+        using var harness = new BatchHarness();
+        var item = harness.AddSupported("https://media.example.invalid/a.mp4", ValidSha1, 10);
+        harness.CandidateIds = [item.Id];
+        await harness.RunAsync();
+        var accepted = harness.Repository.Get(item.Id, Key(item.Id));
+        Assert.IsNotNull(accepted);
+        harness.WriteManifest(item, "https://media.example.invalid/a.mp4?sig=changed", ValidSha1, 10);
+        // The candidate already needs a probe when the first consumer reaches its precheck. The first enablement
+        // observation is false (as if the plugin was just disabled); the following reads already see the re-enabled
+        // value. The already-observed reason must still close admission and stay latched for the whole round.
+        harness.ConsumerPrecheckEntered = () => harness.ScriptedEnabledReads = [false];
+        var reported = new List<double>();
+        var progress = new SynchronousProgress(value =>
+        {
+            lock (reported)
+            {
+                reported.Add(value);
+            }
+        });
+
+        var result = await harness.RunWithProgressAsync(progress, CancellationToken.None);
+
+        Assert.AreEqual(0, harness.ProbeCalls, "A single false enablement observation must refuse the unstarted candidate even after a re-enable.");
+        Assert.AreEqual(0, result.ActualProbeCalls);
+        Assert.AreEqual(0, result.ReliableSuccess);
+        Assert.IsTrue(result.Disabled, "The first false observation must keep the disable reason even after the live configuration was re-enabled.");
+        Assert.IsFalse(result.StopRequested, "A disable is not an administrator stop.");
+        Assert.IsFalse(result.Completed, "A run that observed a disable must not be reported as completed after a re-enable.");
+        Assert.AreEqual(1, result.Revoked, "The loaded but unstarted candidate must settle as revoked.");
+        Assert.AreEqual(1, result.Settled, "The candidate must settle exactly once for this run.");
+        Assert.AreEqual(0, result.NotProcessed);
+        Assert.AreEqual(accepted, harness.Repository.Get(item.Id, Key(item.Id)), "The accepted baseline must survive the refusal.");
+        Assert.AreEqual(0, harness.Coordinator.RunningCount);
+        Assert.AreEqual(0, harness.Coordinator.PreparingCount);
+        Assert.AreEqual(0, harness.Coordinator.ActivePermits);
+        Assert.IsTrue(reported.Count > 0 && reported.Max() < 100, "A disable observed once must never fill progress to 100%.");
+    }
+
+    [TestMethod]
+    [TestCategory("BatchAdmissionFailure")]
+    public async Task ScheduledTaskReportsCancelledWhenOneDisabledObservationIsReEnabledBeforeTheNextRead()
+    {
+        using var harness = new BatchHarness();
+        var item = harness.AddSupported("https://media.example.invalid/a.mp4", ValidSha1, 10);
+        harness.CandidateIds = [item.Id];
+        await harness.RunAsync();
+        harness.WriteManifest(item, "https://media.example.invalid/a.mp4?sig=changed", ValidSha1, 10);
+        harness.ConsumerPrecheckEntered = () => harness.ScriptedEnabledReads = [false];
+        var task = harness.CreateTask();
+
+        await AssertThrowsAsync<OperationCanceledException>(() => task.ExecuteAsync(new SynchronousProgress(_ => { }), CancellationToken.None));
+    }
+
+    [TestMethod]
+    [TestCategory("BatchAdmissionFailure")]
+    public async Task BatchDisabledObservedOnceDuringCandidateFetchSurvivesAReEnableBeforeTheNextRead()
+    {
+        // The candidate-fetch boundary observes the live enablement once and may legitimately see false while the
+        // very next read already sees a re-enable. The fetch is interrupted and the observed reason must reach the
+        // run result instead of being reconstructed (and lost) by re-reading the live configuration after return.
+        using var harness = new BatchHarness();
+        var item = harness.AddSupported("https://media.example.invalid/a.mp4", ValidSha1, 10);
+        harness.CandidateIds = [item.Id];
+        await harness.RunAsync();
+        var accepted = harness.Repository.Get(item.Id, Key(item.Id));
+        Assert.IsNotNull(accepted);
+        harness.WriteManifest(item, "https://media.example.invalid/a.mp4?sig=changed", ValidSha1, 10);
+        harness.CandidateFetchEntered = () => harness.ScriptedEnabledReads = [false];
+        var readsBefore = harness.BatchReadCalls;
+        var reported = new List<double>();
+        var progress = new SynchronousProgress(value =>
+        {
+            lock (reported)
+            {
+                reported.Add(value);
+            }
+        });
+
+        var result = await harness.RunWithProgressAsync(progress, CancellationToken.None);
+
+        Assert.AreEqual(0, harness.ProbeCalls, "An interrupted candidate fetch must not start any probe.");
+        Assert.AreEqual(readsBefore, harness.BatchReadCalls, "An interrupted candidate fetch must not read any batch object.");
+        Assert.IsFalse(result.CandidateTotalKnown, "The interrupted fetch must report an unknown candidate total.");
+        Assert.IsTrue(result.Disabled, "The single false fetch-boundary observation must keep the disable reason after the re-enable.");
+        Assert.IsFalse(result.StopRequested, "A disable is not an administrator stop.");
+        Assert.IsFalse(result.Completed, "A run whose fetch was interrupted by a disable must not be reported as completed.");
+        Assert.AreEqual(0, result.ReliableSuccess);
+        Assert.AreEqual(accepted, harness.Repository.Get(item.Id, Key(item.Id)), "The accepted baseline must survive the interrupted fetch.");
+        Assert.AreEqual(0, harness.Coordinator.RunningCount);
+        Assert.AreEqual(0, harness.Coordinator.PreparingCount);
+        Assert.AreEqual(0, harness.Coordinator.ActivePermits);
+        Assert.IsTrue(reported.Count > 0 && reported.Max() < 100, "A disable observed during the fetch must never fill progress to 100%.");
+    }
+
+    [TestMethod]
+    [TestCategory("BatchAdmissionFailure")]
+    public async Task ScheduledTaskReportsCancelledWhenOneDisabledObservationDuringCandidateFetchIsReEnabledBeforeTheNextRead()
+    {
+        using var harness = new BatchHarness();
+        var item = harness.AddSupported("https://media.example.invalid/a.mp4", ValidSha1, 10);
+        harness.CandidateIds = [item.Id];
+        await harness.RunAsync();
+        harness.WriteManifest(item, "https://media.example.invalid/a.mp4?sig=changed", ValidSha1, 10);
+        harness.CandidateFetchEntered = () => harness.ScriptedEnabledReads = [false];
+        var task = harness.CreateTask();
+
+        await AssertThrowsAsync<OperationCanceledException>(() => task.ExecuteAsync(new SynchronousProgress(_ => { }), CancellationToken.None));
+    }
+
+    [TestMethod]
+    [TestCategory("BatchAdmissionFailure")]
+    public async Task BatchDisabledObservedOnceAfterTheCandidateQueryReturnsSurvivesAReEnableBeforeTheNextRead()
+    {
+        // The post-query boundary re-checks the enablement after the synchronous native query returned. One of
+        // those observations can be false while the very next read already sees a re-enable. The reason must be
+        // latched where it was observed instead of being reconstructed from the live configuration later.
+        using var harness = new BatchHarness();
+        var item = harness.AddSupported("https://media.example.invalid/a.mp4", ValidSha1, 10);
+        harness.CandidateIds = [item.Id];
+        await harness.RunAsync();
+        var accepted = harness.Repository.Get(item.Id, Key(item.Id));
+        Assert.IsNotNull(accepted);
+        harness.WriteManifest(item, "https://media.example.invalid/a.mp4?sig=changed", ValidSha1, 10);
+        harness.AfterCandidateFetch = () => harness.ScriptedEnabledReads = [false];
+
+        var result = await harness.RunAsync();
+
+        Assert.AreEqual(0, harness.ProbeCalls, "A disable observed after the candidate query must not start a probe.");
+        Assert.IsFalse(result.CandidateTotalKnown, "The interrupted identity set must report an unknown candidate total.");
+        Assert.IsTrue(result.Disabled, "The single false post-query observation must keep the disable reason after the re-enable.");
+        Assert.IsFalse(result.StopRequested, "A disable is not an administrator stop.");
+        Assert.IsFalse(result.Completed, "A run interrupted by a disable must not be reported as completed.");
+        Assert.AreEqual(0, result.ReliableSuccess);
+        Assert.AreEqual(accepted, harness.Repository.Get(item.Id, Key(item.Id)), "The accepted baseline must survive the interrupted fetch.");
+        Assert.AreEqual(0, harness.Coordinator.RunningCount);
+        Assert.AreEqual(0, harness.Coordinator.PreparingCount);
+        Assert.AreEqual(0, harness.Coordinator.ActivePermits);
+    }
+
     // ---------- Global failure (AC-T6) ----------
 
     [TestMethod]
@@ -2078,6 +2225,22 @@ public sealed class BatchCheckTests
         /// <summary>Gets or sets a dynamic enablement value read by the shared settings during a run.</summary>
         public bool Enabled { get; set; } = true;
 
+        /// <summary>
+        /// Gets or sets a scripted enablement sequence. When set, each <c>Enabled</c> read consumes the next value;
+        /// once the sequence is exhausted the current <see cref="Enabled"/> value is returned. It lets a regression
+        /// make one observation return <c>false</c> while a subsequent read already sees a re-enabled value, so the
+        /// product's ability to preserve the first observed reason is tested without timing.
+        /// </summary>
+        public List<bool>? ScriptedEnabledReads { get; set; }
+
+        /// <summary>Gets or sets a test-only hook invoked at the start of the native candidate query, before the
+        /// first enablement read of that query boundary.</summary>
+        public Action? CandidateFetchEntered { get; set; }
+
+        /// <summary>Gets or sets a test-only hook invoked at the consumer dequeue boundary immediately before the
+        /// runner observes the live enablement for that candidate.</summary>
+        public Action? ConsumerPrecheckEntered { get; set; }
+
         public TaskCompletionSource NativePreparationReached { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public TaskCompletionSource ReleaseNativePreparation { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -2237,6 +2400,7 @@ public sealed class BatchCheckTests
             {
                 CandidateSetFixed = () => AfterFixedSet?.Invoke(),
                 ConsumerLimit = ConsumerLimit,
+                ConsumerPrecheckEntered = () => ConsumerPrecheckEntered?.Invoke(),
                 ConsumerActivityChanged = active =>
                 {
                     if (active)
@@ -2259,6 +2423,7 @@ public sealed class BatchCheckTests
         internal IReadOnlyList<Guid> FetchCandidates()
         {
             CandidateFetchCalls++;
+            CandidateFetchEntered?.Invoke();
             BeforeCandidateFetch?.Invoke();
             if (FailCandidateFetch)
             {
@@ -2354,7 +2519,21 @@ public sealed class BatchCheckTests
                 _harness = harness;
             }
 
-            public bool Enabled => _harness.Enabled;
+            public bool Enabled
+            {
+                get
+                {
+                    var scripted = _harness.ScriptedEnabledReads;
+                    if (scripted is not null && scripted.Count > 0)
+                    {
+                        var value = scripted[0];
+                        scripted.RemoveAt(0);
+                        return value;
+                    }
+
+                    return _harness.Enabled;
+                }
+            }
 
             public bool PlaybackAutoCheck => true;
 
