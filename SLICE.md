@@ -4,9 +4,9 @@
 Slice ID: 3
 Name: Jellyfin 原生批量检查任务
 Owner: A
-Status: FIX REQUIRED
+Status: READY FOR A REVIEW
 Base SHA: 6da90ab6bd8995d8204ae0b7faf786c823699fe6
-Implementation Head: 5580492a5cacbdc0772dd2f14f9b527ab3851746
+Implementation Head: 7c64eb5dcad6e5f20fb7eb41819be2521f65484d
 ```
 
 ## 激活决定与真实基线
@@ -147,88 +147,88 @@ B 对全部 Required Outcomes／Surfaces 满足后停止新增 Task，单独执�
 
 ## Closure Packet
 
-2026-10-16，B 提交完整 Slice 最终包。仅更新流程状态、真实实现指针及证据交接；上述 Required Outcomes／Surfaces、Base、业务不变量、范围和验收合同不变。
+2026-10-16，B 在同一 Task 3.1 内审查 AF-1 全部纠正后判 PASS，重核七个 Required Outcomes／六类 Surfaces，无进一步实施缺口，停止创建 Task；随后单独完成当前合同的 Slice Final。本包替代旧 B 包作为当前交接，旧包／首败／A 拒绝保留于 `1d463f12062de187ba799b5f6602a274ede7a574:SLICE.md` 及原始证据。Required Outcomes／Surfaces、Base、用户约束和全部验收含义保持不变。
 
 ```text
 Slice: 3 — Jellyfin 原生批量检查任务
 Base: 6da90ab6bd8995d8204ae0b7faf786c823699fe6
-Implementation Checkpoint: 5580492a5cacbdc0772dd2f14f9b527ab3851746
-Reviewed Implementation Range: 6da90ab6bd8995d8204ae0b7faf786c823699fe6..5580492a5cacbdc0772dd2f14f9b527ab3851746
-Final Test Checkout: 678bcf5c3a6ba5c6743402ec27367dd76d0f101d
+Implementation Checkpoint: 7c64eb5dcad6e5f20fb7eb41819be2521f65484d
+Reviewed Implementation Range: 6da90ab6bd8995d8204ae0b7faf786c823699fe6..7c64eb5dcad6e5f20fb7eb41819be2521f65484d
+Final Test Checkout: 1d463f12062de187ba799b5f6602a274ede7a574
 B Decision: SLICE READY FOR A REVIEW
 B Known P0/P1 Blockers: NONE
-A Decision: FIX REQUIRED — see A Final Review (2026-10-16)
+A Decision On Current Candidate: NOT RUN — previous rejection retained below
+Closure Reconciliation On Current Candidate: NOT RUN — A responsibility
 ```
-
-最终测试 checkout 只比实现检查点多报告／B 审查文档，可执行源码一致。Final 重新构建的 DLL SHA-256 为 `76c83b3f0d8e6fc5b936aabb9fa41897a6b9b7060819d813bf0b356b7bbc49d8`，与本轮真实部署／配置页验收记录一致；不混称为 Task 阶段的二进制。
 
 ### 实现与 Task 索引
 
-交付原生「STRM 媒体信息检查」、默认全部／部分库保存、原生候选 ID 去重固定后按 128 个对象分批、最多 8 个固定消费者、共用决策／源身份／ProbeCoordinator／原生保存关联／最小指纹提交、停止准入与已开始收尾、进度与脱敏统计，以及五项完整配置页与恢复操作。插件主动探测仍默认 2、可配置 1～8、下次启动生效；范围对下一轮生效。
+交付原生「STRM 媒体信息检查」、全部／所选库配置、候选 ID 去重固定后按 128 个对象分批、最多 8 个固定消费者、共用决策／源身份／Coordinator／原生探测保存／最小 SQLite 条件提交，以及停止准入、已开始收尾、可对账进度／结果、五项配置页和恢复旅程。插件主动探测默认 2、可设 1～8、下次启动生效；批量范围对下一轮生效。首次信任不计探测成功，默认无自动触发。
 
-| Task | Base／实现 | B PASS 完整快照 |
+| Task | 范围／检查点 | B 结果 |
 |---|---|---|
-| 3.1 — 原生批量完整后端 | `b86d9c17d7f915108072f54ee098f0f5543fe093`／`3209bc699544f26ffe7a5e100941edda0b0d275d` | `2f74aa83f15707df56c4b15409ba1538a488f83a:TASK.md` |
-| 3.2 — 完整管理员配置与恢复旅程 | `2f74aa83f15707df56c4b15409ba1538a488f83a`／`5580492a5cacbdc0772dd2f14f9b527ab3851746` | `678bcf5c3a6ba5c6743402ec27367dd76d0f101d:TASK.md` |
+| 3.1 — 原生批量完整后端及 AF-1 纠正 | Base `b86d9c17d7f915108072f54ee098f0f5543fe093`；当前实现 `7c64eb5dcad6e5f20fb7eb41819be2521f65484d` | PASS；当前 [TASK.md](TASK.md) 保留审查范围与证据。原 PASS 快照 `2f74aa83f15707df56c4b15409ba1538a488f83a:TASK.md` 不改写。 |
+| 3.2 — 完整管理员配置与恢复旅程 | Base `2f74aa83f15707df56c4b15409ba1538a488f83a`；实现 `5580492a5cacbdc0772dd2f14f9b527ab3851746` | 历史 PASS；完整快照 `678bcf5c3a6ba5c6743402ec27367dd76d0f101d:TASK.md`。当前 Final 再验证页面。 |
 
-Task 3.1 各轮修正、Task 3.2 的失效库／未确认保存／完整数值修正及历史 FAIL 均保留于可达 Git 与原始证据。没有为字段、测试或非阻塞润色再建 Task。
+AF-1 纠正保留 owner 拒绝原因、复用本轮停止位约束已分派未开始工作、单次观测禁用并保留原因，以及最终结算合入已有全局仓库故障。B 独立 16 项控制全部通过：末项拒绝、许可立即取得／真实等待、重新启用、单次 false 观测和末项跳过时另一源经公开播放入口 latch 故障均已覆盖。真实仓库故障来源、基线、异常／计数、进度与资源均核验，旧失败保留。未新增业务状态字段／原因枚举／执行 CTS／schema／调度器，已开始／已加入工作的有效提交不因批量停止或禁用被否决。
 
 ### Required Outcomes／Surfaces 完成状态
 
-| 结果 | 状态与当前最终证据 |
+| 结果 | 当前 B 验证与证据 |
 |---|---|
-| RO-1 | PASS：真实唯一任务发现、无默认触发、手动／真实定时、触发器重启保留；Final batch discovery／stop。 |
-| RO-2 | PASS：两库部分／全部／失效选择，133 个真实候选、2 批、多版本；轮内新增本轮不处理、删除安全结算、新增下轮发现；Final batch scope＋配置页 04／09／11／13／14＋十万模拟。 |
-| RO-3 | PASS：共用决策／原生执行／SQLite 条件提交，首次信任不计成功，URL／SHA-1／Size／失败／保存／Manifest 保护；全部 C# 与 Final playback／batch discovery／failure。 |
-| RO-4 | PASS：两方向同源实际一次、批量实际调用分别 1／0 而可靠成功各 1；不同源播放 owner＋批量 owner 混合峰值 2；确定性 1／2／8、false 权限、独立原生刷新与重启生效。 |
-| RO-5 | PASS：原生 Cancelled；2 个已开始源提交、1 个未开始撤销；收尾期新轮次／新探测为 0，排队轮只重探撤销源，再显式运行零重复；两方向 shared_stop 均 Cancelled、可靠成功 1／撤销 0，独立播放可在收尾期间开始。 |
-| RO-6 | PASS：完整回归和实机汇总等式／进度／状态对账；状态库不可用时 Failed 且无新探测，修复重启 Completed；单项／保存／竞态保护分层证据齐全。 |
-| RO-7 | PASS：真实插件入口、五项保存／重启读回、旧配置默认、失效范围修正、保存拒绝／未确认／重读、严格数值与生效说明、原生任务／恢复说明；Final 配置页 19 场景。 |
+| RO-1 | PASS：真实唯一任务发现、无默认触发、手动／真实定时、触发器与配置重启保留；Final batch discovery／stop、配置页原生旅程。 |
+| RO-2 | PASS：全部／部分／失效范围、原生候选获取与多批／多版本、集合固定后增删／移出与新增下轮发现；Final batch scope／discovery＋配置页＋十万模拟。候选到物理源身份映射／去重、缺失对象结算由 Batch 测试与实机共同支持。 |
+| RO-3 | PASS：共用解析／决策／源身份／原生保存／SQLite 条件提交，首次信任与未变零探测，URL／SHA-1／Size、失败／保存／Manifest 保护；202 项 C# 与 Final playback／batch discovery／failure／重启。 |
+| RO-4 | PASS：两方向同源各一次真实探测，批量实际调用 1／0、可靠成功均 1；混合峰值受启动值约束，确定性 1／2／8、排队／完成重查、false 权限与独立原生刷新；Final playback／batch sharing／mixed。 |
+| RO-5 | PASS：真实 Cancelled，已开始完成提交、未开始撤销，收尾期无新轮／新探测，之后正确重跑；两方向 shared_stop、独立播放及同步查询／许可／实际开始竞争控制。 |
+| RO-6 | PASS：AF-1 16 项独立控制、完整回归及实机汇总／进度／原生终态对账；仓库不可用 Failed，修复重启可恢复；末项跳过仍准确计跳过且故障不补 100%，单项失败隔离与必要诊断脱敏。 |
+| RO-7 | PASS：真实完整页面五项配置、保存／拒绝／响应丢失／重读、失效库修正、数值边界、旧配置默认、重启生效及原生任务／恢复说明；Final 19 场景，逐场景原始交互与截图保留。 |
 
-六类 Required Surfaces 均覆盖：原生任务／生命周期（RO-1／5）、库查询／分批源映射（RO-2）、共用执行／开始边界（RO-3／4／5）、SQLite 保护／恢复（RO-3／6）、HTML 页面／配置通道（RO-7）、进度／结果／日志及实机入口（RO-1／5／6／7）。
+六类 Required Surfaces 均核对：原生任务／生命周期（RO-1／5）、库查询／分批源映射（RO-2）、共用执行／开始边界（RO-3／4／5）、SQLite 保护／恢复（RO-3／6）、HTML 页面／配置通道（RO-7）、进度／结果／日志及实机入口（RO-1／5／6／7）。不存在为了字段、额外测试或非阻塞润色再建 Task 的必要。
 
 ### 独立 Slice Final
 
-本机稳定索引：`.git/validation-evidence/5580492a5cacbdc0772dd2f14f9b527ab3851746/slice-final-20261016/INDEX.md`。仅本机可读，未推送。`combined-results2.json` 是含保留首败／重跑的最终汇总；精确命令、cwd、退出码、耗时、源码／锁／SDK／镜像／夹具／配置／构建与部署身份及原始日志分别保存。未使用旧 Task 运行代替本次 Final。
+本机稳定索引：`.git/validation-evidence/7c64eb5dcad6e5f20fb7eb41819be2521f65484d/slice-final-20261016/INDEX.md`。Final 独立执行，未用 Task／旧 Final 运行替代；精确命令／cwd／退出／耗时、源码／锁／SDK／镜像／配置／夹具、TRX、原始实机日志／浏览器产物及恢复均保留。Final checkout 比实现仅多 TASK 报告；当前交接文档提交后再核对被测输入，产品源码不变。
 
-| 门槛 | 当前 Final 结果 |
+固定 SDK `10.0.401`／net10.0、Jellyfin Controller／Model `12.2.0`／源码 `ca0f16eb7c195f720a1493ed469a27c4657db0c6`。Final 构建产品 DLL SHA-256 `5a1eba1935e6d74939ea36da9e283fec5ce75a6101d9241e09566a5306f8a02c`；配置页真实部署记录相同摘要，构建／依赖产物单独索引。
+
+| Final 门槛 | 结果 |
 |---|---|
-| locked restore／Release build | PASS；build 0 警告、0 错误。 |
-| 全部 C#／Python | PASS：182／182、0 skipped；63／63。 |
-| format／治理／差异／本地链接 | PASS；Markdown 138 个本地链接／锚点检查通过，交接文档提交后另复核。 |
-| 默认真实播放入口 | PASS，733.038 秒；同源一次／提交一次／后续零重复，默认 2／保存 1 重启前仍 2／重启后串行，池饱和下独立原生刷新 601 ms 完成；失败、竞态、多版本、SQLite、地址／主流重启及恢复。 |
-| 默认 batch 七场景 suite | PASS，314.218 秒；discovery／stop／shared_stop／sharing／scope／mixed／failure 全部完成，配置／全部触发器／夹具地址 restored and verified。 |
-| 默认真实配置页入口 | PASS，273.222 秒；19 场景、每场景独立原始交互／截图／console／请求；非法输入 0 POST，合法 1／8／2 读回，页面保存值直接驱动原生任务；真实重启及配置／触发器恢复。 |
-| 最终恢复与输入身份 | PASS：初始与最终媒体／STRM／配置文件摘要、有效配置、全部触发器、版本逐项一致；Final 期间全部被测 tracked 输入未变化。临时库条目／文件清除由各入口检查。 |
+| locked restore／Release build | PASS；0 警告、0 错误。 |
+| 全部 C#／Python | PASS：202／202，0 failed／skipped；63／63。 |
+| format／治理／差异／本地 Markdown | PASS；交接文档提交后复核治理及链接。 |
+| 默认真实 playback | PASS，785.828 秒；同源共享、地址／流保存与重启、失败重试／旧基线、普通／旧输入委托、false 权限、多版本／SQLite 恢复、启动并发与独立原生刷新。 |
+| 默认 batch 七场景 suite | PASS，331.485 秒；discovery／stop／shared_stop／sharing／scope／mixed／failure 全部完成，配置／全部触发器／夹具地址 restored and verified。 |
+| 默认真实配置页 | PASS，321.872 秒；19 场景，加载／保存／错误反馈、五项生效与重启、页面值驱动原生任务，原始交互／截图及配置／触发器恢复。 |
+| 输入与环境恢复 | PASS；Final 全程 82 项 tracked 输入未变，初始／最终 fixture／媒体／配置摘要、有效配置、全部触发器与版本完全相同；临时库条目／文件清理由原始入口验证。 |
 
-**失败与重跑披露：** 初次 batch 在停止前把昨天 23:58 的 5 条入口与本轮 1 条一起计成 6，152.115 秒退出 1。Docker 完整日期证明是工具的秒数比较跨日误计；原始失败及日期时间线保留。随后对专用隔离 Jellyfin 容器做同镜像重建，保持绑定数据、配置、媒体与触发器一致，建立新的日志会话；未改源码、断言或筛选。第二次 batch 已完成 discovery／stop／shared_stop 后，B 的额外状态查询复用了同一测试 DeviceId 登录，造成 401，216.618 秒退出 1；属于审查操作干扰，原日志保留。停止并行登录后，第三次原命令完整通过。两次失败均验证恢复；没有把失败改写为 PASS。
+本次 Final 的实际失败与重跑以 INDEX 为准，不删除原始记录；旧 Final 的跨日日志误计／并行鉴权干扰及重跑仍保留在其历史索引。B 监控仅使用日志／文件，未并行使用同一测试鉴权身份。
 
-重跑仅补失败的 batch 及其后未执行门槛；此前同一 Final 的还原／构建／全回归／format／播放结果保留。源码、依赖、构建产物及被测配置／夹具均未变，问题仅涉及批量工具的历史日志边界和额外登录干扰，不影响先前已通过门槛的证据。最终原命令／原断言全部得到有效通过结果。
-
-**成本与有界性分层：** 十万模拟在当前测试 harness 中实际结算 100000 个候选、782 批；完整对象峰值 128、活动消费者峰值 4（上限 8）、累计消费者 Task 6256，没有每候选一个 Task。ID 尺寸估算 4000000 B、槽位容量折算 5851640 B、累计获取线程分配 12647096 B、采样进程堆增量峰值 10664528 B、获取 83.8576 ms。真实 133 候选另记录原生获取 53.823 ms／分配 321512 B／采样峰值 418040 B／容量折算 8824 B，2 批对象读取 26.7998 ms／分配 2001088 B。容量折算、进程堆采样和累计分配不是同一个量，不是精确内部峰值；不宣称总内存恒定或真实十万库性能。
+**有界性和成本分层：** 十万模拟结算 100000 候选、782 批，完整对象峰值 128、活动消费者峰值 5（上限 8）、累计消费者 Task 6256，没有每候选一个 Task。ID 尺寸模型 4000000 B、实际槽位容量折算 5851640 B、累计获取线程分配 12647096 B、采样进程堆增量峰值 10000344 B、获取 246.2318 ms。代表性原生样本 136 候选、2 批，获取 56.3562 ms／分配 213640 B／采样峰值 238416 B／容量折算 8824 B；对象读取 17.308 ms／分配 2058808 B，完整路径与全部原生样本在 `native-cost-metrics.json`。模型、容量折算、进程堆采样与累计分配含义不同，不能当成精确内部峰值、总内存恒定或真实十万库性能。
 
 ### 业务不变量与证据边界
 
-- 仅支持版本化 STRM；普通／旧输入、禁用和 false 权限保留适用原生委托；批量范围外和不支持输入零插件探测。C# 全矩阵＋playback delegation／false＋batch scope。
-- URL 改变优先且必探测；仅双侧有效内容 SHA-1 可比，相同忽略 Size；SHA-1 不可比时仅双侧有效 Size 不同触发，mtime 不参与。完整决策／文件测试＋真实 URL、内容／Size 变化与重启。
-- 首次信任不称本次探测成功；其余接受需本次原生成功、有效主流／地址已保存、稳定 Manifest 和 expectedPrevious 条件提交。失败／原生取消异常／文件再变／保存失败保护由完整测试及代表实机分层支持；内部数据库保存故障实机注入仍 NOT RUN。
-- 同源只共享实际开始的 running，排队／结束后重查；插件主动全局并发独立于原生刷新。批量停止不传给已开始执行，不否决有效提交，等待结算后才开放新轮。完整协调／准备／身份／停止控制＋Final 两方向共享／停止／混合。
-- STRM 只读、不计算远程 SHA-1、不调用 OpenList 元数据 API、不改代理、不另带 FFmpeg；SQLite 仍只存五字段历史，不增加任务状态机／调度器。配置页无第二套运行／停止／定时入口，必要诊断与证据脱敏。
+- 支持版本化 STRM 才优化；普通／旧输入、禁用、false 权限保留适用原生委托，批量范围外和不支持输入零插件探测。当前完整回归及 Final delegation／false／scope 支持。
+- URL 变化优先必探测；仅双侧有效内容 SHA-1 可比，相同忽略 Size，不可比时仅双侧有效 Size 不同触发，mtime 不参与。决策矩阵、文件与真实 URL／内容／Size 变化及重启分层支持。
+- 首次信任不称本次实测成功；其余接受关联本次实际成功、有效主流／地址已保存、稳定 Manifest 与 expectedPrevious 条件提交。失败／原生自身取消／文件再变／保存失败保留可信基线。物理数据库保存故障实机注入仍 NOT RUN。
+- 共享仅实际开始且未结束的同源工作，排队及完成后重查；插件全局池独立于外部原生刷新。停止只撤销本轮未开始工作，已开始／已加入工作正常保存和条件提交，结算后才开放下一轮；不增加执行取消源或客户端停止关联。
+- STRM 只读，五字段最小 SQLite，不计算远程 SHA-1、不调用 OpenList 元数据 API、不改代理、不另带 FFmpeg，无持久化探测状态、额外调度／运行／停止／定时入口。必要日志和原生异常保持脱敏。
 
-### 非阻塞问题、延期与文档协调
+### 非阻塞问题、延期、文档协调与经验候选
 
-- P2：批量验收工具只按当天秒数关联日志，跨日复用容器须建立新日志会话；本轮已验证日期归因与环境修复后完整通过，后续维护宜使用完整日期。不是插件运行时的轮次控制缺陷，不另造 Task。
-- P2：页面／说明对“指数”的泛称比实际按完整数值判断更宽，数学上合法的 1～8 整数写法可被接受；不影响正确性规则，后续维护完善措辞。当前不改 HTML 或增加产品开关。
-- Slice 4：真实十万库／完整扫描压力、外部 JellyfinProxy／OpenList 隔离联调、广泛格式／客户端、发布 ZIP／安装材料仍 NOT RUN。逐分支 T09～T11、audio-only 实机、内部数据库保存故障实机注入、完整镜像构建溯源与通用性能证明保留原已接受限制。
-- A 如判 PASS，在同一关闭检查点协调 README、docs/scope.md／requirements.md／product-experience.md／architecture.md／roadmap.md／progress.md／test-matrix.md 及 SLICE／TASK 的 CURRENT／状态／Next Action。维护文档中旧“尚未实现／NOT RUN／Task PLANNED”指针尚待协调；B 此处只记录实现／验证事实，不提前宣称已关闭或修改稳定规则。
-- 供 A 收尾选择的 B 经验候选：保存响应丢失须核对服务端有效值；日志轮次关联须包含日期／会话；长验收进度观察应使用日志／文件并隔离鉴权身份。经验不是验收门槛，不在本包修改角色经验文件。
+- 保留 P2：批量工具的日志关联仅按当天秒数，跨日复用须建立新日志会话；页面对“指数”的泛称比完整数值判断更宽。两项不改变当前正确性验收，也不另建 Task。
+- Slice 4 的真实十万库／完整扫描压力、外部 JellyfinProxy／OpenList、广泛格式／客户端、发布 ZIP／安装材料继续 NOT RUN。逐分支 T09～T11／audio-only 实机、物理数据库保存故障注入、完整镜像构建溯源及通用 FullRefresh 性能证明沿用已接受限制。
+- A 如判 PASS，在关闭检查点统一 README、docs/scope.md／requirements.md／product-experience.md／architecture.md／roadmap.md／progress.md／test-matrix.md 及 SLICE／TASK 的 CURRENT／状态／Next Action。维护文档中旧 TARGET／NOT RUN／FIX REQUIRED 等事实指针待 A 协调；B 本次不修改稳定需求或提前写成已接受 CURRENT。
+- 供 A 合并的 B 经验候选：共享全局故障须覆盖末项正常返回分支；构建版本标识改变时用源码和可复现二进制核对证据；长验收用完整日期／会话关联日志并隔离鉴权身份。只留可复用方法，不记录任务流水账；角色经验文件在 A 收尾时统一审阅。
 
 ```text
 SLICE READY FOR A REVIEW
-NEXT ACTION: A REVIEWS THE COMPLETE SLICE; NO NEW IMPLEMENTATION TASK
+NEXT ACTION: A RE-REVIEWS THE COMPLETE SLICE; NO NEW IMPLEMENTATION TASK
 ```
 
 ## A Final Review
+
+以下为上一候选 `5580492a5cacbdc0772dd2f14f9b527ab3851746` 的历史拒绝记录，原决定和反例保留。当前纠正候选及新 Final 见上方 Closure Packet，等待 A 重新审查；B 不代 A 更新最终裁定。
 
 2026-10-16，A 完成必读清单、真实 Git 状态与治理检查，初始工作区干净。审查完整 Slice Base..Implementation Head，覆盖原生任务、候选 ID／分批／当前范围与多版本身份、共用执行／保存／指纹、共享／停止收尾、配置页、测试工具及文档差异；核阅两项 Task 的 B PASS 快照和本次独立 Slice Final 原始证据。最终决定如下，不改写历史 Task PASS 或 B 的交接决定。
 
@@ -274,3 +274,10 @@ Base、Required Outcomes／Surfaces、验收及全部安全不变量保持不变
 ```text
 NEXT ACTION: B PLANS THE IN-SLICE CORRECTION FOR AF-1
 ```
+
+
+## 当前交接
+
+当前 B Closure Packet 已包含 AF-1 纠正及新 Final；上方 A 拒绝仅对应旧候选。Slice 保持开放，等待 A 完整审查。
+
+NEXT ACTION: A RE-REVIEWS THE COMPLETE SLICE; NO NEW IMPLEMENTATION TASK
