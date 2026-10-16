@@ -1,11 +1,11 @@
 # Task 4.1 — 单版本安装包与完整安装恢复旅程
 
-必读：[Slice 4 合同](SLICE.md)、[固定交付方案](docs/slice-4-delivery-plan.md)、[开发流程](docs/development-workflow.md)、[B 经验](docs/agent-experience/task-planner-reviewer.md)、[Developer 经验](docs/agent-experience/developer-implementation-role.md)。用户已明确授权本次直接规划 Task；后续 B 根据固定方案规划，独立审查责任保留。本轮仅提交计划，不启动实施。
+必读：[Slice 4 合同](SLICE.md)、[固定交付方案](docs/slice-4-delivery-plan.md)、[开发流程](docs/development-workflow.md)、[B 经验](docs/agent-experience/task-planner-reviewer.md)、[Developer 经验](docs/agent-experience/developer-implementation-role.md)。原计划由用户明确授权 A 规划，后续 B 根据固定方案规划并独立审查；当前为 B 审查后的同 Task 修正交接，具体决定见文末。
 
 ```text
 Task ID: 4.1
 Parent Slice: 4
-Status: READY FOR B REVIEW
+Status: FIX REQUIRED
 Task Base: ae265d0dba02aa1c5599871602d4350072b7155f
 Contract Checkpoint: ae265d0dba02aa1c5599871602d4350072b7155f
 Difficulty: High
@@ -160,12 +160,42 @@ B 审查完整 `ae265d0dba02aa1c5599871602d4350072b7155f..Implementation Head`�
 ## B Review Result
 
 ```text
-Reviewed: NOT SET
-Decision: PENDING
-Slice Required Outcomes all satisfied: NO — RO-1 implemented and pending independent review; RO-2/3/4 await implementation/evidence
-Next: B reviews Task 4.1 Base..Implementation Head and independently reproduces the key package behaviors
+Reviewed: ae265d0dba02aa1c5599871602d4350072b7155f..4bad6eb43e3b8bb87ce9df9bc0aa1adb952044f2
+Review Start HEAD: b48afd1dec64d958d354c496995e3d0d3a46306e
+Reviewer: B
+Decision: FIX REQUIRED
+Slice Required Outcomes all satisfied: NO — RO-1 has the blockers below; RO-2/3/4 remain NOT RUN
+Next: Developer corrects Task 4.1; retain Task ID, Base, Goal, Scope, acceptance and T4 gates
 ```
 
-B PASS 后重核全部 RO；仍按固定方案进入 4.2 时才规划下一 Task。全部 RO 满足则单独 Slice Final 并形成 Closure Packet；不在此关闭 Slice。
+### 审查范围、证据与合法性
 
-NEXT ACTION: B REVIEWS TASK 4.1
+2026-10-17，B 起始工作区干净，已完成必读、已提交合同／固定方案核对及治理检查。审查上述完整范围，核对 25 个改变文件及后继报告；61 项当前源码／工具／测试／依赖／环境输入与 Implementation Head 字节一致。没有修改 Slice、Roadmap、稳定需求或产品实现，也没有操作运行中实例。
+
+读取 Developer 最终索引、包安装／升级／恢复原始 JSON、C#／Python 日志和配置页首败／三次重跑。候选 ZIP SHA-256 确为 `643c02082a19e94f122fa3a3675ccd96c2a818de52f16f1a9354db068dadfaf0`，当前归档／文件与旁置清单相符；已有干净安装、主流／指纹及 MP4／MKV Web 媒体推进的 Developer 观察保留。它们不足以证明下列缺失行为。
+
+B 独立运行 `python3 -m unittest discover -s tests -p 'test_*package*.py' -v`：29/29 PASS、0 失败／0 跳过；另在临时目录对同一候选 ZIP 制造反例，四类非法包均被接受并替换临时有效安装，另复现一项外部目录写入。复现脚本退出 0 表示反例得到确认，五项预期保护均为 FAIL，不是产品 PASS。全部临时数据自动删除，未修改原候选包。
+
+本机完整索引：[B Review INDEX](.git/validation-evidence/4bad6eb43e3b8bb87ce9df9bc0aa1adb952044f2/b-review-20261017/INDEX.md)，含复现脚本、原始结果、61 项输入摘要和审查起点合同／Task 快照；仅本工作区可读。已发现明确阻塞，本轮干净实机／升级／恢复的 B 独立运行及其余完整 T4 重跑均 NOT RUN，不据 Developer 标签签发 PASS。修正候选仍须原完整门槛和 B 独立实机验证。
+
+### 当前 Task 阻塞项（P1）
+
+1. **BR-41-1 — 部署前校验没有落实包完整性合同（AC-1／AC-8）。** `scripts/package_plugin.py:verify_archive()` 重新计算摘要后直接返回，没有与已发布清单／预期摘要比对；托管依赖仅按可被修改的 `meta.json.assemblies` 查存在性，也不核对版本目录／程序集／元数据的一致性。B 保留原旁置清单，分别重写 native 为无效内容、删除 `Microsoft.Data.Sqlite.dll` 并从 assemblies 删除但保留 deps 声明、将 meta 版本改为 `9.9.9.9`、添加 `Jellyfin.Controller.dll`：四包均通过 `verify_archive`，随后 `unpack_archive` 覆盖临时有效安装。修正须在任何有效安装替换前核验可信预期摘要、完整依赖与允许的负载／元数据；补对应真实拒绝与旧文件保留测试，不能只测 ZIP 截断／CRC 或缺 native。若准确 CLI 需要显式 manifest／expected digest，由 B 先在本 Task 记录等价接口；不得删减验收。
+
+2. **BR-41-2 — 升级与备份恢复缺少必要执行（AC-2）。** `scripts/run_isolated_package_integration.py:scenario_upgrade()` 只对有待处理 URL 变化的项目执行替换后检查，没有已接受且未变项目的零探测复用；第 567～572 行在服务器运行时复制配置／SQLite 后即返回 `backup_restore` 路径，没有按说明停止、备份、实际恢复、重启和读回核对，也没有恢复失败的拒绝测试。补齐这两条真实旅程，核对配置／可信指纹／原生主流和地址、未变零探测及待处理变化可重试；失败或缺失不能仍输出总体 PASS。保留当前已观察的替换与变化重试事实，不把复制文件解释为恢复已通过。
+
+3. **BR-41-3 — 隔离写入与收尾边界未完成（AC-8／安全不变量 11）。** `scripts/package_environment.py:deploy_archive()` 不检查 `config/plugins` 的符号链接／实际归属，`unpack_archive()` 会沿该链接删除并替换目标。B 用两个临时目录模拟 owned／foreign，外部有效目录的 sentinel 被删除且写入候选负载。所有部署、基线、备份、移除／清理的必要写入口均须在写入前核验归属，外部路径失败保持原样，Docker 归属查询失败不能作为无容器继续；增加相应拒绝测试。另 `main()` 的 finally 仅保存／打印结果，包验收无自身配置／全部触发器／媒体／STRM／临时库条目的前后对账与恢复／清理结果；补成功及失败路径的可核验收尾，保留必要原始证据，只清理确认本轮所有的输入，不扩大为通用环境框架。
+
+4. **BR-41-4 — 源码与构建身份无法按报告复建（AC-1／AC-8）。** 清单声明来源 `4bad6eb43e3b8bb87ce9df9bc0aa1adb952044f2`，归档 DLL 与 RID AssemblyInfo 实际嵌入 `d157e0ddbd5710c9036fff93123c5420316db056`；两提交可执行输入一致，B 不认定为混入不同产品代码，但当前未记录真实构建 revision／SourceRevisionId 的区别。`--source-revision` 也只校验字符串格式，独立调用接受不存在的全零 SHA，且未传给 publish／验证工作区内容；清单缺锁／构建输入摘要和准确构建命令。修正须关联真实可达源码、被测输入和实际构建标识，拒绝不匹配／虚构来源，记录锁／SDK／命令，证明固定输入及原 SourceRevisionId 下产物可复建；纯文档后继可按流程核验复用，不以改标签代替溯源。
+
+以上均属于原 Task 安装／升级／恢复／身份／隔离义务，Contract 可以满足，**无需 A 改合同；当前 Task 继续同 ID／Base 修正**。修正追加提交，重建 ZIP，保留首败和全部重跑；T4 可执行输入变化后仍执行原指定全套，不重用本次旧候选的 PASS 替代新候选门槛。Developer 同步安装／支持／矩阵中的事实标签，未完成部分不能继续写成已验证。
+
+配置回归首败原文定位到 Jellyfin Home 的 `hometab` 堆栈，原脚本与 Task Base 相同，三份后续完整输出为 PASS；本轮保留这组真实结果，不将首败改写为 PASS，也不据此另造当前 Task 阻塞或削减修正候选门槛。
+
+### Slice 重核与经验候选
+
+RO-1／安装、升级恢复及包身份 Surfaces 未通过本次 B 审查；RO-2 的真实十万库／成本、RO-3 的完整扫描重叠、RO-4 的真实代理及相应 Surfaces 均未完成。固定交付方案的 Task 4.2 依赖 4.1 B PASS，本轮不创建下一 Task，不运行 Slice Final、不提交 Closure Packet、不宣布 Slice 关闭。
+
+供 A 收尾时择要合并的经验：校验工具能列出新摘要不等于核验已发布输入 → 对重写 ZIP、依赖／元数据不一致构造反例并检查有效安装保留 → 用于包交接；恢复报告容易只证明备份文件存在 → 实际执行恢复／重启和业务读回，并记录失败收尾 → 用于升级与恢复审查。此处不改角色经验文件或增加验收义务。
+
+NEXT ACTION: DEVELOPER CORRECTS TASK 4.1
