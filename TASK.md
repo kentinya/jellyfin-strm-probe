@@ -247,14 +247,53 @@ B 审查真实 `Task Base..Developer Head`，并单列 `Correction Start Checkpo
 ```text
 Reviewed: b86d9c17d7f915108072f54ee098f0f5543fe093..97e68dfa2f246488174e47e2ba0cf45910a4947f
 Correction Reviewed: e03052655d298adb30cbb7f315da684f27a07285..97e68dfa2f246488174e47e2ba0cf45910a4947f
-Developer Report: (this checkpoint)
-Decision: AWAITING B REVIEW
-Slice Required Outcomes all satisfied: NOT YET ASSESSED
-Next: B RE-REVIEWS THE CONCURRENT ADMISSION CORRECTION
+Current Fix Reviewed: 39ef1b7ccb90470546c80ef55642301ea92a651b..97e68dfa2f246488174e47e2ba0cf45910a4947f
+Review Checkout / Report: 623a8e8d813f96a6020fec7f2d88b5f409d200ab
+Decision: FIX REQUIRED
+P0/P1 Blockers: AF-1 (P1), observed disable lost across repeated Enabled reads
+Slice Required Outcomes all satisfied: NO
+Next: DEVELOPER CONTINUES THE SAME TASK 3.1 CORRECTION
 ```
 
-上一轮 B `FIX REQUIRED`（并发未开始准入，P1）作为本轮纠正的输入保留于 Git 历史与本文件下方记录；本轮实现与
-自测不构成 PASS。
+2026-10-16，B 重新完成必读清单及 B 经验，初始 main 干净、治理 PASS。以已提交 Slice 为 authority，保留 Task ID／Base／Goal／Scope／High／T4 与用户“不增加状态字段”约束。核对完整 Task Base..Head 文件范围、此前可达 B／A 记录和本次四个产品／测试文件的实际差异；单列本轮纠正范围，不把其间 Task 3.2 页面交付计作本次修正。报告 checkout 比实现候选仅多 TASK.md，53 个源码／测试／工具／锁／构建输入逐个与候选 Git 内容匹配。根状态仍为 FIX REQUIRED、报告标 AWAITING B REVIEW；按用户本轮明确职责审查实际已提交候选，不虚构状态历史。
+
+### 本轮已修复部分与独立结果
+
+- **PASS**：指定 Batch／Coordinator／Context／Playback／Configuration 聚焦 142 passed／0 failed／0 skipped，含 10 项 `BatchAdmissionFailure`。独立 TRX 与精确命令已保存。
+- **PASS**：重跑 B 的四项原始禁用／真实仓库读取失败 latch × runner／ExecuteAsync 控制及三个跨重新启用的并发控制，独立产品断言 7／7 通过。旧三项窗口现零新增开始／调用／可靠成功、两项撤销、基线保留、Disabled=true／Completed=false、进度低于 100%，资源归零。
+- **PASS**：重跑 B 的真实许可等待宽窗口控制；禁用被另一消费者观察并结算、重新启用且释放独立 reservation 后，已分派的等待者不再开始。保留一个正常未变跳过及一个撤销对照；未开始源基线保留、资源归零。不宣称此控制是真实 Jellyfin 页面切换验收。
+- `CloseAdmission()` 复用原停止位和锁，未增加字段／枚举／CTS；`ConfirmStop()` 可在此前禁用关闭准入后记录真正管理员停止时间。已开始／已加入 running 的结果路径没有新增事后禁用拒绝。上述通过只支持这些控制，不排除以下遗漏。
+
+### AF-1 残留：重复读取 Enabled 丢失已观察的禁用（P1）
+
+`BatchCheckRunner.ProcessBatchAsync` 先在外层条件读取 `!_settings.Enabled`，进入分支后再次读取才决定 CloseAdmission 和 Disabled。如果两次读取之间配置重新启用，第一项已因禁用被撤销，却没有关闭本轮准入或保留原因；末项随后补 100%，runner Completed=true，ExecuteAsync 正常返回。`FetchCandidates` 也在观察禁用后仅设置 complete=false，返回 RunAsync 后靠重新读取 Enabled 推断原因；此时重新启用同样使原生入口正常返回。固定 worker 会把正常返回记 Completed。
+
+B 使用同一产品 runner／ExecuteAsync、临时受支持 STRM／已有可信基线和原有假原生，构造可编排的 `IPlaybackSettings`：在目标判断返回一次 Enabled=false，下一次读取前恢复 true。仅替换公开构造参数；不改产品／已提交测试、不直接改停止位。记录直接调用位置，确保读取发生在目标分支，而不是外层异步调用栈的同名历史帧。四项有效控制结果：
+
+| 控制 | 实际结果 |
+|---|---|
+| 末项消费者，runner | 目标两次读取 false→true；Revoked=1、Disabled=false、StopRequested=false、Completed=true；进度 `[0,99,100]`。 |
+| 相同消费者窗口，ExecuteAsync | 正常返回，无取消异常；进度 `[0,99,100]`。 |
+| 候选获取前观察禁用，runner | 获取被中断、CandidateTotalKnown=false、Completed=false，却 Disabled=false／StopRequested=false；进度 `[0]`。 |
+| 相同候选获取窗口，ExecuteAsync | 正常返回，无取消异常；尚未完成获取的任务仍会被 worker 记 Completed。 |
+
+四项均零探测、旧基线未变、许可／preparing／running 归零；独立产品断言 **4 FAIL，退出 1**。这是原 AF-1 的“禁用原因必须持续到本轮结算、不能因重新启用清空”及 RO-6／AC-7 未闭合，不是新增状态要求或 Material Contract Change。生产 `PluginPlaybackSettings.Enabled` 每次读取当前配置，配置保存会发布新对象，两次读取之间允许配置变化；控制证明该合法交错的结果，未测真实页面切换频率，不声称通常或必然发生。
+
+### 同一 Task 的最小继续修正
+
+1. **每个判断点只读取一次 Enabled，并立即固化这次观测。** 读到 false 就使用已有 CloseAdmission 与已有 Disabled 计数；当前分支所有后续动作使用这次局部值，不能通过第二次 getter 推翻第一次观测。局部变量不是新增状态字段。可以复用一个很小的观察方法，避免各处漏记原因；不增加字段、枚举、CTS 或持久化状态。
+2. **同时检查 runner 中相同写法。** 覆盖候选查询前／后、候选固定后、批次前和消费者取项处；捕获禁用的当下就关闭准入并记原因，查询返回后的汇总只消费已记录原因。后续独立边界可重新读取当前配置，但已记录原因不得被清除。保持管理员 token 分类、状态库阶段／失败优先级、已有资源结算和已开始／已加入探测正常收尾。
+3. 在 `BatchAdmissionFailure` 中补回归，确定性控制一次读取禁用、后续读取已启用，覆盖消费者末项与获取阶段的 runner／ExecuteAsync；检查 Disabled、非 Completed／取消异常、进度、基线和资源。保留本轮已通过的四项原控制、三项并发与真实许可等待宽窗口控制。先保留旧候选 FAIL，再执行修正后原完整 T4；B 下轮仍独立关键控制与 stop／sharing，不削减门槛。
+
+### 证据、未运行与 Slice 重核
+
+仅本机索引：`.git/validation-evidence/97e68dfa2f246488174e47e2ba0cf45910a4947f/b-review-20261016-2/INDEX.md`。包含范围 diff、53 项输入与构建产物身份、聚焦 TRX、原控制／宽窗口／重复读取 helper 源码、原始结果、精确命令／退出／耗时及独立断言。采集器退出 0 仅代表成功采集，不代表四项必要行为通过；初次 helper 栈匹配过宽的产物另保留，正式四项使用直接调用帧定位。
+
+已核阅 Developer INDEX、fulltest／build 等原始日志，保留其自测 192 C#／63 Python／实机结果为历史事实；因明确 P1 提前拒绝，本轮不签发完整 T4 证据复用 PASS。B stop／sharing 实机、其余完整实机和 Slice Final 本轮均 **NOT RUN**，符合流程的早期拒绝规则；修正后仍须完整计划。真实十万库、内部数据库物理保存故障注入、外部代理／OpenList、广泛格式／客户端及发布 ZIP 的既有 NOT RUN 边界不变。
+
+重新核对全部七个 RO／六类 Surfaces：RO-1／2／3／4／7 的历史交付保留；RO-6 的禁用原因与原生终态明确未满足，RO-5／配置约定的持续准入停止也不能因本轮已有绿灯整体签发。共用执行／开始边界及进度／原生结果 Surface 仍需同一 Task 修正。故不创建下一 Task、不运行 Slice Final、不替换旧 Closure Packet、不改 Slice／Roadmap／稳定需求、不代 A 关闭。
+
+经验候选：一个边界内多次读取动态配置可能丢失首次拒绝原因 → 捕获一次观测并立即写入既有本轮准入与汇总 → 适用于可即时启停的并发检查；供收尾与已有经验合并，不写流水账。
 
 ### 上一轮 B Review Result（历史输入，2026-10-16）
 
