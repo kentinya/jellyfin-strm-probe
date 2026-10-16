@@ -4,9 +4,9 @@
 Slice ID: 3
 Name: Jellyfin 原生批量检查任务
 Owner: A
-Status: ACTIVE
+Status: READY FOR A REVIEW
 Base SHA: 6da90ab6bd8995d8204ae0b7faf786c823699fe6
-Implementation Head: NOT SET
+Implementation Head: 5580492a5cacbdc0772dd2f14f9b527ab3851746
 ```
 
 ## 激活决定与真实基线
@@ -147,12 +147,91 @@ B 对全部 Required Outcomes／Surfaces 满足后停止新增 Task，单独执�
 
 ## Closure Packet
 
-NOT SUBMITTED。当前仅激活合同，无本 Slice 实现、B 审查或产品验收结果。
+2026-10-16，B 提交完整 Slice 最终包。仅更新流程状态、真实实现指针及证据交接；上述 Required Outcomes／Surfaces、Base、业务不变量、范围和验收合同不变。
+
+```text
+Slice: 3 — Jellyfin 原生批量检查任务
+Base: 6da90ab6bd8995d8204ae0b7faf786c823699fe6
+Implementation Head: 5580492a5cacbdc0772dd2f14f9b527ab3851746
+Reviewed Implementation Range: 6da90ab6bd8995d8204ae0b7faf786c823699fe6..5580492a5cacbdc0772dd2f14f9b527ab3851746
+Final Test Checkout: 678bcf5c3a6ba5c6743402ec27367dd76d0f101d
+B Decision: SLICE READY FOR A REVIEW
+B Known P0/P1 Blockers: NONE
+A Decision: NOT RUN
+```
+
+最终测试 checkout 只比实现检查点多报告／B 审查文档，可执行源码一致。Final 重新构建的 DLL SHA-256 为 `76c83b3f0d8e6fc5b936aabb9fa41897a6b9b7060819d813bf0b356b7bbc49d8`，与本轮真实部署／配置页验收记录一致；不混称为 Task 阶段的二进制。
+
+### 实现与 Task 索引
+
+交付原生「STRM 媒体信息检查」、默认全部／部分库保存、原生候选 ID 去重固定后按 128 个对象分批、最多 8 个固定消费者、共用决策／源身份／ProbeCoordinator／原生保存关联／最小指纹提交、停止准入与已开始收尾、进度与脱敏统计，以及五项完整配置页与恢复操作。插件主动探测仍默认 2、可配置 1～8、下次启动生效；范围对下一轮生效。
+
+| Task | Base／实现 | B PASS 完整快照 |
+|---|---|---|
+| 3.1 — 原生批量完整后端 | `b86d9c17d7f915108072f54ee098f0f5543fe093`／`3209bc699544f26ffe7a5e100941edda0b0d275d` | `2f74aa83f15707df56c4b15409ba1538a488f83a:TASK.md` |
+| 3.2 — 完整管理员配置与恢复旅程 | `2f74aa83f15707df56c4b15409ba1538a488f83a`／`5580492a5cacbdc0772dd2f14f9b527ab3851746` | `678bcf5c3a6ba5c6743402ec27367dd76d0f101d:TASK.md` |
+
+Task 3.1 各轮修正、Task 3.2 的失效库／未确认保存／完整数值修正及历史 FAIL 均保留于可达 Git 与原始证据。没有为字段、测试或非阻塞润色再建 Task。
+
+### Required Outcomes／Surfaces 完成状态
+
+| 结果 | 状态与当前最终证据 |
+|---|---|
+| RO-1 | PASS：真实唯一任务发现、无默认触发、手动／真实定时、触发器重启保留；Final batch discovery／stop。 |
+| RO-2 | PASS：两库部分／全部／失效选择，133 个真实候选、2 批、多版本；轮内新增本轮不处理、删除安全结算、新增下轮发现；Final batch scope＋配置页 04／09／11／13／14＋十万模拟。 |
+| RO-3 | PASS：共用决策／原生执行／SQLite 条件提交，首次信任不计成功，URL／SHA-1／Size／失败／保存／Manifest 保护；全部 C# 与 Final playback／batch discovery／failure。 |
+| RO-4 | PASS：两方向同源实际一次、批量实际调用分别 1／0 而可靠成功各 1；不同源播放 owner＋批量 owner 混合峰值 2；确定性 1／2／8、false 权限、独立原生刷新与重启生效。 |
+| RO-5 | PASS：原生 Cancelled；2 个已开始源提交、1 个未开始撤销；收尾期新轮次／新探测为 0，排队轮只重探撤销源，再显式运行零重复；两方向 shared_stop 均 Cancelled、可靠成功 1／撤销 0，独立播放可在收尾期间开始。 |
+| RO-6 | PASS：完整回归和实机汇总等式／进度／状态对账；状态库不可用时 Failed 且无新探测，修复重启 Completed；单项／保存／竞态保护分层证据齐全。 |
+| RO-7 | PASS：真实插件入口、五项保存／重启读回、旧配置默认、失效范围修正、保存拒绝／未确认／重读、严格数值与生效说明、原生任务／恢复说明；Final 配置页 19 场景。 |
+
+六类 Required Surfaces 均覆盖：原生任务／生命周期（RO-1／5）、库查询／分批源映射（RO-2）、共用执行／开始边界（RO-3／4／5）、SQLite 保护／恢复（RO-3／6）、HTML 页面／配置通道（RO-7）、进度／结果／日志及实机入口（RO-1／5／6／7）。
+
+### 独立 Slice Final
+
+本机稳定索引：`.git/validation-evidence/5580492a5cacbdc0772dd2f14f9b527ab3851746/slice-final-20261016/INDEX.md`。仅本机可读，未推送。`combined-results2.json` 是含保留首败／重跑的最终汇总；精确命令、cwd、退出码、耗时、源码／锁／SDK／镜像／夹具／配置／构建与部署身份及原始日志分别保存。未使用旧 Task 运行代替本次 Final。
+
+| 门槛 | 当前 Final 结果 |
+|---|---|
+| locked restore／Release build | PASS；build 0 警告、0 错误。 |
+| 全部 C#／Python | PASS：182／182、0 skipped；63／63。 |
+| format／治理／差异／本地链接 | PASS；Markdown 138 个本地链接／锚点检查通过，交接文档提交后另复核。 |
+| 默认真实播放入口 | PASS，733.038 秒；同源一次／提交一次／后续零重复，默认 2／保存 1 重启前仍 2／重启后串行，池饱和下独立原生刷新 601 ms 完成；失败、竞态、多版本、SQLite、地址／主流重启及恢复。 |
+| 默认 batch 七场景 suite | PASS，314.218 秒；discovery／stop／shared_stop／sharing／scope／mixed／failure 全部完成，配置／全部触发器／夹具地址 restored and verified。 |
+| 默认真实配置页入口 | PASS，273.222 秒；19 场景、每场景独立原始交互／截图／console／请求；非法输入 0 POST，合法 1／8／2 读回，页面保存值直接驱动原生任务；真实重启及配置／触发器恢复。 |
+| 最终恢复与输入身份 | PASS：初始与最终媒体／STRM／配置文件摘要、有效配置、全部触发器、版本逐项一致；Final 期间全部被测 tracked 输入未变化。临时库条目／文件清除由各入口检查。 |
+
+**失败与重跑披露：** 初次 batch 在停止前把昨天 23:58 的 5 条入口与本轮 1 条一起计成 6，152.115 秒退出 1。Docker 完整日期证明是工具的秒数比较跨日误计；原始失败及日期时间线保留。随后对专用隔离 Jellyfin 容器做同镜像重建，保持绑定数据、配置、媒体与触发器一致，建立新的日志会话；未改源码、断言或筛选。第二次 batch 已完成 discovery／stop／shared_stop 后，B 的额外状态查询复用了同一测试 DeviceId 登录，造成 401，216.618 秒退出 1；属于审查操作干扰，原日志保留。停止并行登录后，第三次原命令完整通过。两次失败均验证恢复；没有把失败改写为 PASS。
+
+重跑仅补失败的 batch 及其后未执行门槛；此前同一 Final 的还原／构建／全回归／format／播放结果保留。源码、依赖、构建产物及被测配置／夹具均未变，问题仅涉及批量工具的历史日志边界和额外登录干扰，不影响先前已通过门槛的证据。最终原命令／原断言全部得到有效通过结果。
+
+**成本与有界性分层：** 十万模拟在当前测试 harness 中实际结算 100000 个候选、782 批；完整对象峰值 128、活动消费者峰值 4（上限 8）、累计消费者 Task 6256，没有每候选一个 Task。ID 尺寸估算 4000000 B、槽位容量折算 5851640 B、累计获取线程分配 12647096 B、采样进程堆增量峰值 10664528 B、获取 83.8576 ms。真实 133 候选另记录原生获取 53.823 ms／分配 321512 B／采样峰值 418040 B／容量折算 8824 B，2 批对象读取 26.7998 ms／分配 2001088 B。容量折算、进程堆采样和累计分配不是同一个量，不是精确内部峰值；不宣称总内存恒定或真实十万库性能。
+
+### 业务不变量与证据边界
+
+- 仅支持版本化 STRM；普通／旧输入、禁用和 false 权限保留适用原生委托；批量范围外和不支持输入零插件探测。C# 全矩阵＋playback delegation／false＋batch scope。
+- URL 改变优先且必探测；仅双侧有效内容 SHA-1 可比，相同忽略 Size；SHA-1 不可比时仅双侧有效 Size 不同触发，mtime 不参与。完整决策／文件测试＋真实 URL、内容／Size 变化与重启。
+- 首次信任不称本次探测成功；其余接受需本次原生成功、有效主流／地址已保存、稳定 Manifest 和 expectedPrevious 条件提交。失败／原生取消异常／文件再变／保存失败保护由完整测试及代表实机分层支持；内部数据库保存故障实机注入仍 NOT RUN。
+- 同源只共享实际开始的 running，排队／结束后重查；插件主动全局并发独立于原生刷新。批量停止不传给已开始执行，不否决有效提交，等待结算后才开放新轮。完整协调／准备／身份／停止控制＋Final 两方向共享／停止／混合。
+- STRM 只读、不计算远程 SHA-1、不调用 OpenList 元数据 API、不改代理、不另带 FFmpeg；SQLite 仍只存五字段历史，不增加任务状态机／调度器。配置页无第二套运行／停止／定时入口，必要诊断与证据脱敏。
+
+### 非阻塞问题、延期与文档协调
+
+- P2：批量验收工具只按当天秒数关联日志，跨日复用容器须建立新日志会话；本轮已验证日期归因与环境修复后完整通过，后续维护宜使用完整日期。不是插件运行时的轮次控制缺陷，不另造 Task。
+- P2：页面／说明对“指数”的泛称比实际按完整数值判断更宽，数学上合法的 1～8 整数写法可被接受；不影响正确性规则，后续维护完善措辞。当前不改 HTML 或增加产品开关。
+- Slice 4：真实十万库／完整扫描压力、外部 JellyfinProxy／OpenList 隔离联调、广泛格式／客户端、发布 ZIP／安装材料仍 NOT RUN。逐分支 T09～T11、audio-only 实机、内部数据库保存故障实机注入、完整镜像构建溯源与通用性能证明保留原已接受限制。
+- A 如判 PASS，在同一关闭检查点协调 README、docs/scope.md／requirements.md／product-experience.md／architecture.md／roadmap.md／progress.md／test-matrix.md 及 SLICE／TASK 的 CURRENT／状态／Next Action。维护文档中旧“尚未实现／NOT RUN／Task PLANNED”指针尚待协调；B 此处只记录实现／验证事实，不提前宣称已关闭或修改稳定规则。
+- 供 A 收尾选择的 B 经验候选：保存响应丢失须核对服务端有效值；日志轮次关联须包含日期／会话；长验收进度观察应使用日志／文件并隔离鉴权身份。经验不是验收门槛，不在本包修改角色经验文件。
+
+```text
+SLICE READY FOR A REVIEW
+NEXT ACTION: A REVIEWS THE COMPLETE SLICE; NO NEW IMPLEMENTATION TASK
+```
 
 ## A Final Review
 
 NOT RUN。收到 Closure Packet 后审查完整 Slice，不在激活时预填 PASS。
 
 ```text
-NEXT ACTION: FOLLOW THE CURRENT TASK.md HANDOFF
+NEXT ACTION: A REVIEWS THE COMPLETE SLICE; NO NEW IMPLEMENTATION TASK
 ```
