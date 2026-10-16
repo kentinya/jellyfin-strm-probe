@@ -467,7 +467,7 @@ public sealed class BatchCheckRunner
                     ConsumerActivityChanged?.Invoke(true);
                     try
                     {
-                        if (stopSignal.IsStopped || !_settings.Enabled || counters.StoreUnavailable != 0)
+                        if (stopSignal.IsStopped || !_settings.Enabled || counters.StoreUnavailable != 0 || counters.Disabled != 0)
                         {
                             if (!_settings.Enabled)
                             {

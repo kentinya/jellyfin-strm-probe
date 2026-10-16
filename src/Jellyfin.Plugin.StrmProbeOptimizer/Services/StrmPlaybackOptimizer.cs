@@ -525,8 +525,19 @@ public sealed class StrmPlaybackOptimizer
             Coordinator.Complete(workItem, outcome.Source, outcome.Committed);
             return outcome.Committed ? BatchSourceOutcome.Probed : BatchSourceOutcome.ProbeIncomplete;
         }
+        catch (BatchDisabledException)
+        {
+            // The plugin was disabled at the owner admission, before the probe actually started. The
+            // reservation/permit is released and the exact reason is surfaced to the runner so the final-item
+            // summary reports the early end instead of faking completion.
+            Coordinator.Abandon(workItem);
+            throw;
+        }
         catch (FingerprintStoreUnavailableException)
         {
+            // The fingerprint store faulted at the owner admission, before the probe actually started. The
+            // reservation/permit is released and the exact global-unavailable reason is surfaced to the runner.
+            Coordinator.Abandon(workItem);
             throw;
         }
         catch (Exception exception)
@@ -698,9 +709,21 @@ public sealed class StrmPlaybackOptimizer
         IReadOnlyList<Guid>? scopeLibraryIds,
         IBatchScopeVerifier? scopeVerifier)
     {
-        if (!_settings.Enabled || IsFingerprintStoreUnavailable)
+        if (IsFingerprintStoreUnavailable)
         {
-            return BatchAdmission.NotProcessed();
+            // The candidate was already decided to need a probe, but the shared fingerprint store latched
+            // unavailable before this owner obtained the execution opportunity. Surface the exact global reason
+            // with the execution stage so the runner keeps it in the need-probe denominator and reports the store
+            // unavailable instead of degrading to an ordinary not-processed input that fakes a completed run.
+            throw new FingerprintStoreUnavailableException(FingerprintStoreFailureStage.Execution);
+        }
+
+        if (!_settings.Enabled)
+        {
+            // The plugin was disabled before this owner obtained the execution opportunity. The exact reason must
+            // reach the run summary so a last-candidate disable reports the early end (Cancelled) instead of an
+            // ordinary not-processed that fakes reliable completion.
+            throw new BatchDisabledException(projectItemId, sourceKey);
         }
 
         if (stopSignal.IsStopped)

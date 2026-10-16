@@ -622,6 +622,257 @@ public sealed class BatchCheckTests
         Assert.AreEqual(0, harness.Coordinator.RunningCount);
     }
 
+    // ---------- Admission failure reason propagation (AF-1 / AC-T6 / AC-T7) ----------
+
+    [TestMethod]
+    [TestCategory("BatchAdmissionFailure")]
+    public async Task BatchDisabledBeforeAdmissionAtTheLastCandidateReportsEarlyEndWithoutFillingProgress()
+    {
+        using var harness = new BatchHarness();
+        var item = harness.AddSupported("https://media.example.invalid/a.mp4", ValidSha1, 10);
+        harness.CandidateIds = [item.Id];
+        await harness.RunAsync();
+        var accepted = harness.Repository.Get(item.Id, Key(item.Id));
+        Assert.IsNotNull(accepted);
+        harness.WriteManifest(item, "https://media.example.invalid/a.mp4?sig=changed", ValidSha1, 10);
+        // The candidate already needs a probe, but the administrator disables the plugin after the decision and
+        // before the owner obtains the execution opportunity. The exact reason must reach the last-candidate
+        // summary instead of degrading to an ordinary "not processed" that fakes a completed run.
+        harness.OnBatchDecision = () => harness.Enabled = false;
+        var reported = new List<double>();
+        var progress = new SynchronousProgress(value =>
+        {
+            lock (reported)
+            {
+                reported.Add(value);
+            }
+        });
+
+        var result = await harness.RunWithProgressAsync(progress, CancellationToken.None);
+
+        Assert.AreEqual(0, harness.ProbeCalls, "An unstarted candidate refused at admission must not probe.");
+        Assert.AreEqual(0, result.ActualProbeCalls);
+        Assert.AreEqual(0, result.ReliableSuccess);
+        Assert.IsTrue(result.Disabled, "The last-candidate admission refusal must carry the disable reason.");
+        Assert.IsFalse(result.Completed, "A disable must never be reported as a completed run.");
+        Assert.AreEqual(0, result.NotProcessed, "A candidate that already needed a probe must not degrade to an ordinary not-processed input.");
+        Assert.AreEqual(1, result.Revoked, "The loaded but unstarted candidate must settle as revoked.");
+        Assert.AreEqual(accepted, harness.Repository.Get(item.Id, Key(item.Id)), "The accepted baseline must survive an admission refusal.");
+        Assert.AreEqual(0, harness.Coordinator.RunningCount);
+        Assert.AreEqual(0, harness.Coordinator.PreparingCount);
+        Assert.AreEqual(0, harness.Coordinator.ActivePermits);
+        Assert.IsTrue(reported.Count > 0 && reported.Max() < 100, "An admission refusal must never fill progress to 100%.");
+    }
+
+    [TestMethod]
+    [TestCategory("BatchAdmissionFailure")]
+    public async Task BatchLatchedStoreBeforeAdmissionAtTheLastCandidateReportsUnavailableWithoutFillingProgress()
+    {
+        using var harness = new BatchHarness();
+        var item = harness.AddSupported("https://media.example.invalid/a.mp4", ValidSha1, 10);
+        harness.CandidateIds = [item.Id];
+        await harness.RunAsync();
+        var accepted = harness.Repository.Get(item.Id, Key(item.Id));
+        Assert.IsNotNull(accepted);
+        var other = harness.AddSupported("https://media.example.invalid/other.mp4", ValidSha1, 10);
+        var backing = harness.Repository;
+        var faulting = new FaultInjectingRepository(backing) { FailGetAfter = int.MaxValue };
+        harness.Repository = faulting;
+        harness.WriteManifest(item, "https://media.example.invalid/a.mp4?sig=changed", ValidSha1, 10);
+        // The candidate already needs a probe, but a different source's real repository read failure latches the
+        // shared store unavailable after the decision and before the owner obtains the execution opportunity. The
+        // exact global-unavailable reason must reach the last-candidate summary and stay in the need-probe count.
+        harness.OnBatchDecision = () =>
+        {
+            faulting.FailGetAfter = 0;
+            LatchFingerprintStore(harness, other);
+        };
+        var reported = new List<double>();
+        var progress = new SynchronousProgress(value =>
+        {
+            lock (reported)
+            {
+                reported.Add(value);
+            }
+        });
+
+        var result = await harness.RunWithProgressAsync(progress, CancellationToken.None);
+
+        Assert.IsTrue(harness.ReviewerOptimizer!.IsFingerprintStoreUnavailable, "Another source's real repository read failure must latch the shared store unavailable.");
+        Assert.AreEqual(0, harness.ProbeCalls, "A latched store fault must not start a probe.");
+        Assert.IsTrue(result.StoreUnavailable, "The last-candidate admission refusal must report the store unavailable.");
+        Assert.IsFalse(result.Completed);
+        Assert.AreEqual(1, result.Checked);
+        Assert.AreEqual(1, result.ProbeIncomplete, "A candidate already decided to need a probe must stay in the need-probe denominator.");
+        Assert.AreEqual(1, result.NeedProbe);
+        Assert.AreEqual(0, result.ReliableSuccess);
+        Assert.AreEqual(accepted, backing.Get(item.Id, Key(item.Id)), "The accepted baseline must survive a store fault at admission.");
+        Assert.AreEqual(0, harness.Coordinator.RunningCount);
+        Assert.AreEqual(0, harness.Coordinator.PreparingCount);
+        Assert.AreEqual(0, harness.Coordinator.ActivePermits);
+        Assert.IsTrue(reported.Count > 0 && reported.Max() < 100, "A store fault must never fill progress to 100%.");
+    }
+
+    [TestMethod]
+    [TestCategory("BatchAdmissionFailure")]
+    public async Task BatchDisabledWhileAnotherSourceWaitsForAPermitReportsBothReasons()
+    {
+        using var harness = new BatchHarness();
+        var first = harness.AddSupported("https://media.example.invalid/a.mp4", ValidSha1, 10);
+        var second = harness.AddSupported("https://media.example.invalid/b.mp4", ValidSha1, 10);
+        harness.CandidateIds = [first.Id, second.Id];
+        await harness.RunAsync();
+        harness.WriteManifest(first, "https://media.example.invalid/a.mp4?sig=changed", ValidSha1, 10);
+        harness.WriteManifest(second, "https://media.example.invalid/b.mp4?sig=changed", ValidSha1, 10);
+        using var coordinator = new ProbeCoordinator(1);
+        var permitWaitReached = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        coordinator.PermitWaitBarrier = () => permitWaitReached.TrySetResult();
+        harness.ReplaceCoordinator(coordinator);
+        harness.BlockProbe = true;
+        harness.AfterProbeStart = () => harness.ProbeStarted.TrySetResult();
+        harness.ConsumerLimit = 2;
+
+        var run = harness.RunAsync();
+        await harness.ProbeStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        // Prove the second source actually reached the global permit wait before the disable, rather than only
+        // observing that the first probe started.
+        await permitWaitReached.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        harness.Enabled = false;
+        harness.ReleaseProbe.TrySetResult();
+        var result = await run.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.AreEqual(1, harness.StartedProbes, "Only the source that actually started may probe.");
+        Assert.AreEqual(1, result.ReliableSuccess, "The already started probe must still finish and commit.");
+        Assert.IsTrue(result.Disabled, "The waiting source's admission refusal must carry the disable reason.");
+        Assert.IsFalse(result.Completed);
+        Assert.AreEqual(1, result.Revoked);
+        Assert.AreEqual(0, result.NotProcessed);
+        Assert.AreEqual(0, harness.Coordinator.RunningCount);
+        Assert.AreEqual(0, harness.Coordinator.PreparingCount);
+        Assert.AreEqual(0, harness.Coordinator.ActivePermits);
+    }
+
+    [TestMethod]
+    [TestCategory("BatchAdmissionFailure")]
+    public async Task BatchDisabledBeforeAdmissionInTheFinalBatchStillReportsEarlyEnd()
+    {
+        using var harness = new BatchHarness();
+        var items = new List<Video>();
+        for (var index = 0; index <= BatchCheckRunner.BatchSize; index++)
+        {
+            items.Add(harness.AddSupported($"https://media.example.invalid/{index}.mp4", ValidSha1, 10));
+        }
+
+        harness.CandidateIds = items.Select(item => item.Id).ToList();
+        await harness.RunAsync();
+        // Only the candidate that sorts into the final batch changes, so the refusal happens after the 128-object
+        // boundary and no further batch will run a global enable/store check to recover the reason.
+        var lastId = items.Select(item => item.Id).OrderBy(id => id).Last();
+        var lastItem = items.First(item => item.Id == lastId);
+        harness.WriteManifest(lastItem, "https://media.example.invalid/last.mp4?sig=changed", ValidSha1, 10);
+        harness.CurrentItemOverride = item =>
+        {
+            if (item.Id == lastId)
+            {
+                harness.Enabled = false;
+            }
+
+            return item;
+        };
+
+        var result = await harness.RunAsync();
+
+        Assert.IsTrue(result.Disabled, "A refusal in the final batch must still reach the run summary.");
+        Assert.IsFalse(result.Completed, "The final batch must not fill a completed run after an admission refusal.");
+        Assert.AreEqual(BatchCheckRunner.BatchSize, result.Skipped, "The unchanged first batch must settle as skipped.");
+        Assert.AreEqual(1, result.Revoked, "The final-batch candidate refused before starting must settle as revoked.");
+        Assert.AreEqual(0, result.NotProcessed, "A refused candidate that needed a probe must not be counted as not processed.");
+        Assert.AreEqual(0, result.ReliableSuccess);
+        Assert.AreEqual(0, harness.ProbeCalls);
+    }
+
+    [TestMethod]
+    [TestCategory("BatchAdmissionFailure")]
+    public async Task ScheduledTaskReportsCancelledWhenDisabledBeforeAdmissionAtTheLastCandidate()
+    {
+        using var harness = new BatchHarness();
+        var item = harness.AddSupported("https://media.example.invalid/a.mp4", ValidSha1, 10);
+        harness.CandidateIds = [item.Id];
+        await harness.RunAsync();
+        harness.WriteManifest(item, "https://media.example.invalid/a.mp4?sig=changed", ValidSha1, 10);
+        harness.OnBatchDecision = () => harness.Enabled = false;
+        var task = harness.CreateTask();
+
+        await AssertThrowsAsync<OperationCanceledException>(() => task.ExecuteAsync(new SynchronousProgress(_ => { }), CancellationToken.None));
+    }
+
+    [TestMethod]
+    [TestCategory("BatchAdmissionFailure")]
+    public async Task ScheduledTaskReportsStoreUnavailableWhenLatchedBeforeAdmissionAtTheLastCandidate()
+    {
+        using var harness = new BatchHarness();
+        var item = harness.AddSupported("https://media.example.invalid/a.mp4", ValidSha1, 10);
+        harness.CandidateIds = [item.Id];
+        await harness.RunAsync();
+        var other = harness.AddSupported("https://media.example.invalid/other.mp4", ValidSha1, 10);
+        var faulting = new FaultInjectingRepository(harness.Repository) { FailGetAfter = int.MaxValue };
+        harness.Repository = faulting;
+        harness.WriteManifest(item, "https://media.example.invalid/a.mp4?sig=changed", ValidSha1, 10);
+        harness.OnBatchDecision = () =>
+        {
+            faulting.FailGetAfter = 0;
+            LatchFingerprintStore(harness, other);
+        };
+        var task = harness.CreateTask();
+
+        await AssertThrowsAsync<InvalidOperationException>(() => task.ExecuteAsync(new SynchronousProgress(_ => { }), CancellationToken.None));
+    }
+
+    [TestMethod]
+    [TestCategory("BatchAdmissionFailure")]
+    public async Task BatchAdmissionRefusalReasonIsNotClearedByReEnablingOrAnotherResult()
+    {
+        using var harness = new BatchHarness();
+        var first = harness.AddSupported("https://media.example.invalid/a.mp4", ValidSha1, 10);
+        var second = harness.AddSupported("https://media.example.invalid/b.mp4", ValidSha1, 10);
+        harness.CandidateIds = [first.Id, second.Id];
+        await harness.RunAsync();
+        harness.WriteManifest(first, "https://media.example.invalid/a.mp4?sig=changed", ValidSha1, 10);
+        harness.WriteManifest(second, "https://media.example.invalid/b.mp4?sig=changed", ValidSha1, 10);
+        harness.ConsumerLimit = 1;
+        var decisions = 0;
+        var settled = 0;
+        // Disable on the first candidate's decision. Once that candidate settles, immediately re-enable. The
+        // observed disable reason must stay latched for the round: a re-enable or a later candidate's settlement
+        // must not clear it or resume work.
+        harness.OnBatchDecision = () =>
+        {
+            if (Interlocked.Increment(ref decisions) == 1)
+            {
+                harness.Enabled = false;
+            }
+        };
+        harness.ConsumerActivityHook = active =>
+        {
+            if (!active && Interlocked.Increment(ref settled) == 1)
+            {
+                harness.Enabled = true;
+            }
+        };
+
+        var result = await harness.RunAsync();
+
+        Assert.IsTrue(result.Disabled, "A reason already observed this round must not be cleared by a later re-enable.");
+        Assert.IsFalse(result.Completed, "A round that observed a disable must not report completion even after re-enabling.");
+        Assert.AreEqual(0, harness.ProbeCalls, "A round that observed a disable must not start further probes.");
+        Assert.AreEqual(2, result.Revoked, "Both loaded but unstarted candidates must settle as revoked.");
+        Assert.AreEqual(0, result.NotProcessed, "A refused candidate that needed a probe must not be counted as not processed.");
+        Assert.AreEqual(0, result.ReliableSuccess);
+        Assert.AreEqual(0, harness.Coordinator.RunningCount);
+        Assert.AreEqual(0, harness.Coordinator.PreparingCount);
+        Assert.AreEqual(0, harness.Coordinator.ActivePermits);
+    }
+
     // ---------- Global failure (AC-T6) ----------
 
     [TestMethod]
@@ -1388,6 +1639,30 @@ public sealed class BatchCheckTests
     private static string Key(Guid id) => id.ToString("N", CultureInfo.InvariantCulture);
 
     /// <summary>
+    /// Latches the shared optimizer's global fingerprint-store-unavailable state through a real repository read
+    /// failure from a different source, rather than setting the property directly. It mirrors how the batch itself
+    /// observes the fault and is used by the AF-1 admission regressions.
+    /// </summary>
+    private static void LatchFingerprintStore(BatchHarness harness, Video other)
+    {
+        using var signal = new BatchStopSignal(CancellationToken.None);
+        try
+        {
+            harness.ReviewerOptimizer!.CheckBatchSourceAsync(
+                harness.ReviewerNative!,
+                other.Id,
+                other,
+                new MediaSourceInfo { Id = Key(other.Id), Path = other.ShortcutPath },
+                Key(other.Id),
+                signal).GetAwaiter().GetResult();
+        }
+        catch (FingerprintStoreUnavailableException)
+        {
+            // Expected: the real read fault latches the store and surfaces the unavailable exception.
+        }
+    }
+
+    /// <summary>
     /// A synchronous <see cref="IProgress{T}"/> that invokes the callback inline. The framework <see cref="Progress{T}"/>
     /// posts callbacks asynchronously, so it cannot deterministically observe the published order under concurrent
     /// consumers; this inline implementation records the exact report order.
@@ -1471,6 +1746,10 @@ public sealed class BatchCheckTests
         public bool SynthesizeBatchObjects { get; set; }
 
         public int PeakActiveConsumers { get; private set; }
+
+        /// <summary>Gets or sets a test-only hook invoked with the same active/idle signal as the runner's
+        /// consumer-activity callback, so a regression can change state after one candidate settles.</summary>
+        public Action<bool>? ConsumerActivityHook { get; set; }
 
         private int _activeConsumers;
 
@@ -1700,6 +1979,8 @@ public sealed class BatchCheckTests
                     {
                         Interlocked.Decrement(ref _activeConsumers);
                     }
+
+                    ConsumerActivityHook?.Invoke(active);
                 }
             };
             _runners.Add(runner);
