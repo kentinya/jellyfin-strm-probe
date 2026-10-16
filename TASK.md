@@ -5,7 +5,7 @@
 ```text
 Task ID: 3.1
 Parent Slice: 3
-Status: FIX REQUIRED
+Status: READY FOR B REVIEW
 Task Base: b86d9c17d7f915108072f54ee098f0f5543fe093
 Contract Checkpoint: e03052655d298adb30cbb7f315da684f27a07285
 Original Contract Checkpoint: 2b515f35db7fc8e85d8ac1a8085dd9b8ccc62ef3
@@ -369,5 +369,34 @@ B 使用两个已有可信基线、URL 已变的源、两个消费者和确定�
 全部 RO／六类 Surfaces 重新核对：RO-1／2／3／4／7 的历史交付不撤销；RO-5 的本轮未开始工作约束与 RO-6 故障停止仍受本反例阻塞。共用执行／实际开始和进度／结果表面尚不能签发当前 PASS；原生任务、库查询、SQLite 和配置页原始证据保持历史事实，不写成当前全 Slice 已满足。因此不创建下一 Task、不运行 Slice Final、不替换旧 Closure Packet，也不代 A 关闭。真实十万库、内部数据库物理保存故障注入、外部代理／OpenList、广泛格式／客户端和发布 ZIP 继续保留原 NOT RUN 边界。
 
 供 Slice 收尾的经验候选：本轮原因已写入汇总仍可能漏过已分派工作 → 用同轮两个消费者跨决策、许可和实际开始边界验证原因持续生效 → 适用于可重新启用的批量准入；与既有并发屏障经验合并，不记录流水账。
+
+## Developer Completion Report — 单次读取禁用观测纠正（2026-10-16）
+
+B 已就“同一边界内多次读取动态 `Enabled` 丢失首次拒绝原因”签发 FIX REQUIRED（P1）。本报告记录同一 Task 3.1 内该接缝的最小纠正。
+
+- Changed Files：
+  - `src/Jellyfin.Plugin.StrmProbeOptimizer/Services/BatchCheckRunner.cs`
+  - `tests/Jellyfin.Plugin.StrmProbeOptimizer.Tests/BatchCheckTests.cs`
+- Implemented：新增私有 `ObserveDisabled(counters, stopSignal)`，在每个决策边界只读取一次 `_settings.Enabled`；读到 false 时立即 `CloseAdmission()` 并置位已有 `Disabled` 计数，返回本轮是否已观察禁用。`BatchCheckRunner` 内全部 `Enabled` 读取点（候选查询前／返回后、集合固定后、批次前、消费者取项）统一改走该方法，不再用后续读取的当前配置重建或清除原因。未新增字段／枚举／CTS／持久化状态；已开始／已加入探测、原生保存、验证与条件提交不变；管理员停止与状态库不可用优先级不变。新增 `ConsumerPrecheckEntered` 测试钩子（生产为 null）用于确定性编排。
+- Tests and Results（源码 HEAD `717595c631489c2dbea817ebb755507271f806bd` + 两个工作文件；实现提交 `9b5e488a0c7f8ac46989f244a7835032b61246b1`）：
+  - 新增 5 个回归（`BatchAdmissionFailure` 同时保留 `Batch`）：消费者边界单次 false 后重启用、消费者 ExecuteAsync、候选获取边界、候选获取 ExecuteAsync、候选查询返回后边界；均断言 `Disabled=true`、`StopRequested=false`、`Completed=false`、进度 < 100%、零探测、旧基线保留、资源归零。
+  - 修正前以 HEAD 产品源码运行新测试：**FAIL 5／pass 10**（`prefix-failure.log`），证明回归确实捕获该缺口。
+  - 候选 `TestCategory=BatchAdmissionFailure`：PASS 15／0 failed／0 skipped。
+  - 聚焦 Batch／Coordinator／Context／Playback／Configuration：PASS 147／0 skipped。
+  - `dotnet-local restore ...sln --locked-mode`：PASS。
+  - `dotnet-local build ...sln -c Release --no-restore`：PASS，0 警告 0 错误。
+  - `dotnet-local test ...sln -c Release --no-restore`：PASS 197／0 failed／0 skipped（192 + 5）。
+  - `dotnet-local format ...sln --verify-no-changes --no-restore`：PASS。
+  - `python3 -m unittest discover -s tests -v`：PASS 63。
+  - `python3 scripts/run_isolated_plugin_integration.py`：PASS。
+  - `python3 scripts/run_isolated_batch_integration.py`：PASS，discovery／failure／mixed／scope／shared_stop／sharing／stop 全跑，stop 场景 `task_status=cancelled`／HTTP 204，夹具与状态恢复并核验。
+  - `python3 scripts/run_isolated_configuration_integration.py`：PASS，19 场景，配置／触发器恢复并核验。
+  - `python3 scripts/check_governance.py`：PASS；`git diff --check`：PASS；Markdown 140 本地链接／锚点：PASS。
+  - 三项实机入口部署的插件 DLL 与本最终构建同为 sha256 `252928de7c753b05c2fdde769cbf8f2b7fc6f4ccfab4bfcf4ab261bdb1c84a55`，产品源码自实机运行后未再改变，故无需重跑；测试程序集 sha256 `528e0a6368396bade565ffd969a148f33c7aed27794242f28a196198e18cade1`。
+  - 证据索引（仅本机）：`.git/validation-evidence/97e68dfa2f246488174e47e2ba0cf45910a4947f/af1-single-read-correction-20261016/INDEX.md`。
+- Decisions：原范围纠正，无合同变更；复用既有停止位、异常、runner 原因计数与原生任务结果映射，未新增执行取消源、持久化状态、调度机制或生产注入开关；不将准入停止扩散到独立播放、其他调用者或下一轮。
+- Remaining In-Slice Work：本单次读取缺口已实现并自测通过；修正后由 B 重核七个 RO／六类 Surfaces、独立聚焦、单次读取控制及指定 stop／sharing 实机。
+- Risks / Deviations：确定性控制以可编排设置模拟合法并发配置发布，真实页面切换时序 NOT RUN；真实十万库、内部数据库物理保存故障注入、外部代理／OpenList 联调、广泛格式／客户端、发布 ZIP 继续 NOT RUN。
+- Head SHA：`9b5e488a0c7f8ac46989f244a7835032b61246b1`。
 
 NEXT ACTION: DEVELOPER CONTINUES TASK 3.1; B RE-REVIEWS THE CORRECTION
