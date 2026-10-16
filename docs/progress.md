@@ -46,6 +46,6 @@ Slice 3 交付完整配置页／所选媒体库、Jellyfin 原生「STRM 媒体�
 - 开发基准 V4.3；Slice 1／2／3 均 PASS / CLOSED，历史失败与合同变更保留在 Git／原始证据；上方账本只记录已关闭能力。
 - 最新接受实现仍是 `7c64eb5dcad6e5f20fb7eb41819be2521f65484d`。Slice 3 的真实关闭提交为 `03169b07d110964562f7da31d2c3d7add82e5ff5`，完整合同／最终包和 Task／B 身份从该快照读取。
 - 2026-10-16，A 在关闭后的独立一轮选择并激活 [Slice 4](../SLICE.md)，Base 固定为上述关闭提交，Implementation Head 为 NOT SET。必要结果为单版本安装与恢复、真实十万原生库／成本、完整扫描重叠和实际代理播放链；用户随后授权本次直接规划首个 Task，并固定 [后续 B 的交付方案](slice-4-delivery-plan.md)；方案已先行提交为 `ae265d0dba02aa1c5599871602d4350072b7155f`，随后 [Task 4.1](../TASK.md) 计划为 PLANNED，Task Base／Contract Checkpoint 均为该 SHA。后续 4.2／4.3／4.4 待 B 逐个规划，不能直接实施。
-- 本次只提交固定交付方案、Task 4.1 计划及事实指针，不改产品／测试／工具或稳定需求和正确性规则，不运行产品实机。Slice 4 的新增验收均 NOT RUN；已有模拟／代表性实机与历史延期不升级为 PASS，完整产品和发布尚未完成。
+- Developer 已在 Task 4.1 内实现并交为 READY FOR B REVIEW：新增 `scripts/package_plugin.py`（从 Release 输出与锁文件生成 Linux x64 ZIP／清单／SHA-256）、`scripts/package_environment.py`（专用隔离实例，独立 project／端口／工作区，服务器容器无源码／SDK／NuGet 挂载）、`scripts/run_isolated_package_integration.py`（仅消费归档的干净／升级／恢复／负向场景）、`scripts/package_playback_driver.mjs`，更新 `dev/compose.yaml` 端口参数化、产品 `meta.json`／`Plugin.Description` 与 `RuntimeIdentifiers`，新增 Python 工具回归与 [安装包说明](package-installation.md)。真实实机已覆盖干净安装、升级替换、禁用／移除／重装、MP4／MKV 原生 Web 播放、首次信任／未变／换 URL／重启、负向包拒绝；三个既有隔离回归（播放／批量 suite／配置页 all）继续 PASS。RO-1 为 Developer 候选 PASS，待 B 独立复核；RO-2～RO-4 仍 NOT RUN。
 
 NEXT ACTION: DEVELOPER IMPLEMENTS TASK 4.1

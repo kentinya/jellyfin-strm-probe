@@ -1,6 +1,6 @@
 # 测试矩阵
 
-下表保留完整产品矩阵；Slice 1／2／3 均已 A 最终审查 PASS / CLOSED。播放、原生批量和完整配置页已有分层证据；真实十万库／完整扫描压力、外部代理及发布仍 NOT RUN。当前接受实现 `7c64eb5dcad6e5f20fb7eb41819be2521f65484d`，范围与最终决定见 [Slice 3 关闭快照](progress.md#slice-3-closed)；[Slice 4](../SLICE.md) 已 ACTIVE、尚无实现，当前 [Task 4.1](../TASK.md) 按用户授权规划为 PLANNED，后续 B 依 [固定交付方案](slice-4-delivery-plan.md) 继续；本轮未实施或运行产品门槛。下方历史状态不因新合同激活而升级。表格保留完整产品目标，不把模拟大库或代表性实机扩大为所有格式／分支／客户端通过。通常前提为受支持版本化 STRM、已有主流、历史指纹与允许探测；例外显式说明。
+下表保留完整产品矩阵；Slice 1／2／3 均已 A 最终审查 PASS / CLOSED。播放、原生批量和完整配置页已有分层证据；真实十万库／完整扫描压力、外部代理及发布仍 NOT RUN。当前接受实现 `7c64eb5dcad6e5f20fb7eb41819be2521f65484d`，范围与最终决定见 [Slice 3 关闭快照](progress.md#slice-3-closed)；[Slice 4](../SLICE.md) 已 ACTIVE，[Task 4.1](../TASK.md) 的 RO-1 安装包已实现并交为 READY FOR B REVIEW，后续 B 依 [固定交付方案](slice-4-delivery-plan.md) 独立审查与继续规划；RO-2～RO-4 未实施或运行。下方历史状态不因新合同激活而升级。表格保留完整产品目标，不把模拟大库或代表性实机扩大为所有格式／分支／客户端通过。通常前提为受支持版本化 STRM、已有主流、历史指纹与允许探测；例外显式说明。
 
 保留 T01～T28 身份以便追溯，但 T08／T22 按 V4.2 改为原生探测后新地址持久化，T02／T17～T19／T27 改为最小指纹合同。旧结果不自动继承。B01～B12 为新增批量／共享并发验收。
 
@@ -190,15 +190,28 @@ B 独立证据索引：`.git/validation-evidence/198f4ff2accd5bc9fcd87518a9684b9
 
 原生成功必须有失败对照，定时／停止／重启／并发要求真实证据。外部代理联调不可用时 BLOCKED／NOT RUN，不算 PASS。
 
-## Slice 4 验收分配（尚未执行）
+## Slice 4 验收分配（RO-1 已实现待审查，其余尚未执行）
 
-本表分配已存在的产品缺口，不修改上方矩阵身份或历史状态。Slice 4 Base 为 `03169b07d110964562f7da31d2c3d7add82e5ff5`，Implementation Head 为 NOT SET；完整结果／边界见 [当前合同](../SLICE.md#slice-验收)。
+本表分配已存在的产品缺口，不修改上方矩阵身份或历史状态。Slice 4 Base 为 `03169b07d110964562f7da31d2c3d7add82e5ff5`，Implementation Head 为 NOT SET；完整结果／边界见 [当前合同](../SLICE.md#slice-验收)。RO-1 已由 Task 4.1 实现并交为 READY FOR B REVIEW，下方状态为 Developer 候选事实，待 B 独立复核后才算验收。
 
 | Required Outcome | 必要证据与矩阵 | 当前状态 |
 |---|---|---|
-| RO-1 单版本安装与恢复 | 固定 Jellyfin／Linux x64 ZIP 及 SQLite 依赖／摘要，干净实例只从归档安装，Slice 3 安装替换保留配置／指纹，页面／原生任务／播放／重启、禁用／移除／重装；MP4／MKV、原生 Web 实际播放。X02／X06／X09、T19／T22／T24 的包安装证据另列。 | NOT RUN |
+| RO-1 单版本安装与恢复 | 固定 Jellyfin／Linux x64 ZIP 及 SQLite 依赖／摘要，干净实例只从归档安装，Slice 3 安装替换保留配置／指纹，页面／原生任务／播放／重启、禁用／移除／重装；MP4／MKV、原生 Web 实际播放。X02／X06／X09、T19／T22／T24 的包安装证据另列。 | Developer 候选 PASS，待 B 独立审查（见下方分项） |
 | RO-2 真实十万原生库 | 至少 100000 受支持 STRM 的原生索引／查询，首次信任／未变零探测与小集合增量、范围／计数，ID O(N)／查询临时成本和对象／消费者上限、时间／内存／停止延迟／重跑；B03／B04／B12。模拟或代表性实机不替代。 | NOT RUN |
 | RO-3 完整扫描重叠 | 有限增删／移库／更新、独立刷新与批量／播放重叠，当前范围与稳定基线保护、下一轮收敛；最终候选的定时／双向共享／停止收尾／失败恢复及重启。B02／B05～B11、T18／T19／T21／T22／T28、X04／X08／X10。 | NOT RUN（新增完整扫描压力／最终包层）；既有控制及代表实机保持原 PASS |
 | RO-4 实际代理播放链 | 固定 JellyfinProxy 及受控后端，原生直连对照、PlaybackInfo／MediaSourceId／302／实际内容读取；未变／同 SHA-1 换 URL／失败修复／多版本／重启，REQ-EXTERNAL-001、T08／T16／T22／T25。只用 HTTP 后端不证明 OpenList 专有行为。 | NOT RUN |
+
+RO-1 分项（Developer 候选，待 B 独立复核）：
+
+| 项 | 事实 | 状态 |
+|---|---|---|
+| 打包与归档身份 | `scripts/package_plugin.py` 从 Release 输出与锁文件生成 ZIP／清单／SHA-256；负载含插件程序集、deps、托管与 linux-x64 native SQLite、meta.json、第三方许可；不含核心库／FFmpeg／其他平台 runtime／SDK／源码／凭据 | PASS（工具 20 项＋真实归档） |
+| 仅归档安装 | 专用隔离实例（独立 project／端口／工作区，服务器容器无源码／SDK／NuGet 挂载）仅解包安装后 Active；进程加载负载与归档摘要一致 | PASS（实机） |
+| 负向包拒绝 | 损坏、缺 native、GUID／ABI 不符、越界路径、符号链接在部署前拒绝；拒绝不损伤有效安装 | PASS（实机＋工具） |
+| 配置页与原生任务 | 真实 HTML 页面五项保存／重启读回；原生任务唯一且默认无触发、手动运行完成 | PASS（实机） |
+| 首次信任／未变／换 URL | 已有主流信任零插件探测；未变复查零探测；同 SHA-1／Size 换 URL 实际探测并持久化，重启复用 | PASS（实机） |
+| MP4／MKV 原生 Web 播放 | 原生 Web 客户端实际播放，视频时间与解码画面推进 | PASS（实机，H.264／AAC） |
+| 升级替换保留 | 从 `7c64eb5dcad6e5f20fb7eb41819be2521f65484d` 构建替换，配置与可信指纹保留、未完成变化重检 | PASS（实机） |
+| 禁用／移除／重装 | 禁用与移除后原生播放；重装后 Active 并重新检查 | PASS（实机） |
 
 全部必要门槛在新候选的独立 Slice Final 执行；外部依赖不足如实 BLOCKED，不以扩大已有 PASS 或删门槛收尾。T05／T09～T11 逐输入独立实机、audio-only 实机、物理数据库保存故障、完整镜像构建溯源和通用性能证明沿用已接受限制；其他格式／客户端／平台不作普遍支持声明。

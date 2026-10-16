@@ -11,7 +11,7 @@
 
 ## 当前边界
 
-Slice 1／2／3 均已经 A 审查完整 Base..Implementation Head 并关闭为 PASS / CLOSED；历史合同／最终决定及不可变快照见 [关闭账本](progress.md)。Slice 3 Base `6da90ab6bd8995d8204ae0b7faf786c823699fe6`、接受实现 `7c64eb5dcad6e5f20fb7eb41819be2521f65484d`。AF-1 经同一 Task 纠正、B 复审及新 Slice Final 后由 A 重新审查闭合；旧拒绝和失败保留。Slice 3 关闭快照为 `03169b07d110964562f7da31d2c3d7add82e5ff5`。A 已在独立一轮选择并激活 [Slice 4](../SLICE.md)，Base 固定为该关闭提交，Implementation Head 为 NOT SET；按用户后续授权，本次已直接规划 [Task 4.1](../TASK.md) 为 PLANNED，Base／Contract Checkpoint 均为 `ae265d0dba02aa1c5599871602d4350072b7155f`；以 [固定交付方案](slice-4-delivery-plan.md) 指导后续 B，只有当前 Task 可进入实施。新增实机／压力／代理／安装验收均 NOT RUN，激活不表示已交付。
+Slice 1／2／3 均已经 A 审查完整 Base..Implementation Head 并关闭为 PASS / CLOSED；历史合同／最终决定及不可变快照见 [关闭账本](progress.md)。Slice 3 Base `6da90ab6bd8995d8204ae0b7faf786c823699fe6`、接受实现 `7c64eb5dcad6e5f20fb7eb41819be2521f65484d`。AF-1 经同一 Task 纠正、B 复审及新 Slice Final 后由 A 重新审查闭合；旧拒绝和失败保留。Slice 3 关闭快照为 `03169b07d110964562f7da31d2c3d7add82e5ff5`。A 已在独立一轮选择并激活 [Slice 4](../SLICE.md)，Base 固定为该关闭提交，Implementation Head 为 NOT SET；按用户授权直接规划 [Task 4.1](../TASK.md)，Base／Contract Checkpoint 均为 `ae265d0dba02aa1c5599871602d4350072b7155f`；以 [固定交付方案](slice-4-delivery-plan.md) 指导后续 B，只有当前 Task 可进入实施。Task 4.1 的 RO-1 安装包已实现并交为 READY FOR B REVIEW（打包入口、专用隔离包验收、MP4／MKV 原生 Web 播放、升级／恢复），待 B 独立复核；RO-2～RO-4 新增验收仍 NOT RUN，激活不表示已交付。
 
 从 V3.0 的三个 Slice 改为四个 Slice 是实质规划调整；旧规划见重规划前检查点 `4b1d0468c1e43e6e9034ef98e99b6cc44ea59485`。旧生成器 P1 始终排除，当前 P1 专指 V4.2 核心插件。
 
