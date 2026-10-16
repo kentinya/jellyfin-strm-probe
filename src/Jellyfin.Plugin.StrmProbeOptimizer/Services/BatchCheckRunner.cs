@@ -350,6 +350,12 @@ public sealed class BatchCheckRunner
         }
 
         counters.StopRequested |= stopSignal.CancellationToken.IsCancellationRequested ? 1 : 0;
+        // A global store fault may have been latched by another caller (for example a playback or same-source
+        // batch candidate) after this run's own counters were last checked. The final settlement must still report
+        // the shared unavailable state instead of faking completion, because the last batch never reaches another
+        // global check. `|=` preserves a fault this run already recorded; it never clears the reason or overrides
+        // an administrator stop (which stays first in the scheduled task's result priority).
+        counters.StoreUnavailable |= _optimizer.IsFingerprintStoreUnavailable ? 1 : 0;
         var completed = counters.StopRequested == 0
             && counters.StoreUnavailable == 0
             && counters.Disabled == 0

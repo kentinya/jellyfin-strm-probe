@@ -1332,6 +1332,179 @@ public sealed class BatchCheckTests
     }
 
     [TestMethod]
+    [TestCategory("BatchAdmissionFailure")]
+    public async Task BatchLastCandidateSkippedDoesNotHideAnotherSourcesLatchedStoreFault()
+    {
+        // The single candidate is unchanged, so its own check returns Skipped without ever reaching the owner
+        // admission that would observe a global store fault. In the same run another source faults the shared
+        // repository after this candidate's decision. The final settlement must still report the latched global
+        // fault instead of faking a completed run, because the final batch never reaches another global check.
+        using var harness = new BatchHarness();
+        var item = harness.AddSupported("https://media.example.invalid/a.mp4", ValidSha1, 10);
+        var other = harness.AddSupported("https://media.example.invalid/other.mp4", ValidSha1, 10);
+        harness.CandidateIds = [item.Id];
+        await harness.RunAsync();
+        var accepted = harness.Repository.Get(item.Id, Key(item.Id));
+        Assert.IsNotNull(accepted);
+        var backing = harness.Repository;
+        var faulting = new FaultInjectingRepository(backing) { FailGetAfter = int.MaxValue };
+        harness.Repository = faulting;
+        // The candidate's own version did not change, so its decision reuses the accepted baseline without a probe.
+        harness.OnBatchDecision = () =>
+        {
+            faulting.FailGetAfter = 0;
+            LatchFingerprintStore(harness, other);
+        };
+        var reported = new List<double>();
+        var progress = new SynchronousProgress(value =>
+        {
+            lock (reported)
+            {
+                reported.Add(value);
+            }
+        });
+
+        var result = await harness.RunWithProgressAsync(progress, CancellationToken.None);
+
+        Assert.IsTrue(harness.ReviewerOptimizer!.IsFingerprintStoreUnavailable, "Another source's real repository read failure must latch the shared store unavailable.");
+        Assert.IsTrue(result.StoreUnavailable, "The latched global store fault must be reported even when the final candidate was skipped.");
+        Assert.IsFalse(result.Completed, "A run that latched a global store fault must not be reported as completed.");
+        Assert.IsFalse(result.StopRequested, "A store fault is not an administrator stop.");
+        Assert.AreEqual(1, result.Checked, "The unchanged candidate must still settle as a completed check.");
+        Assert.AreEqual(1, result.Skipped);
+        Assert.AreEqual(0, result.NeedProbe);
+        Assert.AreEqual(1, result.Settled, "The candidate must settle exactly once for this run.");
+        Assert.AreEqual(0, result.ReliableSuccess);
+        Assert.AreEqual(0, result.ActualProbeCalls);
+        Assert.AreEqual(0, harness.ProbeCalls);
+        Assert.AreEqual(accepted, backing.Get(item.Id, Key(item.Id)), "The accepted baseline must survive a latched store fault.");
+        Assert.AreEqual(0, harness.Coordinator.RunningCount);
+        Assert.AreEqual(0, harness.Coordinator.PreparingCount);
+        Assert.AreEqual(0, harness.Coordinator.ActivePermits);
+        Assert.IsTrue(reported.Count > 0 && reported.Max() < 100, "A latched store fault must never fill progress to 100%.");
+    }
+
+    [TestMethod]
+    [TestCategory("BatchAdmissionFailure")]
+    public async Task ScheduledTaskReportsStoreUnavailableWhenAnotherSourceLatchesAFaultAtTheFinalSkippedCandidate()
+    {
+        using var harness = new BatchHarness();
+        var item = harness.AddSupported("https://media.example.invalid/a.mp4", ValidSha1, 10);
+        var other = harness.AddSupported("https://media.example.invalid/other.mp4", ValidSha1, 10);
+        harness.CandidateIds = [item.Id];
+        await harness.RunAsync();
+        var faulting = new FaultInjectingRepository(harness.Repository) { FailGetAfter = int.MaxValue };
+        harness.Repository = faulting;
+        harness.OnBatchDecision = () =>
+        {
+            faulting.FailGetAfter = 0;
+            LatchFingerprintStore(harness, other);
+        };
+        var task = harness.CreateTask();
+
+        await AssertThrowsAsync<InvalidOperationException>(() => task.ExecuteAsync(new SynchronousProgress(_ => { }), CancellationToken.None));
+    }
+
+    [TestMethod]
+    [TestCategory("BatchAdmissionFailure")]
+    public async Task BatchLastCandidateSkippedDoesNotHideAPlaybackLatchOfTheStoreFault()
+    {
+        // The same terminal gap can be triggered from the public playback entry point: a playback call for another
+        // source faults the shared repository after this candidate's decision. The batch's final settlement must
+        // still report the latched global fault rather than a completed run.
+        using var harness = new BatchHarness();
+        var item = harness.AddSupported("https://media.example.invalid/a.mp4", ValidSha1, 10);
+        var other = harness.AddSupported("https://media.example.invalid/other.mp4", ValidSha1, 10);
+        harness.CandidateIds = [item.Id];
+        await harness.RunAsync();
+        var accepted = harness.Repository.Get(item.Id, Key(item.Id));
+        Assert.IsNotNull(accepted);
+        var backing = harness.Repository;
+        var faulting = new FaultInjectingRepository(backing) { FailGetAfter = int.MaxValue };
+        harness.Repository = faulting;
+        harness.OnBatchDecision = () =>
+        {
+            faulting.FailGetAfter = 0;
+            LatchFingerprintStoreViaPlayback(harness, other);
+        };
+        var reported = new List<double>();
+        var progress = new SynchronousProgress(value =>
+        {
+            lock (reported)
+            {
+                reported.Add(value);
+            }
+        });
+
+        var result = await harness.RunWithProgressAsync(progress, CancellationToken.None);
+
+        Assert.IsTrue(harness.ReviewerOptimizer!.IsFingerprintStoreUnavailable, "A playback call's real repository read failure must latch the shared store unavailable.");
+        Assert.IsTrue(result.StoreUnavailable, "The playback-latched global store fault must reach the batch result.");
+        Assert.IsFalse(result.Completed, "A run that latched a global store fault must not be reported as completed.");
+        Assert.IsFalse(result.StopRequested, "A store fault is not an administrator stop.");
+        Assert.AreEqual(1, result.Checked);
+        Assert.AreEqual(1, result.Skipped);
+        Assert.AreEqual(0, result.NeedProbe);
+        Assert.AreEqual(1, result.Settled, "The candidate must settle exactly once for this run.");
+        Assert.AreEqual(0, result.ReliableSuccess);
+        Assert.AreEqual(0, result.ActualProbeCalls);
+        Assert.AreEqual(0, harness.ProbeCalls);
+        Assert.AreEqual(accepted, backing.Get(item.Id, Key(item.Id)), "The accepted baseline must survive a playback-latched store fault.");
+        Assert.AreEqual(0, harness.Coordinator.RunningCount);
+        Assert.AreEqual(0, harness.Coordinator.PreparingCount);
+        Assert.AreEqual(0, harness.Coordinator.ActivePermits);
+        Assert.IsTrue(reported.Count > 0 && reported.Max() < 100, "A latched store fault must never fill progress to 100%.");
+    }
+
+    [TestMethod]
+    [TestCategory("BatchAdmissionFailure")]
+    public async Task ScheduledTaskReportsStoreUnavailableWhenAPlaybackCallLatchesAFaultAtTheFinalSkippedCandidate()
+    {
+        using var harness = new BatchHarness();
+        var item = harness.AddSupported("https://media.example.invalid/a.mp4", ValidSha1, 10);
+        var other = harness.AddSupported("https://media.example.invalid/other.mp4", ValidSha1, 10);
+        harness.CandidateIds = [item.Id];
+        await harness.RunAsync();
+        var faulting = new FaultInjectingRepository(harness.Repository) { FailGetAfter = int.MaxValue };
+        harness.Repository = faulting;
+        harness.OnBatchDecision = () =>
+        {
+            faulting.FailGetAfter = 0;
+            LatchFingerprintStoreViaPlayback(harness, other);
+        };
+        var task = harness.CreateTask();
+
+        await AssertThrowsAsync<InvalidOperationException>(() => task.ExecuteAsync(new SynchronousProgress(_ => { }), CancellationToken.None));
+    }
+
+    [TestMethod]
+    public async Task BatchLastCandidateSkippedWithoutAStoreFaultStillCompletes()
+    {
+        // Control: the same final skipped candidate without any store fault must still complete and reach 100%.
+        using var harness = new BatchHarness();
+        var item = harness.AddSupported("https://media.example.invalid/a.mp4", ValidSha1, 10);
+        harness.CandidateIds = [item.Id];
+        await harness.RunAsync();
+        var reported = new List<double>();
+        var progress = new SynchronousProgress(value =>
+        {
+            lock (reported)
+            {
+                reported.Add(value);
+            }
+        });
+
+        var result = await harness.RunWithProgressAsync(progress, CancellationToken.None);
+
+        Assert.IsFalse(result.StoreUnavailable);
+        Assert.IsTrue(result.Completed);
+        Assert.AreEqual(1, result.Skipped);
+        Assert.AreEqual(1, result.Checked);
+        Assert.AreEqual(0, harness.ProbeCalls);
+        Assert.IsTrue(reported.Count > 0 && reported.Max() == 100, "A normal skipped candidate must still complete at 100%.");
+    }
+
+    [TestMethod]
     public async Task BatchReadFailureStopsFurtherWorkAndReportsUnread()
     {
         using var harness = new BatchHarness();
@@ -2075,6 +2248,44 @@ public sealed class BatchCheckTests
         catch (FingerprintStoreUnavailableException)
         {
             // Expected: the real read fault latches the store and surfaces the unavailable exception.
+        }
+    }
+
+    /// <summary>
+    /// Latches the shared optimizer's global fingerprint-store-unavailable state through the public playback entry
+    /// point for a different source, rather than setting the property directly. It uses a benign native manager
+    /// whose delegated call returns an existing stream, so only the plugin's own fault propagation is exercised
+    /// (no probe is started for the other source).
+    /// </summary>
+    private static void LatchFingerprintStoreViaPlayback(BatchHarness harness, Video other)
+    {
+        var native = PlaybackOptimizerTests.ScriptedManager.Create();
+        IReadOnlyList<MediaSourceInfo> Sources(BaseItem item) =>
+        [
+            new MediaSourceInfo
+            {
+                Id = item.Id.ToString("N", CultureInfo.InvariantCulture),
+                Path = item.ShortcutPath,
+                MediaStreams = [new MediaStream { Type = MediaStreamType.Video, Codec = "h264" }]
+            }
+        ];
+        native.StaticSourceResolver = (item, _) => Sources(item);
+        native.Playback = (item, _, _, _) => Task.FromResult(Sources(item));
+        try
+        {
+            harness.ReviewerOptimizer!
+                .GetPlaybackMediaSourcesAsync(native.Interface, other, null, true, false, CancellationToken.None)
+                .GetAwaiter()
+                .GetResult();
+        }
+        catch (FingerprintStoreUnavailableException)
+        {
+            // Expected: the real read fault latches the store and surfaces the unavailable exception. Playback
+            // may also delegate after latching; either way the shared optimizer's latch is now set.
+        }
+        catch (InvalidOperationException)
+        {
+            // The playback delegation can surface a follow-up failure once the store is latched; the latch is set.
         }
     }
 
