@@ -5,7 +5,7 @@
 ```text
 Task ID: 3.2
 Parent Slice: 3
-Status: FIX REQUIRED
+Status: READY FOR B REVIEW
 Task Base: 2f74aa83f15707df56c4b15409ba1538a488f83a
 Contract Checkpoint: 2b515f35db7fc8e85d8ac1a8085dd9b8ccc62ef3
 Difficulty: Medium
@@ -145,6 +145,27 @@ git diff --check
   - `restore --locked-mode` PASS；`build` PASS（0 警告 0 错误）；C# `test` PASS 181/181（0 skipped）；`format --verify-no-changes` PASS。
   - `python3 -m unittest discover -s tests -v` PASS 63/63。
   - `python3 scripts/run_isolated_configuration_integration.py` PASS：真实 Chromium（chromium-1187／Playwright 1.55.0）17 个场景覆盖 AC-U1～U5 及 FR-U1／FR-U2，含真实重启读回、失效范围、响应丢失、拒绝／网络失败恢复、并发越界、旧配置缺字段，以及页面保存值驱动的原生任务部分／全部范围、关闭播放检查仍批量、禁用不新增探测、再启用恢复；结束后配置与全部触发器恢复并核对。
+  - `python3 scripts/run_isolated_plugin_integration.py` PASS（同一候选，既有默认播放／失败／竞态／重启回归未回退）。
+  - `python3 scripts/check_governance.py` PASS；`git diff --check` PASS。
+- Decisions：仍复用现有配置保存通道、`ILibraryIdProvider`／原生库查询与原生任务；未改决策、Coordinator、原生刷新、指纹提交或范围／停止语义，维持 T3。
+- Remaining In-Slice Work：本 Task 全部验收后由 B 核对全部 RO；满足则单独 Slice Final 与 Closure Packet。
+- Risks / Deviations：真实外部代理、真实大库与保存故障实机注入仍 NOT RUN，留 Slice 4／其他 Task。证据仅本机可读，未推送。
+
+## Developer Fix Report（FR-U4）
+
+- 修正 Head SHA：`5580492a5cacbdc0772dd2f14f9b527ab3851746`（Task Base 与 Task ID 不变，未改合同、范围或测试门槛）。
+- Changed Files（相对 Task Base `2f74aa83f15707df56c4b15409ba1538a488f83a`）：
+  - `src/Jellyfin.Plugin.StrmProbeOptimizer/Configuration/configPage.html`：新增 `readConcurrencyValue()`，用 `valueAsNumber`（带 `Number(...)` 回退）读取完整数值；`validateBeforeSave()` 要求 `Number.isInteger` 且 1～8，返回校验后的数值对象；保存 POST 复用同一已校验值，移除两处 `parseInt` 截断。
+  - `scripts/configuration_page_driver.mjs`：新增 `numeric_boundary_invalid`／`numeric_boundary_valid` 两个独立会话场景，覆盖 `2.5`、`8.9`、`1e1`、空值、`0`、`9` 及合法 `1`／`8`／`2`。
+  - `scripts/run_isolated_configuration_integration.py`：新增 `scenario_numeric_boundary`，断言非法输入 0 POST、有效配置与配置文件不变，合法值页面／有效配置一致。
+  - `tests/Jellyfin.Plugin.StrmProbeOptimizer.Tests/ConfigurationPageTests.cs`：新增 `PageValidatesTheWholeConcurrencyNumberWithoutTruncating`（要求 `valueAsNumber`、`Number.isInteger`，禁止 `parseInt(concurrencyInput`）。
+  - `tests/test_isolated_configuration_integration.py`：守卫断言新增 numeric boundary 场景与 0 POST 断言。
+  - `docs/core-configuration.md`：补充并发按完整数值校验、小数／指数／空值／越界均拒绝且不截断保存的说明。
+- FR-U4：并发输入按完整数值判定，`2.5`、`8.9`、`1e1`、空值、`0`、`9` 均拒绝且 0 POST，有效配置与旧文件不变；合法 `1`／`8`／`2` 保存后页面与有效配置一致（场景 18／19）。不再有 `parseInt` 截断把 `2.5` 存为 2、`1e1` 存为 1。
+- Tests and Results（完整 SHA `5580492a5cacbdc0772dd2f14f9b527ab3851746`，索引 `.git/validation-evidence/5580492a5cacbdc0772dd2f14f9b527ab3851746/developer-20261016-02/INDEX.md`）：
+  - `restore --locked-mode` PASS；`build` PASS（0 警告 0 错误）；C# `test` PASS 182/182（0 skipped）；`format --verify-no-changes` PASS。
+  - `python3 -m unittest discover -s tests -v` PASS 63/63。
+  - `python3 scripts/run_isolated_configuration_integration.py` PASS：真实 Chromium（chromium-1187／Playwright 1.55.0）19 个场景覆盖 AC-U1～U5 及 FR-U1／FR-U2／FR-U4，含新增数值边界非法 0 POST／有效值不变与合法 1／8／2 保存读回；结束后配置与全部触发器恢复并核对。
   - `python3 scripts/run_isolated_plugin_integration.py` PASS（同一候选，既有默认播放／失败／竞态／重启回归未回退）。
   - `python3 scripts/check_governance.py` PASS；`git diff --check` PASS。
 - Decisions：仍复用现有配置保存通道、`ILibraryIdProvider`／原生库查询与原生任务；未改决策、Coordinator、原生刷新、指纹提交或范围／停止语义，维持 T3。
