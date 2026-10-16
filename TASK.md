@@ -279,11 +279,33 @@ B 使用同一产品 runner／ExecuteAsync、临时受支持 STRM／已有可信
 
 四项均零探测、旧基线未变、许可／preparing／running 归零；独立产品断言 **4 FAIL，退出 1**。这是原 AF-1 的“禁用原因必须持续到本轮结算、不能因重新启用清空”及 RO-6／AC-7 未闭合，不是新增状态要求或 Material Contract Change。生产 `PluginPlaybackSettings.Enabled` 每次读取当前配置，配置保存会发布新对象，两次读取之间允许配置变化；控制证明该合法交错的结果，未测真实页面切换频率，不声称通常或必然发生。
 
-### 同一 Task 的最小继续修正
+### 同一 Task 的最小继续修正（开发指导）
 
-1. **每个判断点只读取一次 Enabled，并立即固化这次观测。** 读到 false 就使用已有 CloseAdmission 与已有 Disabled 计数；当前分支所有后续动作使用这次局部值，不能通过第二次 getter 推翻第一次观测。局部变量不是新增状态字段。可以复用一个很小的观察方法，避免各处漏记原因；不增加字段、枚举、CTS 或持久化状态。
-2. **同时检查 runner 中相同写法。** 覆盖候选查询前／后、候选固定后、批次前和消费者取项处；捕获禁用的当下就关闭准入并记原因，查询返回后的汇总只消费已记录原因。后续独立边界可重新读取当前配置，但已记录原因不得被清除。保持管理员 token 分类、状态库阶段／失败优先级、已有资源结算和已开始／已加入探测正常收尾。
-3. 在 `BatchAdmissionFailure` 中补回归，确定性控制一次读取禁用、后续读取已启用，覆盖消费者末项与获取阶段的 runner／ExecuteAsync；检查 Disabled、非 Completed／取消异常、进度、基线和资源。保留本轮已通过的四项原控制、三项并发与真实许可等待宽窗口控制。先保留旧候选 FAIL，再执行修正后原完整 T4；B 下轮仍独立关键控制与 stop／sharing，不削减门槛。
+**本次只补 runner 的“读取配置 → 关闭准入 → 记录原因”接缝。** 已有 CloseAdmission、停止位、Disabled 计数和原生异常映射继续使用，不增加字段、枚举、CTS 或持久化状态；Task ID／Base／Goal／Scope／High／T4 不变。
+
+1. **用一个小方法完成一次观察。** 在 `BatchCheckRunner` 内读取一次 Enabled，若为 false，立即关闭本轮准入并置位已有 Disabled。当前判断随后只使用这次结果，不再读 Enabled 来猜刚才为什么停止。可按以下局部示意实现：
+
+   ```csharp
+   private bool ObserveDisabled(Counters counters, BatchStopSignal stopSignal)
+   {
+       var enabled = _settings.Enabled;
+       if (!enabled)
+       {
+           stopSignal.CloseAdmission();
+           Interlocked.Exchange(ref counters.Disabled, 1);
+       }
+
+       return Volatile.Read(ref counters.Disabled) != 0;
+   }
+   ```
+
+   每个准入判断点先调用一次，再将返回值与已有停止／故障条件组合。方法使用现有字段；其他消费者已经记录禁用时也返回 true，不会因当前 Enabled=true 恢复旧轮。
+
+2. **把相同遗漏一次补齐。** 应用到候选查询前／返回后、候选固定后、批次前和消费者取项处。特别是 `FetchCandidates`：观察到禁用时就在这里调用已有关闭／记录逻辑，再中断获取；不能等返回 `RunAsync` 后重新读取配置才决定 Disabled。已有汇总消费累计结果，禁止用当前配置清除既有 Disabled。后续独立判断点仍可读取新配置，不把一个局部值当作整轮配置快照。
+3. **沿用原收尾。** 正常撤销／Unread／未知候选总数仍按原路径结算；StopRequested 仍只来自原管理员 token，状态库故障及原因优先级不变。仅关闭准入，不取消已开始／已加入的探测，也不在成功返回后否决有效提交。主要改 `BatchCheckRunner.cs` 与 `BatchCheckTests.cs`，不为本问题重构 optimizer、配置页、schema 或调度。
+4. **先跑反例，再跑原门槛。** 使用可编排的 `IPlaybackSettings`／屏障，令目标判断读到 false、后续读取已恢复 true，至少覆盖消费者末项及候选查询前／后；runner 和 ExecuteAsync 都验证。断言 Disabled=true、StopRequested=false、Completed=false／取消异常、进度低于 100%、零探测、旧基线与资源正确，并保留正常完成／真正管理员停止对照。测试加入现有 `BatchAdmissionFailure`，保留旧候选 FAIL；再运行已有三项并发与真实许可等待宽窗口控制，最后执行本 Task 原完整 T4 和 B 指定独立验证，不削减门槛。
+
+本轮四项反例源码与原始结果见下方 B 证据索引中的 `double-read/`；它们只用于确定性复现，不能把 getter 编排或屏障加进生产配置／运行入口。本节是实施指导，当前审查仍为 FIX REQUIRED。
 
 ### 证据、未运行与 Slice 重核
 
