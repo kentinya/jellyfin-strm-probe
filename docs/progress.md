@@ -45,7 +45,7 @@ Slice 3 交付完整配置页／所选媒体库、Jellyfin 原生「STRM 媒体�
 
 - 开发基准 V4.3；Slice 1／2／3 均 PASS / CLOSED，历史失败与合同变更保留在 Git／原始证据；上方账本只记录已关闭能力。
 - 最新接受实现仍是 `7c64eb5dcad6e5f20fb7eb41819be2521f65484d`。Slice 3 的真实关闭提交为 `03169b07d110964562f7da31d2c3d7add82e5ff5`，完整合同／最终包和 Task／B 身份从该快照读取。
-- 2026-10-16，A 在关闭后的独立一轮选择并激活 [Slice 4](../SLICE.md)，Base 固定为上述关闭提交，Implementation Head 为 NOT SET。必要结果为单版本安装与恢复、真实十万原生库／成本、完整扫描重叠和实际代理播放链；[TASK.md](../TASK.md) 当前暂无活动实施任务；用户随后授权本次直接规划首个 Task，并固定 [后续 B 的交付方案](slice-4-delivery-plan.md)。
-- 本次只提交合同与事实指针，不改产品／测试／工具或稳定需求和正确性规则，不运行产品实机。Slice 4 的新增验收均 NOT RUN；已有模拟／代表性实机与历史延期不升级为 PASS，完整产品和发布尚未完成。
+- 2026-10-16，A 在关闭后的独立一轮选择并激活 [Slice 4](../SLICE.md)，Base 固定为上述关闭提交，Implementation Head 为 NOT SET。必要结果为单版本安装与恢复、真实十万原生库／成本、完整扫描重叠和实际代理播放链；用户随后授权本次直接规划首个 Task，并固定 [后续 B 的交付方案](slice-4-delivery-plan.md)；方案已先行提交为 `ae265d0dba02aa1c5599871602d4350072b7155f`，随后 [Task 4.1](../TASK.md) 计划为 PLANNED，Task Base／Contract Checkpoint 均为该 SHA。后续 4.2／4.3／4.4 待 B 逐个规划，不能直接实施。
+- 本次只提交固定交付方案、Task 4.1 计划及事实指针，不改产品／测试／工具或稳定需求和正确性规则，不运行产品实机。Slice 4 的新增验收均 NOT RUN；已有模拟／代表性实机与历史延期不升级为 PASS，完整产品和发布尚未完成。
 
-NEXT ACTION: AUTHORIZED PLANNER CHECKPOINTS TASK 4.1
+NEXT ACTION: DEVELOPER IMPLEMENTS TASK 4.1

@@ -4,7 +4,7 @@
 
 V4.3 是当前开发基准，仅修订批量扫描方式；V4.2／V3.0 原文与历史合同留在 Git。Slice 1 原型已经 A 最终审查 PASS / CLOSED；[关闭证据](progress.md#slice-1-closed) 保留原始边界。固定 Jellyfin `12.2.0`／源码 `ca0f16eb7c195f720a1493ed469a27c4657db0c6`、Controller／Model `12.2.0`、`net10.0`／SDK `10.0.401`；单版本事实不构成跨版本兼容承诺。
 
-Slice 2 已由 A 审查完整 Base..Implementation Head 并裁定 PASS / CLOSED；接受实现 `59fd3f7e4b6623449a691574fb69b817db72c2ae`，Slice Base 固定为 `924816a84c74f5d79c107478f2d40e621cb8be8d`。Task 2.1／2.2 均 B PASS，单独 Slice Final 经 A 核验输入和原始产物后接受；Slice 3 已另行完成 A 最终审查，当前无活动实施任务。完整合同、Closure Packet 和 [A Final Review](progress.md#slice-2-closed) 保留必要结果及证据边界。
+Slice 2 已由 A 审查完整 Base..Implementation Head 并裁定 PASS / CLOSED；接受实现 `59fd3f7e4b6623449a691574fb69b817db72c2ae`，Slice Base 固定为 `924816a84c74f5d79c107478f2d40e621cb8be8d`。Task 2.1／2.2 均 B PASS，单独 Slice Final 经 A 核验输入和原始产物后接受；Slice 3 已另行完成 A 最终审查；当前 Slice 4 的 [Task 4.1](../TASK.md) 已 PLANNED，尚未实施。完整合同、Closure Packet 和 [A Final Review](progress.md#slice-2-closed) 保留必要结果及证据边界。
 
 - 只读版本 1 解析及完整决策矩阵、原生所属项目／MediaSourceInfo.Id 的稳定多版本身份、五字段 SQLite 和 expectedPrevious 原子条件提交已接受。失败、原生自身取消异常、文件变化及过期结果保护可信基线；SQLite 异常停止优化，保留原权限与旧库，修复后重启重新检查。
 - 共用 `CheckSourceAsync` 使用已有原生探测／事务保存关联；每个取得许可的 owner 先读本调用者当前源，再核对 Manifest／指纹／启停后行动，立即获许可也重判。首次信任核对当前 Manifest 与原生地址，不称为本次探测成功。
@@ -148,6 +148,6 @@ SQLite 运行时异常停止优化并尽可能原生委托，批量报告不可�
 
 ## TARGET — Slice 4 集成与单版本交付
 
-A 已激活 [Slice 4](../SLICE.md)，Base 为 Slice 3 关闭提交 `03169b07d110964562f7da31d2c3d7add82e5ff5`，尚无本 Slice 实现。以既有原生任务、ID 集合／分批、Coordinator、原生保存及 SQLite 条件提交为起点，补齐真实十万原生库成本、完整扫描重叠、实际 JellyfinProxy 播放链和固定 Jellyfin 12.2.0／Linux x64 包安装／恢复证据；不新建调度／运行状态系统。
+A 已激活 [Slice 4](../SLICE.md)，Base 为 Slice 3 关闭提交 `03169b07d110964562f7da31d2c3d7add82e5ff5`，尚无本 Slice 实现。按用户本次授权已直接规划 Task 4.1，后续 B 必须依 [固定交付方案](slice-4-delivery-plan.md) 逐个规划。以既有原生任务、ID 集合／分批、Coordinator、原生保存及 SQLite 条件提交为起点，补齐真实十万原生库成本、完整扫描重叠、实际 JellyfinProxy 播放链和固定 Jellyfin 12.2.0／Linux x64 包安装／恢复证据；不新建调度／运行状态系统。
 
 现有隔离工具会部署开发构建，`Packaging/meta.json` 仍为原型描述；打包／代理／真实大库入口尚未交付。目标包包含插件及所需 SQLite 托管和 native 依赖，以归档摘要关联源码／构建，干净实例只消费归档验收；不会把开发工具复制产物冒充包安装。代理是固定版本的外部组件，插件保留原生 PlaybackInfo／MediaSourceId／302 契约，受控后端不改变插件只读及无 OpenList 元数据 API 的边界。代表性格式／客户端、未用 OpenList 时的专有行为和其他未测范围均按合同准确报告；这些 TARGET 不构成 CURRENT 或跨版本支持。

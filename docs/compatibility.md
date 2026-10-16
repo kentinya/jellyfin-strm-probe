@@ -4,7 +4,7 @@
 
 当前固定组合上的 Slice 1／2／3 均已 PASS / CLOSED，没有发布包或多版本兼容声明。真实插件已用 Jellyfin Controller／Model `12.2.0`、`net10.0` 和 SDK `10.0.401` 构建，并在隔离 Jellyfin `12.2.0` 容器加载；镜像 digest、媒体服务和环境身份见 [环境交接](development-environment.md)。当前证据已覆盖完整播放／SQLite／稳定多源／共享协调、完整配置页及原生批量，完整产品与发布支持仍未验证，分层状态见 [测试矩阵](test-matrix.md)。
 
-历史 FIX REQUIRED 和失败保持原事实。Slice 3 的 AF-1 已在同一 Task 纠正并经 B 复审及新独立 Final 后由 A 关闭，接受实现 `7c64eb5dcad6e5f20fb7eb41819be2521f65484d`，详情见 [关闭记录](progress.md#slice-3-closed) 与 [A 最终审查快照](progress.md#slice-3-closed)。当前无活动实施任务；[Slice 4](../SLICE.md) 已 ACTIVE，由 B 先规划。固定 Jellyfin 12.2.0／Linux x64 包、代表 MP4／MKV／原生 Web 与实际 JellyfinProxy 路径是本 Slice 验证目标，当前仍 NOT RUN；后端只用 HTTP 服务时不宣称 OpenList 专有行为通过。播放取消范围保留原生取消异常处理，不要求成功返回后的额外取消检查或人为注入实机门槛；只共享实际已开始探测，批量停止只撤销未开始工作。Slice 3 已实测原生任务停止与已开始工作收尾。
+历史 FIX REQUIRED 和失败保持原事实。Slice 3 的 AF-1 已在同一 Task 纠正并经 B 复审及新独立 Final 后由 A 关闭，接受实现 `7c64eb5dcad6e5f20fb7eb41819be2521f65484d`，详情见 [关闭记录](progress.md#slice-3-closed) 与 [A 最终审查快照](progress.md#slice-3-closed)。[Slice 4](../SLICE.md) 已 ACTIVE；当前 [Task 4.1](../TASK.md) 按用户授权规划为 PLANNED，后续 B 依 [固定交付方案](slice-4-delivery-plan.md) 继续。固定 Jellyfin 12.2.0／Linux x64 包、代表 MP4／MKV／原生 Web 与实际 JellyfinProxy 路径是本 Slice 验证目标，当前仍 NOT RUN；后端只用 HTTP 服务时不宣称 OpenList 专有行为通过。播放取消范围保留原生取消异常处理，不要求成功返回后的额外取消检查或人为注入实机门槛；只共享实际已开始探测，批量停止只撤销未开始工作。Slice 3 已实测原生任务停止与已开始工作收尾。
 
 下表是早期源码定位候选；当前固定组合的加载／运行事实以上文及关闭证据为准。
 
@@ -74,7 +74,7 @@ A 环境准备及 Task 1.1 原型后续：SDK、固定源码、镜像 digest、�
 | 地址／流持久化 | URL 改变后原生探测并保存，当次 PlaybackInfo 新地址，重启仍有效且有必要主流；保存失败明确 | PASS；当次／重启保存与失败保流重试已独立复验；内部数据库故障未注入 |
 | 探测权限／禁用 | allowMediaProbe=false 各分支不执行；禁用／旧 STRM／手动刷新原生对照 | PASS；真实 false 流入口、禁用、旧 STRM、手动 FullRefresh 已独立复验；公共 PlaybackInfo 不提供 false 参数 |
 
-Task 1.1 PASS；该原型的全部 Outcomes／Surfaces 与单独 Final 经 A 接受，Slice 1 PASS / CLOSED。后续 Slice 2 也已完成并关闭，历史失败按原事实保留；后续 Slice 3 也已关闭，当前 [TASK.md](../TASK.md) 无活动实施任务。T01～T28 及 B01～B12 分层结果见测试矩阵，外部 JellyfinProxy／OpenList、真实大库与完整扫描压力仍 NOT RUN；使用 Jellyfin 已有 FFmpeg／ffprobe。
+Task 1.1 PASS；该原型的全部 Outcomes／Surfaces 与单独 Final 经 A 接受，Slice 1 PASS / CLOSED。后续 Slice 2 也已完成并关闭，历史失败按原事实保留；后续 Slice 3 也已关闭，当前 [Task 4.1](../TASK.md) 为 PLANNED，尚未实施。T01～T28 及 B01～B12 分层结果见测试矩阵，外部 JellyfinProxy／OpenList、真实大库与完整扫描压力仍 NOT RUN；使用 Jellyfin 已有 FFmpeg／ffprobe。
 
 ## 后续真实运行门槛
 

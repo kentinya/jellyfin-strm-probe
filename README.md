@@ -19,7 +19,7 @@
 3. 查看 [当前 Slice](SLICE.md)、[当前 Task](TASK.md)、[四个 Slice 路线图](docs/roadmap.md) 和 [进度](docs/progress.md)。
 4. 开发环境执行 `python3 scripts/development_environment.py doctor`；安装与隔离运行见 [环境交接](docs/development-environment.md)。
 
-Slice 4 Base 固定为 Slice 3 关闭提交 `03169b07d110964562f7da31d2c3d7add82e5ff5`，Implementation Head 为 NOT SET；最新接受产品实现仍是 `7c64eb5dcad6e5f20fb7eb41819be2521f65484d`。当前无活动实施任务，由 B 先规划首个 Task，本轮未实施插件。详细历史与本机证据见 [进度](docs/progress.md#当前开发指针)。
+Slice 4 Base 固定为 Slice 3 关闭提交 `03169b07d110964562f7da31d2c3d7add82e5ff5`，Implementation Head 为 NOT SET；最新接受产品实现仍是 `7c64eb5dcad6e5f20fb7eb41819be2521f65484d`。用户已授权本次直接规划，[Task 4.1](TASK.md) 为 PLANNED，交付单版本安装包与安装恢复；后续 B 必须按 [固定交付方案](docs/slice-4-delivery-plan.md) 继续规划。本轮未实施插件。详细历史与本机证据见 [进度](docs/progress.md#当前开发指针)。
 
 ## 产品目标
 
