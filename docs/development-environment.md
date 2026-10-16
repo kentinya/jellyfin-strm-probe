@@ -68,7 +68,7 @@ python3 scripts/development_environment.py up
 
 固定 SDK 的 locked restore、Release build、C# 全部测试、format verify、仓库治理测试和真实 PlaybackInfo 集成均已有执行记录。T4 最终候选、单独 Slice Final 的证据索引、任务接口调研、实现 SHA 与延期见 [Closure Packet](progress.md#slice-1-closed)；完整 Developer 报告见 [Task 历史指针](progress.md#slice-1-closed)。A 已核验原始证据及输入身份，Slice 1 PASS / CLOSED。
 
-本文件记录已运行环境及事实交接，原环境阻塞和旧实现 FIX REQUIRED 保留为历史。Slice 1／2／3 均已 A 最终审查 PASS / CLOSED；当前 [Task 4.1](../TASK.md) 按用户授权规划为 PLANNED，尚未实施。Slice 3 单独 Final 完成 202 C#／63 Python、构建质量、默认真实播放、批量七场景和配置页 19 场景；A 核验匹配输入／产物后明确复用，另独立复跑回归与关键控制。Final 恢复配置／全部任务触发器／夹具及原生地址、清除临时条目，证据见 [Slice 3 关闭记录](progress.md#slice-3-closed)。这不由环境可用替代产品验收，也不代表发布或真实大库通过。Slice 3 关闭轮只修改文档和运行隔离控制，未操作运行实例。当前 Slice 4 已 ACTIVE，固定交付方案和首个 Task 4.1 计划已提交，后续 B 按 [方案](slice-4-delivery-plan.md) 继续规划；本次只改文档，未准备环境或运行产品门槛。
+本文件记录已运行环境及事实交接，原环境阻塞和旧实现 FIX REQUIRED 保留为历史。Slice 1／2／3 均已 A 最终审查 PASS / CLOSED；[Task 4.1](../TASK.md) 的单版本安装包与安装恢复已实现并交为 READY FOR B REVIEW。Slice 3 单独 Final 完成 202 C#／63 Python、构建质量、默认真实播放、批量七场景和配置页 19 场景；A 核验匹配输入／产物后明确复用，另独立复跑回归与关键控制。Final 恢复配置／全部任务触发器／夹具及原生地址、清除临时条目，证据见 [Slice 3 关闭记录](progress.md#slice-3-closed)。这不由环境可用替代产品验收，也不代表发布或真实大库通过。Slice 3 关闭轮只修改文档和运行隔离控制，未操作运行实例。当前 Slice 4 已 ACTIVE；Task 4.1 新增独立包验收实例（Compose project `jf-strm-probe-package-*`、端口 `18097`、工作区 `artifacts/package-env`，服务器容器无源码／SDK／NuGet 挂载），安装、配置与恢复步骤见 [安装包说明](package-installation.md)；RO-2～RO-4 仍 NOT RUN。
 
 ## 已运行环境证据
 
