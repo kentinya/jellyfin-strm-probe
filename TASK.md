@@ -49,6 +49,52 @@ Planner / Reviewer: B
 4. 将四项反例与同类许可等待／多消费者边界加入现有 MSTest 项目；优先复用 BatchHarness、临时 STRM、故障仓库及同步进度，不复制产品算法、不靠 sleep 或生产调试入口。新增测试标记 `TestCategory("BatchAdmissionFailure")`，同时保留 Batch 类别，令独立复现命令可发现它们。
 5. 主要文件边界为 `Services/StrmPlaybackOptimizer.cs`、必要的 `BatchProbeTypes.cs`／`BatchCheckRunner.cs`／`Tasks/StrmProbeScheduledTask.cs`、`BatchCheckTests.cs`。仅在同一根因确实需要时调整 Coordinator／相关测试或隔离工具，不要求为每个文件产生改动。报告精确列出涉及的层；未触及的配置页／原生保存／schema 等不得借修正重构。
 
+### 简化实施方案（开发指导，2026-10-16）
+
+首选复用已有两个异常、runner 的原因计数和原生任务结果映射。先修正丢失原因的接缝，再按现有测试验证同根因边界；无需新增结果类型、持久化状态或调度机制。以下是原验收内的实现建议，Task 身份／Base／范围／T4 不变。
+
+**第一步：在 owner 准入处分别报告真实原因。** 将 `AdmitBatchOwnerAsync` 开头合并返回 NotProcessed 的分支替换为两个检查，保持当前开始边界的状态库优先顺序：
+
+```csharp
+// 设计示意：在已有 owner 准入检查中使用现有类型。
+if (IsFingerprintStoreUnavailable)
+{
+    throw new FingerprintStoreUnavailableException(
+        FingerprintStoreFailureStage.Execution);
+}
+
+if (!_settings.Enabled)
+{
+    throw new BatchDisabledException(projectItemId, sourceKey);
+}
+```
+
+这里已经根据当前源判断需要探测，所以状态库故障沿用 Execution 阶段的“需要但未完成”计数；实际原生调用数仍为 0，不把阶段标签当作已经开始探测。普通／旧／不支持输入原有的 NotProcessed 分支继续按原规则工作。
+
+**第二步：让未开始拒绝安全释放 owner 并向上传播。** 在 `RunBatchProbeAsync` 最外层、现有通用 `catch (Exception)` 之前，覆盖这两类异常。可以把已有最外层状态库 catch 扩展为：
+
+```csharp
+catch (Exception exception) when (
+    exception is BatchDisabledException or FingerprintStoreUnavailableException)
+{
+    Coordinator.Abandon(workItem);
+    throw;
+}
+```
+
+现有原生准备阶段和状态库分支若已结算，`Abandon` 的幂等性使重复调用成为空操作；不要为整理重复 catch 重写整条执行链。新准入分支走到此处时尚未开始，不调用 EndProbe、不提交指纹、不转成 ProbeIncomplete 返回而吞掉异常。其他真正执行异常保留原 Fail／收尾语义。
+
+**第三步：复用 runner／scheduled task 的现有结果路径。** `ProcessCandidateAsync` 已有的两个 catch 负责保存本轮原因，不需另建一套结果转换。消费者取下一项前，将本轮已记录的 `counters.Disabled != 0` 与已有停止／不可用条件一起检查，避免其他消费者继续取项时忽略已观察的禁用；仍让已开始／已加入的工作正常结算。原因一旦写入本轮计数不清零，不能只靠最后重新读取当前配置来决定是否完成。
+
+| 准入前拒绝原因 | 复用的本轮统计 | 复用的原生任务结果 |
+|---|---|---|
+| 禁用 | Disabled=true；该未开始候选计 Revoked；Completed=false | 汇总及收尾后抛取消异常，Cancelled |
+| 已决定需探测后状态库不可用 | StoreUnavailable=true；Checked／ProbeIncomplete 各增加 1，NeedProbe 保留；Completed=false | 汇总及收尾后抛脱敏不可用异常，Failed |
+
+两条路径都不报 100%，不增加 ActualProbeCalls 或 ReliableSuccess，保留旧基线。现有 `RunAsync` 完成条件和 `StrmProbeScheduledTask.ExecuteAsync` 已能消费这些标志，优先保持其结构；管理员停止与故障同时出现仍沿用既有取消优先、汇总保留故障的规则。
+
+**验证顺序：** 先用现有 `OnBatchDecision` 重现四项最小末项反例并保留失败；完成上述局部修正后，验证先等待许可、跨批末项、多消费者及已开始／共享对照，最后执行下节完整候选门槛。生产代码不增加用于卡竞态的按钮、延时或注入开关。若确定性测试揭示同根因的其他未开始路径仍丢原因，在原 Task 范围内修补该接缝，不能靠只改终态掩盖它。
+
 ## 验收条件
 
 以下 AC-T1～AC-T8 保留原 Task 的业务与安全验收；仅将 AC-T8 的旧页面缺失说明同步为 Task 3.2 已交付的事实，不改变页面义务。复选框表示纠正候选待重新核验；旧通过与限制在历史快照中保留，不虚构历史失败或新的已通过结果。
