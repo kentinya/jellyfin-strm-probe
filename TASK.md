@@ -5,7 +5,7 @@
 ```text
 Task ID: 3.1
 Parent Slice: 3
-Status: READY FOR B REVIEW
+Status: FIX REQUIRED
 Task Base: b86d9c17d7f915108072f54ee098f0f5543fe093
 Contract Checkpoint: e03052655d298adb30cbb7f315da684f27a07285
 Original Contract Checkpoint: 2b515f35db7fc8e85d8ac1a8085dd9b8ccc62ef3
@@ -195,7 +195,7 @@ B 审查真实 `Task Base..Developer Head`，并单列 `Correction Start Checkpo
 - Slice 4 的真实大库／完整扫描压力／广泛客户端格式／外部 JellyfinProxy／OpenList 联调／发布 ZIP；以及生成器、远程哈希／API／代理改造、生产操作、推送、历史重写。
 - 以本计划、治理通过或旧 Final 宣告 AF-1 修复、Task PASS 或 Slice 关闭。
 
-## Developer Completion Report
+## Developer Completion Report — 上轮并发纠正（历史输入）
 
 历史完成报告及各轮 B 结果保留于 Previous B PASS Snapshot 与上轮 B Review Result；下表记录本轮
 “已分派但未开始工作跨重新启用”的并发纠正。
@@ -242,134 +242,6 @@ B 审查真实 `Task Base..Developer Head`，并单列 `Correction Start Checkpo
   广泛格式／客户端、发布 ZIP）；窄窗口以确定性屏障证明，未新增生产开关。
 - Head SHA：`97e68dfa2f246488174e47e2ba0cf45910a4947f`。
 
-## B Review Result
-
-```text
-Reviewed: b86d9c17d7f915108072f54ee098f0f5543fe093..97e68dfa2f246488174e47e2ba0cf45910a4947f
-Correction Reviewed: e03052655d298adb30cbb7f315da684f27a07285..97e68dfa2f246488174e47e2ba0cf45910a4947f
-Current Fix Reviewed: 39ef1b7ccb90470546c80ef55642301ea92a651b..97e68dfa2f246488174e47e2ba0cf45910a4947f
-Review Checkout / Report: 623a8e8d813f96a6020fec7f2d88b5f409d200ab
-Decision: FIX REQUIRED
-P0/P1 Blockers: AF-1 (P1), observed disable lost across repeated Enabled reads
-Slice Required Outcomes all satisfied: NO
-Next: DEVELOPER CONTINUES THE SAME TASK 3.1 CORRECTION
-```
-
-2026-10-16，B 重新完成必读清单及 B 经验，初始 main 干净、治理 PASS。以已提交 Slice 为 authority，保留 Task ID／Base／Goal／Scope／High／T4 与用户“不增加状态字段”约束。核对完整 Task Base..Head 文件范围、此前可达 B／A 记录和本次四个产品／测试文件的实际差异；单列本轮纠正范围，不把其间 Task 3.2 页面交付计作本次修正。报告 checkout 比实现候选仅多 TASK.md，53 个源码／测试／工具／锁／构建输入逐个与候选 Git 内容匹配。根状态仍为 FIX REQUIRED、报告标 AWAITING B REVIEW；按用户本轮明确职责审查实际已提交候选，不虚构状态历史。
-
-### 本轮已修复部分与独立结果
-
-- **PASS**：指定 Batch／Coordinator／Context／Playback／Configuration 聚焦 142 passed／0 failed／0 skipped，含 10 项 `BatchAdmissionFailure`。独立 TRX 与精确命令已保存。
-- **PASS**：重跑 B 的四项原始禁用／真实仓库读取失败 latch × runner／ExecuteAsync 控制及三个跨重新启用的并发控制，独立产品断言 7／7 通过。旧三项窗口现零新增开始／调用／可靠成功、两项撤销、基线保留、Disabled=true／Completed=false、进度低于 100%，资源归零。
-- **PASS**：重跑 B 的真实许可等待宽窗口控制；禁用被另一消费者观察并结算、重新启用且释放独立 reservation 后，已分派的等待者不再开始。保留一个正常未变跳过及一个撤销对照；未开始源基线保留、资源归零。不宣称此控制是真实 Jellyfin 页面切换验收。
-- `CloseAdmission()` 复用原停止位和锁，未增加字段／枚举／CTS；`ConfirmStop()` 可在此前禁用关闭准入后记录真正管理员停止时间。已开始／已加入 running 的结果路径没有新增事后禁用拒绝。上述通过只支持这些控制，不排除以下遗漏。
-
-### AF-1 残留：重复读取 Enabled 丢失已观察的禁用（P1）
-
-`BatchCheckRunner.ProcessBatchAsync` 先在外层条件读取 `!_settings.Enabled`，进入分支后再次读取才决定 CloseAdmission 和 Disabled。如果两次读取之间配置重新启用，第一项已因禁用被撤销，却没有关闭本轮准入或保留原因；末项随后补 100%，runner Completed=true，ExecuteAsync 正常返回。`FetchCandidates` 也在观察禁用后仅设置 complete=false，返回 RunAsync 后靠重新读取 Enabled 推断原因；此时重新启用同样使原生入口正常返回。固定 worker 会把正常返回记 Completed。
-
-B 使用同一产品 runner／ExecuteAsync、临时受支持 STRM／已有可信基线和原有假原生，构造可编排的 `IPlaybackSettings`：在目标判断返回一次 Enabled=false，下一次读取前恢复 true。仅替换公开构造参数；不改产品／已提交测试、不直接改停止位。记录直接调用位置，确保读取发生在目标分支，而不是外层异步调用栈的同名历史帧。四项有效控制结果：
-
-| 控制 | 实际结果 |
-|---|---|
-| 末项消费者，runner | 目标两次读取 false→true；Revoked=1、Disabled=false、StopRequested=false、Completed=true；进度 `[0,99,100]`。 |
-| 相同消费者窗口，ExecuteAsync | 正常返回，无取消异常；进度 `[0,99,100]`。 |
-| 候选获取前观察禁用，runner | 获取被中断、CandidateTotalKnown=false、Completed=false，却 Disabled=false／StopRequested=false；进度 `[0]`。 |
-| 相同候选获取窗口，ExecuteAsync | 正常返回，无取消异常；尚未完成获取的任务仍会被 worker 记 Completed。 |
-
-四项均零探测、旧基线未变、许可／preparing／running 归零；独立产品断言 **4 FAIL，退出 1**。这是原 AF-1 的“禁用原因必须持续到本轮结算、不能因重新启用清空”及 RO-6／AC-7 未闭合，不是新增状态要求或 Material Contract Change。生产 `PluginPlaybackSettings.Enabled` 每次读取当前配置，配置保存会发布新对象，两次读取之间允许配置变化；控制证明该合法交错的结果，未测真实页面切换频率，不声称通常或必然发生。
-
-### 同一 Task 的最小继续修正（开发指导）
-
-**本次只补 runner 的“读取配置 → 关闭准入 → 记录原因”接缝。** 已有 CloseAdmission、停止位、Disabled 计数和原生异常映射继续使用，不增加字段、枚举、CTS 或持久化状态；Task ID／Base／Goal／Scope／High／T4 不变。
-
-1. **用一个小方法完成一次观察。** 在 `BatchCheckRunner` 内读取一次 Enabled，若为 false，立即关闭本轮准入并置位已有 Disabled。当前判断随后只使用这次结果，不再读 Enabled 来猜刚才为什么停止。可按以下局部示意实现：
-
-   ```csharp
-   private bool ObserveDisabled(Counters counters, BatchStopSignal stopSignal)
-   {
-       var enabled = _settings.Enabled;
-       if (!enabled)
-       {
-           stopSignal.CloseAdmission();
-           Interlocked.Exchange(ref counters.Disabled, 1);
-       }
-
-       return Volatile.Read(ref counters.Disabled) != 0;
-   }
-   ```
-
-   每个准入判断点先调用一次，再将返回值与已有停止／故障条件组合。方法使用现有字段；其他消费者已经记录禁用时也返回 true，不会因当前 Enabled=true 恢复旧轮。
-
-2. **把相同遗漏一次补齐。** 应用到候选查询前／返回后、候选固定后、批次前和消费者取项处。特别是 `FetchCandidates`：观察到禁用时就在这里调用已有关闭／记录逻辑，再中断获取；不能等返回 `RunAsync` 后重新读取配置才决定 Disabled。已有汇总消费累计结果，禁止用当前配置清除既有 Disabled。后续独立判断点仍可读取新配置，不把一个局部值当作整轮配置快照。
-3. **沿用原收尾。** 正常撤销／Unread／未知候选总数仍按原路径结算；StopRequested 仍只来自原管理员 token，状态库故障及原因优先级不变。仅关闭准入，不取消已开始／已加入的探测，也不在成功返回后否决有效提交。主要改 `BatchCheckRunner.cs` 与 `BatchCheckTests.cs`，不为本问题重构 optimizer、配置页、schema 或调度。
-4. **先跑反例，再跑原门槛。** 使用可编排的 `IPlaybackSettings`／屏障，令目标判断读到 false、后续读取已恢复 true，至少覆盖消费者末项及候选查询前／后；runner 和 ExecuteAsync 都验证。断言 Disabled=true、StopRequested=false、Completed=false／取消异常、进度低于 100%、零探测、旧基线与资源正确，并保留正常完成／真正管理员停止对照。测试加入现有 `BatchAdmissionFailure`，保留旧候选 FAIL；再运行已有三项并发与真实许可等待宽窗口控制，最后执行本 Task 原完整 T4 和 B 指定独立验证，不削减门槛。
-
-本轮四项反例源码与原始结果见下方 B 证据索引中的 `double-read/`；它们只用于确定性复现，不能把 getter 编排或屏障加进生产配置／运行入口。本节是实施指导，当前审查仍为 FIX REQUIRED。
-
-### 证据、未运行与 Slice 重核
-
-仅本机索引：`.git/validation-evidence/97e68dfa2f246488174e47e2ba0cf45910a4947f/b-review-20261016-2/INDEX.md`。包含范围 diff、53 项输入与构建产物身份、聚焦 TRX、原控制／宽窗口／重复读取 helper 源码、原始结果、精确命令／退出／耗时及独立断言。采集器退出 0 仅代表成功采集，不代表四项必要行为通过；初次 helper 栈匹配过宽的产物另保留，正式四项使用直接调用帧定位。
-
-已核阅 Developer INDEX、fulltest／build 等原始日志，保留其自测 192 C#／63 Python／实机结果为历史事实；因明确 P1 提前拒绝，本轮不签发完整 T4 证据复用 PASS。B stop／sharing 实机、其余完整实机和 Slice Final 本轮均 **NOT RUN**，符合流程的早期拒绝规则；修正后仍须完整计划。真实十万库、内部数据库物理保存故障注入、外部代理／OpenList、广泛格式／客户端及发布 ZIP 的既有 NOT RUN 边界不变。
-
-重新核对全部七个 RO／六类 Surfaces：RO-1／2／3／4／7 的历史交付保留；RO-6 的禁用原因与原生终态明确未满足，RO-5／配置约定的持续准入停止也不能因本轮已有绿灯整体签发。共用执行／开始边界及进度／原生结果 Surface 仍需同一 Task 修正。故不创建下一 Task、不运行 Slice Final、不替换旧 Closure Packet、不改 Slice／Roadmap／稳定需求、不代 A 关闭。
-
-经验候选：一个边界内多次读取动态配置可能丢失首次拒绝原因 → 捕获一次观测并立即写入既有本轮准入与汇总 → 适用于可即时启停的并发检查；供收尾与已有经验合并，不写流水账。
-
-### 上一轮 B Review Result（历史输入，2026-10-16）
-
-```text
-Reviewed: b86d9c17d7f915108072f54ee098f0f5543fe093..071142f69e110d6406c81294fc03f0918bb0fc0f
-Correction Reviewed: e03052655d298adb30cbb7f315da684f27a07285..071142f69e110d6406c81294fc03f0918bb0fc0f
-Review Checkout / Developer Report: e5b5462735ecb7a59009fbd993339802820c6db3
-Decision: FIX REQUIRED
-P0/P1 Blockers: AF-1 (P1), concurrent unstarted admission remains open
-Slice Required Outcomes all satisfied: NO
-Next: DEVELOPER CONTINUES THE SAME TASK 3.1 CORRECTION
-```
-
-2026-10-16，B 完成必读清单、B 经验、干净 main 状态及治理 PASS 核查。保留 Task ID／Base／Goal／Scope／High／T4 与已提交合同，不改 Slice、Roadmap 或稳定需求。核对真实 Task Base..Developer Head 的文件范围及可达历史 B PASS，单列纠正差异：本次仅两个产品文件及 `BatchCheckTests.cs`；其间 Task 3.2 页面交付沿用历史身份，不计成本次修正。Developer Head 到报告 checkout 仅 `TASK.md` 不同；当前聚焦构建与独立控制的可执行输入匹配该候选。
-
-### 已修复部分与独立验证
-
-- PASS：B 独立执行指定 Batch／Coordinator／Context／Playback／Configuration 聚焦命令，139 passed／0 failed／0 skipped；TRX 确认包含全部 7 项新增 `BatchAdmissionFailure`，并非零发现。
-- PASS：B 以 A 原控制为起点，使用当前测试程序集中的 BatchHarness、真实产品 runner／ExecuteAsync、临时 STRM／内存仓库和假原生保存，独立复现禁用／另一源真实仓库读取失败 latch × runner／ExecuteAsync 四项。禁用返回 Disabled、Revoked=1、Completed=false；状态库故障保留 Checked=NeedProbe=ProbeIncomplete=1、StoreUnavailable=true。四项均零探测、旧基线不变、进度最高 99%、许可／preparing／running 归零；ExecuteAsync 分别抛 OperationCanceledException／InvalidOperationException。仅证明确定性入口，不冒充真实 worker 终态。
-- 当前新增异常传播和 Abandon 释放修复了 A 的四个最小反例；已开始后的成功提交规则没有因此失效。但新增“重新启用”回归设置 `ConsumerLimit=1`，只保护下一次取项，不能证明已取出的并发工作也停止准入。
-
-### AF-1 尚未闭合：本轮原因只挡下一次取项，已分派工作可在重新启用后开始（P1）
-
-`BatchCheckRunner.ProcessBatchAsync` 在取项后检查 `counters.Disabled`，随后进入 `ProcessCandidateAsync`。这个本轮已观察原因没有传入后续 `CheckBatchSourceAsync`／owner 准入／实际开始边界；这些路径仍只读当前 `_settings.Enabled` 与管理员停止信号。因此一消费者已报告禁用并结算为撤销后，管理员重新启用会让同轮另一个已分派、尚未开始的消费者恢复探测。最终 Disabled=true／Completed=false 只保证结果标签，不能阻止额外工作。
-
-B 使用两个已有可信基线、URL 已变的源、两个消费者和确定性屏障独立复现；所有实际探测均发生在禁用已被第一项观察／结算、随后重新启用之后：
-
-| 窗口 | 屏障与实际结果 |
-|---|---|
-| 决策后、取得许可前 | 两项都已通过消费者前置检查并作出需探测决策；第一项禁用并撤销，结算回调重新启用，再释放第二项。额外开始／调用 1，ReliableSuccess=1，Revoked=1，两个基线中一个更新。 |
-| 立即取得许可、尚未登记 | 并发上限 2，两项均实际取得许可；第二项卡在 PermitAcquiredBarrier，第一项拒绝结算后重新启用并释放第二项。仍额外开始／提交 1。 |
-| 等待许可后、尚未登记 | 并发上限 1，独立 reservation 暂占许可，确认两项均到 PermitWaitBarrier 后释放；第一项因禁用拒绝，第二项获许可但等第一项结算／重新启用后继续。waitCount=2，仍额外开始／提交 1。 |
-
-三个控制均得到 Disabled=true、Completed=false、Checked=NeedProbe=ReliableSuccess=1、Revoked=1、ActualProbeCalls=1，进度 `[0, 50, 99]`、资源最终全零。期望是已观察原因持续约束本轮未开始工作：后续实际开始／成功为 0，两项撤销、两个旧基线保留。统计等式和不补 100% 已满足，不能据此忽略准入义务。第二项在禁用之前没有实际开始，故本反例不要求撤销任何已开始探测或否决其有效提交。
-
-这正是原 AF-1 验收“原因一经观察不能由重新启用清空，后续未开始探测停止”与并发准入边界的未闭合部分，影响 RO-6 及 RO-5／配置禁用的未开始工作约束；不是新范围或 Material Contract Change。维持原 Task 纠正，不另建 Task，不交 A 改合同。
-
-### 同一 Task 的继续纠正与测试要求
-
-1. 将本轮已经观察到的禁用／不可用原因持续约束到已分派但未实际开始的工作，覆盖决策后、许可等待／立即取得、原生准备及实际开始边界。不能仅在下一次取项检查本轮原因，也不能仅靠最终 Completed=false 掩盖新增调用。复用既有本轮上下文和开始／停止协调机制；不要求新增调度器、持久化状态或通用框架。
-2. 加入上述三个会失败的并发回归，保留修正前 FAIL。至少明确断言：拒绝原因已被第一项结算、第二项此前未开始、重新启用后同轮零新增开始、各候选一次结算、两项撤销、旧基线与进度／资源正确。以屏障证明立即取得与实际等待，保留单消费者及 A 四项控制；原 `BatchAdmissionFailure` 类别继续作为聚焦入口。
-3. 不能将本轮准入停止扩散到独立播放、其他调用者或下一轮；已开始／已加入 running 的工作仍完成保存／验证／条件提交。保留原生自身取消、管理员停止与状态库不可用的原因优先／汇总，不能用新的执行取消源或成功后的禁用检查达成零调用断言。
-4. 本轮已有明确 P1，B 不运行昂贵的 stop／sharing 实机及 Slice Final；这些项目本轮均为 **NOT RUN**，不是 PASS 或删减门槛。修正候选仍须执行上文完整 T4，B 下轮独立聚焦、上述控制及指定 stop／sharing；Developer 原完整门槛不能代替新可执行候选的验证。
-
-### 证据、复用边界与 Slice 重核
-
-本机索引：`.git/validation-evidence/071142f69e110d6406c81294fc03f0918bb0fc0f/b-review-20261016/INDEX.md`。包含 helper 源码、四项旧控制与三个新控制的原始结果、单独产品断言（4 PASS／3 FAIL，退出 1）、精确命令、TRX、源码／锁／SDK／构建输入与产物身份。collector 退出 0 只表示成功采集；不将其称为产品 PASS。本机证据不宣称远程可读。
-
-已读取 Developer INDEX、identity 与相关原始测试／batch 日志，保留其自测结果为历史事实；本轮因明确阻塞提前拒绝，**不签发完整 T4 可复用 PASS**。Developer INDEX 对每项新增用例均具有全部断言的概括比实际代码更宽（ExecuteAsync 两项仅断言异常）；本轮四项独立控制已补充核验基线、进度与资源，后续报告须按实际用例说明覆盖。
-
-全部 RO／六类 Surfaces 重新核对：RO-1／2／3／4／7 的历史交付不撤销；RO-5 的本轮未开始工作约束与 RO-6 故障停止仍受本反例阻塞。共用执行／实际开始和进度／结果表面尚不能签发当前 PASS；原生任务、库查询、SQLite 和配置页原始证据保持历史事实，不写成当前全 Slice 已满足。因此不创建下一 Task、不运行 Slice Final、不替换旧 Closure Packet，也不代 A 关闭。真实十万库、内部数据库物理保存故障注入、外部代理／OpenList、广泛格式／客户端和发布 ZIP 继续保留原 NOT RUN 边界。
-
-供 Slice 收尾的经验候选：本轮原因已写入汇总仍可能漏过已分派工作 → 用同轮两个消费者跨决策、许可和实际开始边界验证原因持续生效 → 适用于可重新启用的批量准入；与既有并发屏障经验合并，不记录流水账。
-
 ## Developer Completion Report — 单次读取禁用观测纠正（2026-10-16）
 
 B 已就“同一边界内多次读取动态 `Enabled` 丢失首次拒绝原因”签发 FIX REQUIRED（P1）。本报告记录同一 Task 3.1 内该接缝的最小纠正。
@@ -399,4 +271,62 @@ B 已就“同一边界内多次读取动态 `Enabled` 丢失首次拒绝原因�
 - Risks / Deviations：确定性控制以可编排设置模拟合法并发配置发布，真实页面切换时序 NOT RUN；真实十万库、内部数据库物理保存故障注入、外部代理／OpenList 联调、广泛格式／客户端、发布 ZIP 继续 NOT RUN。
 - Head SHA：`9b5e488a0c7f8ac46989f244a7835032b61246b1`。
 
-NEXT ACTION: DEVELOPER CONTINUES TASK 3.1; B RE-REVIEWS THE CORRECTION
+历史报告的交接动作已由下方当前 B Review Result 替代。
+
+## B Review Result
+
+```text
+Reviewed: b86d9c17d7f915108072f54ee098f0f5543fe093..9b5e488a0c7f8ac46989f244a7835032b61246b1
+Correction Reviewed: e03052655d298adb30cbb7f315da684f27a07285..9b5e488a0c7f8ac46989f244a7835032b61246b1
+Current Fix Reviewed: 717595c631489c2dbea817ebb755507271f806bd..9b5e488a0c7f8ac46989f244a7835032b61246b1
+Review Checkout / Developer Report: de01271ad51395907fc68139cf2f8190c13a56f7
+Decision: FIX REQUIRED
+P0/P1 Blockers: AF-1 (P1), global store failure omitted by final skipped candidate
+Slice Required Outcomes all satisfied: NO
+Next: DEVELOPER CONTINUES THE SAME TASK 3.1 CORRECTION
+```
+
+2026-10-16，B 完成 AGENTS 必读清单及 B 经验，初始 main 干净、规划／审查前治理 PASS。以已提交 Slice 为 authority，保留 Task ID／Base／Goal／Scope／High／T4 与不新增状态字段的实施约束；单列完整 Task 范围、本次纠正范围及最新两个文件的差异，未将其间 Task 3.2 页面交付计作本次修正。Developer 被测工作文件与提交 blob 相同，82 项 tracked 输入只有 TASK.md 与当前 checkout 不同。上轮重复读取反例、详细指导与 B FIX REQUIRED 保留于 `de01271ad51395907fc68139cf2f8190c13a56f7:TASK.md`，原始失败证据保持不变。
+
+### 已修复行为与独立验证
+
+- **PASS**：独立聚焦 147／0 failed／0 skipped，TRX 逐项确认全部 15 项 `BatchAdmissionFailure` 被执行。单次禁用观测立即复用 CloseAdmission 和已有 Disabled；没有增加字段、枚举、CTS 或持久化状态。两个新增 ExecuteAsync 用例实际只断言取消异常，不能按 Developer 报告概括成每个用例均检查全部计数／基线／资源；下述独立控制补充核验这些项。
+- **PASS**：B 独立重跑此前禁用／另一源实际仓库读取失败 latch × runner／ExecuteAsync 四项、决策后／立即获许可／实际等待许可的三个并发重新启用控制、一个真实许可等待宽窗口控制、消费者／候选获取单次 false 后恢复 true × runner／ExecuteAsync 四项，共 **12 个控制**。原因／异常正确，未开始源零新增探测、旧基线保留、资源归零、进度低于 100%；宽窗口仍有一个正常未变跳过、两个撤销。double-read helper 仅适配新 ObserveDisabled 调用帧，仍通过公开构造参数替换动态设置，不修改产品／已提交测试。
+- **PASS**：B 独立 locked restore、Release build（0 警告／0 错误）、C# 全套 **197／0 failed／0 skipped**、format、Python **63**、治理、差异和 **140** 个本地 Markdown 链接／锚点。
+- **PASS**：B 指定真实 `--scenario stop`（104.689 秒）和 `--scenario sharing`（83.335 秒）。停止最终 Cancelled，2 个已开始源提交、1 个撤销；收尾期零新轮／零新探测，排队轮只处理撤销源，再次显式运行零重复。两方向共享各一次真实探测，批量 ActualProbeCalls 分别 1／0、ReliableSuccess 均 1。夹具／地址、配置和全部触发器 restored and verified。部署产品 DLL 为当前构建 `21a595b0949a9c35b88fb282fceae4fffe6afc03dc50dbe223ceb5b7be36e357`，不冒称与 Developer 的旧构建摘要相同。
+
+以上支持禁用修正及原停止／共享行为，不能排除以下 RO-6 遗漏。
+
+### AF-1 残留：末项跳过路径未将共享状态库故障带入本轮终态（P1）
+
+`CheckBatchSourceAsync` 在已有基线、未变化时直接返回 Skipped，不经过 owner 准入的故障检查。此时若另一源已经通过同一个 optimizer 的真实仓库读取失败置位 `IsFingerprintStoreUnavailable`，本候选仍会正常跳过。`BatchCheckRunner` 在整批结算后及最终完成判断只消费 `counters.StoreUnavailable`，没有把已置位的共享故障纳入结果；末批不会再到下一批的全局检查。因此仍得到 `StoreUnavailable=false／Completed=true`，补 100%，ExecuteAsync 正常返回，固定原生 worker 会记 Completed。
+
+B 使用单个末项、临时受支持 STRM 和已有可信基线，保留 URL／SHA-1／Size 不变。在其决策之后，用另一源通过同一 optimizer 实际读取故障仓库；没有直接设置私有 latch。独立控制包括原源级批量入口和真正的公开播放入口 `GetPlaybackMediaSourcesAsync`，各覆盖 runner／ExecuteAsync。播放控制使用原有假原生的已有流作为合法委托返回；只检查插件故障传播，不声称是真实数据库物理故障注入。
+
+| 控制 | 实际结果 |
+|---|---|
+| 另一源经 CheckBatchSourceAsync latch，末项 runner | latch=true；Checked=Skipped=Settled=1，NeedProbe=0；StoreUnavailable=false、Completed=true；进度 `[0,99,100]`。 |
+| 相同窗口，ExecuteAsync | 正常返回，无不可用异常；进度到 100%。 |
+| 另一源经公开播放入口实际读取失败 latch，末项 runner | 同样 latch=true、Skipped=1、StoreUnavailable=false、Completed=true；进度 `[0,99,100]`。 |
+| 相同公开播放故障，ExecuteAsync | 正常返回，无不可用异常；进度到 100%。 |
+
+四项零批量／假原生探测、旧基线未变、许可／preparing／running 归零；独立必要行为断言 **4 FAIL，退出 1**。正确的跳过计数与零探测不抵消必要故障反馈。此问题违反原 RO-6、AC-6／AC-7／AC-T6／AC-T7 的“状态库全局不可用报告不可用、全局故障不补满”义务，是 AF-1 的终态传播残留；不是新 Outcome、额外状态要求或 Material Contract Change。
+
+### 同一 Task 的最小继续修正
+
+1. **将已有共享 latch 纳入 runner 结算。** 在现有批次收尾／最终结果决定边界读取 `_optimizer.IsFingerprintStoreUnavailable`，置位已有 `counters.StoreUnavailable`，再按现有优先级产生结果。复用既有 latch、计数和 ExecuteAsync 异常映射；无需增加字段、枚举、CTS、持久化状态或重构调度。不能只在需要探测的 owner 分支处理故障，或寄望还有下一批检查。
+2. **保留准确的源结果和已开始收尾。** 本控制的末项确实已完成未变检查，保留 Skipped／Checked 的实际口径，不凭全局故障编造需要探测。已开始／已加入工作仍等待保存、验证和条件提交；本轮报告不可用不能用作成功后否决已满足全部条件的提交。管理员停止优先及不可用汇总继续沿原规则。
+3. **先加入会失败的末项回归。** 使用现有 BatchHarness／决策屏障／故障仓库，至少以另一源通过公开播放入口真实读取失败 latch 同一 optimizer，覆盖 runner 与 ExecuteAsync。断言 latch 的实际来源、StoreUnavailable=true、Completed=false／脱敏 InvalidOperationException、进度低于 100%、无额外批量探测、准确跳过与等式、旧基线和资源；保留无故障正常跳过 Completed／100% 对照。归入现有 `BatchAdmissionFailure`，保存修正前 FAIL。
+4. **原 T4 和独立验证持续有效。** 修正后先跑上述反例及既有 12 项控制，再执行原完整候选门槛与 B 指定独立 stop／sharing；不因本轮已有绿灯削减当前候选验证。用户授权仍只由 Developer 实施本 Task 修正；B 本轮不改产品代码。
+
+### 证据、未运行与 Slice 重核
+
+本机索引：`.git/validation-evidence/9b5e488a0c7f8ac46989f244a7835032b61246b1/b-review-20261016/INDEX.md`。保存真实范围 diff、输入／SDK／锁／构建与部署身份、TRX、12 个原控制和 4 个末项故障控制的 helper 源码／原始结果／独立断言、真实 stop／sharing 原始日志与恢复，以及精确命令／退出码／耗时。collector 退出 0 仅表示采集成功；4 FAIL 的产品断言退出 1 才是本轮阻塞判定。
+
+已核阅 Developer 的原始 build／fulltest／首败／三项实机日志，核对输入和工作文件身份，并将其仅在临时目录的浏览器原始产物复制到稳定 B 证据目录；历史自测保留，不签发完整 T4 复用 PASS。发现明确 P1 后按流程提前拒绝：当前 B 的完整默认 playback／batch suite／configuration 及 Slice Final 均 **NOT RUN**；已启动的独立 sharing 正常完成和恢复后，剩余昂贵门槛未启动，未取消在执行的探测。Developer 的既有全套不改写成本轮 B 或 Slice Final 结果。
+
+七个 RO／六类 Surfaces 已重新核对：RO-1／2／3／4／7 的历史交付保留，RO-5 本轮真实停止／收尾得到支持，禁用准入反例已闭合；**RO-6 的全局故障反馈和原生终态仍未满足**。进度／结果表面阻塞整 Slice 接受；原生任务、库查询、共用执行、SQLite 与配置页保留分层事实，不能整体签发 PASS。因此不创建下一 Task、不运行 Slice Final、不替换旧 Closure Packet、不改 Slice／Roadmap／稳定需求，也不代 A 关闭。
+
+真实十万库、内部数据库物理保存故障注入、外部代理／OpenList、广泛格式／客户端及发布 ZIP 的既有 NOT RUN 边界不变。供收尾合并的经验候选：只检查需要探测分支会漏掉并发全局故障 → 同时覆盖末项正常跳过与跨播放入口故障，核对本轮终态 → 适用于共享不可用 latch 的批量任务；本轮不写经验流水账。
+
+NEXT ACTION: DEVELOPER CONTINUES THE SAME TASK 3.1 CORRECTION
