@@ -95,16 +95,16 @@ catch (Exception exception) when (
 
 **验证顺序：** 先用现有 `OnBatchDecision` 重现四项最小末项反例并保留失败；完成上述局部修正后，验证先等待许可、跨批末项、多消费者及已开始／共享对照，最后执行下节完整候选门槛。生产代码不增加用于卡竞态的按钮、延时或注入开关。若确定性测试揭示同根因的其他未开始路径仍丢原因，在原 Task 范围内修补该接缝，不能靠只改终态掩盖它。
 
-### 并发遗漏的最小修复方案（开发指导，2026-10-16）
+### 并发遗漏的最小修复方案（不增加状态字段，2026-10-16）
 
-**核心做法：在现有 `BatchStopSignal` 中记住“本轮已禁用”，并让它参与原有实际开始边界。重新启用不能恢复旧轮未开始工作；新轮使用新的本轮信号。** 本节补充前述异常传播方案，不改 Task／合同／T4，不代表实现或审查通过。
+**核心做法：复用 `BatchStopSignal` 已有的 `_stopped`／短锁／`TryBeginProbe()` 关闭本轮准入，用已有 `counters.Disabled` 保存禁用原因。** 按用户本次要求，不增加 `IsDisabled` 字段、原因枚举、CancellationTokenSource 或持久化状态。本节替代此前“另增本轮禁用标志”的建议；Task／合同／T4 不变，不代表实现或审查通过。
 
-1. **增加一个本轮禁用标志。** 在 `BatchStopSignal` 增加只置位、不清零的禁用标志和幂等确认方法，例如 `IsDisabled`／`ConfirmDisabled()`；与 `TryBeginProbe()` 使用同一把短锁。`TryBeginProbe()` 在管理员已停止或本轮已禁用时都拒绝开始。下一轮创建新 signal，自然恢复准入。保留现有 `IsStopped`／原 token 代表管理员停止，避免把禁用或状态库故障误报为管理员点击停止。
-2. **发现禁用时立即确认，后续统一消费。** runner 观察到 Enabled=false，以及 optimizer 的 owner 准入／匹配原生开始回调观察到禁用时，先确认本轮禁用，再抛原 `BatchDisabledException` 或按现有撤销路径结算；不能等释放许可、返回 runner 后才确认。在已分派工作的入口、取得许可后、准备等待返回／重新检查及实际开始处检查这个持续标志，当前 Enabled=true 也不能越过。原始 Enabled 检查仍保留，用来发现第一次禁用。
-3. **沿用现有收尾与原因映射。** owner 拒绝时用 `Abandon` 释放自己的 reservation；follower 不得放弃其他 owner 的工作。`TryBeginProbe()` 拒绝时区分本轮禁用与管理员停止，继续使用既有异常／撤销统计。runner 保留 Disabled，最终 Completed=false、进度低于 100%、原生 Cancelled。已经开始或此前已加入 running 的工作继续保存／验证／条件提交，不在返回成功后检查该标志来否决提交。状态库已有不可恢复到本轮可用的全局 latch，保留原 StoreUnavailable／阶段计数及异常优先顺序，不把它转成普通取消。无需新增 CancellationTokenSource，也不把准入信号传给已开始的执行。
-4. **先证明反例关闭，再跑完整门槛。** 将 B 的决策后、立即取得许可、等待许可三个并发反例加入 `BatchAdmissionFailure`；补保留真实许可等待的宽窗口控制。先记录旧候选 FAIL，修复后断言重新启用仍零新增开始、各项只结算一次、未开始源基线不变、资源归零。再保护已开始成功提交、独立播放不受影响、收尾后新轮可运行，最后执行本 Task 原完整 T4 与 B 指定独立验证。
+1. **让已有停止位也能关闭禁用后的准入。** 可增加一个幂等方法 `CloseAdmission()`，在现有 `_gate` 内将已有 `_stopped` 置位，不增加字段。它与 `TryBeginProbe()` 使用同一把锁：先关闭就不能开始，已开始者继续收尾。下一轮仍新建 signal，不清除旧轮停止位。这个位只回答“本轮是否还能准入”，不承担结束原因分类。
+2. **在发现禁用处立即关闭，再沿原路径结算。** runner 的禁用分支及 optimizer 的 owner 准入／匹配原生开始回调发现 Enabled=false 时，先关闭准入，再记录已有 Disabled 或抛已有 `BatchDisabledException`；不能等释放许可、返回 runner 后才关闭。入口、取得许可后、准备等待返回和实际开始处复用既有停止检查。重新启用只改变当前配置，不能清除旧轮停止位；owner 拒绝释放自己的 reservation，follower 不得放弃别人的工作。
+3. **分清准入已关闭与管理员停止。** runner 当前多处用 `stopSignal.IsStopped` 推导 `StopRequested`，本方案下须改用原始任务 token 的 `IsCancellationRequested`；已有 `counters.Disabled` 仍由真正观察禁用的工作置位，等待所有工作结算后用于汇总，后续撤销项不凭停止位猜原因。已有状态库 latch／阶段计数及原生结果优先顺序保持：管理员实际停止优先、状态库不可用 Failed、禁用提前结束 Cancelled。`BatchStopRejectedException` 继续表示未开始工作被拒绝，不据此伪造管理员停止。检查 `IsStopped` 的现有调用，准入判断与原因判断分别处理，不能只增加一次 `ConfirmStop()` 调用。
+4. **保护原有收尾和计时，再验证。** `CloseAdmission()` 不取消原 token、不改执行 token，不影响已开始／已加入 running 的保存与条件提交，也不影响独立播放。现有 `ConfirmStop()` 继续由原任务 token 确认管理员停止并记录 `StoppedTimestamp`；即使此前已因禁用关闭准入，也应在真正管理员停止时记录该时间。`RecordStopQueryLatency` 只计算真实管理员停止，避免把禁用时刻算成停止耗时。先跑 B 的三个并发反例及真实许可等待的宽窗口控制，再保护正常停止、禁用与停止同时发生、已开始成功提交、独立播放和收尾后新轮；最后执行原完整 T4 与 B 指定验证。
 
-主要修改位置：`BatchProbeTypes.cs`（本轮禁用与开始边界）、`BatchCheckRunner.cs`（观察／结算）、`StrmPlaybackOptimizer.cs`（准入及开始处消费）、`BatchCheckTests.cs`（并发回归）。优先沿现有方法局部修正，无需调整配置页、SQLite schema 或调度结构。
+主要修改位置仍为 `BatchProbeTypes.cs`（复用停止位及短锁）、`BatchCheckRunner.cs`（观察禁用、原因／耗时分类）、`StrmPlaybackOptimizer.cs`（发现禁用时关闭准入）、`BatchCheckTests.cs`（并发和原因回归）。沿已有方法局部修正，无需调整配置页、SQLite schema 或调度结构。等待许可／准备工作的原 token 不会因禁用而取消，可能等既有等待返回后撤销；实际开始边界必须拒绝，不能提前返回并遗留后台工作。
 
 B 补充控制及原始结果仅本机可读：`.git/validation-evidence/071142f69e110d6406c81294fc03f0918bb0fc0f/b-reachability-20261016/INDEX.md`。宽窗口控制使用独立 reservation 持有许可、产品真实等待；另一消费者观察禁用并撤销后才重新启用、释放许可，仍新增一次探测／提交。它证明现有等待链可达，不冒充真实 Jellyfin 配置页切换验收；初次 helper 的对象返回顺序假设错误与修正记录均保留。
 
