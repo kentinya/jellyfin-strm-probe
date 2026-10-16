@@ -5,7 +5,7 @@
 ```text
 Task ID: 3.1
 Parent Slice: 3
-Status: FIX REQUIRED
+Status: READY FOR B REVIEW
 Task Base: b86d9c17d7f915108072f54ee098f0f5543fe093
 Contract Checkpoint: e03052655d298adb30cbb7f315da684f27a07285
 Original Contract Checkpoint: 2b515f35db7fc8e85d8ac1a8085dd9b8ccc62ef3
@@ -272,6 +272,36 @@ B 已就“同一边界内多次读取动态 `Enabled` 丢失首次拒绝原因�
 - Head SHA：`9b5e488a0c7f8ac46989f244a7835032b61246b1`。
 
 历史报告的交接动作已由下方当前 B Review Result 替代。
+
+## Developer Completion Report — 末项跳过共享状态库故障传播纠正（2026-10-16）
+
+B 已就“末项正常跳过未把共享状态库全局故障带入本轮终态”签发 FIX REQUIRED（P1）。本报告记录同一 Task 3.1 内该终态传播接缝的最小纠正。
+
+- Changed Files：
+  - `src/Jellyfin.Plugin.StrmProbeOptimizer/Services/BatchCheckRunner.cs`
+  - `tests/Jellyfin.Plugin.StrmProbeOptimizer.Tests/BatchCheckTests.cs`
+- Implemented：在 `RunAsync` 最终结算处、`completed` 判定之前增加一行
+  `counters.StoreUnavailable |= _optimizer.IsFingerprintStoreUnavailable ? 1 : 0;`，把 optimizer 已 latch 的共享状态库不可用合入本轮计数。`|=` 保留本轮已记录故障、不清除原因；管理员停止仍在原生任务结果中优先，随后才是状态库不可用失败。未新增字段／枚举／CTS／状态表／结果类型，未改动 `ObserveDisabled`、停止位、异常、共享探测、保存与条件提交；`CheckBatchSourceAsync` 的 Skipped 分支保持原样。
+- Tests and Results：
+  - 新增 5 个回归（`BatchAdmissionFailure` 同时保留 `Batch`）：另一源经原源级批量入口 latch × runner／ExecuteAsync、另一源经公开播放入口 latch × runner／ExecuteAsync、以及无故障正常跳过仍 Completed／100% 对照。两个 latch 辅助均通过共享 optimizer 的真实仓库读取失败触发（批量入口与公开播放入口），不直接设置私有 latch。
+  - 修正前以当前 HEAD 产品源码运行新增类别：**FAIL 4／pass 15**（`prefix-failure-batchadmission.log`），证明回归确实捕获该缺口。
+  - 候选 `TestCategory=BatchAdmissionFailure`：PASS 19／0 failed／0 skipped。
+  - 聚焦 Batch／Coordinator／Context／Playback／Configuration：PASS 152／0 skipped。
+  - `dotnet-local restore ...sln --locked-mode`：PASS。
+  - `dotnet-local build ...sln -c Release --no-restore`：PASS，0 警告 0 错误。
+  - `dotnet-local test ...sln -c Release --no-restore`：PASS 202／0 failed／0 skipped（197 + 5）。
+  - `dotnet-local format ...sln --verify-no-changes --no-restore`：PASS。
+  - `python3 -m unittest discover -s tests -v`：PASS 63。
+  - `python3 scripts/run_isolated_plugin_integration.py`：PASS。
+  - `python3 scripts/run_isolated_batch_integration.py`：PASS，discovery／failure／mixed／scope／shared_stop／sharing／stop 全跑，夹具与状态恢复并核验。
+  - `python3 scripts/run_isolated_configuration_integration.py`：PASS，19 场景，配置／触发器恢复并核验。
+  - `python3 scripts/check_governance.py`：PASS；`git diff --check`：PASS；Markdown 140 本地链接／锚点：PASS。
+  - 候选构建产品 DLL sha256 `49bb3ae470bb7bb9edb53ba3152b29ee01afe165b4a78ca510f0d8132ec4f87e`，配置页实机记录同一 DLL 摘要；测试程序集 sha256 `529dbca59070681e9d22ecc194ac74d71e63a5711efa8bcd31055a2d73f3f7d3`。
+  - 证据索引（仅本机）：`.git/validation-evidence/43cd5dd7c78befa0f14536dc831ca3e9c294fd88/af1-final-skip-store-fault-20261016/INDEX.md`。
+- Decisions：原范围纠正，无合同变更；复用既有 optimizer latch、runner 原因计数与原生任务结果映射，未新增执行取消源、持久化状态、调度机制或生产注入开关；不改动已开始／已加入探测、共享、保存与条件提交。
+- Remaining In-Slice Work：本终态传播缺口已实现并自测通过；修正后由 B 重核七个 RO／六类 Surfaces、独立聚焦、末项跳过共享故障控制及指定 stop／sharing 实机。
+- Risks / Deviations：确定性控制以可编排设置／公开播放入口模拟合法并发，真实页面切换时序 NOT RUN；真实十万库、内部数据库物理保存故障注入、外部代理／OpenList 联调、广泛格式／客户端、发布 ZIP 继续 NOT RUN。
+- Head SHA：`7c64eb5dcad6e5f20fb7eb41819be2521f65484d`（实现提交；本报告随后一文档检查点记录）。
 
 ## B Review Result
 
