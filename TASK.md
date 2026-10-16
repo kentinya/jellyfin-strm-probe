@@ -197,40 +197,64 @@ B 审查真实 `Task Base..Developer Head`，并单列 `Correction Start Checkpo
 
 ## Developer Completion Report
 
-历史完成报告及各轮 B 结果保留于 Previous B PASS Snapshot；下表只记录本轮 AF-1 纠正。
+历史完成报告及各轮 B 结果保留于 Previous B PASS Snapshot 与上轮 B Review Result；下表记录本轮
+“已分派但未开始工作跨重新启用”的并发纠正。
 
 - Changed Files：
-  - `src/Jellyfin.Plugin.StrmProbeOptimizer/Services/StrmPlaybackOptimizer.cs`
+  - `src/Jellyfin.Plugin.StrmProbeOptimizer/Services/BatchProbeTypes.cs`
   - `src/Jellyfin.Plugin.StrmProbeOptimizer/Services/BatchCheckRunner.cs`
+  - `src/Jellyfin.Plugin.StrmProbeOptimizer/Services/StrmPlaybackOptimizer.cs`
   - `tests/Jellyfin.Plugin.StrmProbeOptimizer.Tests/BatchCheckTests.cs`
-- Implemented：`AdmitBatchOwnerAsync` 不再把禁用／已 latch 状态库不可用合并为 `NotProcessed`，而是分别抛出
-  `BatchDisabledException` 与执行阶段 `FingerprintStoreUnavailableException`；`RunBatchProbeAsync` 以
-  `Coordinator.Abandon(workItem)` 释放未开始 reservation 后向上传播，不 `EndProbe`、不提交指纹、不转成
-  `ProbeIncomplete`。runner 的消费者在取下一项前也检查本轮已记录的 `Disabled`，使已观察原因不被其他结果或
-  重新启用清空。新增 7 个 `TestCategory("BatchAdmissionFailure")`（同时保留 `Batch`）回归，覆盖末项禁用／故障、
-  等待许可、跨 128 末批、重新启用、原生任务 `Cancelled`／`Failed` 结果。
+- Implemented：复用已有 `BatchStopSignal` 的 `_stopped`／短锁，新增幂等 `CloseAdmission()`（不新增字段、
+  枚举、`CancellationTokenSource` 或持久化状态）。任一消费者在决策、许可等待／立即取得或原生准备处观察到禁用
+  时立即 `CloseAdmission()`，使同轮所有已分派但未开始的工作在实际开始边界被拒绝，即使管理员在第二项到达前
+  重新启用也不会新增探测。`StopRequested` 只由真实管理员 token（`CancellationToken.IsCancellationRequested`）
+  推导，不再由共享准入位推导，因此禁用仍报告为 `Disabled`／Cancelled，真实管理员停止保留优先级与自身耗时；
+  `ConfirmStop` 仅在首次真实停止时记录时间戳。已开始探测、原生保存、验证与条件提交不受影响，独立播放与下一轮
+  不受影响。
 - Tests and Results：
-  - 新增类别 `TestCategory=BatchAdmissionFailure`：候选 7 passed／0 failed／0 skipped；先以 `HEAD~1` 产品源码运行
-    7 failed（`prefix-failure.log`），证明回归确实捕获 AF-1。
-  - `bash scripts/dotnet-local restore ...sln --locked-mode`：PASS。
-  - `bash scripts/dotnet-local build ...sln -c Release --no-restore`：PASS，0 警告 0 错误。
-  - `bash scripts/dotnet-local test ...sln -c Release --no-restore`：PASS 189／0 failed／0 skipped（原 182 + 7）。
-  - `bash scripts/dotnet-local format ...sln --verify-no-changes --no-restore`：PASS。
+  - 新增 3 个并发回归（`BatchAdmissionFailure` 同时保留 `Batch`）：决策后、立即取得许可、真实等待许可后三种窗口，
+    断言“第一项已结算禁用、第二项此前未开始、重新启用后同轮零新增开始、零 `ProbeCalls`、两项撤销、各候选一次结算、
+    两个旧基线保留、Disabled=true／Completed=false、ActualProbeCalls=0、进度 < 100%、资源归零”。
+  - 修正前以 `HEAD~1` 产品源码运行新增类别：**FAIL 3／pass 7**（`prefix-failure.log`），证明回归确实捕获该缺口。
+  - 候选 `TestCategory=BatchAdmissionFailure`：PASS 10／0 failed／0 skipped。
+  - 聚焦 Batch／Coordinator／Context／Playback／Configuration：PASS 142／0 skipped。
+  - `dotnet-local restore ...sln --locked-mode`：PASS。
+  - `dotnet-local build ...sln -c Release --no-restore`：PASS，0 警告 0 错误。
+  - `dotnet-local test ...sln -c Release --no-restore`：PASS 192／0 failed／0 skipped（189 + 3）。
+  - `dotnet-local format ...sln --verify-no-changes --no-restore`：PASS。
   - `python3 -m unittest discover -s tests -v`：PASS 63。
-  - `python3 scripts/run_isolated_plugin_integration.py`：PASS（718 s）。
-  - `python3 scripts/run_isolated_batch_integration.py`：PASS（313 s），discovery／stop／shared_stop／sharing／
-    scope／mixed／failure 全跑，配置／触发器／夹具恢复并核验。
-  - `python3 scripts/run_isolated_configuration_integration.py`：PASS（249 s）。
-  - `python3 scripts/check_governance.py`：PASS；`git diff --check`：PASS；Markdown 140 本地链接／锚点：PASS。
-  - 证据索引（仅本机）：`.git/validation-evidence/071142f69e110d6406c81294fc03f0918bb0fc0f/correction-20261016/INDEX.md`。
-- Decisions：本次为原范围纠正，无合同变更；复用既有异常、runner 原因计数与原生任务结果映射，未新增结果类型、
-  持久化状态、调度机制或执行取消源。
-- Remaining In-Slice Work：AF-1 已实现并自测通过；修正后由 B 重核七个 RO／六类 Surfaces，并独立复现关键行为。
+  - `python3 scripts/run_isolated_plugin_integration.py`：PASS（703 s）。
+  - `python3 scripts/run_isolated_batch_integration.py`：PASS（311 s），discovery／failure／mixed／scope／
+    shared_stop／sharing／stop 全跑，配置／触发器／夹具恢复并核验。
+  - `python3 scripts/run_isolated_configuration_integration.py`：PASS（273 s）。
+  - `python3 scripts/check_governance.py`：PASS；`git diff --check`：PASS。
+  - 部署 DLL 身份 `sha256 c3742ea3ab9f8fe86d9f1e2be5231cc7eed69bcf3cca99032e826d88cd9d0aab`，与配置页实机记录一致；
+    隔离入口只部署产品构建产物，不部署测试程序集。
+  - 证据索引（仅本机）：`.git/validation-evidence/97e68dfa2f246488174e47e2ba0cf45910a4947f/af1-concurrency-correction-20261016/INDEX.md`。
+- Decisions：原范围纠正，无合同变更；复用既有停止位、异常、runner 原因计数与原生任务结果映射，未新增执行取消源、
+  持久化状态、调度机制或生产注入开关；不将准入停止扩散到独立播放、其他调用者或下一轮。
+- Remaining In-Slice Work：本并发缺口已实现并自测通过；修正后由 B 重核七个 RO／六类 Surfaces，独立聚焦、三项并发
+  控制及指定 stop／sharing 实机。
 - Risks / Deviations：未运行项继续 NOT RUN（真实十万库、内部数据库物理保存故障注入、外部代理／OpenList 联调、
-  广泛格式／客户端、发布 ZIP）；准入窄窗口以确定性屏障证明，未新增生产注入开关。
-- Head SHA：`071142f69e110d6406c81294fc03f0918bb0fc0f`。
+  广泛格式／客户端、发布 ZIP）；窄窗口以确定性屏障证明，未新增生产开关。
+- Head SHA：`97e68dfa2f246488174e47e2ba0cf45910a4947f`。
 
 ## B Review Result
+
+```text
+Reviewed: b86d9c17d7f915108072f54ee098f0f5543fe093..97e68dfa2f246488174e47e2ba0cf45910a4947f
+Correction Reviewed: e03052655d298adb30cbb7f315da684f27a07285..97e68dfa2f246488174e47e2ba0cf45910a4947f
+Developer Report: (this checkpoint)
+Decision: AWAITING B REVIEW
+Slice Required Outcomes all satisfied: NOT YET ASSESSED
+Next: B RE-REVIEWS THE CONCURRENT ADMISSION CORRECTION
+```
+
+上一轮 B `FIX REQUIRED`（并发未开始准入，P1）作为本轮纠正的输入保留于 Git 历史与本文件下方记录；本轮实现与
+自测不构成 PASS。
+
+### 上一轮 B Review Result（历史输入，2026-10-16）
 
 ```text
 Reviewed: b86d9c17d7f915108072f54ee098f0f5543fe093..071142f69e110d6406c81294fc03f0918bb0fc0f
