@@ -5,7 +5,7 @@
 ```text
 Task ID: 3.1
 Parent Slice: 3
-Status: READY FOR B REVIEW
+Status: FIX REQUIRED
 Task Base: b86d9c17d7f915108072f54ee098f0f5543fe093
 Contract Checkpoint: e03052655d298adb30cbb7f315da684f27a07285
 Original Contract Checkpoint: 2b515f35db7fc8e85d8ac1a8085dd9b8ccc62ef3
@@ -220,15 +220,54 @@ B 审查真实 `Task Base..Developer Head`，并单列 `Correction Start Checkpo
 ## B Review Result
 
 ```text
-Reviewed: NOT SET — no corrective implementation submitted
+Reviewed: b86d9c17d7f915108072f54ee098f0f5543fe093..071142f69e110d6406c81294fc03f0918bb0fc0f
+Correction Reviewed: e03052655d298adb30cbb7f315da684f27a07285..071142f69e110d6406c81294fc03f0918bb0fc0f
+Review Checkout / Developer Report: e5b5462735ecb7a59009fbd993339802820c6db3
 Decision: FIX REQUIRED
-P0/P1 Blockers: AF-1 (P1), open from A Final Review
+P0/P1 Blockers: AF-1 (P1), concurrent unstarted admission remains open
 Slice Required Outcomes all satisfied: NO
-Next: DEVELOPER CORRECTS TASK 3.1 UNDER THIS PLAN
+Next: DEVELOPER CONTINUES THE SAME TASK 3.1 CORRECTION
 ```
 
-这是 B 对原 Task 的继续纠正与合法性决定，不是新候选的实施审查 PASS。修正维持 Task 3.1；Developer 提交后交 B 审查，B PASS 后重新核对全部 Required Outcomes／Surfaces。全部满足即停止规划，单独运行当前合同完整 Slice Final 并提交更新 Closure Packet 给 A，不代 A 关闭。
+2026-10-16，B 完成必读清单、B 经验、干净 main 状态及治理 PASS 核查。保留 Task ID／Base／Goal／Scope／High／T4 与已提交合同，不改 Slice、Roadmap 或稳定需求。核对真实 Task Base..Developer Head 的文件范围及可达历史 B PASS，单列纠正差异：本次仅两个产品文件及 `BatchCheckTests.cs`；其间 Task 3.2 页面交付沿用历史身份，不计成本次修正。Developer Head 到报告 checkout 仅 `TASK.md` 不同；当前聚焦构建与独立控制的可执行输入匹配该候选。
 
-供 Slice 收尾的经验候选：未开始工作被拒绝的原因容易在层间退化为普通跳过 → 将原因保留到本轮汇总与原生终态，并用最后一个候选验证 → 适用于批量准入及并发收尾。
+### 已修复部分与独立验证
 
-NEXT ACTION: B REVIEWS THE TASK 3.1 AF-1 CORRECTION CANDIDATE
+- PASS：B 独立执行指定 Batch／Coordinator／Context／Playback／Configuration 聚焦命令，139 passed／0 failed／0 skipped；TRX 确认包含全部 7 项新增 `BatchAdmissionFailure`，并非零发现。
+- PASS：B 以 A 原控制为起点，使用当前测试程序集中的 BatchHarness、真实产品 runner／ExecuteAsync、临时 STRM／内存仓库和假原生保存，独立复现禁用／另一源真实仓库读取失败 latch × runner／ExecuteAsync 四项。禁用返回 Disabled、Revoked=1、Completed=false；状态库故障保留 Checked=NeedProbe=ProbeIncomplete=1、StoreUnavailable=true。四项均零探测、旧基线不变、进度最高 99%、许可／preparing／running 归零；ExecuteAsync 分别抛 OperationCanceledException／InvalidOperationException。仅证明确定性入口，不冒充真实 worker 终态。
+- 当前新增异常传播和 Abandon 释放修复了 A 的四个最小反例；已开始后的成功提交规则没有因此失效。但新增“重新启用”回归设置 `ConsumerLimit=1`，只保护下一次取项，不能证明已取出的并发工作也停止准入。
+
+### AF-1 尚未闭合：本轮原因只挡下一次取项，已分派工作可在重新启用后开始（P1）
+
+`BatchCheckRunner.ProcessBatchAsync` 在取项后检查 `counters.Disabled`，随后进入 `ProcessCandidateAsync`。这个本轮已观察原因没有传入后续 `CheckBatchSourceAsync`／owner 准入／实际开始边界；这些路径仍只读当前 `_settings.Enabled` 与管理员停止信号。因此一消费者已报告禁用并结算为撤销后，管理员重新启用会让同轮另一个已分派、尚未开始的消费者恢复探测。最终 Disabled=true／Completed=false 只保证结果标签，不能阻止额外工作。
+
+B 使用两个已有可信基线、URL 已变的源、两个消费者和确定性屏障独立复现；所有实际探测均发生在禁用已被第一项观察／结算、随后重新启用之后：
+
+| 窗口 | 屏障与实际结果 |
+|---|---|
+| 决策后、取得许可前 | 两项都已通过消费者前置检查并作出需探测决策；第一项禁用并撤销，结算回调重新启用，再释放第二项。额外开始／调用 1，ReliableSuccess=1，Revoked=1，两个基线中一个更新。 |
+| 立即取得许可、尚未登记 | 并发上限 2，两项均实际取得许可；第二项卡在 PermitAcquiredBarrier，第一项拒绝结算后重新启用并释放第二项。仍额外开始／提交 1。 |
+| 等待许可后、尚未登记 | 并发上限 1，独立 reservation 暂占许可，确认两项均到 PermitWaitBarrier 后释放；第一项因禁用拒绝，第二项获许可但等第一项结算／重新启用后继续。waitCount=2，仍额外开始／提交 1。 |
+
+三个控制均得到 Disabled=true、Completed=false、Checked=NeedProbe=ReliableSuccess=1、Revoked=1、ActualProbeCalls=1，进度 `[0, 50, 99]`、资源最终全零。期望是已观察原因持续约束本轮未开始工作：后续实际开始／成功为 0，两项撤销、两个旧基线保留。统计等式和不补 100% 已满足，不能据此忽略准入义务。第二项在禁用之前没有实际开始，故本反例不要求撤销任何已开始探测或否决其有效提交。
+
+这正是原 AF-1 验收“原因一经观察不能由重新启用清空，后续未开始探测停止”与并发准入边界的未闭合部分，影响 RO-6 及 RO-5／配置禁用的未开始工作约束；不是新范围或 Material Contract Change。维持原 Task 纠正，不另建 Task，不交 A 改合同。
+
+### 同一 Task 的继续纠正与测试要求
+
+1. 将本轮已经观察到的禁用／不可用原因持续约束到已分派但未实际开始的工作，覆盖决策后、许可等待／立即取得、原生准备及实际开始边界。不能仅在下一次取项检查本轮原因，也不能仅靠最终 Completed=false 掩盖新增调用。复用既有本轮上下文和开始／停止协调机制；不要求新增调度器、持久化状态或通用框架。
+2. 加入上述三个会失败的并发回归，保留修正前 FAIL。至少明确断言：拒绝原因已被第一项结算、第二项此前未开始、重新启用后同轮零新增开始、各候选一次结算、两项撤销、旧基线与进度／资源正确。以屏障证明立即取得与实际等待，保留单消费者及 A 四项控制；原 `BatchAdmissionFailure` 类别继续作为聚焦入口。
+3. 不能将本轮准入停止扩散到独立播放、其他调用者或下一轮；已开始／已加入 running 的工作仍完成保存／验证／条件提交。保留原生自身取消、管理员停止与状态库不可用的原因优先／汇总，不能用新的执行取消源或成功后的禁用检查达成零调用断言。
+4. 本轮已有明确 P1，B 不运行昂贵的 stop／sharing 实机及 Slice Final；这些项目本轮均为 **NOT RUN**，不是 PASS 或删减门槛。修正候选仍须执行上文完整 T4，B 下轮独立聚焦、上述控制及指定 stop／sharing；Developer 原完整门槛不能代替新可执行候选的验证。
+
+### 证据、复用边界与 Slice 重核
+
+本机索引：`.git/validation-evidence/071142f69e110d6406c81294fc03f0918bb0fc0f/b-review-20261016/INDEX.md`。包含 helper 源码、四项旧控制与三个新控制的原始结果、单独产品断言（4 PASS／3 FAIL，退出 1）、精确命令、TRX、源码／锁／SDK／构建输入与产物身份。collector 退出 0 只表示成功采集；不将其称为产品 PASS。本机证据不宣称远程可读。
+
+已读取 Developer INDEX、identity 与相关原始测试／batch 日志，保留其自测结果为历史事实；本轮因明确阻塞提前拒绝，**不签发完整 T4 可复用 PASS**。Developer INDEX 对每项新增用例均具有全部断言的概括比实际代码更宽（ExecuteAsync 两项仅断言异常）；本轮四项独立控制已补充核验基线、进度与资源，后续报告须按实际用例说明覆盖。
+
+全部 RO／六类 Surfaces 重新核对：RO-1／2／3／4／7 的历史交付不撤销；RO-5 的本轮未开始工作约束与 RO-6 故障停止仍受本反例阻塞。共用执行／实际开始和进度／结果表面尚不能签发当前 PASS；原生任务、库查询、SQLite 和配置页原始证据保持历史事实，不写成当前全 Slice 已满足。因此不创建下一 Task、不运行 Slice Final、不替换旧 Closure Packet，也不代 A 关闭。真实十万库、内部数据库物理保存故障注入、外部代理／OpenList、广泛格式／客户端和发布 ZIP 继续保留原 NOT RUN 边界。
+
+供 Slice 收尾的经验候选：本轮原因已写入汇总仍可能漏过已分派工作 → 用同轮两个消费者跨决策、许可和实际开始边界验证原因持续生效 → 适用于可重新启用的批量准入；与既有并发屏障经验合并，不记录流水账。
+
+NEXT ACTION: DEVELOPER CONTINUES TASK 3.1; B RE-REVIEWS THE CORRECTION
