@@ -314,10 +314,25 @@ B 使用单个末项、临时受支持 STRM 和已有可信基线，保留 URL�
 
 ### 同一 Task 的最小继续修正
 
-1. **将已有共享 latch 纳入 runner 结算。** 在现有批次收尾／最终结果决定边界读取 `_optimizer.IsFingerprintStoreUnavailable`，置位已有 `counters.StoreUnavailable`，再按现有优先级产生结果。复用既有 latch、计数和 ExecuteAsync 异常映射；无需增加字段、枚举、CTS、持久化状态或重构调度。不能只在需要探测的 owner 分支处理故障，或寄望还有下一批检查。
-2. **保留准确的源结果和已开始收尾。** 本控制的末项确实已完成未变检查，保留 Skipped／Checked 的实际口径，不凭全局故障编造需要探测。已开始／已加入工作仍等待保存、验证和条件提交；本轮报告不可用不能用作成功后否决已满足全部条件的提交。管理员停止优先及不可用汇总继续沿原规则。
-3. **先加入会失败的末项回归。** 使用现有 BatchHarness／决策屏障／故障仓库，至少以另一源通过公开播放入口真实读取失败 latch 同一 optimizer，覆盖 runner 与 ExecuteAsync。断言 latch 的实际来源、StoreUnavailable=true、Completed=false／脱敏 InvalidOperationException、进度低于 100%、无额外批量探测、准确跳过与等式、旧基线和资源；保留无故障正常跳过 Completed／100% 对照。归入现有 `BatchAdmissionFailure`，保存修正前 FAIL。
-4. **原 T4 和独立验证持续有效。** 修正后先跑上述反例及既有 12 项控制，再执行原完整候选门槛与 B 指定独立 stop／sharing；不因本轮已有绿灯削减当前候选验证。用户授权仍只由 Developer 实施本 Task 修正；B 本轮不改产品代码。
+2026-10-16，按用户要求收敛为以下简单实施方案。保留同一 Task 的 ID／Base／Goal／Scope／High／T4；这是开发指导，当前审查仍为 FIX REQUIRED。
+
+**1. 先加回归，保存修正前 FAIL。** 复用 `BatchHarness`、决策屏障和故障仓库：唯一候选已有可信基线且未变化，决定跳过后，另一源通过同一 optimizer 的公开播放入口实际读取仓库失败，再让本候选结算。覆盖 runner 和 ExecuteAsync，归入现有 `BatchAdmissionFailure`。期望 runner 的 `StoreUnavailable=true`、`Completed=false`、进度低于 100%；ExecuteAsync 抛现有脱敏 `InvalidOperationException`。同时检查 `Checked=Skipped=1`、`NeedProbe=0`、零额外探测、旧基线保留、统计等式及资源归零；保留无故障正常跳过 Completed／100% 对照。现有 B helper 和原始失败见下方证据索引。
+
+**2. 在最终结算处补一行，沿用现有结果路径。** 主要修改 `BatchCheckRunner.RunAsync`：所有批次消费者已经等待结束、未读取数已经结算后，在现有 `completed` 判断之前，把 optimizer 已记录的全局故障合入本轮已有计数。局部示意：
+
+```csharp
+counters.StopRequested |= stopSignal.CancellationToken.IsCancellationRequested ? 1 : 0;
+counters.StoreUnavailable |= _optimizer.IsFingerprintStoreUnavailable ? 1 : 0;
+var completed = counters.StopRequested == 0
+    && counters.StoreUnavailable == 0
+    && counters.Disabled == 0
+    && counters.ReadIncomplete == 0
+    && counters.Unread == 0;
+```
+
+`|=` 保留本轮此前已记录的故障。现有 Copy 会带出 StoreUnavailable，completed=false 就不会补 100%，现有 ExecuteAsync 会在汇总后报告不可用；管理员停止仍按已有顺序优先。预计只需修改 `BatchCheckRunner.cs` 和 `BatchCheckTests.cs`，无需新增字段、枚举、CTS、状态表或结果类型。保留已经完成的真实 Skipped／Checked 计数；已开始／已加入探测仍完成保存、验证和条件提交，不能用本轮故障反馈事后否决有效提交。
+
+**3. 聚焦通过后执行原门槛。** 先运行现有 `BatchAdmissionFailure` 与 Batch／Coordinator／Context／Playback／Configuration 聚焦命令，保护禁用单次观测、重新启用、正常跳过、已开始成功及共享收尾；再执行上文完整 T4 最终候选门槛。B 继续独立复现本轮四项故障控制、既有 12 项控制及指定 stop／sharing 实机。准确命令与证据要求沿用“必要测试”，不降低门槛。本轮只修订指导，插件实施仍由 Developer 在同一 Task 内完成。
 
 ### 证据、未运行与 Slice 重核
 
