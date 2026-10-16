@@ -5,7 +5,7 @@
 ```text
 Task ID: 3.1
 Parent Slice: 3
-Status: FIX REQUIRED
+Status: READY FOR B REVIEW
 Task Base: b86d9c17d7f915108072f54ee098f0f5543fe093
 Contract Checkpoint: e03052655d298adb30cbb7f315da684f27a07285
 Original Contract Checkpoint: 2b515f35db7fc8e85d8ac1a8085dd9b8ccc62ef3
@@ -184,15 +184,38 @@ B 审查真实 `Task Base..Developer Head`，并单列 `Correction Start Checkpo
 
 ## Developer Completion Report
 
-本次纠正尚未开始；历史完成报告及各轮 B 结果保留于 Previous B PASS Snapshot，本表只记录新修正。
+历史完成报告及各轮 B 结果保留于 Previous B PASS Snapshot；下表只记录本轮 AF-1 纠正。
 
-- Changed Files：NOT SET。
-- Implemented：NOT RUN；AF-1 待闭合。
-- Tests and Results：NOT RUN；填写上述各阶段实际命令／结果／证据与首次失败，不挪用历史 PASS。
-- Decisions：本次原范围纠正，无合同变更。
-- Remaining In-Slice Work：AF-1；修正后由 B 重核七个 RO／六类 Surfaces。
-- Risks / Deviations：NOT SET；不得以降低门槛代替真实结果。
-- Head SHA：NOT SET。
+- Changed Files：
+  - `src/Jellyfin.Plugin.StrmProbeOptimizer/Services/StrmPlaybackOptimizer.cs`
+  - `src/Jellyfin.Plugin.StrmProbeOptimizer/Services/BatchCheckRunner.cs`
+  - `tests/Jellyfin.Plugin.StrmProbeOptimizer.Tests/BatchCheckTests.cs`
+- Implemented：`AdmitBatchOwnerAsync` 不再把禁用／已 latch 状态库不可用合并为 `NotProcessed`，而是分别抛出
+  `BatchDisabledException` 与执行阶段 `FingerprintStoreUnavailableException`；`RunBatchProbeAsync` 以
+  `Coordinator.Abandon(workItem)` 释放未开始 reservation 后向上传播，不 `EndProbe`、不提交指纹、不转成
+  `ProbeIncomplete`。runner 的消费者在取下一项前也检查本轮已记录的 `Disabled`，使已观察原因不被其他结果或
+  重新启用清空。新增 7 个 `TestCategory("BatchAdmissionFailure")`（同时保留 `Batch`）回归，覆盖末项禁用／故障、
+  等待许可、跨 128 末批、重新启用、原生任务 `Cancelled`／`Failed` 结果。
+- Tests and Results：
+  - 新增类别 `TestCategory=BatchAdmissionFailure`：候选 7 passed／0 failed／0 skipped；先以 `HEAD~1` 产品源码运行
+    7 failed（`prefix-failure.log`），证明回归确实捕获 AF-1。
+  - `bash scripts/dotnet-local restore ...sln --locked-mode`：PASS。
+  - `bash scripts/dotnet-local build ...sln -c Release --no-restore`：PASS，0 警告 0 错误。
+  - `bash scripts/dotnet-local test ...sln -c Release --no-restore`：PASS 189／0 failed／0 skipped（原 182 + 7）。
+  - `bash scripts/dotnet-local format ...sln --verify-no-changes --no-restore`：PASS。
+  - `python3 -m unittest discover -s tests -v`：PASS 63。
+  - `python3 scripts/run_isolated_plugin_integration.py`：PASS（718 s）。
+  - `python3 scripts/run_isolated_batch_integration.py`：PASS（313 s），discovery／stop／shared_stop／sharing／
+    scope／mixed／failure 全跑，配置／触发器／夹具恢复并核验。
+  - `python3 scripts/run_isolated_configuration_integration.py`：PASS（249 s）。
+  - `python3 scripts/check_governance.py`：PASS；`git diff --check`：PASS；Markdown 140 本地链接／锚点：PASS。
+  - 证据索引（仅本机）：`.git/validation-evidence/071142f69e110d6406c81294fc03f0918bb0fc0f/correction-20261016/INDEX.md`。
+- Decisions：本次为原范围纠正，无合同变更；复用既有异常、runner 原因计数与原生任务结果映射，未新增结果类型、
+  持久化状态、调度机制或执行取消源。
+- Remaining In-Slice Work：AF-1 已实现并自测通过；修正后由 B 重核七个 RO／六类 Surfaces，并独立复现关键行为。
+- Risks / Deviations：未运行项继续 NOT RUN（真实十万库、内部数据库物理保存故障注入、外部代理／OpenList 联调、
+  广泛格式／客户端、发布 ZIP）；准入窄窗口以确定性屏障证明，未新增生产注入开关。
+- Head SHA：`071142f69e110d6406c81294fc03f0918bb0fc0f`。
 
 ## B Review Result
 
@@ -208,4 +231,4 @@ Next: DEVELOPER CORRECTS TASK 3.1 UNDER THIS PLAN
 
 供 Slice 收尾的经验候选：未开始工作被拒绝的原因容易在层间退化为普通跳过 → 将原因保留到本轮汇总与原生终态，并用最后一个候选验证 → 适用于批量准入及并发收尾。
 
-NEXT ACTION: DEVELOPER CORRECTS TASK 3.1
+NEXT ACTION: B REVIEWS THE TASK 3.1 AF-1 CORRECTION CANDIDATE
