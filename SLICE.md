@@ -11,7 +11,7 @@ Implementation Head: NOT SET
 
 ## 激活决定与真实基线
 
-2026-10-16，A 在 Slice 3 已 PASS / CLOSED 后的独立一轮，按 V4.3 P3 与路线图选择并激活本 Slice。本轮只定义能力合同、协调事实指针并提交本地检查点，不写实现代码、不规划具体 Task；合同提交后由 B 检查准入并计划首个 Task。
+2026-10-16，A 在 Slice 3 已 PASS / CLOSED 后的独立一轮，按 V4.3 P3 与路线图选择并激活本 Slice。初次激活轮只定义能力合同、协调事实指针并提交本地检查点，没有实施或规划具体 Task；后续用户授权的规划安排见下方。
 
 初始 `main` 工作区干净，治理检查 PASS。Base 是 Slice 3 的真实关闭提交 `03169b07d110964562f7da31d2c3d7add82e5ff5`，不是其产品实现或交接报告提交；固定不随后续合同、计划或报告移动。该 Base 接受实现 `7c64eb5dcad6e5f20fb7eb41819be2521f65484d`，固定 Jellyfin `12.2.0`／源码 `ca0f16eb7c195f720a1493ed469a27c4657db0c6`、Controller／Model `12.2.0`、`net10.0`／SDK `10.0.401`、Linux x64，镜像 digest 见 [开发环境](docs/development-environment.md)。
 
@@ -45,7 +45,7 @@ RO-1～RO-4 都是本 Slice 必要结果。依赖、时间或环境不足时如�
 
 ## 用户约束与最小机制
 
-沿用 [稳定需求](docs/requirements.md)、[用户旅程](docs/product-experience.md)、[架构](docs/architecture.md)、[测试矩阵](docs/test-matrix.md) 和 [开发流程](docs/development-workflow.md)。本合同定义完整结果；B 决定合理实施单元及具体命令，不由 A 预排 Task、类名或文件清单。
+沿用 [稳定需求](docs/requirements.md)、[用户旅程](docs/product-experience.md)、[架构](docs/architecture.md)、[测试矩阵](docs/test-matrix.md) 和 [开发流程](docs/development-workflow.md)。本合同定义完整结果。用户随后明确授权 A 兼任本次 Task 规划，并固定 [Slice 4 交付方案](docs/slice-4-delivery-plan.md)；本次先规划 Task 4.1，后续 B 必须依据该方案、真实仓库和已接受证据细化计划，继续承担独立 Task Review。类名与文件数量不构成交付目标。
 
 ### 安装与单版本交付
 
@@ -132,7 +132,9 @@ git diff --check
 
 ## 事实更新与停止规则
 
-Base 固定；本 Slice 尚无实现，Implementation Head 保持 NOT SET，不能填旧 Slice 实现或本次文档提交。B 必须先运行已提交治理检查、核对真实仓库和本合同，再计划首个 Task；Developer 仅在活动 Task 内实施。改变 Required Outcomes／Surfaces、当前 Task 边界或安全／正确性验收含义时，A 先提交明确的新合同，B 再决定继续／调整／重规划，不让 Developer 直接继续。
+2026-10-16 用户后续明确授权本次直接规划 Task，并固定方案指导后续 B；因此本轮 A 可兼任规划，保留 B 独立审查与 A Slice 最终审查责任。[交付方案](docs/slice-4-delivery-plan.md) 固定 4.1 安装与恢复 → 4.2 完整扫描并发 → 4.3 真实十万库 → 4.4 实际代理联调，根 TASK 每次只激活一个。此为用户授权的规划安排，不改变任何 Required Outcome／Surface、业务不变量、AC／最终门槛、延期或 Base，不属于 Material Contract Change；本轮仍不实施插件。
+
+Base 固定；本 Slice 尚无实现，Implementation Head 保持 NOT SET，不能填旧 Slice 实现或本次文档提交。本次授权的规划者先运行已提交治理检查、核对真实仓库、本合同和固定方案，再提交首个 Task；后续 B 按同样准入规划。Developer 仅在活动 Task 内实施。改变 Required Outcomes／Surfaces、当前 Task 边界或安全／正确性验收含义时，A 先提交明确的新合同，B 再决定继续／调整／重规划，不让 Developer 直接继续。
 
 全部必要结果满足后 B 停止新增 Task，单独执行 Slice Final，形成一份 Closure Packet 并交为 READY FOR A REVIEW。A 审查完整 Base..Implementation Head，判 PASS、FIX REQUIRED 或 PARTIAL / RESCOPE；P2／P3、可选证明和措辞不单独阻止 PASS。PASS 后一次性协调 CURRENT、SLICE／TASK、Roadmap／Progress／README 和简短角色经验，宣布 PASS / CLOSED 并停止；选择其他 Slice 另开一轮。
 
@@ -149,4 +151,4 @@ P0/P1 Blockers: NOT ASSESSED
 Closure Reconciliation: NOT STARTED
 ```
 
-NEXT ACTION: B PLANS FIRST TASK
+NEXT ACTION: AUTHORIZED PLANNER CHECKPOINTS TASK 4.1

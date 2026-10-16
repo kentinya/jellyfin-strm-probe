@@ -1,7 +1,7 @@
 # NO ACTIVE IMPLEMENTATION TASK
 
-Slice 4 已由 A 定义为 ACTIVE，当前没有实施 Task。B 应先运行 `python3 scripts/check_governance.py`，读取已提交的 [Slice 4 合同](SLICE.md)，核对实际仓库后规划首个 Task；本次 A 激活不授权 Developer 直接开始，也不预排 Task ID／范围／测试计划。
+用户后续明确授权本次直接规划 Task，并将 [Slice 4 交付方案](docs/slice-4-delivery-plan.md) 固定为后续 B 的规划指导。该方案随本合同检查点先提交，随后单独提交首个 Task 4.1；当前仍无活动实施 Task，不启动插件实施。
 
-Slice 3 已 PASS / CLOSED；完整合同、Closure Packet、A 最终决定及已接受 Task／B 身份保留于 `03169b07d110964562f7da31d2c3d7add82e5ff5:SLICE.md`／`TASK.md`，索引见 [关闭账本](docs/progress.md#slice-3-closed)。历史失败和拒绝不改写，不复制旧 Task 为新 Slice 的活动计划。
+Slice 3 的完整合同／最终包及 Task／B 身份见 `03169b07d110964562f7da31d2c3d7add82e5ff5:SLICE.md`／`TASK.md` 及 [关闭账本](docs/progress.md#slice-3-closed)。Slice 4 Base 不变，本轮不改产品、验收或业务规则。
 
-NEXT ACTION: B PLANS FIRST TASK
+NEXT ACTION: AUTHORIZED PLANNER CHECKPOINTS TASK 4.1

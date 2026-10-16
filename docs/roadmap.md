@@ -11,7 +11,7 @@
 
 ## 当前边界
 
-Slice 1／2／3 均已经 A 审查完整 Base..Implementation Head 并关闭为 PASS / CLOSED；历史合同／最终决定及不可变快照见 [关闭账本](progress.md)。Slice 3 Base `6da90ab6bd8995d8204ae0b7faf786c823699fe6`、接受实现 `7c64eb5dcad6e5f20fb7eb41819be2521f65484d`。AF-1 经同一 Task 纠正、B 复审及新 Slice Final 后由 A 重新审查闭合；旧拒绝和失败保留。Slice 3 关闭快照为 `03169b07d110964562f7da31d2c3d7add82e5ff5`。A 已在独立一轮选择并激活 [Slice 4](../SLICE.md)，Base 固定为该关闭提交，Implementation Head 为 NOT SET；根 [TASK.md](../TASK.md) 无活动实施任务，下一步由 B 先规划。新增实机／压力／代理／安装验收均 NOT RUN，激活不表示已交付。
+Slice 1／2／3 均已经 A 审查完整 Base..Implementation Head 并关闭为 PASS / CLOSED；历史合同／最终决定及不可变快照见 [关闭账本](progress.md)。Slice 3 Base `6da90ab6bd8995d8204ae0b7faf786c823699fe6`、接受实现 `7c64eb5dcad6e5f20fb7eb41819be2521f65484d`。AF-1 经同一 Task 纠正、B 复审及新 Slice Final 后由 A 重新审查闭合；旧拒绝和失败保留。Slice 3 关闭快照为 `03169b07d110964562f7da31d2c3d7add82e5ff5`。A 已在独立一轮选择并激活 [Slice 4](../SLICE.md)，Base 固定为该关闭提交，Implementation Head 为 NOT SET；根 [TASK.md](../TASK.md) 暂无活动实施任务；按用户后续授权，本次直接规划首个 Task，并以 [固定交付方案](slice-4-delivery-plan.md) 指导后续 B。新增实机／压力／代理／安装验收均 NOT RUN，激活不表示已交付。
 
 从 V3.0 的三个 Slice 改为四个 Slice 是实质规划调整；旧规划见重规划前检查点 `4b1d0468c1e43e6e9034ef98e99b6cc44ea59485`。旧生成器 P1 始终排除，当前 P1 专指 V4.2 核心插件。
 
