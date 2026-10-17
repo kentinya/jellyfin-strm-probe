@@ -19,7 +19,7 @@
 3. 查看 [当前 Slice](SLICE.md)、[当前 Task](TASK.md)、[四个 Slice 路线图](docs/roadmap.md) 和 [进度](docs/progress.md)。
 4. 开发环境执行 `python3 scripts/development_environment.py doctor`；安装与隔离运行见 [环境交接](docs/development-environment.md)；单版本安装包、配置与恢复见 [安装包说明](docs/package-installation.md)。
 
-Slice 4 Base 固定为 Slice 3 关闭提交 `03169b07d110964562f7da31d2c3d7add82e5ff5`，Implementation Head 为 NOT SET；最新接受产品实现仍是 `7c64eb5dcad6e5f20fb7eb41819be2521f65484d`。[Task 4.1](TASK.md) 交付单版本安装包与安装恢复，[Task 4.2](TASK.md) 交付完整扫描与播放／批量并发下的正确性；两者均已实现并交为 READY FOR B REVIEW，后续 B 必须按 [固定交付方案](docs/slice-4-delivery-plan.md) 继续规划。安装、配置与恢复说明见 [安装包说明](docs/package-installation.md)。详细历史与本机证据见 [进度](docs/progress.md#当前开发指针)。
+Slice 4 Base 固定为 Slice 3 关闭提交 `03169b07d110964562f7da31d2c3d7add82e5ff5`，Implementation Head 为 NOT SET；最新接受产品实现仍是 `7c64eb5dcad6e5f20fb7eb41819be2521f65484d`。Task 4.1 的单版本安装包与安装恢复已由 B 独立 PASS（审查快照 `0e7b26b381ed5f71781e75d317275afa51d791e9:TASK.md`）；[Task 4.2](TASK.md) 的扫描／播放／批量验收被 B 判为 FIX REQUIRED，需在原 Task 修正并发变化、逐源断言、停止恢复控制与原始证据。后续 B 必须按 [固定交付方案](docs/slice-4-delivery-plan.md) 继续规划。安装、配置与恢复说明见 [安装包说明](docs/package-installation.md)。详细历史与本机证据见 [进度](docs/progress.md#当前开发指针)。
 
 ## 产品目标
 
