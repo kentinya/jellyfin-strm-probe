@@ -854,6 +854,14 @@ def force_full_refresh(auth: str, item_id: str) -> int:
     return status
 
 
+def full_refresh_target_item_id(items: dict[str, dict], item_name: str) -> str:
+    """Resolve the exact pre-merge item to refresh, rather than the shared project's display ID."""
+    item = items.get(item_name)
+    require(isinstance(item, dict) and item.get("Id"),
+            f"The selected FullRefresh source item {item_name!r} has no native item ID.")
+    return canonical_guid(item["Id"], "FullRefresh source item")
+
+
 def merge_versions(auth: str, item_ids: list[str]) -> int:
     query = urlencode({"ids": ",".join(item_ids)})
     status, _ = pe.request_json("POST", "/Videos/MergeVersions?" + query, headers={"Authorization": auth})
@@ -2458,9 +2466,11 @@ def multi_version_and_refresh(auth: str, fixture: dict, recorder: EvidenceRecord
     mtime_evidence = advance_fixture_mtime_for_native_refresh(mv_a_path)
     recorder.record("full_refresh_fixture_mtime", item_id=canonical, source_key=mv_a,
                     manifest=read_versioned_manifest(mv_a_path), mtime=mtime_evidence)
-    refresh_status = force_full_refresh(auth, dashed(canonical))
+    refresh_target_item_id = full_refresh_target_item_id(items, fixture["mv_a_name"])
+    refresh_status = force_full_refresh(auth, dashed(refresh_target_item_id))
     if ACTIVE_RECORDER is not None:
         ACTIVE_RECORDER.record("full_refresh_request", item_id=canonical, source_key=mv_a,
+                               request_item_id=refresh_target_item_id,
                                status=refresh_status, started_at=refresh_started)
     require(refresh_status == 204, f"Jellyfin rejected the independent FullRefresh ({refresh_status}).")
     refreshed_a, refresh_events, refresh_completed = wait_for_full_refresh_completion(
