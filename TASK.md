@@ -5,13 +5,13 @@
 ```text
 Task ID: 4.1
 Parent Slice: 4
-Status: FIX REQUIRED
+Status: READY FOR B REVIEW
 Task Base: ae265d0dba02aa1c5599871602d4350072b7155f
 Contract Checkpoint: ae265d0dba02aa1c5599871602d4350072b7155f
 Difficulty: High
 Test Level: T4
 Planner / Reviewer: A (user-authorized planning) / B (independent Task Review)
-Implementation Head: 7dbf36615bddea0aa65a14d84ae56806aea62aa8
+Implementation Head: b5d4f2836229d16ac8add7034294c4306ddf5be1
 ```
 
 ## Goal
@@ -326,4 +326,14 @@ RO-1／安装、升级恢复及包身份 Surfaces 未通过本次 B 审查；RO-
 
 供 A 收尾时择要合并的经验：校验工具能列出新摘要不等于核验已发布输入 → 对重写 ZIP、依赖／元数据不一致构造反例并检查有效安装保留 → 用于包交接；恢复报告容易只证明备份文件存在 → 实际执行恢复／重启和业务读回，并记录失败收尾 → 用于升级与恢复审查。此处不改角色经验文件或增加验收义务。
 
-NEXT ACTION: DEVELOPER CORRECTS TASK 4.1 (BR-41-3b — PREVIOUS RUN OWNERSHIP / EARLY-FAILURE CLEANUP)
+### Developer 修正报告（2026-10-17，BR-41-3b 当前轮归属）
+
+- 修正提交：`b5d4f2836229d16ac8add7034294c4306ddf5be1`（`fix: bind package acceptance cleanup to current-run ownership`），在 Task Base `ae265d0d…` 之后追加，未改写已审查历史。
+- Changed Files：`scripts/package_environment.py`、`scripts/run_isolated_package_integration.py`、`tests/test_isolated_package_integration.py`、`docs/package-installation.md`。未改产品决策／权限／取消／Coordinator／SQLite schema／指纹门槛，未改 C# 产品代码。
+- 复现与修正：先按 B 的反例复现——把上一轮 `--keep-workspace` 留存的带标记目录传给 `--workspace` 并提供不存在的 `--package`，场景未开始即 FAIL，`finally` 仍输出 `cleanup: CLEANED` 并删除旧目录。`select_workspace` 现只认领不存在或空目录，任何已有非空目录（含带旧标记者）在任何写入前被拒；它写入本轮唯一 token 并记录模块级归属；`workspace()` 在磁盘标记非本轮 token 时拒绝写入；`cleanup_instance()` 同时要求本轮归属与标记匹配，直接 patch 的 `WORK` 不再被当作本轮所有；`main()` 先验证包再认领工作区，缺失／损坏包无文件系统副作用。修正后同一反例退出 1、不调用 Docker、旧目录字节不变。
+- Tests and Results（候选 `b5d4f283…`，工作区干净）：restore PASS；build 0 警告／0 错误；`dotnet test` 202/202 PASS；format PASS；`python3 -m unittest discover -s tests -v` 122/122 PASS；包工具测试 59/59 PASS；`package_plugin.py` 产出 ZIP SHA-256 `2d5edd4afcb77850b11d56d22648088fad7e0ffd9440c15ba29662f83efae788`（来源 SHA 等于 HEAD）；`--verify` 与 `sha256sum -c` PASS；`run_isolated_package_integration.py --scenario all` PASS（clean／upgrade／recovery／invalid；`instance_reconciliation` 为 `CLEAN`、`disturbed` 为空、工作区已完整清理）；`run_isolated_plugin_integration.py` PASS；`run_isolated_batch_integration.py --scenario suite` PASS；`run_isolated_configuration_integration.py --scenario all` PASS；governance／`git diff --check`／Markdown 本地链接与锚点 PASS。
+- 证据索引：`.git/validation-evidence/b5d4f2836229d16ac8add7034294c4306ddf5be1/dev-20261017-01/INDEX.md`（本地可读），含输入摘要、精确命令／输出、包／清单摘要与包验收原始 JSON。
+- Remaining In-Slice Work：RO-2、RO-3、RO-4 与最终 Slice Final 未变，仍 NOT RUN。
+- Head SHA：`b5d4f2836229d16ac8add7034294c4306ddf5be1`（本报告在后续文档提交记录，不预填自身 SHA）。
+
+NEXT ACTION: B REVIEWS TASK 4.1 (candidate b5d4f283, BR-41-3b correction)
