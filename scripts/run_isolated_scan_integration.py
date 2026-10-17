@@ -481,7 +481,7 @@ def configuration_payload_from_xml(data: bytes) -> dict:
 # ---------------------------------------------------------------------------------------------------------------------
 
 
-def docker_log_lines(name: str, tail: int = 60000) -> list[str]:
+def docker_log_lines(name: str, tail: int = 30000) -> list[str]:
     logs = run("docker", "logs", "--timestamps", "--tail", str(tail), name, timeout=30)
     require(logs.returncode == 0, f"Could not read the container logs for {name}.")
     return (logs.stdout + logs.stderr).splitlines()
@@ -565,10 +565,10 @@ def probe_start_for_item(events: list[dict], item_id: str) -> dict | None:
     return next((event for event in events if event["item_id"] == key), None)
 
 
-def batch_entry_events(since: datetime.datetime | None = None) -> list[dict]:
+def batch_entry_events(since: datetime.datetime | None = None, tail: int = 8000) -> list[dict]:
     """Return the plugin task's ExecuteAsync entry markers with UTC times."""
     entries: list[dict] = []
-    for line in docker_log_lines(container()):
+    for line in docker_log_lines(container(), tail=tail):
         if "STRM media information check entered" not in line:
             continue
         timestamp = parse_docker_timestamp(line)
