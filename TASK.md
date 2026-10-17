@@ -5,13 +5,13 @@
 ```text
 Task ID: 4.2
 Parent Slice: 4
-Status: FIX REQUIRED
+Status: READY FOR B REVIEW
 Task Base: 0e7b26b381ed5f71781e75d317275afa51d791e9
 Contract Checkpoint: ae265d0dba02aa1c5599871602d4350072b7155f
 Difficulty: High
 Test Level: T4
 Planner / Reviewer: B
-Implementation Head: eac764d9b32a1b13f8ac963f8c14888fd50db4a3
+Implementation Head: 86946cc4ef5c0648b71aafc00aa666f2a2bb20c5
 ```
 
 ## Goal
@@ -273,3 +273,19 @@ Required Outcomes／Surfaces 重核：RO-1 为 Task 4.1 B PASS，安装包 Surfa
 可复用经验候选供 Slice 收尾：原生地址与历史地址相互一致仍可能同时陈旧 → 以当前 Manifest 和当前项目／源键作为独立预期，并用陈旧双方一致的反例验证拒绝能力 → 适用于指纹／多源持久化验收。本轮不改角色经验文件。
 
 NEXT ACTION: DEVELOPER COMPLETES TASK 4.2 CORRECTIONS (BR-42-1..BR-42-4)
+
+### Developer 修正报告（2026-10-18，BR-42-1～4）
+
+- 修正提交：`86946cc4ef5c0648b71aafc00aa666f2a2bb20c5`。保留前次 B `FIX REQUIRED`、所有失败及 Task Base 复现，没有改写审查历史。本次 BR 修正仅改 `scripts/run_isolated_scan_integration.py` 与 `tests/test_isolated_scan_integration.py`；未改 Slice／Roadmap／稳定需求或产品行为合同。
+- BR-42-1（本轮未处理候选）：扫描入口固定并记录所选库的原生 item ID／MediaSourceId 清单、Guid 排序和 128 对象批次。最终扫描证据中候选集合为 136 个项目，首批阻塞源为 batch 0，删除与移出目标均为 batch 1 且变化时未开始；本轮先安全结算，新增／移入均在下一轮发现，移出身份重新按当前库关系核验。`scope_change_round` 的最终结果同时证明删除／移出在固定集合、尚未处理窗口的边界控制。
+- BR-42-2（当前键、源与 FullRefresh）：逐项以本轮 Manifest 和当前原生项目／MediaSourceId 生成预期，对应当前 `(canonical item_id, source_key)` 的五字段行、当前 URL、SHA-1／Size 和主流均须完整匹配；缺身份或缺地址不能跳过，旧孤儿行不能代替当前键。显式选源拒绝额外源、错源、错地址或无主流。修复独立 FullRefresh 选取：把 Jellyfin 当前可见的合并项目 ID 映射到其唯一当前版本／source_key，再对可见合并项目发出 Refresh；不再用隐藏的 pre-merge 子项 ID 等待另一个版本的处理。最终 ZIP 上本轮请求返回 204，目标是可见版本 `Scan MV B 2382fe84`，观察到本次处理开始及结束，后续仅该 source_key 实际探测并提交一次；另一版本指纹保持完整稳定，两版本 PlaybackInfo 选源均匹配各自地址。FullRefresh 完成 UTC：`2026-10-17T21:17:38.142374Z`。
+- BR-42-3（停止与恢复）：最终停止场景固定 130 项、两批；在下一轮前保留逐源状态，记录 2 个已开始源成功提交、1 个未开始源撤销、任务 `Cancelled`，并核对收尾期间没有新探测／新轮实际进入；显式下一轮随后收敛，已提交源不重复探测。恢复场景真实修复之前失败的媒体 URL，要求该源成功探测、保存新地址及当前指纹；禁用配置保存并读回，任务 `Cancelled`、零探测且旧指纹保持；SQLite 故障轮为 `Failed` 且故障期间编码器／路由探测计数未增加，恢复重启后待处理源成功提交，未变复查零探测。
+- BR-42-4（原始证据）：最终扫描 `events.jsonl` 为运行中追加记录，含完整 UTC／单调时间、任务轮询、容器启动身份、候选／Manifest、文件变更、原生源／主流／五字段快照、探测／提交及恢复事件；`rounds/` 保存每轮前后状态，`logs/` 保存实例重启及删除前脱敏 Jellyfin／媒体原始日志，`result.json` 和 `INDEX.md` 记录归档身份、恢复、对账和清理。首次实例创建前没有容器可采集的两条记录明确记为 `log_capture_unavailable`，随后每次实际重启和 teardown 日志均有留存。外置索引与完整原始结果均为本机可读，不声称远程可读。
+- FullRefresh 失败诊断：候选 `afe1cfdf5409809e30356d5f65fa996c85d85ad8` 的最终扫描在返回 204 后未观察到本轮处理，是保留的失败证据。使用 Task Base 插件归档对相同 harness 的独立回放也在 `base-fullrefresh-20261018-02` 以相同错误失败，排除了仅凭 Developer 自报判断；原因是发送了隐藏的版本子项 ID，但等待合并后另一项目 ID 的日志。修复后同一 Task Base 的回放 `base-fullrefresh-20261018-03` PASS；最终候选 ZIP 的完整扫描再次 PASS。较早的 SQLite 故障时间窗误包含健康探测也保留于 `5a2c5b7b6e401abf3cd36d209d1a8cbb068d1194/final-20261018-06`；时间窗改为从故障轮实际开始时刻取证，之后的候选 `afe1...` 扫描已通过该检查并暴露独立 FullRefresh 缺口。没有删除首败或把失败写作 PASS。
+- 最终 T4 候选 `86946cc4ef5c0648b71aafc00aa666f2a2bb20c5` 的门禁：locked restore PASS；Release build PASS（0 warnings／0 errors）；C# tests 202/202 PASS；format verify PASS；完整 Python tests 196/196 PASS（其中扫描工具回归 74 项）；重新打包 PASS，ZIP SHA-256 `434f930d6ad8282c1d68d47c7fc4456d52a025ae05e273db7b2f21551071ccaf`，metadata 来源 SHA 与候选一致。Package `all` 对同 ZIP PASS，clean／upgrade／recovery／invalid 全过，实例对账 CLEAN、清理 CLEANED；Scan `all` 消费同 ZIP PASS，overlap／controls／stop／recovery 全过，触发器 restored and verified、实例对账 CLEAN、清理 CLEANED。
+- 最终扫描真实三方重叠：原生扫描 `21:16:49.559924Z–21:16:52.125773Z`，批量后端探测 `21:16:49.341767Z–21:17:09.343180Z`，播放后端探测 `21:16:49.342759Z–21:17:09.343740Z`；两次探测实际开始后才观察到扫描 Running 并在该区间内执行 B→C、SHA-1 和 Size 有限变化。136 项稳定复查零探测；多版本按项目共享／source_key 独立；共同控制记录双向共享实际探测及并发峰值 2。既有开发部署入口另行串行执行：`run_isolated_plugin_integration.py` PASS；`run_isolated_batch_integration.py --scenario suite` PASS（state restoration verified）；`run_isolated_configuration_integration.py --scenario all` PASS（19 个浏览器场景，configuration restoration verified）。这些旧入口单列为开发部署回归，不替代同 ZIP 安装验收。
+- 证据索引：`.git/validation-evidence/86946cc4ef5c0648b71aafc00aa666f2a2bb20c5/final-20261018-08/INDEX.md`。固定运行时 .NET SDK 10.0.401、Python 3.11.2、Node 22.23.3、Playwright 1.55.0、Chromium 140.0.7339.16；镜像使用 Jellyfin `sha256:357724bf0ae27a672c7cbaa899db2d9abeb13dbd8657ccce750258a4c059d037` 与媒体服务 `sha256:0a310eeecf4e1f5a0743f9a6520c90c88d089c903ca5fd283f501e3a805f5f89`。重新打包前将旧 `artifacts/releases` ZIP 和旁车文件原样留存于证据索引的 `preexisting-release-files/`，未静默丢弃旧产物。
+- 剩余边界：RO-2 十万候选与分层成本、RO-4 实际代理联调、独立 Slice Final／Closure Packet 仍为 NOT RUN／未完成；最终夹具是小型多库／多版本与跨 128 批次验证，不代表真实十万库或生产压力结果。没有远程推送。
+- Developer 决定：`READY FOR B REVIEW`。这是交接状态，不是 Developer 对 BR、RO 或 Slice 的 PASS 裁决；请 B 独立审查 Base..Implementation Head 和上述本机原始证据。
+
+Implementation Head: `86946cc4ef5c0648b71aafc00aa666f2a2bb20c5`
