@@ -1187,6 +1187,9 @@ def scope_change_round(auth: str, fixture: dict, recorder: EvidenceRecorder) -> 
     summary = latest_summary_after(round_started)
     fields = summary_fields_complete(summary)
     require(fields.get("candidate_fetch_failed") is False, f"The scope-change round failed its candidate fetch: {summary}.")
+    # The deleted captured candidate must be reconciled away before the stable-set check; the round
+    # itself completed without failing on it (safe settlement), so no new probe or failure escaped.
+    wait_for_item_absent(auth, delete_name)
 
     # The added and moved-in items must not be processed in the fixed-set round.
     added_item = wait_for_item(auth, added_name)
