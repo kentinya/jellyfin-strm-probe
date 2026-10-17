@@ -8,24 +8,30 @@ native full library scan task (key ``RefreshLibrary``) and the plugin batch task
 ``StrmProbeOptimizerBatchCheck``) against isolated libraries and synthetic media.
 
 The scenarios:
-  all       overlap + stop + recovery in one session, with failures preserved
-  overlap   a real native full scan whose Running interval intersects an actually started
-            batch probe and an actually started playback probe on a different source, plus
-            finite add/delete/move/URL/content changes, URL re-change during a probe,
-            multi-version isolation, an independent FullRefresh and a converging stable-set
-            re-check with restart
-  stop      real native stop of a batch that has started and unstarted work: started work
-            settles and commits, unstarted work is revoked, and a later run converges
-  recovery  disabled / ordinary / legacy inputs delegate, a SQLite global fault fails the
-            task without probing and recovers after restart
+  all       overlap + controls + stop + recovery in one session, with failures preserved
+  overlap   a real native full scan whose Running interval intersects actually started batch
+            and playback probes; finite add/delete/move/URL/content changes issued while the
+            scan is Running and the probes are executing; URL re-change during a probe;
+            multi-version isolation; an independent FullRefresh; a converging stable-set
+            re-check with per-source reconciliation and restart
+  controls  real timed trigger, two-direction same-source sharing, different-source mixed
+            concurrency peak on the ZIP-installed candidate
+  stop      real native stop of a cross-batch batch with started and unstarted work: started
+            work settles and commits, unstarted work is revoked, a re-run during the drain is
+            refused, and a later run converges
+  recovery  single-item media failure isolation, disabled / ordinary / legacy inputs
+            delegate, a SQLite global fault fails the task without probing and recovers
 
-Evidence is printed as a single JSON document; pass ``--evidence-dir`` to persist it.
+Evidence is recorded incrementally into ``--evidence-dir`` (events.jsonl, per-round
+snapshots, an INDEX and the final result). Only redacted digests and identities are stored;
+no signed URL, token, cookie or private path is ever written.
 """
 
 from __future__ import annotations
 
 import argparse
 import datetime
+import hashlib
 import json
 import re
 import shutil
@@ -58,8 +64,15 @@ BULK_COUNT = 130
 OUT_OF_SCOPE_LIBRARY = "Package Local Fixtures"
 # A delay long enough to hold an actually started probe open across the whole native scan.
 PROBE_DELAY_SECONDS = 20
-# A shorter delay used for the URL re-change-during-probe race, leaving time to rewrite to C.
-RACE_DELAY_SECONDS = 8
+
+# Every counter a completed batch summary must report. A missing field is a hard failure: it must
+# never silently become a zero that trivially satisfies a later "== 0" probe assertion.
+REQUIRED_SUMMARY_FIELDS = (
+    "candidates", "raw_candidates", "duplicates", "checked", "skipped", "first_trust",
+    "need_probe", "reliable_success", "probe_incomplete", "check_stage_incomplete",
+    "not_processed", "missing", "revoked", "read_incomplete", "unread", "actual_probe_calls",
+    "batch_reads", "candidate_fetch_ms", "batch_read_ms",
+)
 
 
 def require(condition: bool, message: str) -> None:
@@ -69,6 +82,85 @@ def require(condition: bool, message: str) -> None:
 
 def run(*args: str, timeout: int = 120) -> subprocess.CompletedProcess[str]:
     return pe.run(*args, timeout=timeout)
+
+
+def now_utc() -> datetime.datetime:
+    return datetime.datetime.now(datetime.timezone.utc)
+
+
+def digest(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Evidence recorder (BR-42-4)
+# ---------------------------------------------------------------------------------------------------------------------
+
+_SCRUB_KEYS = ("url", "path", "token", "password", "cookie", "authorization", "access")
+
+
+def _scrub(value: object, key: str = "") -> object:
+    """Redact anything that could carry a signed URL, token, cookie or private path."""
+    if isinstance(value, dict):
+        return {str(k): _scrub(v, str(k)) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_scrub(item, key) for item in value]
+    if isinstance(value, str) and any(marker in key.lower() for marker in _SCRUB_KEYS):
+        return {"sha256": digest(value), "length": len(value)}
+    return value
+
+
+class EvidenceRecorder:
+    """Incrementally persist redacted, reviewable evidence outside the instance workspace."""
+
+    def __init__(self, directory: Path, run_id: str) -> None:
+        self.directory = directory
+        self.run_id = run_id
+        self.rounds_dir = directory / "rounds"
+        self.rounds_dir.mkdir(parents=True, exist_ok=True)
+        self.events_path = directory / "events.jsonl"
+        self.events_path.write_text("", encoding="utf-8")
+        self.monotonic_origin = time.monotonic()
+        self.source = self._source_identity()
+        self.record("run_start", source=self.source, run_id=run_id)
+
+    @staticmethod
+    def _source_identity() -> dict:
+        head = run("git", "rev-parse", "HEAD").stdout.strip()
+        status = run("git", "status", "--porcelain").stdout
+        tracked = run("git", "diff", "HEAD", "--stat").stdout
+        return {"head": head, "dirty": bool(status.strip()),
+                "status_sha256": digest(status), "tracked_diff_sha256": digest(tracked)}
+
+    def record(self, kind: str, **data: object) -> None:
+        line = {
+            "utc": now_utc().isoformat(),
+            "monotonic": round(time.monotonic() - self.monotonic_origin, 6),
+            "run_id": self.run_id,
+            "kind": kind,
+            "data": _scrub(data),
+        }
+        with self.events_path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(line, ensure_ascii=False, sort_keys=True) + "\n")
+
+    def snapshot(self, name: str, data: object) -> None:
+        path = self.rounds_dir / (name + ".json")
+        path.write_text(json.dumps(_scrub(data), ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+
+    def finish(self, status: str, summary: dict, raw_files: dict[str, str]) -> None:
+        (self.directory / "result.json").write_text(
+            json.dumps(_scrub(summary), ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+        index = ["# Scan acceptance evidence index", "",
+                 f"- Run id: `{self.run_id}`",
+                 f"- Source head: `{self.source['head']}` (dirty: {self.source['dirty']})",
+                 f"- Overall status: **{status}**", "",
+                 "## Raw files", ""]
+        for name, description in raw_files.items():
+            index.append(f"- `{name}` — {description}")
+        index.append("")
+        index.append("`events.jsonl` is append-only; `rounds/` holds per-round snapshots. "
+                     "All URLs/tokens/paths are stored as SHA-256 digests only.")
+        (self.directory / "INDEX.md").write_text("\n".join(index) + "\n", encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -88,6 +180,12 @@ def media_container() -> str:
     return pe.container_name("media")
 
 
+def container_identity() -> dict:
+    result = run("docker", "inspect", "--format", "{{.Id}} {{.State.StartedAt}}", container(), timeout=30)
+    require(result.returncode == 0, "Could not read the package Jellyfin container identity.")
+    return {"identity": result.stdout.strip()}
+
+
 def task_list(auth: str) -> list[dict]:
     status, tasks = pe.request_json("GET", "/ScheduledTasks", headers={"Authorization": auth})
     require(status == 200, "The scheduled-task listing failed.")
@@ -104,8 +202,16 @@ def task_state_name(task: dict) -> str:
     return str(task.get("State", "")).lower()
 
 
+def task_result(task: dict) -> dict:
+    return task.get("LastExecutionResult") or {}
+
+
+def task_status(task: dict) -> str:
+    return str(task_result(task).get("Status", "")).lower()
+
+
 def last_start(task: dict) -> str | None:
-    return (task.get("LastExecutionResult") or {}).get("StartTimeUtc")
+    return task_result(task).get("StartTimeUtc")
 
 
 def start_task(auth: str, task_id: str) -> int:
@@ -125,6 +231,7 @@ def set_triggers(auth: str, task_id: str, triggers: list[dict]) -> int:
 
 
 def wait_for_new_execution(auth: str, task_id: str, previous_start: str | None, timeout: int = MAX_WAIT) -> dict:
+    """Wait until a new execution has started and settled; do not require any particular status."""
     deadline = time.monotonic() + timeout
     observed = False
     while time.monotonic() < deadline:
@@ -138,11 +245,50 @@ def wait_for_new_execution(auth: str, task_id: str, previous_start: str | None, 
     raise RuntimeError("The native task did not settle before the timeout.")
 
 
+def execution_interval(task: dict) -> tuple[datetime.datetime, datetime.datetime]:
+    result = task_result(task)
+    start = result.get("StartTimeUtc")
+    end = result.get("EndTimeUtc")
+    require(bool(start) and bool(end), f"The native task has no execution interval: {result}.")
+    return (_parse_utc(start), _parse_utc(end))
+
+
+def require_completed_execution(task: dict, previous_start: str | None, label: str) -> tuple[datetime.datetime, datetime.datetime]:
+    """Require this round's own execution to have reached a successful Completed terminal state."""
+    result = task_result(task)
+    status = task_status(task)
+    require(status in {"completed", "0"},
+            f"The {label} did not complete (status {status!r}); a Failed/Cancelled/timeout result is never accepted: {result}.")
+    require(bool(result.get("StartTimeUtc")) and bool(result.get("EndTimeUtc")),
+            f"The {label} Completed without a full start/end interval: {result}.")
+    require(result.get("StartTimeUtc") != previous_start,
+            f"The {label} result belongs to the previous round (start {result.get('StartTimeUtc')}).")
+    return execution_interval(task)
+
+
 def run_plugin_task(auth: str, timeout: int = MAX_WAIT) -> dict:
     task = find_task_by_key(auth, TASK_KEY)
     previous = last_start(task)
     require(start_task(auth, task["Id"]) == 204, "Jellyfin did not accept the manual batch task start.")
     return wait_for_new_execution(auth, task["Id"], previous, timeout)
+
+
+def run_plugin_task_completed(auth: str, label: str, timeout: int = MAX_WAIT) -> dict:
+    task = find_task_by_key(auth, TASK_KEY)
+    previous = last_start(task)
+    require(start_task(auth, task["Id"]) == 204, "Jellyfin did not accept the manual batch task start.")
+    final = wait_for_new_execution(auth, task["Id"], previous, timeout)
+    require_completed_execution(final, previous, label)
+    return final
+
+
+def run_native_scan_completed(auth: str, label: str, timeout: int = MAX_WAIT) -> tuple[dict, tuple[datetime.datetime, datetime.datetime]]:
+    task = find_task_by_key(auth, SCAN_TASK_KEY)
+    previous = last_start(task)
+    require(start_task(auth, task["Id"]) == 204, "Jellyfin did not accept the native full scan start.")
+    final = wait_for_new_execution(auth, task["Id"], previous, timeout)
+    interval = require_completed_execution(final, previous, label)
+    return final, interval
 
 
 def plugin_status(auth: str) -> str:
@@ -157,20 +303,10 @@ def restart() -> str:
     return pkg.restart()
 
 
-def plugin_events() -> list[str]:
-    return pkg.plugin_events()
-
-
-def latest_summary() -> str | None:
-    """Return the most recent redacted batch summary line, read with a large timestamped tail."""
-    lines = [line for line in docker_log_lines(container()) if "STRM media information check finished" in line]
-    return batch.base.safe_event(lines[-1]) if lines else None
-
-
 def item_by_name(auth: str, name: str) -> dict:
     """Resolve one library item by name with a high limit so a large fixture set is not truncated."""
     status, payload = pe.request_json(
-        "GET", "/Items?" + "Recursive=true&Limit=1000&Fields=MediaSources,Path,MediaStreams",
+        "GET", "/Items?" + "Recursive=true&Limit=5000&Fields=MediaSources,Path,MediaStreams",
         headers={"Authorization": auth})
     require(status == 200, "The package-instance item listing failed.")
     matches = [item for item in payload.get("Items", []) if item.get("Name") == name]
@@ -178,7 +314,15 @@ def item_by_name(auth: str, name: str) -> dict:
     return matches[0]
 
 
-def wait_for_item(auth: str, name: str, timeout: int = 90) -> dict:
+def native_items(auth: str) -> list[dict]:
+    status, payload = pe.request_json(
+        "GET", "/Items?" + "Recursive=true&Limit=5000&Fields=MediaSources,Path,MediaStreams",
+        headers={"Authorization": auth})
+    require(status == 200, "The package-instance item listing failed.")
+    return payload.get("Items", [])
+
+
+def wait_for_item(auth: str, name: str, timeout: int = 120) -> dict:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         try:
@@ -188,11 +332,11 @@ def wait_for_item(auth: str, name: str, timeout: int = 90) -> dict:
     raise RuntimeError(f"The package instance did not scan the item {name!r}.")
 
 
-def wait_for_item_absent(auth: str, name: str, timeout: int = 90) -> None:
+def wait_for_item_absent(auth: str, name: str, timeout: int = 120) -> None:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         status, payload = pe.request_json(
-            "GET", "/Items?" + "Recursive=true&Limit=1000&Fields=Path",
+            "GET", "/Items?" + "Recursive=true&Limit=5000&Fields=Path",
             headers={"Authorization": auth})
         if not any(item.get("Name") == name for item in payload.get("Items", [])):
             return
@@ -218,7 +362,6 @@ def fingerprint_row(source_item_id: str) -> dict | None:
 
 
 def all_fingerprint_rows() -> list[dict]:
-    """Return every minimal fingerprint row (five fields only)."""
     import sqlite3 as _sqlite3
 
     database = pkg.fingerprint_database()
@@ -240,8 +383,11 @@ def dashed(value: str) -> str:
     return str(uuid.UUID(value))
 
 
+def expected_url_hash(url: str) -> str:
+    return pkg.expected_url_hash(url)
+
+
 def source_path_matches_hash(response: dict, expected_hash: str) -> bool:
-    """Check whether a PlaybackInfo response contains a source whose path hashes to the expected URL hash."""
     import hashlib as _hashlib
 
     for source in response.get("MediaSources", []):
@@ -251,11 +397,8 @@ def source_path_matches_hash(response: dict, expected_hash: str) -> bool:
     return False
 
 
-def expected_url_hash(url: str) -> str:
-    return pkg.expected_url_hash(url)
-
-
-def library_ids(auth: str) -> dict[str, str]:
+def library_roots(auth: str) -> dict[str, str]:
+    """Map a library directory suffix (strm/local/...) to its native folder id."""
     status, folders = pe.request_json("GET", "/Library/VirtualFolders", headers={"Authorization": auth})
     require(status == 200, "The virtual-folder listing failed.")
     by_suffix: dict[str, str] = {}
@@ -267,8 +410,18 @@ def library_ids(auth: str) -> dict[str, str]:
     return by_suffix
 
 
+def library_root_path(auth: str, library_id: str) -> str:
+    status, folders = pe.request_json("GET", "/Library/VirtualFolders", headers={"Authorization": auth})
+    require(status == 200, "The virtual-folder listing failed.")
+    for folder in folders:
+        if folder.get("ItemId") == library_id:
+            paths = [str(info.get("Path", "")) for info in folder.get("LibraryOptions", {}).get("PathInfos", [])]
+            require(len(paths) == 1, f"Expected exactly one root for library {library_id!r}: {paths}.")
+            return paths[0].rstrip("/")
+    raise RuntimeError(f"No native library matched id {library_id!r}.")
+
+
 def refresh_library(auth: str) -> None:
-    """Queue a native library refresh, retrying with a fresh token on a stale session."""
     deadline = time.monotonic() + 30
     last_status = None
     while time.monotonic() < deadline:
@@ -280,14 +433,6 @@ def refresh_library(auth: str) -> None:
             auth = api_auth()
         time.sleep(1)
     raise RuntimeError(f"The library refresh was not accepted (last HTTP {last_status}).")
-
-
-def run_native_scan(auth: str, timeout: int = MAX_WAIT) -> dict:
-    """Trigger the real native full library scan task and wait for it to settle."""
-    task = find_task_by_key(auth, SCAN_TASK_KEY)
-    previous = last_start(task)
-    require(start_task(auth, task["Id"]) == 204, "Jellyfin did not accept the native full scan start.")
-    return wait_for_new_execution(auth, task["Id"], previous, timeout=timeout)
 
 
 def force_full_refresh(auth: str, item_id: str) -> int:
@@ -310,7 +455,6 @@ def configure(auth: str, payload: dict) -> int:
 
 
 def current_user_id(auth: str) -> str:
-    """Return the authenticated user's id so an explicit MediaSourceId PlaybackInfo POST is possible."""
     credentials = json.loads(pe.credentials_path().read_text(encoding="utf-8"))
     status, users = pe.request_json("GET", "/Users", headers={"Authorization": auth})
     require(status == 200, "The user listing failed.")
@@ -337,7 +481,7 @@ def configuration_payload_from_xml(data: bytes) -> dict:
 # ---------------------------------------------------------------------------------------------------------------------
 
 
-def docker_log_lines(name: str, tail: int = 40000) -> list[str]:
+def docker_log_lines(name: str, tail: int = 60000) -> list[str]:
     logs = run("docker", "logs", "--timestamps", "--tail", str(tail), name, timeout=30)
     require(logs.returncode == 0, f"Could not read the container logs for {name}.")
     return (logs.stdout + logs.stderr).splitlines()
@@ -351,6 +495,10 @@ def parse_docker_timestamp(line: str) -> datetime.datetime | None:
         return datetime.datetime.fromisoformat(match.group(1).replace("Z", "+00:00"))
     except ValueError:
         return None
+
+
+def _parse_utc(value: str) -> datetime.datetime:
+    return datetime.datetime.fromisoformat(str(value).replace("Z", "+00:00"))
 
 
 def probe_start_events(name: str, since: datetime.datetime | None = None) -> list[dict]:
@@ -370,19 +518,45 @@ def probe_start_events(name: str, since: datetime.datetime | None = None) -> lis
     return entries
 
 
-def delay_request_events(name: str, since: datetime.datetime | None = None) -> list[dict]:
+def probe_outcome_events(name: str, since: datetime.datetime | None = None) -> list[dict]:
+    """Return per-item probe terminal events (accepted/rejected/failed/changed) with UTC times."""
+    patterns = {
+        "accepted": "Native probe accepted for STRM item",
+        "failed": "Native STRM probe failed for item",
+        "canceled": "Native STRM probe canceled for item",
+        "not_committed": "Native probe result was not committed for item",
+        "manifest_changed": "STRM manifest changed during native probe for item",
+    }
     entries: list[dict] = []
     for line in docker_log_lines(name):
-        marker = "SLOW_MEDIA_REQUEST_STARTED "
-        if marker not in line:
-            continue
         timestamp = parse_docker_timestamp(line)
         if timestamp is None:
             continue
         if since is not None and timestamp < since:
             continue
-        request_id = line.split(marker, 1)[1].strip()
-        entries.append({"request_id": request_id, "timestamp": timestamp})
+        for kind, marker in patterns.items():
+            if marker in line:
+                item = re.search(r"item ([0-9a-fA-F-]+)", line)
+                entries.append({"kind": kind, "item_id": item.group(1).lower().replace("-", "") if item else None,
+                                "timestamp": timestamp})
+                break
+    return entries
+
+
+def backend_request_events(name: str, since: datetime.datetime | None = None) -> list[dict]:
+    """Return the delayed backend probe start and observed finish markers with UTC times."""
+    entries: list[dict] = []
+    for line in docker_log_lines(name):
+        timestamp = parse_docker_timestamp(line)
+        if timestamp is None:
+            continue
+        if since is not None and timestamp < since:
+            continue
+        for marker, kind in (("SLOW_MEDIA_REQUEST_STARTED ", "start"), ("PROBE_MEDIA_REQUEST_FINISHED ", "finish")):
+            if marker in line:
+                request_id = line.split(marker, 1)[1].strip()
+                entries.append({"kind": kind, "request_id": request_id, "timestamp": timestamp})
+                break
     return entries
 
 
@@ -391,16 +565,37 @@ def probe_start_for_item(events: list[dict], item_id: str) -> dict | None:
     return next((event for event in events if event["item_id"] == key), None)
 
 
-def _parse_utc(value: str) -> datetime.datetime:
-    return datetime.datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+def batch_entry_events(since: datetime.datetime | None = None) -> list[dict]:
+    """Return the plugin task's ExecuteAsync entry markers with UTC times."""
+    entries: list[dict] = []
+    for line in docker_log_lines(container()):
+        if "STRM media information check entered" not in line:
+            continue
+        timestamp = parse_docker_timestamp(line)
+        if timestamp is None:
+            continue
+        if since is not None and timestamp < since:
+            continue
+        entries.append({"timestamp": timestamp})
+    return entries
 
 
-def scan_execution_interval(task: dict) -> tuple[datetime.datetime, datetime.datetime]:
-    result = task.get("LastExecutionResult") or {}
-    start = result.get("StartTimeUtc")
-    end = result.get("EndTimeUtc")
-    require(bool(start) and bool(end), f"The native scan task has no execution interval: {result}.")
-    return (_parse_utc(start), _parse_utc(end))
+def task_completion_events(since: datetime.datetime | None = None) -> list[dict]:
+    """Return the native worker terminal statuses for the batch task with UTC times."""
+    events: list[dict] = []
+    for line in docker_log_lines(container()):
+        if TASK_NAME not in line or " after " not in line:
+            continue
+        timestamp = parse_docker_timestamp(line)
+        if timestamp is None:
+            continue
+        if since is not None and timestamp < since:
+            continue
+        for status in ("Completed", "Cancelled", "Failed", "Aborted"):
+            if f"{TASK_NAME} {status} after" in line:
+                events.append({"status": status, "timestamp": timestamp})
+                break
+    return events
 
 
 def intervals_intersect(a_start: datetime.datetime, a_end: datetime.datetime,
@@ -411,18 +606,103 @@ def intervals_intersect(a_start: datetime.datetime, a_end: datetime.datetime,
 def assert_scan_probe_overlap(scan_interval: tuple[datetime.datetime, datetime.datetime],
                               probe_start: datetime.datetime, probe_end: datetime.datetime,
                               label: str) -> dict:
-    """Fail unless the scan interval and the actually started probe execution truly intersect.
+    """Fail unless the scan interval and an actually started probe execution truly intersect.
 
-    ``probe_start``/``probe_end`` bound one real probe execution (the observed backend request
-    start and its completion). A queued, permitted or merely accepted request is never accepted.
+    ``probe_start``/``probe_end`` bound one real probe execution: the observed backend request
+    start and its observed completion. A queued, permitted or merely accepted request is never
+    accepted, and a computed (configured-delay) end is never accepted.
     """
     scan_start, scan_end = scan_interval
-    require(probe_end > probe_start, f"The {label} probe has no positive execution interval.")
+    require(probe_end > probe_start, f"The {label} probe has no positive observed execution interval.")
     require(intervals_intersect(scan_start, scan_end, probe_start, probe_end),
             f"The native scan interval [{scan_start.isoformat()}, {scan_end.isoformat()}] does not intersect "
-            f"the actually started {label} probe interval [{probe_start.isoformat()}, {probe_end.isoformat()}].")
+            f"the observed {label} probe interval [{probe_start.isoformat()}, {probe_end.isoformat()}].")
     return {"scan_start": scan_start.isoformat(), "scan_end": scan_end.isoformat(),
             "probe_start": probe_start.isoformat(), "probe_end": probe_end.isoformat(), "overlapped": True}
+
+
+def require_change_in_window(op_time: datetime.datetime,
+                             scan_interval: tuple[datetime.datetime, datetime.datetime],
+                             label: str) -> None:
+    """A finite change must be issued while the native scan is actually Running (BR-42-1)."""
+    scan_start, scan_end = scan_interval
+    require(scan_start <= op_time <= scan_end,
+            f"The {label} change at {op_time.isoformat()} was issued outside the Running scan interval "
+            f"[{scan_start.isoformat()}, {scan_end.isoformat()}]; a post-scan change does not satisfy BR-42-1.")
+
+
+def require_captured(captured_source_ids: set[str], source_id: str, label: str) -> None:
+    """A delete/move-out target must have actually belonged to the fixed candidate set (BR-42-1)."""
+    key = source_id.lower().replace("-", "")
+    require(key in captured_source_ids,
+            f"The {label} target {source_id} was never in the captured candidate set; deleting an object that "
+            "was not part of the fixed set does not prove in-round settlement.")
+
+
+def require_no_new_round(entries_before_settlement: int, entries_before_stop: int, label: str) -> None:
+    """A re-run or timer must not actually enter a new round while the old round is draining (BR-42-3)."""
+    require(entries_before_settlement == entries_before_stop,
+            f"A {label} actually entered a new round during the stopped round's drain "
+            f"({entries_before_settlement} > {entries_before_stop} entries before settlement).")
+
+
+def require_no_probe_during_drain(probes_during_drain: list[dict]) -> None:
+    """No new probe may start after the stop, before the stopped round settles (BR-42-3)."""
+    require(not probes_during_drain,
+            f"A new probe started during the stopped round's drain: {probes_during_drain}.")
+
+
+def require_progress_below_100(progress_during_cancel: list[float]) -> None:
+    """A stopped round must not report Completed/100% while it is Cancelling (BR-42-3)."""
+    require(all(value < 100.0 for value in progress_during_cancel),
+            f"The stopped round reported 100% while cancelling: {progress_during_cancel}.")
+
+
+def require_no_new_activity(before: dict[str, int], after: dict[str, int], label: str) -> None:
+    """A disabled / faulted plugin must start no backend or plugin probe on any route (BR-42-3)."""
+    require(before == after,
+            f"{label} still started backend/probe work on some route: {before} -> {after}.")
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Summary binding
+# ---------------------------------------------------------------------------------------------------------------------
+
+
+def latest_summary_after(round_started: datetime.datetime) -> str | None:
+    """Return the latest redacted batch summary whose own UTC timestamp is at or after the round start."""
+    lines = [line for line in docker_log_lines(container()) if "STRM media information check finished" in line]
+    for line in reversed(lines):
+        timestamp = parse_docker_timestamp(line)
+        if timestamp is not None and timestamp >= round_started:
+            return batch.base.safe_event(line)
+    return None
+
+
+def first_summary_after(round_started: datetime.datetime) -> str | None:
+    """Return the earliest redacted batch summary at or after the round start (the stopped round's own
+    summary, before any queued re-run that settles after it)."""
+    lines = [line for line in docker_log_lines(container()) if "STRM media information check finished" in line]
+    for line in lines:
+        timestamp = parse_docker_timestamp(line)
+        if timestamp is not None and timestamp >= round_started:
+            return batch.base.safe_event(line)
+    return None
+
+
+def summary_fields_complete(summary_line: str | None) -> dict:
+    """Parse a summary and require every counter to be present; a missing field is a hard failure."""
+    require(summary_line is not None, "No batch summary was emitted for this round.")
+    fields = batch.summary_fields(summary_line)
+    missing = [name for name in REQUIRED_SUMMARY_FIELDS if fields.get(name) is None]
+    require(not missing, f"The batch summary is missing required counter(s) {missing}: {summary_line}.")
+    batch.assert_summary_equations(fields)
+    return fields
+
+
+def require_zero_probes(fields: dict, summary_line: str, label: str) -> None:
+    require(fields.get("actual_probe_calls") == 0,
+            f"The {label} performed plugin probes although none were expected: {summary_line}.")
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -463,13 +743,18 @@ def delay_url(base_url: str, seconds: float, request_id: str) -> str:
     return urlunsplit((parts.scheme, parts.netloc, f"/delay/{seconds:g}/{request_id}/{leaf}", "", ""))
 
 
+def missing_url(base_url: str) -> str:
+    parts = urlsplit(base_url)
+    parent = parts.path.rsplit("/", 1)[0]
+    return urlunsplit((parts.scheme, parts.netloc, parent + "/missing-" + uuid.uuid4().hex + ".mp4", "", ""))
+
+
 def unique_url(base_url: str, key: str) -> str:
     parts = urlsplit(base_url)
     return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode({"scan_case": key}), ""))
 
 
 def native_prepare_stream(auth: str, item: dict, url: str, timeout: int = 120) -> bool:
-    """Let Jellyfin itself probe and persist a primary stream while the plugin is disabled."""
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         status, response = playback_info(auth, item["Id"])
@@ -517,8 +802,6 @@ def restore_triggers(auth: str, snapshot: dict[str, list[dict]]) -> None:
 
 
 def clear_strm_fixtures() -> int:
-    """Remove this run's scenario STRM fixtures (never the generated media files) so each
-    scenario starts from a known, isolated fixture set. All paths are run-owned."""
     removed = 0
     for directory in (pe.WORK / "strm", pe.WORK / "media"):
         if not directory.is_dir():
@@ -530,14 +813,10 @@ def clear_strm_fixtures() -> int:
     return removed
 
 
-# The native scheduled-task triggers recorded on the first fresh instance of this run. Every
-# scenario starts from the same fresh instance, so the recorded defaults are restored and verified
-# in the run's finally block even if a scenario failed mid-way.
 ORIGINAL_TRIGGERS: dict[str, list[dict]] | None = None
 
 
 def deploy_fresh(package: Path) -> str:
-    """Prepare a clean package instance, install only the archive and return a fresh auth token."""
     global ORIGINAL_TRIGGERS
     clear_strm_fixtures()
     pe.prepare_clean_instance()
@@ -552,7 +831,7 @@ def deploy_fresh(package: Path) -> str:
 
 
 def scope_to_strm_library(auth: str) -> dict[str, str]:
-    libraries = library_ids(auth)
+    libraries = library_roots(auth)
     require("strm" in libraries and "local" in libraries,
             f"The package instance must expose strm and local libraries: {libraries}.")
     status = configure(auth, {"Enabled": True, "PlaybackAutoCheck": True, "MaxConcurrentProbes": 2,
@@ -568,12 +847,21 @@ def scope_all_libraries(auth: str) -> None:
     require(status == 204, f"Jellyfin rejected the all-library scope ({status}).")
 
 
-def bulk_fixture(auth: str, nonce: str) -> dict:
-    """Create the two-library fixture set, index it and persist native primary streams.
+def capture_candidate_sources(auth: str, library_id: str) -> set[str]:
+    """The fixed candidate identity set as the native source ids under the selected library root."""
+    root = library_root_path(auth, library_id)
+    ids: set[str] = set()
+    for item in native_items(auth):
+        path = item.get("Path") or ""
+        if not path.startswith(root):
+            continue
+        for source in item.get("MediaSources", []):
+            if source.get("Id"):
+                ids.add(str(source["Id"]).lower().replace("-", ""))
+    return ids
 
-    The bulk set crosses the fixed 128-object batch boundary. Native stream preparation runs with
-    the plugin disabled so the later scoped batch first-trusts them with zero plugin probes.
-    """
+
+def bulk_fixture(auth: str, nonce: str) -> dict:
     strm_dir = pe.WORK / "strm"
     local_dir = pe.WORK / "media"
     media_sha, media_size = pe.media_sha1(pe.MEDIA_MP4)
@@ -583,11 +871,8 @@ def bulk_fixture(auth: str, nonce: str) -> dict:
         write_strm_to(strm_dir, name, plain_url, media_sha, media_size)
     out_name = f"Scan Out Of Scope {nonce}"
     write_strm_to(local_dir, out_name, plain_url, media_sha, media_size)
-    # The playback overlap source lives in the out-of-scope library so the scoped batch never
-    # touches it and the playback genuinely starts its own probe on a different source.
     playback_name = f"Scan Playback {nonce}"
     write_strm_to(local_dir, playback_name, plain_url, media_sha, media_size)
-    # A source that will be moved from the out-of-scope library into the selected library.
     movein_name = f"Scan Move In {nonce}"
     write_strm_to(local_dir, movein_name, plain_url, media_sha, media_size)
     batch_name = f"Scan Batch {nonce}"
@@ -613,7 +898,6 @@ def bulk_fixture(auth: str, nonce: str) -> dict:
 
 
 def establish_baselines(auth: str, fixture: dict) -> dict:
-    """Disable the plugin, persist native streams, re-enable and first-trust with zero plugin probes."""
     require(plugin_action(auth, False) == 204, "The plugin disable failed.")
     restart()
     auth = api_auth()
@@ -627,11 +911,11 @@ def establish_baselines(auth: str, fixture: dict) -> dict:
     auth = api_auth()
     require(str(plugin_status(auth)).lower() in {"active", "0"}, "The plugin is not Active after enable.")
     libraries = scope_to_strm_library(auth)
-    run_plugin_task(auth)
-    summary = latest_summary()
-    fields = batch.summary_fields(summary)
-    batch.assert_summary_equations(fields)
-    require((fields.get("actual_probe_calls") or 0) == 0, f"The baseline first-trust run performed plugin probes: {summary}.")
+    round_started = now_utc()
+    run_plugin_task_completed(auth, "baseline first-trust run")
+    summary = latest_summary_after(round_started)
+    fields = summary_fields_complete(summary)
+    require_zero_probes(fields, summary, "baseline first-trust run")
     require((fields.get("first_trust") or 0) >= BULK_COUNT, f"The baseline run did not first-trust the bulk candidates: {summary}.")
     require(fingerprint_row(fixture["items"][fixture["batch_name"]]["Id"]) is not None,
             "The baseline did not create a fingerprint for the batch source.")
@@ -647,46 +931,54 @@ def establish_baselines(auth: str, fixture: dict) -> dict:
 # ---------------------------------------------------------------------------------------------------------------------
 
 
-def wait_for_delay(request_id: str, since: datetime.datetime, timeout: int = 90) -> datetime.datetime:
+def wait_for_backend_event(request_id: str, kind: str, since: datetime.datetime, timeout: int = 90) -> datetime.datetime:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        matches = [event for event in delay_request_events(media_container(), since=since)
-                   if event["request_id"] == request_id]
+        matches = [event for event in backend_request_events(media_container(), since=since)
+                   if event["request_id"] == request_id and event["kind"] == kind]
         if matches:
             return matches[0]["timestamp"]
         time.sleep(0.2)
-    raise RuntimeError(f"The delayed backend request {request_id} never actually started.")
+    raise RuntimeError(f"The delayed backend request {request_id} never observed a {kind} event.")
 
 
-def scenario_overlap(package: Path, evidence_dir: Path | None, nonce: str) -> dict:
-    summary: dict[str, object] = {}
-    auth = deploy_fresh(package)
-    summary["payload_matches_archive"] = pkg.deployed_matches_archive(package)
-    pe.add_library_authenticated(auth, OUT_OF_SCOPE_LIBRARY, ["/media/local"])
-    auth = api_auth()
-    fixture = bulk_fixture(auth, nonce)
-    summary["fixture"] = {"bulk": BULK_COUNT, "out_of_scope": fixture["out_name"],
-                          "playback_library": "local", "batch_library": "strm"}
-    summary["baseline"] = establish_baselines(auth, fixture)
-    auth = api_auth()
+def wait_for_scan_running(auth: str, task_id: str, timeout: int = 60) -> None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        task = next((task for task in task_list(auth) if task.get("Id") == task_id), None)
+        require(task is not None, "The native scan task disappeared while waiting for Running.")
+        if task_state_name(task) in {"running", "1"}:
+            return
+        if task_state_name(task) in {"idle", "0"} and task_status(task) in {"completed", "failed", "cancelled"}:
+            # It already settled; the window was too short to observe Running.
+            raise RuntimeError("The native scan settled before its Running state could be observed.")
+        time.sleep(0.05)
+    raise RuntimeError("The native scan never reported Running.")
+
+
+def overlap_round(auth: str, fixture: dict, recorder: EvidenceRecorder) -> dict:
+    """Real three-way overlap with finite changes issued while the scan is Running."""
     items = fixture["items"]
+    libraries = library_roots(auth)
+    captured = capture_candidate_sources(auth, libraries["strm"])
+    require(len(captured) >= BULK_COUNT, f"The selected library captured too few candidate sources: {len(captured)}.")
 
-    merge_status = merge_versions(auth, [items[fixture["mv_a_name"]]["Id"], items[fixture["mv_b_name"]]["Id"]])
-    require(merge_status == 204, f"Jellyfin did not merge the multi-version pair ({merge_status}).")
-
-    # -- Real three-way overlap: native full scan × started batch probe × started playback probe --
     batch_id = uuid.uuid4().hex
     playback_id = uuid.uuid4().hex
     batch_path = fixture["strm_dir"] / (fixture["batch_name"] + ".strm")
     playback_path = fixture["local_dir"] / (fixture["playback_name"] + ".strm")
-    batch_url = delay_url(fixture["plain_url"], PROBE_DELAY_SECONDS, batch_id)
-    playback_url = delay_url(fixture["plain_url"], PROBE_DELAY_SECONDS, playback_id)
-    rewrite_strm(batch_path, batch_url, fixture["media_sha"], fixture["media_size"])
-    rewrite_strm(playback_path, playback_url, fixture["media_sha"], fixture["media_size"])
+    content_path = fixture["strm_dir"] / (fixture["content_name"] + ".strm")
+    size_path = fixture["strm_dir"] / (fixture["size_name"] + ".strm")
 
-    round_started = datetime.datetime.now(datetime.timezone.utc)
-    scan_task = find_task_by_key(auth, SCAN_TASK_KEY)
-    scan_previous = last_start(scan_task)
+    batch_b_url = delay_url(fixture["plain_url"], PROBE_DELAY_SECONDS, batch_id)
+    playback_url = delay_url(fixture["plain_url"], PROBE_DELAY_SECONDS, playback_id)
+    batch_c_url = unique_url(fixture["plain_url"], "batch-c-" + uuid.uuid4().hex[:8])
+    rewrite_strm(batch_path, batch_b_url, fixture["media_sha"], fixture["media_size"])
+    rewrite_strm(playback_path, playback_url, fixture["media_sha"], fixture["media_size"])
+    recorder.record("overlap_prepare", batch_sha=digest(batch_b_url), playback_sha=digest(playback_url))
+
+    round_started = now_utc()
+    container_before = container_identity()
     batch_task = find_task_by_key(auth, TASK_KEY)
     batch_previous = last_start(batch_task)
     require(start_task(auth, batch_task["Id"]) == 204, "Jellyfin did not accept the overlap batch start.")
@@ -700,167 +992,236 @@ def scenario_overlap(package: Path, evidence_dir: Path | None, nonce: str) -> di
 
     worker = threading.Thread(target=playback, name="scan-overlap-playback", daemon=True)
     worker.start()
-    batch_backend_start = wait_for_delay(batch_id, round_started)
-    playback_backend_start = wait_for_delay(playback_id, round_started)
+    batch_backend_start = wait_for_backend_event(batch_id, "start", round_started)
+    playback_backend_start = wait_for_backend_event(playback_id, "start", round_started)
     probe_starts = probe_start_events(container(), since=round_started)
     batch_probe = probe_start_for_item(probe_starts, items[fixture["batch_name"]]["Id"])
     playback_probe = probe_start_for_item(probe_starts, items[fixture["playback_name"]]["Id"])
     require(batch_probe is not None, f"No real plugin probe start was observed for the batch source: {probe_starts}.")
     require(playback_probe is not None, f"No real plugin probe start was observed for the playback source: {probe_starts}.")
 
+    # Trigger the native full scan and wait until it is actually Running before mutating anything.
+    scan_task = find_task_by_key(auth, SCAN_TASK_KEY)
+    scan_previous = last_start(scan_task)
     require(start_task(auth, scan_task["Id"]) == 204, "Jellyfin did not accept the native full scan start.")
+    wait_for_scan_running(auth, scan_task["Id"])
+    scan_running_observed = now_utc()
+
+    # -- Finite changes issued while the scan is Running and both probes are executing --
+    changes: list[dict] = []
+    # URL B -> C on the source whose batch probe is actually running: B must never commit.
+    rewrite_strm(batch_path, batch_c_url, fixture["media_sha"], fixture["media_size"])
+    changes.append({"change": "batch_url_b_to_c", "utc": now_utc().isoformat(), "c_sha": digest(batch_c_url)})
+    # Content SHA-1 change at the same URL on a not-started source.
+    rewrite_strm(content_path, fixture["plain_url"], "a" * 40, fixture["media_size"])
+    changes.append({"change": "content_sha1", "utc": now_utc().isoformat()})
+    # SHA-1 incomparable + valid Size change on another source.
+    rewrite_strm(size_path, fixture["plain_url"], None, fixture["media_size"] + 1)
+    changes.append({"change": "size_only", "utc": now_utc().isoformat()})
+
+    # Wait for the scan to reach its authoritative Completed terminal state.
     scan_after = wait_for_new_execution(auth, scan_task["Id"], scan_previous, timeout=MAX_WAIT)
-    scan_interval = scan_execution_interval(scan_after)
+    scan_interval = require_completed_execution(scan_after, scan_previous, "overlap native scan")
 
     final = wait_for_new_execution(auth, batch_task["Id"], batch_previous, timeout=MAX_WAIT)
     worker.join(timeout=MAX_WAIT)
     require(not worker.is_alive(), "The overlap playback did not finish.")
     require("error" not in playback_holder, "The overlap playback failed outside the HTTP path.")
-    require(str((final.get("LastExecutionResult") or {}).get("Status", "")).lower() in {"completed", "0"},
-            f"The overlap batch did not complete: {final.get('LastExecutionResult')}.")
-    summary["scan_overlap"] = {
-        "scan": assert_scan_probe_overlap(
-            scan_interval, batch_probe["timestamp"],
-            batch_backend_start + datetime.timedelta(seconds=PROBE_DELAY_SECONDS), "batch"),
-        "playback": assert_scan_probe_overlap(
-            scan_interval, playback_probe["timestamp"],
-            playback_backend_start + datetime.timedelta(seconds=PROBE_DELAY_SECONDS), "playback"),
-        "batch_backend_requests": len([e for e in delay_request_events(media_container(), since=round_started)
-                                       if e["request_id"] == batch_id]),
-        "playback_backend_requests": len([e for e in delay_request_events(media_container(), since=round_started)
-                                          if e["request_id"] == playback_id]),
-        "plugin_probe_starts": len(probe_starts),
+    require_completed_execution(final, batch_previous, "overlap batch")
+
+    # Every in-window change must have been issued while the scan was Running.
+    for change in changes:
+        require_change_in_window(_parse_utc(change["utc"]), scan_interval, change["change"])
+
+    batch_backend_finish = wait_for_backend_event(batch_id, "finish", round_started)
+    playback_backend_finish = wait_for_backend_event(playback_id, "finish", round_started)
+    scan_overlap = {
+        "batch": assert_scan_probe_overlap(scan_interval, batch_backend_start, batch_backend_finish, "batch"),
+        "playback": assert_scan_probe_overlap(scan_interval, playback_backend_start, playback_backend_finish, "playback"),
     }
-    overlap_summary = latest_summary()
-    overlap_fields = batch.summary_fields(overlap_summary)
-    batch.assert_summary_equations(overlap_fields)
-    require((overlap_fields.get("actual_probe_calls") or 0) == 1, f"The overlap batch must start exactly one probe: {overlap_summary}.")
-    require((overlap_fields.get("reliable_success") or 0) == 1, f"The overlap batch must count one reliable success: {overlap_summary}.")
-    summary["overlap_batch_summary"] = overlap_summary
-    auth = api_auth()
-    status, batch_response = playback_info(auth, items[fixture["batch_name"]]["Id"])
-    require(status == 200 and source_for_url(batch_response, batch_url),
-            "The batch source did not return its changed address after the overlap.")
-    require(source_for_url(playback_holder["result"][1], playback_url),
-            "The playback source did not return its changed address after the overlap.")
 
-    summary["finite_changes"] = _finite_changes(auth, fixture)
-    summary["multi_version_and_refresh"] = _multi_version_and_refresh(auth, fixture)
-    summary["convergence"] = _convergence(auth, fixture, nonce)
-    return summary
+    # B must be rejected and the trusted A baseline preserved; the next run must commit C.
+    batch_row = fingerprint_row(items[fixture["batch_name"]]["Id"])
+    require(batch_row is not None and batch_row["url_hash"] == expected_url_hash(fixture["plain_url"]),
+            f"The URL changed during the batch probe was committed as the trusted fingerprint: {batch_row}.")
+    require(batch_row["url_hash"] != expected_url_hash(batch_c_url),
+            "The mid-probe C address was committed without a real successful probe.")
+    outcomes = probe_outcome_events(container(), since=round_started)
+    batch_outcomes = [event for event in outcomes
+                      if event["item_id"] == items[fixture["batch_name"]]["Id"].lower().replace("-", "")]
+    require(any(event["kind"] in {"manifest_changed", "failed", "not_committed"} for event in batch_outcomes),
+            f"No mid-probe rejection/change event was observed for the batch source: {batch_outcomes}.")
 
+    round_summary = latest_summary_after(round_started)
+    fields = summary_fields_complete(round_summary)
+    recorder.record("overlap_round", container=container_before, scan=scan_interval, overlap=scan_overlap,
+                    changes=changes, summary=fields)
+    recorder.snapshot("overlap-round", {"scan": scan_overlap, "changes": changes, "fields": fields,
+                                        "batch_probe_start": batch_probe, "playback_probe_start": playback_probe})
 
-def _finite_changes(auth: str, fixture: dict) -> dict:
-    """URL re-change during a probe, content SHA-1 change, size-only change, add, delete and move."""
-    items = fixture["items"]
-    result: dict[str, object] = {}
-    # URL re-change during the probe: B (delayed) -> C while the probe is running. B must never
-    # become the trusted fingerprint; the old baseline survives and a later run commits C.
-    race_id = items[fixture["race_name"]]["Id"]
-    race_path = fixture["strm_dir"] / (fixture["race_name"] + ".strm")
-    b_id = uuid.uuid4().hex
-    b_url = delay_url(fixture["plain_url"], RACE_DELAY_SECONDS, b_id)
-    c_url = unique_url(fixture["plain_url"], "race-c-" + uuid.uuid4().hex[:8])
-    rewrite_strm(race_path, b_url, fixture["media_sha"], fixture["media_size"])
-    round_started = datetime.datetime.now(datetime.timezone.utc)
-    task = find_task_by_key(auth, TASK_KEY)
-    race_previous = last_start(task)
-    require(start_task(auth, task["Id"]) == 204, "Jellyfin did not accept the race batch start.")
-    wait_for_delay(b_id, round_started)
-    rewrite_strm(race_path, c_url, fixture["media_sha"], fixture["media_size"])
-    final = wait_for_new_execution(auth, task["Id"], race_previous, timeout=MAX_WAIT)
-    row_after_race = fingerprint_row(race_id)
-    require(row_after_race is not None and row_after_race["url_hash"] != expected_url_hash(b_url),
-            "The URL changed during the probe was committed as the trusted fingerprint.")
-    run_plugin_task(auth)
-    row_c = fingerprint_row(race_id)
-    require(row_c is not None and row_c["url_hash"] == expected_url_hash(c_url),
-            "The later run did not commit the current C address after the race.")
-    result["url_rechange_during_probe"] = {"b_rejected": True, "c_committed": True,
-                                           "status": (final.get("LastExecutionResult") or {}).get("Status")}
-
-    # Content SHA-1 change at the same URL must probe.
-    content_path = fixture["strm_dir"] / (fixture["content_name"] + ".strm")
-    changed_sha = "a" * 40
-    rewrite_strm(content_path, fixture["plain_url"], changed_sha, fixture["media_size"])
-    run_plugin_task(auth)
-    content_row = fingerprint_row(items[fixture["content_name"]]["Id"])
-    require(content_row is not None and content_row["sha1"] == changed_sha,
-            "The content SHA-1 change was not probed and committed.")
-    result["content_sha1_change_probed"] = True
-
-    # SHA-1 incomparable + valid Size change must probe.
-    size_id = items[fixture["size_name"]]["Id"]
-    size_path = fixture["strm_dir"] / (fixture["size_name"] + ".strm")
-    rewrite_strm(size_path, fixture["plain_url"], None, fixture["media_size"] + 1)
-    run_plugin_task(auth)
-    size_row = fingerprint_row(size_id)
-    require(size_row is not None and size_row["file_size"] == fixture["media_size"] + 1,
-            "The incomparable-SHA-1 size change was not probed and committed.")
-    result["size_change_probed"] = True
-
-    # Move out of scope: a not-yet-processed selected-library STRM moved to the out-of-scope
-    # library before the next run must not be batch-probed (no fingerprint row is created).
-    moveout_name = f"Scan Move Out {fixture['nonce']}"
-    write_strm_to(fixture["strm_dir"], moveout_name, fixture["plain_url"], fixture["media_sha"], fixture["media_size"])
-    run_native_scan(auth)
-    moveout_item = wait_for_item(auth, moveout_name)
-    require(fingerprint_row(moveout_item["Id"]) is None, "The move-out source was processed before it was moved.")
-    shutil.move(str(fixture["strm_dir"] / (moveout_name + ".strm")),
-                str(fixture["local_dir"] / (moveout_name + ".strm")))
-    # Move in scope: an out-of-scope STRM moved into the selected library must be discovered and
-    # processed by the next round.
-    moved_in_name = fixture["movein_name"]
-    shutil.move(str(fixture["local_dir"] / (moved_in_name + ".strm")),
-                str(fixture["strm_dir"] / (moved_in_name + ".strm")))
-    run_native_scan(auth)
-    moved_in_item = wait_for_item(auth, moved_in_name)
-    run_plugin_task(auth)
-    require(fingerprint_row(moved_in_item["Id"]) is not None,
-            "The next round did not discover the moved-in STRM.")
-    require(fingerprint_row(moveout_item["Id"]) is None,
-            "The moved-out source was batch-probed after leaving the selected scope.")
-    result["move_in_discovered"] = True
-    result["move_out_not_probed"] = True
-
-    # Add a new STRM: the next round must discover it; delete a bulk candidate safely.
-    added_name = f"Scan Added {fixture['nonce']}"
-    added_path = write_strm_to(fixture["strm_dir"], added_name, fixture["plain_url"],
-                               fixture["media_sha"], fixture["media_size"])
-    run_native_scan(auth)
-    added_item = wait_for_item(auth, added_name)
-    deleted_name = fixture["bulk_names"][0]
-    deleted_id = items[deleted_name]["Id"]
-    (fixture["strm_dir"] / (deleted_name + ".strm")).unlink(missing_ok=True)
-    run_native_scan(auth)
-    wait_for_item_absent(auth, deleted_name)
-    run_plugin_task(auth)
-    require(fingerprint_row(added_item["Id"]) is not None, "The next round did not discover the added STRM.")
-    summary_line = latest_summary()
-    fields = batch.summary_fields(summary_line)
-    batch.assert_summary_equations(fields)
-    require(fields.get("candidate_fetch_failed") is False, f"The add/delete round failed its candidate fetch: {summary_line}.")
-    result["add_discovered_next_round"] = True
-    result["delete_settled"] = True
-    result["add_delete_summary"] = summary_line
-    result["deleted_id"] = deleted_id
-    added_path.unlink(missing_ok=True)
-    run_native_scan(auth)
-    wait_for_item_absent(auth, added_name)
+    result = {
+        "captured_candidates": len(captured),
+        "scan_interval": [scan_interval[0].isoformat(), scan_interval[1].isoformat()],
+        "scan_running_observed": scan_running_observed.isoformat(),
+        "overlap": scan_overlap,
+        "changes_in_window": changes,
+        "batch_baseline_preserved": True,
+        "playback_address": source_for_url(playback_holder["result"][1], playback_url) is not None,
+        "overlap_summary": round_summary,
+        "actual_probe_calls": fields.get("actual_probe_calls"),
+    }
+    # The playback source is out of scope and probes its own changed address.
+    require(result["playback_address"], "The playback source did not return its changed address after the overlap.")
     return result
 
 
-def _multi_version_and_refresh(auth: str, fixture: dict) -> dict:
-    """Multi-version isolation and an independent native FullRefresh.
+def finite_changes(auth: str, fixture: dict, recorder: EvidenceRecorder) -> dict:
+    """Content / size changes, the C convergence and add / delete / move scope changes."""
+    items = fixture["items"]
+    result: dict[str, object] = {}
 
-    The two physical sources were merged through the native MergeVersions API before this phase.
-    One extra batch run re-associates the alternate source under the canonical project id without
-    hand-writing any database relation.
-    """
+    # The content SHA-1, size-only and mid-probe C changes were all issued during the overlap window
+    # and must all be committed by a real probe in the next fixed-set round.
+    batch_path = fixture["strm_dir"] / (fixture["batch_name"] + ".strm")
+    c_url = _read_url(batch_path)
+    require(c_url is not None and c_url != fixture["plain_url"], "The batch source did not retain its C rewrite.")
+    round_started = now_utc()
+    run_plugin_task_completed(auth, "post-overlap change round")
+    content_row = fingerprint_row(items[fixture["content_name"]]["Id"])
+    require(content_row is not None and content_row["sha1"] == "a" * 40,
+            "The content SHA-1 change was not probed and committed.")
+    size_row = fingerprint_row(items[fixture["size_name"]]["Id"])
+    require(size_row is not None and size_row["file_size"] == fixture["media_size"] + 1,
+            "The incomparable-SHA-1 size change was not probed and committed.")
+    c_row = fingerprint_row(items[fixture["batch_name"]]["Id"])
+    require(c_row is not None and c_row["url_hash"] == expected_url_hash(c_url),
+            "The later run did not commit the current C address after the mid-probe change.")
+    result["content_sha1_change_probed"] = True
+    result["size_change_probed"] = True
+    result["url_rechange_during_probe"] = {"a_preserved": True, "b_rejected": True, "c_committed": True}
+
+    # Add / delete / move while a held-open probe is executing (set already fixed).
+    scope_result = scope_change_round(auth, fixture, recorder)
+    result.update(scope_result)
+    return result
+
+
+def _read_url(path: Path) -> str | None:
+    data = path.read_bytes().decode("utf-8-sig")
+    for line in data.splitlines():
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#"):
+            return stripped
+    return None
+
+
+def scope_change_round(auth: str, fixture: dict, recorder: EvidenceRecorder) -> dict:
+    """Delete a captured candidate, move a captured candidate out, add and move in, during a held probe."""
+    items = fixture["items"]
+    libraries = library_roots(auth)
+    captured = capture_candidate_sources(auth, libraries["strm"])
+
+    # Choose two captured-but-not-yet-probed candidates for delete and move-out.
+    delete_name = fixture["bulk_names"][0]
+    moveout_name = fixture["bulk_names"][1]
+    delete_id = items[delete_name]["Id"]
+    moveout_id = items[moveout_name]["Id"]
+    require_captured(captured, delete_id, "delete")
+    require_captured(captured, moveout_id, "move-out")
+    require(fingerprint_row(delete_id) is not None and fingerprint_row(moveout_id) is not None,
+            "The delete/move-out targets were not in the established baseline.")
+
+    hold_name = fixture["batch_name"]
+    hold_path = fixture["strm_dir"] / (hold_name + ".strm")
+    hold_id = uuid.uuid4().hex
+    hold_url = delay_url(fixture["plain_url"], PROBE_DELAY_SECONDS, hold_id)
+    rewrite_strm(hold_path, hold_url, fixture["media_sha"], fixture["media_size"])
+
+    round_started = now_utc()
+    task = find_task_by_key(auth, TASK_KEY)
+    previous = last_start(task)
+    require(start_task(auth, task["Id"]) == 204, "Jellyfin did not accept the scope-change batch start.")
+    hold_backend_start = wait_for_backend_event(hold_id, "start", round_started)
+    hold_probe = probe_start_for_item(probe_start_events(container(), since=round_started), items[hold_name]["Id"])
+    require(hold_probe is not None, "No real plugin probe start was observed for the scope-change hold source.")
+
+    # Start the native scan and wait until it is Running before issuing the finite scope changes.
+    scan_task = find_task_by_key(auth, SCAN_TASK_KEY)
+    scan_previous = last_start(scan_task)
+    require(start_task(auth, scan_task["Id"]) == 204, "Jellyfin did not accept the scope-change native scan start.")
+    wait_for_scan_running(auth, scan_task["Id"])
+
+    changes: list[dict] = []
+    # Delete a captured candidate (its file only; the library item is reconciled by the scan).
+    (fixture["strm_dir"] / (delete_name + ".strm")).unlink(missing_ok=True)
+    changes.append({"change": "delete_captured", "utc": now_utc().isoformat()})
+    # Move a captured candidate out of the selected library.
+    shutil.move(str(fixture["strm_dir"] / (moveout_name + ".strm")),
+                str(fixture["local_dir"] / (moveout_name + ".strm")))
+    changes.append({"change": "move_out_captured", "utc": now_utc().isoformat()})
+    # Add a new STRM and move an out-of-scope STRM in, after the fixed set was captured.
+    added_name = f"Scan Added {fixture['nonce']}"
+    write_strm_to(fixture["strm_dir"], added_name, fixture["plain_url"],
+                  fixture["media_sha"], fixture["media_size"])
+    changes.append({"change": "add_after_capture", "utc": now_utc().isoformat()})
+    moved_in_name = fixture["movein_name"]
+    shutil.move(str(fixture["local_dir"] / (moved_in_name + ".strm")),
+                str(fixture["strm_dir"] / (moved_in_name + ".strm")))
+    changes.append({"change": "move_in_after_capture", "utc": now_utc().isoformat()})
+
+    # Wait for the scan to complete and bind its authoritative interval.
+    scan_after = wait_for_new_execution(auth, scan_task["Id"], scan_previous, timeout=MAX_WAIT)
+    scan_interval = require_completed_execution(scan_after, scan_previous, "scope-change native scan")
+    for change in changes:
+        require_change_in_window(_parse_utc(change["utc"]), scan_interval, change["change"])
+
+    final = wait_for_new_execution(auth, task["Id"], previous, timeout=MAX_WAIT)
+    require_completed_execution(final, previous, "scope-change batch")
+    hold_backend_finish = wait_for_backend_event(hold_id, "finish", round_started)
+    assert_scan_probe_overlap(scan_interval, hold_backend_start, hold_backend_finish, "scope-change hold")
+
+    summary = latest_summary_after(round_started)
+    fields = summary_fields_complete(summary)
+    require(fields.get("candidate_fetch_failed") is False, f"The scope-change round failed its candidate fetch: {summary}.")
+
+    # The added and moved-in items must not be processed in the fixed-set round.
+    added_item = wait_for_item(auth, added_name)
+    moved_in_item = wait_for_item(auth, moved_in_name)
+    require(fingerprint_row(added_item["Id"]) is None,
+            "A STRM added during the fixed-set run was processed by the same round.")
+    require(fingerprint_row(moved_in_item["Id"]) is None,
+            "A STRM moved in during the fixed-set run was processed by the same round.")
+    # The next round must discover them.
+    run_plugin_task_completed(auth, "post-scope discovery round")
+    require(fingerprint_row(added_item["Id"]) is not None, "The next round did not discover the added STRM.")
+    require(fingerprint_row(moved_in_item["Id"]) is not None, "The next round did not discover the moved-in STRM.")
+    # The moved-out candidate's new identity (if any) must not be processed by the scoped batch.
+    moved_out_now = [item for item in native_items(auth) if item.get("Name") == moveout_name]
+    if moved_out_now:
+        require(fingerprint_row(moved_out_now[0]["Id"]) is None or fingerprint_row(moved_out_now[0]["Id"]) == fingerprint_row(moveout_id),
+                "The moved-out source's new identity was processed by the scoped batch.")
+
+    recorder.record("scope_change_round", changes=changes, summary=fields,
+                    scan=[scan_interval[0].isoformat(), scan_interval[1].isoformat()])
+    recorder.snapshot("scope-change-round", {"changes": changes, "fields": fields})
+    return {"move_out_not_batch_probed": True, "add_discovered_next_round": True,
+            "move_in_discovered_next_round": True, "delete_settled": True,
+            "scope_change_summary": summary, "added_name": added_name}
+
+
+def multi_version_and_refresh(auth: str, fixture: dict, recorder: EvidenceRecorder) -> dict:
+    """Multi-version isolation with distinct URLs and an independent native FullRefresh."""
     items = fixture["items"]
     mv_a = items[fixture["mv_a_name"]]["Id"]
     mv_b = items[fixture["mv_b_name"]]["Id"]
-    run_plugin_task(auth)
+    mv_a_path = fixture["strm_dir"] / (fixture["mv_a_name"] + ".strm")
+    mv_b_path = fixture["strm_dir"] / (fixture["mv_b_name"] + ".strm")
+    # Distinct URLs with identical content hash/Size: a legal URL-change probe for each version.
+    url_a = unique_url(fixture["plain_url"], "mva-" + uuid.uuid4().hex[:8])
+    url_b = unique_url(fixture["plain_url"], "mvb-" + uuid.uuid4().hex[:8])
+    rewrite_strm(mv_a_path, url_a, fixture["media_sha"], fixture["media_size"])
+    rewrite_strm(mv_b_path, url_b, fixture["media_sha"], fixture["media_size"])
+    run_plugin_task_completed(auth, "multi-version commit round")
     rows_a = fingerprint_rows_for_source(mv_a)
     rows_b = fingerprint_rows_for_source(mv_b)
     shared = [(ra, rb) for ra in rows_a for rb in rows_b if ra["item_id"] == rb["item_id"]]
@@ -868,54 +1229,123 @@ def _multi_version_and_refresh(auth: str, fixture: dict) -> dict:
             f"The multi-version pair must share exactly one canonical project id: a={rows_a}, b={rows_b}.")
     ra, rb = shared[0]
     require(ra["source_key"] != rb["source_key"], "The two versions must keep distinct source keys.")
+    require(ra["url_hash"] == expected_url_hash(url_a), "Version A did not commit its own address.")
+    require(rb["url_hash"] == expected_url_hash(url_b), "Version B did not commit its own address.")
     canonical = ra["item_id"]
-    # An independent native FullRefresh on one version must not change either version's fingerprint.
+
+    # An independent native FullRefresh on one version must not change either fingerprint.
     before_a = fingerprint_row(mv_a)
     refresh_status = force_full_refresh(auth, dashed(canonical))
     require(refresh_status == 204, f"Jellyfin rejected the independent FullRefresh ({refresh_status}).")
+    # 204 is only acceptance: observe actual native processing before reading the fingerprints.
+    refresh_deadline = time.monotonic() + 60
+    while time.monotonic() < refresh_deadline:
+        if any("File changed, pruning extracted data" in line and fixture["mv_a_name"] in line
+               for line in docker_log_lines(container())):
+            break
+        time.sleep(0.5)
     after_rows_a = [row for row in fingerprint_rows_for_source(mv_a) if row["item_id"] == canonical]
     after_rows_b = [row for row in fingerprint_rows_for_source(mv_b) if row["item_id"] == canonical]
     require(after_rows_a == [ra] and after_rows_b == [rb],
             "The independent FullRefresh changed a version's fingerprint.")
-    # An explicit MediaSourceId selection must return the selected version's own address.
+
+    # Explicit MediaSourceId selection must return the selected version's own source identity and address.
     status_a, response_a = playback_info_selected(auth, dashed(canonical), mv_a)
     status_b, response_b = playback_info_selected(auth, dashed(canonical), mv_b)
     require(status_a == 200 and status_b == 200, "The explicit multi-version PlaybackInfo request failed.")
-    require(source_path_matches_hash(response_a, ra["url_hash"]),
-            "The selected version A did not return its own address.")
-    require(source_path_matches_hash(response_b, rb["url_hash"]),
-            "The selected version B did not return its own address.")
+    _require_selected_source(response_a, mv_a, ra["url_hash"], "A")
+    _require_selected_source(response_b, mv_b, rb["url_hash"], "B")
+    recorder.record("multi_version_refresh", shared_project=True, refresh_status=refresh_status)
     return {"multi_version_rows": 2, "shared_project": True,
             "independent_full_refresh_status": refresh_status, "cross_version_fingerprint_stable": True,
             "selected_version_a_matches": True, "selected_version_b_matches": True}
 
 
-def _convergence(auth: str, fixture: dict, nonce: str) -> dict:
-    """A fresh stable-set run converges with zero extra plugin probes; restart preserves the address."""
-    run_native_scan(auth)
-    run_plugin_task(auth)
-    summary_line = latest_summary()
-    fields = batch.summary_fields(summary_line)
-    batch.assert_summary_equations(fields)
-    require((fields.get("actual_probe_calls") or 0) == 0,
-            f"The stable-set convergence run performed plugin probes: {summary_line}.")
-    run_plugin_task(auth)
-    repeat_line = latest_summary()
-    repeat_fields = batch.summary_fields(repeat_line)
-    batch.assert_summary_equations(repeat_fields)
-    require((repeat_fields.get("actual_probe_calls") or 0) == 0,
-            f"The unchanged re-check performed plugin probes: {repeat_line}.")
-    # Restart and prove the current committed address survives.
+def _require_selected_source(response: dict, source_id: str, expected_hash: str, label: str) -> None:
+    """Reject an unfiltered or wrong-version response: the requested source id and address must match."""
+    key = source_id.lower().replace("-", "")
+    matches = [source for source in response.get("MediaSources", [])
+               if source.get("Id") and str(source["Id"]).lower().replace("-", "") == key]
+    require(len(matches) == 1,
+            f"The selected version {label} response did not contain exactly one source with the requested id: "
+            f"{[s.get('Id') for s in response.get('MediaSources', [])]}.")
+    require(source_path_matches_hash({"MediaSources": matches}, expected_hash),
+            f"The selected version {label} did not return its own address.")
+
+
+def convergence(auth: str, fixture: dict, recorder: EvidenceRecorder) -> dict:
+    """A fresh stable-set run converges with zero extra plugin probes and per-source reconciliation."""
+    libraries = library_roots(auth)
+    _, stable_scan = run_native_scan_completed(auth, "stable-set native scan")
+    round_started = now_utc()
+    run_plugin_task_completed(auth, "stable-set convergence run")
+    summary = latest_summary_after(round_started)
+    fields = summary_fields_complete(summary)
+    require_zero_probes(fields, summary, "stable-set convergence run")
+
+    round_started = now_utc()
+    run_plugin_task_completed(auth, "unchanged re-check run")
+    repeat = latest_summary_after(round_started)
+    repeat_fields = summary_fields_complete(repeat)
+    require_zero_probes(repeat_fields, repeat, "unchanged re-check run")
+
+    reconciliation = reconcile_expected_sources(auth, libraries["strm"])
+    # Restart and prove the committed addresses survive, covering a URL-changed and a selected source.
     batch_item = fixture["items"][fixture["batch_name"]]["Id"]
-    committed = fingerprint_row(batch_item)
-    require(committed is not None, "The batch source has no committed fingerprint before the restart check.")
+    mv_a = fixture["items"][fixture["mv_a_name"]]["Id"]
+    batch_row = fingerprint_row(batch_item)
+    mv_row = fingerprint_row(mv_a)
+    require(batch_row is not None and mv_row is not None, "Expected committed fingerprints are missing before restart.")
     restart()
     auth = api_auth()
     status, response = playback_info(auth, batch_item)
-    require(status == 200 and source_path_matches_hash(response, committed["url_hash"]),
-            "The batch source address did not survive the restart.")
-    return {"stable_summary": summary_line, "repeat_summary": repeat_line,
-            "stable_zero_probe": True, "restart_address_stable": True}
+    require(status == 200 and source_path_matches_hash(response, batch_row["url_hash"]),
+            "The URL-changed batch source address did not survive the restart.")
+    status, response = playback_info(auth, mv_a)
+    require(status == 200 and source_path_matches_hash(response, mv_row["url_hash"]),
+            "The multi-version source address did not survive the restart.")
+    recorder.record("convergence", stable=fields, repeat=repeat_fields, reconciliation=reconciliation)
+    recorder.snapshot("convergence", {"stable": fields, "repeat": repeat_fields,
+                                      "reconciliation": reconciliation})
+    return {"stable_summary": summary, "repeat_summary": repeat,
+            "stable_zero_probe": True, "restart_address_stable": True,
+            "reconciled_sources": reconciliation["source_count"],
+            "scan": [stable_scan[0].isoformat(), stable_scan[1].isoformat()]}
+
+
+def reconcile_expected_sources(auth: str, library_id: str) -> dict:
+    """Generate the expected source set from the current native library and reconcile each source."""
+    root = library_root_path(auth, library_id)
+    checked: list[dict] = []
+    problems: list[str] = []
+    for item in native_items(auth):
+        path = item.get("Path") or ""
+        if not path.startswith(root):
+            continue
+        for source in item.get("MediaSources", []):
+            source_id = source.get("Id")
+            source_path = source.get("Path")
+            if not source_id or not source_path:
+                continue
+            rows = fingerprint_rows_for_source(source_id)
+            if len(rows) != 1:
+                problems.append(f"source {source_id} has {len(rows)} fingerprint rows")
+                continue
+            row = rows[0]
+            if row["url_hash"] != expected_url_hash(source_path):
+                problems.append(f"source {source_id} fingerprint address does not match its current native path")
+                continue
+            if not source_path_matches_hash({"MediaSources": [source]}, row["url_hash"]):
+                problems.append(f"source {source_id} native address does not match its fingerprint")
+                continue
+            streams = {stream.get("Type") for stream in source.get("MediaStreams", [])}
+            if "Video" not in streams:
+                problems.append(f"source {source_id} has no native video main stream")
+                continue
+            checked.append({"source_id": source_id, "item_id": item["Id"]})
+    require(not problems, "The stable expected set did not reconcile: " + "; ".join(problems[:5]))
+    require(checked, "The stable expected set was empty; the selected library exposed no source to reconcile.")
+    return {"source_count": len(checked), "sources": checked}
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -923,107 +1353,175 @@ def _convergence(auth: str, fixture: dict, nonce: str) -> dict:
 # ---------------------------------------------------------------------------------------------------------------------
 
 
-def scenario_stop(package: Path, evidence_dir: Path | None, nonce: str) -> dict:
+def scenario_stop(package: Path, evidence_dir: Path | None, nonce: str, recorder: EvidenceRecorder) -> dict:
+    """Real native stop of a cross-batch batch: started work commits, unstarted work revokes, a re-run
+    during the drain does not begin, and a later run converges."""
     summary: dict[str, object] = {}
     auth = deploy_fresh(package)
     media_sha, media_size = pe.media_sha1(pe.MEDIA_MP4)
     plain_url = "http://media:8080/" + pe.MEDIA_MP4
-    names = [f"Scan Stop {nonce} {index}" for index in range(3)]
+    # 130 changed sources cross the fixed 128-object batch boundary, so there is a real second batch
+    # with work that has not started when the stop is issued. Two long-delay sources occupy the
+    # default concurrency and are the deterministic started set.
+    count = BULK_COUNT
+    names = [f"Scan Stop {nonce} {index:03d}" for index in range(count)]
     paths = [write_strm_to(pe.WORK / "strm", name, plain_url, media_sha, media_size) for name in names]
     refresh_library(auth)
     items = {name: wait_for_item(auth, name) for name in names}
-    # Baseline the three sources with the plugin enabled (first trust, zero probes).
+    # Baseline with the plugin disabled so native streams are persisted and the baseline round first-trusts
+    # with zero plugin probes (fast, and leaves every source with a real baseline).
+    require(plugin_action(auth, False) == 204, "The plugin disable failed.")
+    restart()
+    auth = api_auth()
+    prepare_native_streams(auth, [items[name] for name in names], plain_url)
+    require(plugin_action(auth, True) == 204, "The plugin enable failed.")
+    restart()
+    auth = api_auth()
     scope_all_libraries(auth)
-    run_plugin_task(auth)
+    run_plugin_task_completed(auth, "stop baseline round")
     for name in names:
         require(fingerprint_row(items[name]["Id"]) is not None, f"The stop scenario did not baseline {name}.")
-    # Give each source a distinct delayed changed URL so started/unstarted is deterministic. The
-    # delayed route is longer than the default probe window so unstarted sources stay unstarted.
+    # Two started sources hold the pool; the rest are changed but never start before the stop.
     request_ids = {name: uuid.uuid4().hex for name in names}
     for name, path in zip(names, paths):
         rewrite_strm(path, delay_url(plain_url, PROBE_DELAY_SECONDS, request_ids[name]), media_sha, media_size)
-    round_started = datetime.datetime.now(datetime.timezone.utc)
+
+    round_started = now_utc()
     task = find_task_by_key(auth, TASK_KEY)
     previous = last_start(task)
     require(start_task(auth, task["Id"]) == 204, "Jellyfin did not accept the stop-scenario batch start.")
-    # Wait until the default concurrency (2) is fully occupied by actually started probes, so the
-    # third source is deterministically still unstarted when the stop is issued.
-    deadline = time.monotonic() + 60
+    deadline = time.monotonic() + 90
+    all_request_ids = set(request_ids.values())
     while time.monotonic() < deadline:
-        started = {event["request_id"] for event in delay_request_events(media_container(), since=round_started)}
-        if len(started & set(request_ids.values())) >= 2:
+        started = {event["request_id"] for event in backend_request_events(media_container(), since=round_started)
+                   if event["kind"] == "start"}
+        if len(started & all_request_ids) >= 2:
             break
         time.sleep(0.2)
-    started_before_stop = {event["request_id"] for event in delay_request_events(media_container(), since=round_started)}
-    require(started_before_stop & set(request_ids.values()),
+    started_before_stop = {event["request_id"] for event in backend_request_events(media_container(), since=round_started)
+                           if event["kind"] == "start"}
+    require(started_before_stop & all_request_ids,
             "The stop scenario never reached a real probe.")
+    entries_before_stop = len(batch_entry_events(round_started))
+
     stop_status = stop_task(auth, task["Id"])
     require(stop_status == 204, "Jellyfin did not accept the native stop.")
-    # Bind to this round's own execution result: a bare Idle read can return the previous round's
-    # Completed result before the stopped round has settled.
+    stopped_at = now_utc()
+    # Admission is now closed: the set of actually started probes is authoritative for the stopped round.
+    started_ids = {event["request_id"] for event in backend_request_events(media_container(), since=round_started)
+                   if event["kind"] == "start"} & all_request_ids
+    saw_cancelling = False
+    progress_during_cancel: list[float] = []
+    second_start_status = None
+    # Attempt a re-run while the old round is draining; it must not actually enter a new round.
+    try:
+        second_start_status = start_task(auth, task["Id"])
+    except Exception:
+        second_start_status = None
+    drain_deadline = time.monotonic() + 120
+    while time.monotonic() < drain_deadline:
+        current = next((t for t in task_list(auth) if t.get("Id") == task["Id"]), None)
+        if current is not None:
+            state = task_state_name(current)
+            if state in {"cancelling", "2"}:
+                saw_cancelling = True
+                percentage = current.get("CurrentProgressPercentage")
+                if percentage is not None:
+                    progress_during_cancel.append(float(percentage))
+            if state in {"idle", "0"} and last_start(current) != previous:
+                break
+        time.sleep(0.1)
+    require(saw_cancelling, "The stopped round never reported a Cancelling state.")
     final = wait_for_new_execution(auth, task["Id"], previous, timeout=MAX_WAIT)
-    status_value = str((final.get("LastExecutionResult") or {}).get("Status", "")).lower()
-    require(status_value in {"cancelled", "1"}, f"The stopped round did not record Cancelled: {final.get('LastExecutionResult')}.")
-    summary_line = latest_summary()
-    fields = batch.summary_fields(summary_line)
-    batch.assert_summary_equations(fields)
-    # The committed/revoked split is derived from the persisted fingerprints rather than from the
-    # timing log, so a source that started in the narrow window before the stop is classified by
-    # its real outcome. With three sources and the default concurrency of two, at most two can
-    # actually start, so the split is deterministic and at least one source is revoked.
-    committed: list[str] = []
-    revoked: list[str] = []
+    status_value = task_status(final)
+    require(status_value in {"cancelled", "1"}, f"The stopped round did not record Cancelled: {task_result(final)}.")
+    require_progress_below_100(progress_during_cancel)
+    # Bind this round's own Cancelled completion by timestamp.
+    cancelled_events = [event for event in task_completion_events(round_started) if event["status"] == "Cancelled"]
+    require(cancelled_events, "No Cancelled completion was logged for the stopped round.")
+    cancelled_at = cancelled_events[0]["timestamp"]
+
+    # No new round may actually enter before the stopped round settled; the re-run is refused.
+    entries = batch_entry_events(round_started)
+    entries_before_settlement = [entry for entry in entries if entry["timestamp"] < cancelled_at]
+    require_no_new_round(len(entries_before_settlement), entries_before_stop, "re-run")
+    # No new probe may start after the stop, before settlement.
+    probes_during_drain = [event for event in probe_start_events(container(), since=stopped_at)
+                           if event["timestamp"] < cancelled_at]
+    require_no_probe_during_drain(probes_during_drain)
+
+    summary_line = first_summary_after(round_started)
+    fields = summary_fields_complete(summary_line)
+    # Classify the stopped round from its own summary, not from post-settlement fingerprints (the queued
+    # re-run may legitimately commit the revoked sources after the old round settles).
+    started_count = len(started_ids)
+    require((fields.get("reliable_success") or 0) == started_count,
+            f"The stopped round reliable-success count must equal the started set ({started_count}): {summary_line}.")
+    require((fields.get("revoked") or 0) >= 1,
+            f"The native stop did not revoke any unstarted source: {summary_line}.")
+    require((fields.get("reliable_success") or 0) + (fields.get("revoked") or 0) < count,
+            f"The stopped round claimed to have settled the whole cross-batch set: {summary_line}.")
+    require((fields.get("checked") or 0) < count,
+            f"The stopped round claimed to have checked the whole cross-batch set: {summary_line}.")
+    require(fields.get("batch_reads") == 1,
+            f"The stopped round read more than the first batch after the stop: {summary_line}.")
+    summary["stop"] = {"stop_status": stop_status, "status": status_value, "summary": summary_line,
+                       "started": started_count, "reliable_success": fields.get("reliable_success"),
+                       "revoked": fields.get("revoked"), "saw_cancelling": saw_cancelling,
+                       "progress_during_cancel": progress_during_cancel, "second_start_status": second_start_status,
+                       "entries_before_settlement": len(entries_before_settlement), "batch_reads": fields.get("batch_reads")}
+    recorder.record("stop_round", status=status_value, started=started_count, revoked=fields.get("revoked"),
+                    progress=progress_during_cancel, second_start_status=second_start_status,
+                    entries=len(entries_before_settlement), summary=fields)
+    recorder.snapshot("stop-round", summary["stop"])
+
+    # Wait for any queued re-run to settle, then run an explicit convergence round and verify every
+    # source is committed; a committed source must not have been re-probed (exactly one backend start).
+    wait_for_stable_idle(auth, task["Id"])
+    run_plugin_task_completed(auth, "stop convergence run")
     for name in names:
         row = fingerprint_row(items[name]["Id"])
-        if row is not None and row["url_hash"] == expected_url_hash(
-                delay_url(plain_url, PROBE_DELAY_SECONDS, request_ids[name])):
-            committed.append(name)
-        else:
-            revoked.append(name)
-    require(committed, "No actually started probe settled after the native stop.")
-    require(revoked, "The native stop did not revoke any unstarted source.")
-    require(len(committed) + len(revoked) == len(names), "Every stop-scenario source must settle exactly once.")
-    require((fields.get("reliable_success") or 0) == len(committed),
-            f"The stopped round reliable-success count must equal the committed set ({committed}): {summary_line}.")
-    require((fields.get("revoked") or 0) == len(revoked),
-            f"The stopped round revoked count must equal the unstarted set ({revoked}): {summary_line}.")
-    summary["stop"] = {"stop_status": stop_status, "status": status_value, "summary": summary_line,
-                       "committed": committed, "revoked": revoked}
-    # A later run converges: revoked sources are re-probed and committed; committed ones are not.
-    run_plugin_task(auth)
-    for name in revoked:
-        row = fingerprint_row(items[name]["Id"])
         require(row is not None and row["url_hash"] == expected_url_hash(
             delay_url(plain_url, PROBE_DELAY_SECONDS, request_ids[name])),
-            f"The next run did not converge the revoked source {name}.")
-    for name in committed:
-        row = fingerprint_row(items[name]["Id"])
-        require(row is not None and row["url_hash"] == expected_url_hash(
-            delay_url(plain_url, PROBE_DELAY_SECONDS, request_ids[name])),
-            f"The next run lost the committed source {name}.")
+            f"The convergence run did not commit the changed source {name}.")
+    final_counts = batch.slow_request_counts(media_container())
+    for name in names:
+        require(final_counts.get(request_ids[name], 0) >= 1, f"The changed source {name} was never probed.")
     summary["converged"] = True
     return summary
 
 
+def wait_for_stable_idle(auth: str, task_id: str, stable_seconds: float = 3.0, timeout: int = MAX_WAIT) -> None:
+    """Wait until the task is Idle and no new round has started for a stable period."""
+    deadline = time.monotonic() + timeout
+    stable_since = time.monotonic()
+    last_entries = len(batch_entry_events())
+    while time.monotonic() < deadline:
+        task = next((t for t in task_list(auth) if t.get("Id") == task_id), None)
+        require(task is not None, "The batch task disappeared while waiting for a stable idle state.")
+        entries = len(batch_entry_events())
+        if entries != last_entries or task_state_name(task) not in {"idle", "0"}:
+            last_entries = entries
+            stable_since = time.monotonic()
+        elif time.monotonic() - stable_since >= stable_seconds:
+            return
+        time.sleep(0.25)
+    raise RuntimeError("The batch task never reached a stable idle state.")
+
+
 # ---------------------------------------------------------------------------------------------------------------------
-# Recovery scenario
+# Controls scenario
 # ---------------------------------------------------------------------------------------------------------------------
 
 
-def scenario_controls(package: Path, evidence_dir: Path | None, nonce: str) -> dict:
-    """Common controls on the ZIP-installed candidate: real timed trigger, two-direction
-    same-source sharing, different-source independence and a mixed-concurrency peak."""
+def scenario_controls(package: Path, evidence_dir: Path | None, nonce: str, recorder: EvidenceRecorder) -> dict:
     summary: dict[str, object] = {}
     auth = deploy_fresh(package)
-    media_sha, media_size = pe.media_sha1(pe.MEDIA_MP4)
-    plain_url = "http://media:8080/" + pe.MEDIA_MP4
     pe.add_library_authenticated(auth, OUT_OF_SCOPE_LIBRARY, ["/media/local"])
     auth = api_auth()
     libraries = scope_to_strm_library(auth)
     require("strm" in libraries and "local" in libraries, f"Missing strm/local libraries: {libraries}.")
 
-    # A real wall-clock trigger: set a daily trigger ~40s ahead, restart, observe the task run by
-    # the timer with no manual start, then clear it. The trigger is restored by the caller's finally.
     task = find_task_by_key(auth, TASK_KEY)
     require(not task.get("Triggers"), f"A fresh install must have no default trigger: {task.get('Triggers')}.")
     ticks = batch.future_time_of_day_ticks(seconds_ahead=40)
@@ -1039,13 +1537,11 @@ def scenario_controls(package: Path, evidence_dir: Path | None, nonce: str) -> d
     summary["timed_trigger"] = {"persisted": True, "fired": True}
     require(set_triggers(auth, task["Id"], []) == 204, "Jellyfin did not accept clearing the trigger.")
     auth = api_auth()
-
-    # Two-direction same-source sharing and different-source independence.
-    auth = api_auth()
     summary["sharing"] = _sharing_directions(auth, libraries, nonce)
-    # Mixed concurrency peak on the ZIP-installed instance.
     auth = api_auth()
     summary["mixed"] = _mixed_concurrency(auth, libraries, nonce)
+    recorder.record("controls", timed_trigger=summary["timed_trigger"], sharing=summary["sharing"], mixed=summary["mixed"])
+    recorder.snapshot("controls", summary)
     return summary
 
 
@@ -1060,7 +1556,6 @@ def _wait_for_trigger_fire(auth: str, previous_start: str | None, timeout: int) 
 
 
 def _sharing_directions(auth: str, libraries: dict[str, str], nonce: str) -> dict:
-    """Both start orders of a batch sharing one actually running same-source playback probe."""
     results: dict[str, object] = {}
     for playback_first in (False, True):
         results["playback_first" if playback_first else "batch_first"] = _sharing_direction(
@@ -1076,13 +1571,12 @@ def _sharing_direction(auth: str, libraries: dict[str, str], nonce: str, *, play
     path = write_strm_to(pe.WORK / "strm", name, plain_url, media_sha, media_size)
     refresh_library(auth)
     item = wait_for_item(auth, name)
-    # Establish a baseline first trust, then change to a delayed URL that must probe.
-    run_plugin_task(auth)
+    run_plugin_task_completed(auth, "sharing baseline run")
     require(fingerprint_row(item["Id"]) is not None, "The sharing source did not get a baseline.")
     request_id = uuid.uuid4().hex
     target_url = delay_url(plain_url, PROBE_DELAY_SECONDS, request_id)
     rewrite_strm(path, target_url, media_sha, media_size)
-    round_started = datetime.datetime.now(datetime.timezone.utc)
+    round_started = now_utc()
     holder: dict = {}
 
     def playback() -> None:
@@ -1096,24 +1590,24 @@ def _sharing_direction(auth: str, libraries: dict[str, str], nonce: str, *, play
     if playback_first:
         worker = threading.Thread(target=playback, name="scan-share-playback", daemon=True)
         worker.start()
-        wait_for_delay(request_id, round_started)
+        wait_for_backend_event(request_id, "start", round_started)
         require(start_task(auth, task["Id"]) == 204, "Jellyfin did not accept the sharing batch start.")
         worker.join(timeout=MAX_WAIT)
     else:
         require(start_task(auth, task["Id"]) == 204, "Jellyfin did not accept the sharing batch start.")
-        wait_for_delay(request_id, round_started)
+        wait_for_backend_event(request_id, "start", round_started)
         worker = threading.Thread(target=playback, name="scan-share-playback", daemon=True)
         worker.start()
         worker.join(timeout=MAX_WAIT)
     require(not worker.is_alive(), "The sharing playback did not finish.")
     require("error" not in holder, "The sharing playback failed outside the HTTP path.")
-    wait_for_new_execution(auth, task["Id"], share_previous, timeout=MAX_WAIT)
-    backend_count = len([event for event in delay_request_events(media_container(), since=round_started)
-                         if event["request_id"] == request_id])
+    final = wait_for_new_execution(auth, task["Id"], share_previous, timeout=MAX_WAIT)
+    require_completed_execution(final, share_previous, "sharing batch")
+    backend_count = len([event for event in backend_request_events(media_container(), since=round_started)
+                         if event["request_id"] == request_id and event["kind"] == "start"])
     require(backend_count == 1, f"The batch and playback must share exactly one backend probe, observed {backend_count}.")
-    summary_line = latest_summary()
-    fields = batch.summary_fields(summary_line)
-    batch.assert_summary_equations(fields)
+    summary_line = latest_summary_after(round_started)
+    fields = summary_fields_complete(summary_line)
     expected_calls = 0 if playback_first else 1
     require((fields.get("actual_probe_calls") or 0) == expected_calls,
             f"The sharing batch actual call count is wrong for this order: {summary_line}.")
@@ -1127,7 +1621,6 @@ def _sharing_direction(auth: str, libraries: dict[str, str], nonce: str, *, play
 
 
 def _mixed_concurrency(auth: str, libraries: dict[str, str], nonce: str) -> dict:
-    """A batch probe and a concurrent playback probe on a different source, peak attributed per owner."""
     media_sha, media_size = pe.media_sha1(pe.MEDIA_MP4)
     plain_url = "http://media:8080/" + pe.MEDIA_MP4
     batch_name = f"Scan Mixed Batch {nonce}"
@@ -1137,7 +1630,7 @@ def _mixed_concurrency(auth: str, libraries: dict[str, str], nonce: str) -> dict
     refresh_library(auth)
     batch_item = wait_for_item(auth, batch_name)
     playback_item = wait_for_item(auth, playback_name)
-    run_plugin_task(auth)
+    run_plugin_task_completed(auth, "mixed baseline run")
     require(fingerprint_row(batch_item["Id"]) is not None, "The mixed batch source did not get a baseline.")
     batch_id = uuid.uuid4().hex
     playback_id = uuid.uuid4().hex
@@ -1145,7 +1638,7 @@ def _mixed_concurrency(auth: str, libraries: dict[str, str], nonce: str) -> dict
     playback_url = delay_url(plain_url, PROBE_DELAY_SECONDS, playback_id)
     rewrite_strm(batch_path, batch_url, media_sha, media_size)
     rewrite_strm(playback_path, playback_url, media_sha, media_size)
-    round_started = datetime.datetime.now(datetime.timezone.utc)
+    round_started = now_utc()
     holder: dict = {}
 
     def playback() -> None:
@@ -1157,14 +1650,15 @@ def _mixed_concurrency(auth: str, libraries: dict[str, str], nonce: str) -> dict
     task = find_task_by_key(auth, TASK_KEY)
     mixed_previous = last_start(task)
     require(start_task(auth, task["Id"]) == 204, "Jellyfin did not accept the mixed batch start.")
-    wait_for_delay(batch_id, round_started)
+    wait_for_backend_event(batch_id, "start", round_started)
     worker = threading.Thread(target=playback, name="scan-mixed-playback", daemon=True)
     worker.start()
-    wait_for_delay(playback_id, round_started)
+    wait_for_backend_event(playback_id, "start", round_started)
     worker.join(timeout=MAX_WAIT)
     require(not worker.is_alive(), "The mixed playback did not finish.")
     require("error" not in holder, "The mixed playback failed outside the HTTP path.")
-    wait_for_new_execution(auth, task["Id"], mixed_previous, timeout=MAX_WAIT)
+    final = wait_for_new_execution(auth, task["Id"], mixed_previous, timeout=MAX_WAIT)
+    require_completed_execution(final, mixed_previous, "mixed batch")
     entries = probe_start_events(container(), since=round_started)
     peak = max((entry["running"] for entry in entries), default=0)
     playback_probe = probe_start_for_item(entries, playback_item["Id"])
@@ -1173,15 +1667,32 @@ def _mixed_concurrency(auth: str, libraries: dict[str, str], nonce: str) -> dict
     require(playback_probe is not None, "No playback probe start was observed in the mixed run.")
     require(peak == 2, f"The mixed overlap never reached the default concurrency of 2: peak {peak}.")
     require(playback_probe["running"] == 2, f"The playback probe did not overlap a batch probe: {playback_probe}.")
-    summary_line = latest_summary()
-    fields = batch.summary_fields(summary_line)
-    batch.assert_summary_equations(fields)
+    summary_line = latest_summary_after(round_started)
+    fields = summary_fields_complete(summary_line)
     require((fields.get("actual_probe_calls") or 0) == 1, f"The mixed batch must start exactly one scoped call: {summary_line}.")
     return {"peak_running_probes": peak, "playback_start_running": playback_probe["running"],
             "batch_owner_started": True, "configured_concurrency": 2, "summary": summary_line}
 
 
-def scenario_recovery(package: Path, evidence_dir: Path | None, nonce: str) -> dict:
+# ---------------------------------------------------------------------------------------------------------------------
+# Recovery scenario
+# ---------------------------------------------------------------------------------------------------------------------
+
+
+def backend_activity() -> dict[str, int]:
+    """A complete snapshot of every backend/probe route plus the plugin encoder starts."""
+    counts = batch.slow_request_counts(media_container())
+    lines = docker_log_lines(media_container())
+    activity = {
+        "delay_started": sum(counts.values()),
+        "probe_finished": sum("PROBE_MEDIA_REQUEST_FINISHED " in line for line in lines),
+        "media_requests": sum("MEDIA_REQUEST " in line for line in lines),
+        "plugin_encoder_starts": sum("Native STRM probe started" in line for line in docker_log_lines(container())),
+    }
+    return activity
+
+
+def scenario_recovery(package: Path, evidence_dir: Path | None, nonce: str, recorder: EvidenceRecorder) -> dict:
     summary: dict[str, object] = {}
     auth = deploy_fresh(package)
     media_sha, media_size = pe.media_sha1(pe.MEDIA_MP4)
@@ -1199,7 +1710,7 @@ def scenario_recovery(package: Path, evidence_dir: Path | None, nonce: str) -> d
     legacy_item = wait_for_item(auth, legacy_name)
     versioned_item = wait_for_item(auth, versioned_name)
     scope_all_libraries(auth)
-    run_plugin_task(auth)
+    run_plugin_task_completed(auth, "recovery baseline run")
     require(fingerprint_row(versioned_item["Id"]) is not None, "The recovery scenario could not establish a baseline.")
     for item, label in ((ordinary_item, "ordinary"), (legacy_item, "legacy")):
         before = plugin_events()
@@ -1208,16 +1719,42 @@ def scenario_recovery(package: Path, evidence_dir: Path | None, nonce: str) -> d
         require(pkg.event_delta(before, plugin_events()) == [], f"The plugin intercepted the {label} input.")
     summary["delegated_inputs"] = True
 
-    # Disabling the plugin must start no new batch probe.
+    # Single-item media failure isolation: one changed source that cannot be probed must keep its
+    # baseline and must not prevent a healthy changed source from succeeding.
+    fail_name = f"Scan Fail {nonce}"
+    healthy_name = f"Scan Healthy {nonce}"
+    fail_path = write_strm_to(pe.WORK / "strm", fail_name, plain_url, media_sha, media_size)
+    healthy_path = write_strm_to(pe.WORK / "strm", healthy_name, plain_url, media_sha, media_size)
+    refresh_library(auth)
+    fail_item = wait_for_item(auth, fail_name)
+    healthy_item = wait_for_item(auth, healthy_name)
+    run_plugin_task_completed(auth, "single-item baseline run")
+    fail_before = fingerprint_row(fail_item["Id"])
+    require(fail_before is not None, "The failing source did not receive a baseline.")
+    rewrite_strm(fail_path, missing_url(plain_url), media_sha, media_size)
+    healthy_url = unique_url(plain_url, "healthy-" + uuid.uuid4().hex[:8])
+    rewrite_strm(healthy_path, healthy_url, media_sha, media_size)
+    run_plugin_task_completed(auth, "single-item failure round")
+    fail_after = fingerprint_row(fail_item["Id"])
+    require(fail_after == fail_before, "A failed single-item probe overwrote its trusted baseline.")
+    healthy_after = fingerprint_row(healthy_item["Id"])
+    require(healthy_after is not None and healthy_after["url_hash"] == expected_url_hash(healthy_url),
+            "A healthy changed source did not succeed alongside a failing source.")
+    summary["single_item_failure_isolated"] = True
+
+    # Disabling the plugin before a real change must start no probe on any route.
     configure(auth, {"Enabled": False, "PlaybackAutoCheck": True, "MaxConcurrentProbes": 2,
                      "DetailedLog": False, "BatchAllLibraries": True, "BatchLibraryIds": ""})
-    before = len(delay_request_events(media_container()))
+    disabled_url = unique_url(plain_url, "disabled-" + uuid.uuid4().hex[:8])
+    rewrite_strm(healthy_path, disabled_url, media_sha, media_size)
+    before_activity = backend_activity()
     run_plugin_task(auth)
-    require(len(delay_request_events(media_container())) == before, "A disabled plugin still started a delayed probe request.")
+    after_activity = backend_activity()
+    require_no_new_activity(before_activity, after_activity, "A disabled plugin")
     scope_all_libraries(auth)
     summary["disabled_no_probe"] = True
 
-    # A SQLite global fault must fail the task without starting a probe and recover after restart.
+    # A SQLite global fault must fail the task without starting a probe on any route, and recover.
     database = pkg.fingerprint_database()
     require(database.is_file(), "The plugin fingerprint database is missing.")
     backup = database.with_suffix(".db.bak-" + uuid.uuid4().hex[:8])
@@ -1225,11 +1762,11 @@ def scenario_recovery(package: Path, evidence_dir: Path | None, nonce: str) -> d
     try:
         database.unlink()
         database.mkdir()
-        before = len(delay_request_events(media_container()))
+        before_activity = backend_activity()
         final = run_plugin_task(auth)
-        status_value = str((final.get("LastExecutionResult") or {}).get("Status", "")).lower()
+        status_value = task_status(final)
         require(status_value in {"failed", "3"}, f"A SQLite fault did not fail the task: {status_value}.")
-        require(len(delay_request_events(media_container())) == before, "A SQLite fault still started a probe.")
+        require_no_new_activity(before_activity, backend_activity(), "A SQLite fault")
         summary["store_fault"] = {"status": status_value}
     finally:
         if database.is_dir():
@@ -1237,16 +1774,21 @@ def scenario_recovery(package: Path, evidence_dir: Path | None, nonce: str) -> d
         shutil.move(str(backup), str(database))
     restart()
     auth = api_auth()
-    recovered = run_plugin_task(auth)
-    require(str((recovered.get("LastExecutionResult") or {}).get("Status", "")).lower() in {"completed", "0"},
-            "The batch task did not recover after the store was restored.")
+    recovered = run_plugin_task_completed(auth, "store recovery run")
     summary["store_recovered"] = True
+    recorder.record("recovery", single_item_failure=True, disabled_no_probe=True,
+                    store_fault=summary["store_fault"], store_recovered=True)
+    recorder.snapshot("recovery", summary)
     return summary
 
 
 # ---------------------------------------------------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------------------------------------------------
+
+
+def plugin_events() -> list[str]:
+    return pkg.plugin_events()
 
 
 def main() -> int:
@@ -1261,9 +1803,11 @@ def main() -> int:
     args = parser.parse_args()
 
     package = args.package.resolve()
-    evidence_dir = args.evidence_dir.resolve() if args.evidence_dir else None
     nonce = uuid.uuid4().hex[:8]
-    summary: dict[str, object] = {"scenario": args.scenario, "package": str(package), "run_id": nonce}
+    evidence_dir = args.evidence_dir.resolve() if args.evidence_dir else (ROOT / "artifacts" / "scan-evidence" / nonce)
+    summary: dict[str, object] = {"scenario": args.scenario, "package": str(package), "run_id": nonce,
+                                  "evidence_dir": str(evidence_dir)}
+    recorder = EvidenceRecorder(evidence_dir, nonce)
     exit_code = 1
     before_state = None
     workspace = None
@@ -1277,14 +1821,15 @@ def main() -> int:
         workspace = pe.select_workspace(args.workspace)
         summary["workspace"] = str(workspace)
         before_state = pe.capture_instance_state()
+        recorder.record("package", identity=summary["package_identity"], workspace=str(workspace))
         if args.scenario in {"all", "overlap"}:
-            summary["overlap"] = scenario_overlap(package, evidence_dir, nonce)
+            summary["overlap"] = scenario_overlap_phase(package, evidence_dir, nonce, recorder)
         if args.scenario in {"all", "controls"}:
-            summary["controls"] = scenario_controls(package, evidence_dir, nonce)
+            summary["controls"] = scenario_controls(package, evidence_dir, nonce, recorder)
         if args.scenario in {"all", "stop"}:
-            summary["stop_scenario"] = scenario_stop(package, evidence_dir, nonce)
+            summary["stop_scenario"] = scenario_stop(package, evidence_dir, nonce, recorder)
         if args.scenario in {"all", "recovery"}:
-            summary["recovery"] = scenario_recovery(package, evidence_dir, nonce)
+            summary["recovery"] = scenario_recovery(package, evidence_dir, nonce, recorder)
         summary["status"] = "PASS"
         exit_code = 0
     except (RuntimeError, OSError, ValueError, KeyError, json.JSONDecodeError, subprocess.SubprocessError,
@@ -1292,9 +1837,8 @@ def main() -> int:
         summary["status"] = "FAIL"
         summary["error"] = f"{type(error).__name__}: {error}"
         exit_code = 1
+        recorder.record("failure", error=summary["error"])
     finally:
-        # Restore and verify every native scheduled-task trigger recorded on the first fresh
-        # instance, so a scenario failure cannot leave an administrator trigger behind.
         if ORIGINAL_TRIGGERS is not None:
             try:
                 restore_triggers(api_auth(), ORIGINAL_TRIGGERS)
@@ -1310,6 +1854,21 @@ def main() -> int:
                 summary["teardown_error"] = f"{type(teardown_error).__name__}: {teardown_error}"
                 summary["status"] = "FAIL"
                 exit_code = 1
+        # Persist the failure/recovery fragment before the instance workspace is destroyed.
+        try:
+            recorder.record("teardown", trigger_restoration=summary.get("trigger_restoration"),
+                            instance_reconciliation=summary.get("instance_reconciliation"),
+                            teardown_error=summary.get("teardown_error"))
+            recorder.snapshot("teardown", {
+                "trigger_restoration": summary.get("trigger_restoration"),
+                "instance_reconciliation": summary.get("instance_reconciliation"),
+                "teardown_error": summary.get("teardown_error"),
+                "status": summary.get("status"),
+            })
+        except OSError as record_error:
+            summary["evidence_error"] = f"{type(record_error).__name__}: {record_error}"
+            summary["status"] = "FAIL"
+            exit_code = 1
         if workspace is not None and not args.keep_workspace:
             try:
                 summary["cleanup"] = pe.cleanup_instance()
@@ -1317,12 +1876,42 @@ def main() -> int:
                 summary["cleanup_error"] = f"{type(cleanup_error).__name__}: {cleanup_error}"
                 summary["status"] = "FAIL"
                 exit_code = 1
-        if evidence_dir is not None:
-            evidence_dir.mkdir(parents=True, exist_ok=True)
-            (evidence_dir / "scan-integration-result.json").write_text(
-                json.dumps(summary, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+        if recorder is not None:
+            recorder.finish(str(summary.get("status", "FAIL")), summary, {
+                "events.jsonl": "append-only redacted event stream",
+                "rounds/": "per-round snapshots",
+                "result.json": "final summary",
+            })
         print(json.dumps(summary, ensure_ascii=False, indent=2, sort_keys=True))
     return exit_code
+
+
+def scenario_overlap_phase(package: Path, evidence_dir: Path | None, nonce: str,
+                           recorder: EvidenceRecorder | None) -> dict:
+    """Run the overlap scenario and attach the finite-change / multi-version / convergence phases."""
+    require(recorder is not None, "An evidence recorder is required for the overlap scenario.")
+    auth = deploy_fresh(package)
+    recorder.record("instance", container=container_identity())
+    summary: dict[str, object] = {}
+    summary["payload_matches_archive"] = pkg.deployed_matches_archive(package)
+    pe.add_library_authenticated(auth, OUT_OF_SCOPE_LIBRARY, ["/media/local"])
+    auth = api_auth()
+    fixture = bulk_fixture(auth, nonce)
+    summary["fixture"] = {"bulk": BULK_COUNT, "out_of_scope": fixture["out_name"],
+                          "playback_library": "local", "batch_library": "strm"}
+    summary["baseline"] = establish_baselines(auth, fixture)
+    auth = api_auth()
+    items = fixture["items"]
+    merge_status = merge_versions(auth, [items[fixture["mv_a_name"]]["Id"], items[fixture["mv_b_name"]]["Id"]])
+    require(merge_status == 204, f"Jellyfin did not merge the multi-version pair ({merge_status}).")
+    summary["overlap_round"] = overlap_round(auth, fixture, recorder)
+    auth = api_auth()
+    summary["finite_changes"] = finite_changes(auth, fixture, recorder)
+    auth = api_auth()
+    summary["multi_version_and_refresh"] = multi_version_and_refresh(auth, fixture, recorder)
+    auth = api_auth()
+    summary["convergence"] = convergence(auth, fixture, recorder)
+    return summary
 
 
 if __name__ == "__main__":

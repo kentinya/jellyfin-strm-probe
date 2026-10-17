@@ -19,6 +19,7 @@ class MediaHandler(SimpleHTTPRequestHandler):
             time.sleep(3)
             self.path = "/" + filename
             print(f"MEDIA_REQUEST {self.command} " + filename, flush=True)
+            print(f"PROBE_MEDIA_REQUEST_FINISHED {request_id}", flush=True)
             return
 
         # A parameterized delay route lets a scenario hold a probe open for a deterministic settlement window
@@ -33,6 +34,7 @@ class MediaHandler(SimpleHTTPRequestHandler):
             time.sleep(seconds)
             self.path = "/" + filename
             print(f"MEDIA_REQUEST {self.command} " + filename, flush=True)
+            print(f"PROBE_MEDIA_REQUEST_FINISHED {request_id}", flush=True)
             return
 
         if len(path_parts) == 3 and path_parts[0] == "independent":
