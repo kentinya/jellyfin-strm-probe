@@ -167,6 +167,15 @@ class ScanLogAttributionTests(unittest.TestCase):
 
 
 class ScanStopControlTests(unittest.TestCase):
+    def test_stop_sources_follow_fixture_name_order_within_the_actual_batch(self):
+        names = [f"Scan Stop fixture {index:03d}" for index in range(4)]
+        ids = {name: f"{index + 1:032x}" for index, name in enumerate(names)}
+        first_batch = [ids[names[3]], ids[names[0]], ids[names[2]]]
+        second_batch = [ids[names[1]]]
+        selected, unread = scan.select_stop_round_sources(names, ids, first_batch, second_batch)
+        self.assertEqual(selected, [names[0], names[2], names[3]])
+        self.assertEqual(unread, ids[names[1]])
+
     def test_a_new_round_during_drain_cannot_pass(self):
         scan.require_no_new_round(entries_before_settlement=1, entries_before_stop=1, label="re-run")
         with self.assertRaises(RuntimeError):
@@ -545,14 +554,24 @@ class ScanReconciliationTests(unittest.TestCase):
                 scan.validate_url_race_intermediate(changed, baseline, allowed, "URL race")
 
     def test_probe_join_events_identify_only_actual_started_probe_joins(self):
-        line = ('2026-10-17T08:00:00.0000000Z INF Joined a running native probe for item '
-                'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa source_key '
-                'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb')
-        with patch.object(scan, "docker_log_lines", return_value=[line]):
+        playback_join = ('2026-10-17T08:00:00.0000000Z INF Joined a running native probe for item '
+                         'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa, source_key '
+                         'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb')
+        batch_join = ('2026-10-17T08:00:01.0000000Z INF Batch joined a running native probe for item '
+                      'cccccccc-cccc-cccc-cccc-cccccccccccc, source_key '
+                      'dddddddd-dddd-dddd-dddd-dddddddddddd')
+        preparing_wait = ('2026-10-17T08:00:02.0000000Z INF Waiting for a same-source probe that is still preparing '
+                          'for item eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee, source_key '
+                          'ffffffff-ffff-ffff-ffff-ffffffffffff')
+        with patch.object(scan, "docker_log_lines", return_value=[playback_join, batch_join, preparing_wait]):
             events = scan.probe_join_events("jellyfin")
-        self.assertEqual(len(events), 1)
+        self.assertEqual(len(events), 2)
         self.assertEqual(events[0]["item_id"], "a" * 32)
         self.assertEqual(events[0]["source_key"], "b" * 32)
+        self.assertEqual(events[0]["direction"], "playback")
+        self.assertEqual(events[1]["item_id"], "c" * 32)
+        self.assertEqual(events[1]["source_key"], "d" * 32)
+        self.assertEqual(events[1]["direction"], "batch")
 
     def test_rewrite_strm_refuses_a_path_outside_the_workspace(self):
         with tempfile.TemporaryDirectory() as tmp:

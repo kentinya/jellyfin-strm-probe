@@ -67,9 +67,9 @@ BULK_COUNT = 130
 OUT_OF_SCOPE_LIBRARY = "Package Local Fixtures"
 # A delay long enough to hold an actually started probe open across the whole native scan.
 PROBE_DELAY_SECONDS = 20
-# A shorter delay for the stop scenario, so the started probes are still executing when the stop is issued
-# while the convergence round stays bounded.
-STOP_DELAY_SECONDS = 12
+# A bounded long delay keeps the joined probes executing while the 130-candidate batch reaches the selected
+# source and the native stop request is issued; the post-stop convergence round uses stable, non-delayed URLs.
+STOP_DELAY_SECONDS = 45
 BATCH_OBJECT_LIMIT = 128
 
 ACTIVE_RECORDER: "EvidenceRecorder | None" = None
@@ -1003,16 +1003,22 @@ def probe_join_events(name: str, since: datetime.datetime | None = None) -> list
     """Return only joins to probes that had actually started, never preparing or permit waits."""
     entries: list[dict] = []
     for line in docker_log_lines(name):
-        if "Joined a running native probe for item" not in line:
+        if "Batch joined a running native probe for item" in line:
+            prefix = "Batch joined a running native probe for item"
+            direction = "batch"
+        elif "Joined a running native probe for item" in line:
+            prefix = "Joined a running native probe for item"
+            direction = "playback"
+        else:
             continue
         timestamp = parse_docker_timestamp(line)
-        item = re.search(r"Joined a running native probe for item ([0-9a-fA-F-]+)", line)
+        item = re.search(re.escape(prefix) + r" ([0-9a-fA-F-]+)", line)
         source = re.search(r"source_key ([0-9a-fA-F-]+)", line)
         if timestamp is None or item is None or (since is not None and timestamp < since):
             continue
         entries.append({"item_id": canonical_guid(item.group(1), "joined probe item"),
                         "source_key": canonical_guid(source.group(1), "joined probe source") if source else None,
-                        "timestamp": timestamp})
+                        "direction": direction, "timestamp": timestamp})
     return entries
 
 
@@ -1379,6 +1385,17 @@ def require_no_new_round(entries_before_settlement: int, entries_before_stop: in
     require(entries_before_settlement == entries_before_stop,
             f"A {label} actually entered a new round during the stopped round's drain "
             f"({entries_before_settlement} > {entries_before_stop} entries before settlement).")
+
+
+def select_stop_round_sources(names: list[str], item_ids_by_name: dict[str, str],
+                              first_batch: list[str], second_batch: list[str]) -> tuple[list[str], str]:
+    """Choose early named fixtures within batch one, independent of their random GUID order."""
+    first_batch_ids = {canonical_guid(item_id, "first stop candidate batch") for item_id in first_batch}
+    first_names = [name for name in names
+                   if canonical_guid(item_ids_by_name[name], f"stop fixture {name}") in first_batch_ids]
+    require(len(first_names) >= 3, "The stop fixture has fewer than three named candidates in its first object batch.")
+    require(bool(second_batch), "The stop fixture has no candidate in its later object batch.")
+    return first_names[:3], canonical_guid(second_batch[0], "unread stop candidate")
 
 
 def require_no_probe_during_drain(probes_during_drain: list[dict]) -> None:
@@ -1869,7 +1886,8 @@ def wait_for_probe_join(item_id: str, source_key: str, since: datetime.datetime,
     expected_source = canonical_guid(source_key, "expected joined source")
     while time.monotonic() < deadline:
         matches = [event for event in probe_join_events(container(), since=since)
-                   if event["item_id"] == expected_item and event["source_key"] == expected_source]
+                   if event["item_id"] == expected_item and event["source_key"] == expected_source
+                   and event["direction"] == "batch"]
         if matches:
             return matches[0]
         time.sleep(0.2)
@@ -2625,6 +2643,8 @@ def scenario_stop(package: Path, evidence_dir: Path | None, nonce: str, recorder
     """Playback owns a real probe first, batch joins it, then both settle through a native batch stop."""
     summary: dict[str, object] = {}
     auth = deploy_fresh(package)
+    pe.add_library_authenticated(auth, OUT_OF_SCOPE_LIBRARY, ["/media/local"])
+    auth = api_auth()
     media_sha, media_size = pe.media_sha1(pe.MEDIA_MP4)
     plain_url = "http://media:8080/" + pe.MEDIA_MP4
     names = [f"Scan Stop {nonce} {index:03d}" for index in range(BULK_COUNT)]
@@ -2665,13 +2685,14 @@ def scenario_stop(package: Path, evidence_dir: Path | None, nonce: str, recorder
             "The native sorted candidate ID set does not match the fixture's current project identities.")
     first_batch = candidate_manifest["batches"][0]["item_ids"]
     second_batch = candidate_manifest["batches"][1]["item_ids"]
-    first_item_ids = [item_id for item_id in first_batch if item_id in names_by_id]
-    require(len(first_item_ids) >= 3 and second_batch,
+    first_names, unread_id = select_stop_round_sources(
+        names, {name: item["Id"] for name, item in items.items()}, first_batch, second_batch)
+    require(len(first_names) == 3 and second_batch,
             "The stop candidate manifest does not contain three first-batch sources and a later-batch target.")
-    playback_first_id, second_id, queued_id = first_item_ids[:3]
-    unread_id = second_batch[0]
-    changed_ids = [playback_first_id, second_id, queued_id, unread_id]
-    changed_names = [names_by_id[item_id] for item_id in changed_ids]
+    playback_first_name, second_name, queued_name = first_names
+    changed_names = [playback_first_name, second_name, queued_name, names_by_id[unread_id]]
+    changed_ids = [canonical_guid(items[name]["Id"], f"stop source {name}") for name in changed_names]
+    playback_first_id, second_id, queued_id = changed_ids[:3]
     request_ids = {name: uuid.uuid4().hex for name in changed_names}
     baseline_rows: dict[str, dict] = {}
     baseline_states: dict[str, dict] = {}

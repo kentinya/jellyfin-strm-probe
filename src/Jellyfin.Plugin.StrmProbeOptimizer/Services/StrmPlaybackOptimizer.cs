@@ -588,6 +588,13 @@ public sealed class StrmPlaybackOptimizer
         BatchSharedJoinBarrier?.Invoke();
         if (isRunning)
         {
+            _logger.LogInformation(
+                "Batch joined a running native probe for item {ItemId}, source_key {SourceId}; running probes {Running}, active permits {Active}.",
+                projectItemId,
+                sourceKey,
+                Coordinator.RunningCount,
+                Coordinator.ActivePermits);
+
             try
             {
                 // A same-source probe that actually started is not cancelled by the batch stop. Wait for it to
