@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import shutil
+import sys
 import tempfile
 import unittest
 import zipfile
@@ -16,12 +18,16 @@ ROOT = Path(__file__).resolve().parents[1]
 def load(name: str, relative: str):
     spec = importlib.util.spec_from_file_location(name, ROOT / relative)
     module = importlib.util.module_from_spec(spec)
+    # Register under the plain module name so the environment/integration scripts' lazy
+    # ``import package_plugin`` resolves to the same object and exception classes.
+    sys.modules[name] = module
     spec.loader.exec_module(module)
     return module
 
 
 package_environment = load("package_environment", "scripts/package_environment.py")
 integration = load("run_isolated_package_integration", "scripts/run_isolated_package_integration.py")
+package_plugin = load("package_plugin", "scripts/package_plugin.py")
 
 
 class PackageEnvironmentTests(unittest.TestCase):
@@ -62,12 +68,11 @@ class PackageEnvironmentTests(unittest.TestCase):
         self.assertIn("# strm-probe-version:1", text)
 
     def test_deploy_archive_refuses_an_invalid_archive_without_disturbing_the_valid_one(self):
-        publish = Path(tempfile.mkdtemp()) / "publish"
-        publish.mkdir(parents=True)
-        # Build a minimal valid archive via the real builder using the published test helpers.
+        # Build a minimal valid archive with its published sidecar via the real builder helpers.
         import tests.test_package_plugin as builder
 
-        valid = builder.build_valid_archive(Path(tempfile.mkdtemp()))
+        source = Path(tempfile.mkdtemp())
+        valid = builder.build_valid_archive_with_sidecar(source)
         work = Path(tempfile.mkdtemp())
         (work / "config" / "plugins").mkdir(parents=True)
         with patch.object(package_environment, "WORK", work):
@@ -75,19 +80,75 @@ class PackageEnvironmentTests(unittest.TestCase):
             self.assertEqual(first["folder"], "Jellyfin.Plugin.StrmProbeOptimizer_0.1.0.0")
             before = package_environment.deployed_payload()
             self.assertTrue(before)
-            # A GUID-mismatched archive must be refused and leave the payload untouched.
+            # A GUID-mismatched archive with a stale sidecar must be refused and leave the payload untouched.
             broken = Path(tempfile.mkdtemp()) / "broken.zip"
-            with zipfile.ZipFile(valid) as source, zipfile.ZipFile(broken, "w") as target:
-                for name in source.namelist():
-                    data = source.read(name)
+            with zipfile.ZipFile(valid) as source_zip, zipfile.ZipFile(broken, "w") as target:
+                for name in source_zip.namelist():
+                    data = source_zip.read(name)
                     if name.endswith("meta.json"):
                         meta = json.loads(data)
                         meta["guid"] = "00000000-0000-0000-0000-000000000000"
                         data = json.dumps(meta).encode()
                     target.writestr(name, data)
-            with self.assertRaises((integration.package_plugin.PackageError, package_environment.PackageEnvironmentError)):
+            shutil.copy2(package_plugin.sidecar_manifest_path(valid), package_plugin.sidecar_manifest_path(broken))
+            with self.assertRaises((package_plugin.PackageError, package_environment.PackageEnvironmentError)):
                 package_environment.deploy_archive(broken)
             self.assertEqual(package_environment.deployed_payload(), before)
+
+    def test_deploy_archive_refuses_an_archive_without_its_sidecar(self):
+        import tests.test_package_plugin as builder
+
+        source = Path(tempfile.mkdtemp())
+        valid = builder.build_valid_archive_with_sidecar(source)
+        orphan = Path(tempfile.mkdtemp()) / "orphan.zip"
+        shutil.copy2(valid, orphan)
+        work = Path(tempfile.mkdtemp())
+        (work / "config" / "plugins").mkdir(parents=True)
+        with patch.object(package_environment, "WORK", work):
+            with self.assertRaises((package_plugin.PackageError, package_environment.PackageEnvironmentError)):
+                package_environment.deploy_archive(orphan)
+            self.assertEqual(package_environment.deployed_payload(), {})
+
+    def test_deploy_archive_refuses_a_foreign_plugins_symlink(self):
+        import tests.test_package_plugin as builder
+
+        source = Path(tempfile.mkdtemp())
+        valid = builder.build_valid_archive_with_sidecar(source)
+        work = Path(tempfile.mkdtemp())
+        foreign = Path(tempfile.mkdtemp())
+        (work / "config").mkdir(parents=True)
+        (work / "config" / "plugins").symlink_to(foreign, target_is_directory=True)
+        sentinel = foreign / "foreign-sentinel.txt"
+        sentinel.write_text("must remain untouched", encoding="utf-8")
+        with patch.object(package_environment, "WORK", work):
+            with self.assertRaises(package_environment.PackageEnvironmentError):
+                package_environment.deploy_archive(valid)
+        self.assertTrue(sentinel.is_file(), "a foreign deployment directory was modified")
+
+    def test_remove_deployed_plugin_refuses_a_symlinked_folder(self):
+        work = Path(tempfile.mkdtemp())
+        plugins = work / "config" / "plugins"
+        plugins.mkdir(parents=True)
+        foreign = Path(tempfile.mkdtemp())
+        (foreign / "sentinel.txt").write_text("keep", encoding="utf-8")
+        (plugins / "Jellyfin.Plugin.StrmProbeOptimizer_0.1.0.0").symlink_to(foreign, target_is_directory=True)
+        with patch.object(package_environment, "WORK", work):
+            with self.assertRaises(package_environment.PackageEnvironmentError):
+                package_environment.remove_deployed_plugin()
+        self.assertTrue((foreign / "sentinel.txt").is_file())
+
+    def test_require_owned_path_rejects_escape_and_symlink(self):
+        work = Path(tempfile.mkdtemp())
+        (work / "config").mkdir()
+        foreign = Path(tempfile.mkdtemp())
+        (work / "config" / "link").symlink_to(foreign, target_is_directory=True)
+        with patch.object(package_environment, "WORK", work):
+            with self.assertRaises(package_environment.PackageEnvironmentError):
+                package_environment.require_owned_path(work / "config" / "link" / "x")
+            with self.assertRaises(package_environment.PackageEnvironmentError):
+                package_environment.require_owned_path(Path("/etc/passwd"))
+            # A normal owned path resolves.
+            self.assertTrue(str(package_environment.require_owned_path(work / "config")))
 
 
 class IntegrationHelperTests(unittest.TestCase):

@@ -60,6 +60,41 @@ def require(condition: bool, message: str) -> None:
         raise PackageEnvironmentError(message)
 
 
+def require_owned_path(path: Path, *, label: str | None = None) -> Path:
+    """Return ``path`` resolved only when it is safely inside the package workspace.
+
+    Every write target (deploy, baseline, backup, removal and cleanup) must pass this check
+    first: the path and each of its parents below the workspace must exist without a
+    symbolic link, and the resolved path must stay inside ``WORK``. A foreign directory or a
+    symlinked ``config/plugins`` therefore fails before anything is deleted or replaced.
+    """
+    workspace_root = WORK.resolve()
+    candidate = path if path.is_absolute() else (WORK / path)
+    # Walk the chain from the workspace down so a symlinked parent cannot hide the target.
+    relative = None
+    try:
+        relative = candidate.resolve(strict=False).relative_to(workspace_root)
+    except ValueError:
+        relative = None
+    if relative is None:
+        raise PackageEnvironmentError(
+            f"Refusing to write outside the package workspace: {label or candidate}."
+        )
+    current = workspace_root
+    for part in relative.parts:
+        current = current / part
+        if current.is_symlink():
+            raise PackageEnvironmentError(
+                f"Refusing to write through a symbolic link: {label or current}."
+            )
+    return candidate
+
+
+def workspace_owned_root() -> Path:
+    workspace()
+    return WORK.resolve()
+
+
 def workspace() -> None:
     for path in (ROOT / "artifacts", WORK):
         if path.is_symlink():
@@ -152,7 +187,10 @@ def write_compose() -> Path:
 
 
 def guard_containers() -> None:
-    ids = run(*DOCKER, "ps", "-aq", "--filter", "label=com.docker.compose.project=" + PROJECT).stdout
+    listed = run(*DOCKER, "ps", "-aq", "--filter", "label=com.docker.compose.project=" + PROJECT)
+    require(listed.returncode == 0,
+            f"Could not query the package-environment containers: {listed.stderr.strip() or listed.stdout.strip()}")
+    ids = listed.stdout
     if not ids.strip():
         return
     inspected = run(*DOCKER, "inspect", *ids.split())
@@ -357,14 +395,27 @@ def add_library_authenticated(auth_header: str, name: str, paths: list[str]) -> 
     require(status in (200, 204), f"Adding the library {name!r} failed with HTTP {status}.")
 
 
-def unpack_archive(archive: Path, destination: Path) -> dict:
-    """Validate an archive fully, then swap it into place; a rejected archive never disturbs the target."""
+def unpack_archive(archive: Path, destination: Path, *, expected_sha256: str | None = None,
+                   expected_entries: dict[str, str] | None = None) -> dict:
+    """Validate an archive fully, then swap it into place; a rejected archive never disturbs the target.
+
+    The consumer reads the archive's published sidecar manifest by default and refuses to
+    replace a valid installation unless the archive and every file match it.
+    """
     import package_plugin
 
     require(archive.is_file() and not archive.is_symlink(), f"The package {archive} is missing or symbolic.")
-    verification = package_plugin.verify_archive(archive)
+    if expected_sha256 is None and expected_entries is None:
+        expected_sha256, expected_entries = package_plugin.expected_from_sidecar(archive)
+    require(expected_sha256 is not None,
+            "Refusing to install an archive without its published sidecar manifest (archive + per-file digests).")
+    # Ownership is checked before any delete/replace so a foreign directory is never touched.
+    owned_destination = require_owned_path(destination, label=f"plugin folder {destination.name}")
+    owned_parent = require_owned_path(destination.parent, label="plugins directory")
+    verification = package_plugin.verify_archive(
+        archive, expected_sha256=expected_sha256, expected_entries=expected_entries)
     root = verification["folder"]
-    staging = destination.parent / (".staging-" + uuid.uuid4().hex[:12])
+    staging = owned_parent / (".staging-" + uuid.uuid4().hex[:12])
     if staging.exists():
         shutil.rmtree(staging)
     staging.mkdir(parents=True)
@@ -386,9 +437,10 @@ def unpack_archive(archive: Path, destination: Path) -> dict:
                 target.write_bytes(data)
                 extracted.append({"path": relative.as_posix(), "sha256": hashlib.sha256(data).hexdigest()})
         # Only after the whole archive is validated and staged is the previous install replaced.
-        if destination.exists():
-            shutil.rmtree(destination)
-        staging.replace(destination)
+        if owned_destination.exists():
+            require(not owned_destination.is_symlink(), f"Refusing to replace a symlinked plugin folder {root!r}.")
+            shutil.rmtree(owned_destination)
+        staging.replace(owned_destination)
     finally:
         if staging.exists():
             shutil.rmtree(staging, ignore_errors=True)
@@ -397,15 +449,20 @@ def unpack_archive(archive: Path, destination: Path) -> dict:
 
 def deploy_archive(archive: Path) -> dict:
     """Install the archive into the package instance's plugin directory (no dev deployment)."""
-    plugins = WORK / "config" / "plugins"
-    plugins.mkdir(parents=True, exist_ok=True)
     import package_plugin
 
-    verification = package_plugin.verify_archive(archive)
+    owned_plugins = require_owned_path(WORK / "config" / "plugins", label="package plugins directory")
+    owned_plugins.mkdir(parents=True, exist_ok=True)
+    expected_sha, expected_entries = package_plugin.expected_from_sidecar(archive)
+    require(expected_sha is not None,
+            "Refusing to deploy an archive without its published sidecar manifest (archive + per-file digests).")
+    verification = package_plugin.verify_archive(
+        archive, expected_sha256=expected_sha, expected_entries=expected_entries)
     folder = verification["folder"]
     require(folder == "Jellyfin.Plugin.StrmProbeOptimizer_0.1.0.0",
             f"Unexpected plugin folder {folder!r}; expected the supported versioned folder.")
-    return unpack_archive(archive, plugins / folder)
+    return unpack_archive(archive, owned_plugins / folder,
+                          expected_sha256=expected_sha, expected_entries=expected_entries)
 
 
 def plugin_directory() -> Path:
@@ -426,4 +483,102 @@ def deployed_payload() -> dict[str, str]:
 
 def remove_deployed_plugin() -> None:
     """Remove the plugin payload entirely (used for the uninstall/native-recovery scenario)."""
-    shutil.rmtree(plugin_directory(), ignore_errors=True)
+    target = require_owned_path(plugin_directory(), label="deployed plugin folder")
+    if target.is_symlink():
+        raise PackageEnvironmentError("Refusing to remove a symlinked plugin folder.")
+    shutil.rmtree(target, ignore_errors=True)
+
+
+def backup_state(destination: Path) -> dict:
+    """Copy the configuration and fingerprint database into an owned backup directory.
+
+    The server must be stopped by the caller first, per the delivery instructions.
+    """
+    owned_destination = require_owned_path(destination, label="backup directory")
+    owned_destination.mkdir(parents=True, exist_ok=True)
+    sources = {
+        "configuration": WORK / "config" / "plugins" / "configurations" / "Jellyfin.Plugin.StrmProbeOptimizer.xml",
+        "fingerprint": WORK / "config" / "data" / "plugins" / "b061643ed17d4c6e8ba26b57e286bd20" / "strm-fingerprints.db",
+    }
+    copied: dict[str, dict[str, str]] = {}
+    for label, source in sources.items():
+        require(source.is_file(), f"The package instance has no {label} to back up: {source}.")
+        target = owned_destination / source.name
+        shutil.copy2(source, target)
+        copied[label] = {"path": str(target), "sha256": hashlib.sha256(target.read_bytes()).hexdigest()}
+    return copied
+
+
+def restore_state(backup: Path) -> dict:
+    """Restore the configuration and fingerprint database from a backup and return read-back hashes."""
+    owned_backup = require_owned_path(backup, label="backup directory")
+    require(owned_backup.is_dir(), f"The backup directory {owned_backup} does not exist.")
+    sources = {
+        "configuration": (owned_backup / "Jellyfin.Plugin.StrmProbeOptimizer.xml",
+                          WORK / "config" / "plugins" / "configurations" / "Jellyfin.Plugin.StrmProbeOptimizer.xml"),
+        "fingerprint": (owned_backup / "strm-fingerprints.db",
+                        WORK / "config" / "data" / "plugins" / "b061643ed17d4c6e8ba26b57e286bd20" / "strm-fingerprints.db"),
+    }
+    restored: dict[str, dict[str, str]] = {}
+    for label, (source, target) in sources.items():
+        require(source.is_file(), f"The backup has no {label}: {source}.")
+        owned_target = require_owned_path(target, label=f"{label} target")
+        owned_target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, owned_target)
+        restored[label] = {"path": str(owned_target), "sha256": hashlib.sha256(owned_target.read_bytes()).hexdigest()}
+    return restored
+
+
+def _tree_fingerprint(root: Path) -> dict[str, str]:
+    """Return {relative path: sha256} for the regular files under a workspace subdirectory."""
+    result: dict[str, str] = {}
+    if not root.is_dir():
+        return result
+    for path in sorted(root.rglob("*")):
+        if path.is_file() and not path.is_symlink():
+            result[path.relative_to(root).as_posix()] = hashlib.sha256(path.read_bytes()).hexdigest()
+    return result
+
+
+def capture_instance_state() -> dict[str, object]:
+    """Snapshot the owned instance inputs (config, media, STRM, libraries) before a run."""
+    workspace()
+    state: dict[str, object] = {
+        "configuration": _tree_fingerprint(WORK / "config" / "plugins" / "configurations"),
+        "fingerprint_database": _tree_fingerprint(
+            WORK / "config" / "data" / "plugins" / "b061643ed17d4c6e8ba26b57e286bd20"),
+        "media": _tree_fingerprint(WORK / "media"),
+        "strm": _tree_fingerprint(WORK / "strm"),
+    }
+    return state
+
+
+def reconcile_instance_state(before: dict[str, object]) -> dict[str, object]:
+    """Compare the current owned inputs with a captured snapshot and report per-area deltas.
+
+    The package instance is disposable acceptance data, so this reports rather than silently
+    deleting anything the test itself did not create; it never touches a path outside WORK.
+    """
+    after = capture_instance_state()
+    areas: dict[str, object] = {}
+    for area in ("configuration", "fingerprint_database", "media", "strm"):
+        previous = dict(before.get(area, {}))
+        current = dict(after.get(area, {}))
+        added = sorted(set(current) - set(previous))
+        removed = sorted(set(previous) - set(current))
+        changed = sorted(path for path in set(previous) & set(current) if previous[path] != current[path])
+        areas[area] = {"added": added, "removed": removed, "changed": changed}
+    return {"status": "RECORDED", "areas": areas}
+
+
+def cleanup_instance() -> dict[str, object]:
+    """Stop the owned package instance and remove only its own workspace data."""
+    workspace()
+    compose("stop")
+    removed: list[str] = []
+    for name in ("config", "cache", "strm", "media", "baseline", "backup"):
+        target = require_owned_path(WORK / name, label=f"cleanup target {name}")
+        if target.exists() and not target.is_symlink():
+            shutil.rmtree(target)
+            removed.append(name)
+    return {"status": "CLEANED", "removed": removed}

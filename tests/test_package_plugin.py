@@ -98,6 +98,35 @@ def build_valid_archive(directory: Path, manifest: dict | None = None) -> Path:
     return archive
 
 
+def build_valid_archive_with_sidecar(directory: Path) -> Path:
+    """Build a valid archive and its published sidecar manifest (digest + per-file entries)."""
+    archive = build_valid_archive(directory)
+    verification = package_plugin.verify_archive(archive)
+    identity = {
+        "plugin": package_plugin.PROJECT.name,
+        "guid": package_plugin.PLUGIN_GUID,
+        "version": verification["version"],
+        "targetAbi": verification["targetAbi"],
+        "runtime": verification["runtime"],
+        "sourceRevision": "a" * 40,
+    }
+    package_plugin.write_sidecars(directory, archive, identity, verification["entries"])
+    return archive
+
+
+def rewrite_archive(source: Path, destination: Path, mutate) -> Path:
+    with zipfile.ZipFile(source) as original, zipfile.ZipFile(destination, "w") as target:
+        root = original.namelist()[0].split("/")[0]
+        for name in original.namelist():
+            data = original.read(name)
+            replacement = mutate(name, data)
+            if replacement is None:
+                continue
+            target.writestr(name, replacement)
+        mutate.root = root
+    return destination
+
+
 class PackageLayoutTests(unittest.TestCase):
     def test_payload_plan_includes_managed_and_linux_native_assets(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -170,12 +199,19 @@ class PackageLayoutTests(unittest.TestCase):
             with patch.object(package_plugin, "META_SOURCE", meta):
                 self.assertEqual(package_plugin.load_plugin_manifest()["guid"], package_plugin.PLUGIN_GUID)
 
-    def test_source_revision_rejects_a_short_or_non_hex_value(self):
+    def test_source_revision_requires_a_reachable_head_commit(self):
         with self.assertRaises(package_plugin.PackageError):
             package_plugin.source_revision("abc")
         with self.assertRaises(package_plugin.PackageError):
             package_plugin.source_revision("z" * 40)
-        self.assertEqual(package_plugin.source_revision("a" * 40), "a" * 40)
+        # A well-formed but non-existent or non-HEAD commit must be refused.
+        with self.assertRaises(package_plugin.PackageError):
+            package_plugin.source_revision("0" * 40)
+        head = package_plugin.git_head()
+        self.assertEqual(package_plugin.source_revision(head), head)
+        self.assertEqual(package_plugin.source_revision(None), head)
+        with self.assertRaises(package_plugin.PackageError):
+            package_plugin.source_revision("a" * 40)
 
     def test_licence_mapping_covers_every_shipped_dependency(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -320,6 +356,148 @@ class ArchiveVerifierTests(unittest.TestCase):
     def test_missing_archive_is_rejected(self):
         with self.assertRaises(package_plugin.PackageError):
             package_plugin.verify_archive(Path("/nonexistent/package.zip"))
+
+
+class PackageIntegrityTests(unittest.TestCase):
+    """The protections B's counterexamples showed were missing (BR-41-1)."""
+
+    def test_sidecar_digest_mismatch_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            archive = build_valid_archive_with_sidecar(Path(tmp))
+            expected_sha, expected_entries = package_plugin.expected_from_sidecar(archive)
+            self.assertIsNotNone(expected_sha)
+            # A mutated archive whose sidecar still records the original digest is refused.
+            mutated = Path(tmp) / "mutated.zip"
+            mutated.write_bytes(archive.read_bytes() + b"trailing")
+            mutated_sidecar = Path(tmp) / (mutated.stem + ".manifest.json")
+            mutated_sidecar.write_text(package_plugin.sidecar_manifest_path(archive).read_text(), encoding="utf-8")
+            with self.assertRaises(package_plugin.PackageError):
+                package_plugin.verify_archive(mutated, expected_sha256=expected_sha, expected_entries=expected_entries)
+
+    def test_per_file_digest_mismatch_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            archive = build_valid_archive_with_sidecar(Path(tmp))
+            expected_sha, expected_entries = package_plugin.expected_from_sidecar(archive)
+            # Rewrite the native payload but keep the sidecar (and archive) digest matching by
+            # re-publishing only the entry list: the per-file comparison must still fail.
+            mutated = Path(tmp) / "native.zip"
+            with zipfile.ZipFile(archive) as source, zipfile.ZipFile(mutated, "w") as target:
+                for name in source.namelist():
+                    data = source.read(name)
+                    if name.endswith("libe_sqlite3.so"):
+                        data = b"not a native library"
+                    target.writestr(name, data)
+            new_sha = package_plugin.sha256_file(mutated)
+            with self.assertRaises(package_plugin.PackageError):
+                package_plugin.verify_archive(mutated, expected_sha256=new_sha, expected_entries=expected_entries)
+
+    def test_managed_dependency_removed_with_stale_whitelist_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            archive = build_valid_archive(Path(tmp))
+            broken = Path(tmp) / "missing-managed.zip"
+            with zipfile.ZipFile(archive) as source, zipfile.ZipFile(broken, "w") as target:
+                for name in source.namelist():
+                    if name.endswith("/Microsoft.Data.Sqlite.dll"):
+                        continue
+                    data = source.read(name)
+                    if name.endswith("meta.json"):
+                        manifest = json.loads(data)
+                        manifest["assemblies"].remove("Microsoft.Data.Sqlite.dll")
+                        data = json.dumps(manifest).encode()
+                    target.writestr(name, data)
+            with self.assertRaises(package_plugin.PackageError):
+                package_plugin.verify_archive(broken)
+
+    def test_version_conflict_between_meta_and_dependencies_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            archive = build_valid_archive(Path(tmp))
+            broken = Path(tmp) / "version.zip"
+            with zipfile.ZipFile(archive) as source, zipfile.ZipFile(broken, "w") as target:
+                for name in source.namelist():
+                    data = source.read(name)
+                    if name.endswith("meta.json"):
+                        manifest = json.loads(data)
+                        manifest["version"] = "9.9.9.9"
+                        data = json.dumps(manifest).encode()
+                    target.writestr(name, data)
+            with self.assertRaises(package_plugin.PackageError):
+                package_plugin.verify_archive(broken)
+
+    def test_extra_core_assembly_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            archive = build_valid_archive(Path(tmp))
+            broken = Path(tmp) / "core.zip"
+            with zipfile.ZipFile(archive) as source, zipfile.ZipFile(broken, "w") as target:
+                for name in source.namelist():
+                    target.writestr(name, source.read(name))
+                target.writestr("Jellyfin.Plugin.StrmProbeOptimizer_0.1.0.0/Jellyfin.Controller.dll", b"unexpected")
+            with self.assertRaises(package_plugin.PackageError):
+                package_plugin.verify_archive(broken)
+
+    def test_assembly_version_mismatch_is_rejected(self):
+        # Use a real managed assembly so the declared-version check is exercised. The stub
+        # fixtures declare no assemblyVersion, so they are covered by the allow-list and
+        # dependency-completeness checks instead.
+        archive = ROOT / "artifacts" / "releases" / "Jellyfin.Plugin.StrmProbeOptimizer_linux-x64.zip"
+        if not archive.is_file():
+            self.skipTest("the published release archive is not present")
+        with tempfile.TemporaryDirectory() as tmp:
+            with zipfile.ZipFile(archive) as bundle:
+                root = bundle.namelist()[0].split("/")[0]
+                real_dll = bundle.read(f"{root}/Microsoft.Data.Sqlite.dll")
+            deps = json.loads(json.dumps(DEPS))
+            deps["targets"][DEPS_TARGET]["Microsoft.Data.Sqlite.Core/10.0.0"]["runtime"]["lib/net8.0/Microsoft.Data.Sqlite.dll"] = {
+                "assemblyVersion": "9.9.9.9"}
+            publish_dir = make_publish(Path(tmp) / "publish")
+            (publish_dir / "Jellyfin.Plugin.StrmProbeOptimizer.deps.json").write_text(json.dumps(deps), encoding="utf-8")
+            (publish_dir / "Microsoft.Data.Sqlite.dll").write_bytes(real_dll)
+            files, _ = package_plugin.build_archive_layout(
+                publish_dir, MANIFEST, "0.1.0.0", "a" * 40, "10.0.401", "linux-x64", "Release")
+            archive_path = Path(tmp) / "mismatch.zip"
+            package_plugin.write_archive(archive_path, files)
+            with self.assertRaises(package_plugin.PackageError):
+                package_plugin.verify_archive(archive_path)
+            # The same package with the correct declared version passes.
+            deps["targets"][DEPS_TARGET]["Microsoft.Data.Sqlite.Core/10.0.0"]["runtime"]["lib/net8.0/Microsoft.Data.Sqlite.dll"] = {
+                "assemblyVersion": "10.0.0.0"}
+            (publish_dir / "Jellyfin.Plugin.StrmProbeOptimizer.deps.json").write_text(json.dumps(deps), encoding="utf-8")
+            files, _ = package_plugin.build_archive_layout(
+                publish_dir, MANIFEST, "0.1.0.0", "a" * 40, "10.0.401", "linux-x64", "Release")
+            good = Path(tmp) / "good.zip"
+            package_plugin.write_archive(good, files)
+            package_plugin.verify_archive(good)
+
+    def test_read_assembly_version_reads_a_real_assembly(self):
+        archive = ROOT / "artifacts" / "releases" / "Jellyfin.Plugin.StrmProbeOptimizer_linux-x64.zip"
+        if not archive.is_file():
+            self.skipTest("the published release archive is not present")
+        with zipfile.ZipFile(archive) as bundle:
+            data = bundle.read(next(n for n in bundle.namelist() if n.endswith("Jellyfin.Plugin.StrmProbeOptimizer.dll")))
+        self.assertEqual(package_plugin.read_assembly_version(data), "0.1.0.0")
+        self.assertIsNone(package_plugin.read_assembly_version(b"not an assembly"))
+
+    def test_embedded_revision_mismatch_is_rejected(self):
+        import re as _re
+
+        data = b"prefix 0.1.0+" + b"b" * 40 + b" suffix"
+        self.assertIsNotNone(_re.search(package_plugin.EMBEDDED_REVISION, data))
+        with tempfile.TemporaryDirectory() as tmp:
+            assembly = Path(tmp) / "Jellyfin.Plugin.StrmProbeOptimizer.dll"
+            assembly.write_bytes(data)
+            with self.assertRaises(package_plugin.PackageError):
+                package_plugin.verify_embedded_revision(assembly, "a" * 40)
+            package_plugin.verify_embedded_revision(assembly, "b" * 40)
+            with self.assertRaises(package_plugin.PackageError):
+                package_plugin.verify_embedded_revision(Path(tmp) / "missing.dll", "b" * 40)
+
+    def test_build_input_digest_covers_tracked_sources(self):
+        digest = package_plugin.build_input_digest()
+        self.assertRegex(digest, r"[0-9a-f]{64}")
+
+    def test_worktree_cleanliness_is_reported(self):
+        clean, detail = package_plugin.worktree_is_clean()
+        self.assertIsInstance(clean, bool)
+        self.assertIsInstance(detail, str)
 
 
 if __name__ == "__main__":

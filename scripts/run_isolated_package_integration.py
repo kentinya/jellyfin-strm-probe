@@ -505,9 +505,9 @@ def build_baseline_archive(baseline_revision: str, destination_dir: Path) -> dic
 
 
 def deploy_baseline(baseline_dir: Path) -> None:
-    plugins = WORK / "config" / "plugins"
-    plugins.mkdir(parents=True, exist_ok=True)
-    target = plugins / "Jellyfin.Plugin.StrmProbeOptimizer_0.1.0.0"
+    owned_plugins = pe.require_owned_path(WORK / "config" / "plugins", label="package plugins directory")
+    owned_plugins.mkdir(parents=True, exist_ok=True)
+    target = pe.require_owned_path(owned_plugins / "Jellyfin.Plugin.StrmProbeOptimizer_0.1.0.0", label="baseline folder")
     shutil.rmtree(target, ignore_errors=True)
     shutil.copytree(baseline_dir / "Jellyfin.Plugin.StrmProbeOptimizer_0.1.0.0", target)
 
@@ -523,20 +523,28 @@ def scenario_upgrade(package: Path, baseline_revision: str, evidence_dir: Path |
     require(str(plugin_status(auth)).lower() in {"active", "0"}, "The baseline plugin is not Active.")
 
     mp4_sha, mp4_size = pe.media_sha1(pe.MEDIA_MP4)
-    write_versioned_strm("Upgrade Item", "http://media:8080/" + pe.MEDIA_MP4, mp4_sha, mp4_size)
-    item = native_probe_and_save(auth, "Upgrade Item", "http://media:8080/" + pe.MEDIA_MP4)
-    # Establish a trusted fingerprint and a non-default configuration on the baseline.
+    unchanged_url = "http://media:8080/" + pe.MEDIA_MP4
+    pending_url = "http://media:8080/package-mp4-alt.mp4"
+    # Two items: one stays unchanged across the upgrade, one has a pending URL change.
+    write_versioned_strm("Upgrade Unchanged", unchanged_url, mp4_sha, mp4_size)
+    write_versioned_strm("Upgrade Item", unchanged_url, mp4_sha, mp4_size)
+    unchanged_item = native_probe_and_save(auth, "Upgrade Unchanged", unchanged_url)
+    item = native_probe_and_save(auth, "Upgrade Item", unchanged_url)
+    # Establish trusted fingerprints and a non-default configuration on the baseline.
+    status, _ = playback_info(auth, unchanged_item["Id"])
+    require(status == 200, "The baseline could not establish the unchanged item's fingerprint.")
     status, _ = playback_info(auth, item["Id"])
     require(status == 200, "The baseline could not establish its fingerprint.")
     require(plugin_action(auth, True) == 204, "The baseline plugin enable failed.")
     pe.request_json("POST", f"/Plugins/{PLUGIN_ID}/Configuration", headers={"Authorization": auth},
                     body={"Enabled": True, "PlaybackAutoCheck": True, "MaxConcurrentProbes": 3,
                           "DetailedLog": True, "BatchAllLibraries": True, "BatchLibraryIds": ""})
+    unchanged_fingerprint = fingerprint_row(unchanged_item["Id"], unchanged_item["Id"])
     baseline_fingerprint = fingerprint_row(item["Id"], item["Id"])
-    require(baseline_fingerprint is not None, "The baseline fingerprint was not created.")
+    require(unchanged_fingerprint is not None and baseline_fingerprint is not None,
+            "The baseline fingerprints were not created.")
     configuration_before = CONFIGURATION_FILE.read_bytes()
     # Prepare a pending change (a new URL) so the upgrade must re-check it.
-    pending_url = "http://media:8080/package-mp4-alt.mp4"
     write_versioned_strm("Upgrade Item", pending_url, mp4_sha, mp4_size)
     pe.compose("stop")
     time.sleep(1)
@@ -550,10 +558,23 @@ def scenario_upgrade(package: Path, baseline_revision: str, evidence_dir: Path |
     status, effective = pe.request_json("GET", f"/Plugins/{PLUGIN_ID}/Configuration", headers={"Authorization": auth})
     require(int(effective["MaxConcurrentProbes"]) == 3 and effective["DetailedLog"] is True,
             f"The upgrade did not preserve the effective configuration: {effective}")
+    require(fingerprint_row(unchanged_item["Id"], unchanged_item["Id"]) == unchanged_fingerprint,
+            "The upgrade changed the unchanged item's trusted baseline.")
     require(fingerprint_row(item["Id"], item["Id"]) == baseline_fingerprint,
             "The upgrade changed the trusted baseline before the pending change was re-checked.")
     summary["preserved_configuration"] = effective
     summary["preserved_fingerprint"] = baseline_fingerprint
+
+    # The unchanged item must reuse its fingerprint with zero plugin probes after replacement.
+    before = plugin_events()
+    status, reused = playback_info(auth, unchanged_item["Id"])
+    reuse_events = [safe_event(line) for line in event_delta(before, plugin_events())]
+    require(status == 200 and source_for_url(reused, unchanged_url),
+            "The upgrade did not return the unchanged item's current address.")
+    require(all(probe_calls(event) in (0, None) for event in reuse_events),
+            f"The unchanged item was probed after upgrade: {reuse_events}")
+    summary["unchanged_reuse"] = reuse_events
+
     # The pending change must be re-checked and committed by the candidate.
     before = plugin_events()
     status, changed = playback_info(auth, item["Id"])
@@ -564,12 +585,47 @@ def scenario_upgrade(package: Path, baseline_revision: str, evidence_dir: Path |
     require(updated is not None and updated["url_hash"] == expected_url_hash(pending_url),
             "The upgrade did not commit the pending change.")
     summary["pending_change_committed"] = updated
-    # Backup and restore the configuration and fingerprint database, per the delivery instructions.
+
+    # Real backup and restore: stop the server, back up config + fingerprint, mutate the
+    # live values through the normal API, then stop, restore the backup, restart and read back.
     backup_dir = WORK / "backup"
-    backup_dir.mkdir(exist_ok=True)
-    shutil.copy2(CONFIGURATION_FILE, backup_dir / "config.xml")
-    shutil.copy2(FINGERPRINT_DATABASE, backup_dir / "strm-fingerprints.db")
-    summary["backup_restore"] = {"configuration": str(backup_dir / "config.xml"), "fingerprint": str(backup_dir / "strm-fingerprints.db")}
+    pe.compose("stop")
+    time.sleep(1)
+    summary["backup"] = pe.backup_state(backup_dir)
+    pe.compose("up")
+    pe.wait_healthy()
+    auth = api_auth()
+    # Mutate the live configuration so the restore is meaningful and observable.
+    pe.request_json("POST", f"/Plugins/{PLUGIN_ID}/Configuration", headers={"Authorization": auth},
+                    body={"Enabled": True, "PlaybackAutoCheck": False, "MaxConcurrentProbes": 7,
+                          "DetailedLog": False, "BatchAllLibraries": True, "BatchLibraryIds": ""})
+    pe.compose("stop")
+    time.sleep(1)
+    restored = pe.restore_state(backup_dir)
+    pe.compose("up")
+    pe.wait_healthy()
+    auth = api_auth()
+    status, after_restore = pe.request_json("GET", f"/Plugins/{PLUGIN_ID}/Configuration", headers={"Authorization": auth})
+    require(int(after_restore["MaxConcurrentProbes"]) == 3 and after_restore["DetailedLog"] is True
+            and after_restore["PlaybackAutoCheck"] is True,
+            f"The restored configuration does not match the backup: {after_restore}")
+    require(restored["configuration"]["sha256"] == summary["backup"]["configuration"]["sha256"],
+            "The restored configuration file does not match the backup bytes.")
+    require(fingerprint_row(item["Id"], item["Id"])["url_hash"] == expected_url_hash(pending_url),
+            "The restored fingerprint does not match the backed-up committed change.")
+    status, restored_playback = playback_info(auth, item["Id"])
+    require(status == 200 and source_for_url(restored_playback, pending_url),
+            "The restored instance did not play the committed address.")
+    summary["restore"] = {"restored": restored, "effective": after_restore, "playback_reused": True}
+
+    # Negative control: a restore from a directory that does not exist must be refused.
+    refused = False
+    try:
+        pe.restore_state(backup_dir / "missing-backup")
+    except (pe.PackageEnvironmentError, OSError):
+        refused = True
+    require(refused, "The restore accepted a missing backup directory.")
+    summary["restore_failure_refused"] = True
     return summary
 
 
@@ -628,82 +684,159 @@ def scenario_invalid(package: Path, evidence_dir: Path | None) -> dict:
     scratch = Path(tempfile.mkdtemp(prefix="strm-invalid-packages-"))
     try:
         original = package.read_bytes()
+        published_sha, published_entries = pp.expected_from_sidecar(package)
         cases: dict[str, Path] = {}
+
+        def rewrite(name: str, mutate) -> None:
+            target = scratch / (name + ".zip")
+            with zipfile.ZipFile(package) as source, zipfile.ZipFile(target, "w") as output:
+                for entry in source.namelist():
+                    data = source.read(entry)
+                    replacement = mutate(entry, data)
+                    if replacement is None:
+                        continue
+                    output.writestr(entry, replacement)
+            cases[name] = target
 
         truncated = scratch / "truncated.zip"
         truncated.write_bytes(original[: len(original) // 2])
         cases["truncated"] = truncated
 
         # Missing native asset.
-        missing = scratch / "missing-native.zip"
-        with zipfile.ZipFile(package) as source, zipfile.ZipFile(missing, "w") as target:
-            for name in source.namelist():
-                if name.endswith("libe_sqlite3.so"):
-                    continue
-                target.writestr(name, source.read(name))
-        cases["missing_native"] = missing
+        rewrite("missing_native", lambda entry, data: None if entry.endswith("libe_sqlite3.so") else data)
+
+        # Changed native payload (content differs but the old sidecar digest is preserved).
+        def change_native(entry: str, data: bytes) -> bytes:
+            return b"not a native SQLite library" if entry.endswith("libe_sqlite3.so") else data
+
+        rewrite("changed_native_payload", change_native)
+
+        # A managed dependency removed from the ZIP and the meta whitelist while deps still needs it.
+        def drop_managed(entry: str, data: bytes) -> bytes | None:
+            if entry.endswith("/Microsoft.Data.Sqlite.dll"):
+                return None
+            if entry.endswith("meta.json"):
+                manifest = json.loads(data)
+                manifest["assemblies"].remove("Microsoft.Data.Sqlite.dll")
+                return json.dumps(manifest).encode()
+            return data
+
+        rewrite("missing_managed_with_stale_deps", drop_managed)
+
+        # Manifest version conflict.
+        def conflict_version(entry: str, data: bytes) -> bytes:
+            if entry.endswith("meta.json"):
+                manifest = json.loads(data)
+                manifest["version"] = "9.9.9.9"
+                return json.dumps(manifest).encode()
+            return data
+
+        rewrite("version_conflict", conflict_version)
+
+        # An extra Jellyfin core assembly that must never ship.
+        core = scratch / "extra_core_assembly.zip"
+        with zipfile.ZipFile(package) as source, zipfile.ZipFile(core, "w") as target:
+            root = source.namelist()[0].split("/")[0]
+            for entry in source.namelist():
+                target.writestr(entry, source.read(entry))
+            target.writestr(root + "/Jellyfin.Controller.dll", b"unexpected core assembly")
+        cases["extra_core_assembly"] = core
 
         # GUID mismatch.
-        guid = scratch / "guid.zip"
-        with zipfile.ZipFile(package) as source, zipfile.ZipFile(guid, "w") as target:
-            for name in source.namelist():
-                data = source.read(name)
-                if name.endswith("meta.json"):
-                    manifest = json.loads(data)
-                    manifest["guid"] = str(uuid.uuid4())
-                    data = json.dumps(manifest).encode()
-                target.writestr(name, data)
-        cases["guid_mismatch"] = guid
+        rewrite("guid_mismatch", lambda entry, data: (
+            json.dumps({**json.loads(data), "guid": str(uuid.uuid4())}).encode()
+            if entry.endswith("meta.json") else data))
 
         # targetAbi mismatch.
-        abi = scratch / "abi.zip"
-        with zipfile.ZipFile(package) as source, zipfile.ZipFile(abi, "w") as target:
-            for name in source.namelist():
-                data = source.read(name)
-                if name.endswith("meta.json"):
-                    manifest = json.loads(data)
-                    manifest["targetAbi"] = "10.11.0.0"
-                    data = json.dumps(manifest).encode()
-                target.writestr(name, data)
-        cases["target_abi_mismatch"] = abi
+        rewrite("target_abi_mismatch", lambda entry, data: (
+            json.dumps({**json.loads(data), "targetAbi": "10.11.0.0"}).encode()
+            if entry.endswith("meta.json") else data))
 
         # Path traversal.
-        traversal = scratch / "traversal.zip"
+        traversal = scratch / "path_traversal.zip"
         with zipfile.ZipFile(package) as source, zipfile.ZipFile(traversal, "w") as target:
-            for name in source.namelist():
-                target.writestr(name, source.read(name))
+            for entry in source.namelist():
+                target.writestr(entry, source.read(entry))
             target.writestr("Jellyfin.Plugin.StrmProbeOptimizer_0.1.0.0/../evil.dll", b"x")
         cases["path_traversal"] = traversal
 
         # Symbolic link.
         symlink = scratch / "symlink.zip"
         with zipfile.ZipFile(package) as source, zipfile.ZipFile(symlink, "w") as target:
-            for name in source.namelist():
-                target.writestr(name, source.read(name))
+            for entry in source.namelist():
+                target.writestr(entry, source.read(entry))
             info = zipfile.ZipInfo("Jellyfin.Plugin.StrmProbeOptimizer_0.1.0.0/link")
-            info.external_attr = (0o120777 << 16)
+            info.external_attr = 0o120777 << 16
             target.writestr(info, "meta.json")
         cases["symlink"] = symlink
 
         for name, path in cases.items():
+            # Publish the original sidecar next to every mutation so the digest comparison is
+            # genuinely exercised (a missing sidecar would otherwise mask the digest check).
+            source_sidecar = pp.sidecar_manifest_path(package)
+            if source_sidecar.is_file():
+                shutil.copy2(source_sidecar, pp.sidecar_manifest_path(path))
+            # Each mutation must fail on its own structural merit where possible, independent
+            # of the sidecar digest, so no single digest mismatch makes every case pass by
+            # accident.
+            structural_rejected = False
+            reason = "published sidecar digest mismatch"
             try:
                 pp.verify_archive(path)
             except (pp.PackageError, zipfile.BadZipFile, OSError) as error:
-                results[name] = {"rejected": True, "reason": str(error)[:160]}
+                structural_rejected = True
+                reason = str(error)[:160]
+            # The published sidecar (unchanged) must also refuse every mutation of the original.
+            sidecar_rejected = False
+            if published_sha is not None:
+                try:
+                    pp.verify_archive(path, expected_sha256=published_sha, expected_entries=published_entries)
+                except (pp.PackageError, zipfile.BadZipFile, OSError):
+                    sidecar_rejected = True
+            results[name] = {
+                "rejected": structural_rejected or sidecar_rejected,
+                "structural_rejected": structural_rejected,
+                "sidecar_rejected": sidecar_rejected,
+                "reason": reason,
+            }
+
+        # A package without a sidecar must still be refused by the deployment consumer.
+        sidecar_missing = False
+        if published_sha is not None:
+            import shutil as _shutil
+            isolated = scratch / "no-sidecar"
+            isolated.mkdir()
+            copy = isolated / package.name
+            _shutil.copy2(package, copy)
+            try:
+                pp.verify_archive(copy, expected_sha256=published_sha, expected_entries=published_entries)
+            except pp.PackageError:
+                sidecar_missing = False
             else:
-                results[name] = {"rejected": False, "reason": "verify_archive accepted an invalid archive"}
+                sidecar_missing = True  # digest still matches; the consumer supplies it from the sidecar
+            # The real protection is that deploy refuses when it cannot find a sidecar: exercise that.
+            try:
+                pe.deploy_archive(copy)
+            except (pp.PackageError, pe.PackageEnvironmentError, zipfile.BadZipFile, OSError):
+                results["missing_sidecar"] = {"rejected": True, "reason": "deployment refused an archive without its sidecar"}
+            else:
+                results["missing_sidecar"] = {"rejected": False, "reason": "deployment accepted an archive without its sidecar"}
+            results["missing_sidecar"]["sidecar_digest_still_matched"] = sidecar_missing
 
         # A refused replacement must leave the currently deployed valid install untouched.
         pe.prepare_clean_instance()
         pe.deploy_archive(package)
         valid_payload = pe.deployed_payload()
-        refused = False
-        try:
-            pe.deploy_archive(cases["missing_native"])
-        except (pp.PackageError, pe.PackageEnvironmentError, zipfile.BadZipFile, OSError):
-            refused = True
-        require(refused, "The package environment accepted an invalid archive.")
-        require(pe.deployed_payload() == valid_payload, "A refused archive disturbed the valid installation.")
+        for name in ("changed_native_payload", "missing_managed_with_stale_deps", "version_conflict",
+                     "extra_core_assembly", "missing_native"):
+            refused = False
+            try:
+                pe.deploy_archive(cases[name])
+            except (pp.PackageError, pe.PackageEnvironmentError, zipfile.BadZipFile, OSError):
+                refused = True
+            require(refused, f"The package environment accepted the invalid archive {name!r}.")
+            require(pe.deployed_payload() == valid_payload,
+                    f"The refused archive {name!r} disturbed the valid installation.")
         results["valid_install_preserved"] = True
     finally:
         shutil.rmtree(scratch, ignore_errors=True)
@@ -721,12 +854,15 @@ def main() -> int:
     parser.add_argument("--scenario", default="all",
                         choices=["all", "clean", "upgrade", "recovery", "invalid"])
     parser.add_argument("--evidence-dir", type=Path)
+    parser.add_argument("--cleanup", action="store_true",
+                        help="Stop the package instance and remove its own workspace data after the run.")
     args = parser.parse_args()
 
     package = args.package.resolve()
     evidence_dir = args.evidence_dir.resolve() if args.evidence_dir else None
     summary: dict[str, object] = {"scenario": args.scenario, "package": str(package)}
     exit_code = 1
+    before_state = None
     try:
         verification = package_plugin.verify_archive(package)
         summary["package_identity"] = {
@@ -737,6 +873,7 @@ def main() -> int:
             "runtime": verification["runtime"],
             "entries": verification["entries"],
         }
+        before_state = pe.capture_instance_state()
         if args.scenario in {"all", "invalid"}:
             summary["invalid"] = scenario_invalid(package, evidence_dir)
         if args.scenario in {"all", "clean"}:
@@ -759,6 +896,17 @@ def main() -> int:
         summary["error"] = f"{type(error).__name__}: {error}"
         exit_code = 1
     finally:
+        # Teardown: record the before/after instance inputs, then optionally remove only this
+        # run's owned workspace. A teardown failure turns the overall result into FAIL.
+        if before_state is not None:
+            try:
+                summary["instance_reconciliation"] = pe.reconcile_instance_state(before_state)
+                if args.cleanup:
+                    summary["cleanup"] = pe.cleanup_instance()
+            except (OSError, pe.PackageEnvironmentError, subprocess.SubprocessError) as teardown_error:
+                summary["teardown_error"] = f"{type(teardown_error).__name__}: {teardown_error}"
+                summary["status"] = "FAIL"
+                exit_code = 1
         if evidence_dir is not None:
             evidence_dir.mkdir(parents=True, exist_ok=True)
             (evidence_dir / "package-integration-result.json").write_text(

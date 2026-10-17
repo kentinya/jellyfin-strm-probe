@@ -29,15 +29,19 @@ python3 scripts/package_plugin.py --configuration Release --runtime linux-x64 --
 产物（默认在 `artifacts/releases/`）：
 
 - `Jellyfin.Plugin.StrmProbeOptimizer_linux-x64.zip`：归档；
-- `Jellyfin.Plugin.StrmProbeOptimizer_linux-x64.manifest.json`：来源、SDK、运行时、依赖、许可、每文件摘要与归档 SHA-256；
+- `Jellyfin.Plugin.StrmProbeOptimizer_linux-x64.manifest.json`：来源、SDK、运行时、依赖、许可、每文件摘要、构建命令与输入摘要及归档 SHA-256；
 - `Jellyfin.Plugin.StrmProbeOptimizer_linux-x64.zip.sha256`：归档校验值。
 
-校验归档（部署前）：
+打包要求工作区无未提交的受跟踪改动；`--source-revision` 必须等于当前 HEAD 且为真实可达提交，该 SHA 通过 `-p:SourceRevisionId` 写入程序集构建标识，并在打包时核对。清单同时记录锁文件与构建输入摘要，可用于复建。
+
+校验归档（部署前，必须在归档所在目录执行 `sha256sum -c`，因为清单只记录文件名）：
 
 ```bash
 python3 scripts/package_plugin.py --verify artifacts/releases/Jellyfin.Plugin.StrmProbeOptimizer_linux-x64.zip
-sha256sum -c artifacts/releases/Jellyfin.Plugin.StrmProbeOptimizer_linux-x64.zip.sha256
+(cd artifacts/releases && sha256sum -c Jellyfin.Plugin.StrmProbeOptimizer_linux-x64.zip.sha256)
 ```
+
+`--verify` 会自动读取归档旁的同名 `.manifest.json`，并比对归档 SHA-256、每个负载文件摘要、依赖完整性、程序集版本与元数据；清单缺失或不匹配即拒绝。包验收部署同样默认读取该清单，不会用重新计算的摘要自证。
 
 归档内含一个顶层插件目录 `Jellyfin.Plugin.StrmProbeOptimizer_0.1.0.0/`，其中有插件程序集、依赖清单、托管与 Linux x64 native SQLite 负载、`meta.json` 和 `THIRD-PARTY-NOTICES.txt`。它不含源码、测试、SDK、凭据、媒体库数据或运行状态。拒绝损坏归档、缺失 native、GUID／ABI 不符、越界路径与符号链接；拒绝时不会覆盖已有有效安装。
 
@@ -76,7 +80,7 @@ URL 变化必探测、SHA-1／Size 决策、Modified 忽略与权限边界是固
 - 配置：`config/plugins/configurations/Jellyfin.Plugin.StrmProbeOptimizer.xml`。
 - 历史指纹：`config/data/plugins/b061643ed17d4c6e8ba26b57e286bd20/` 下的 `strm-fingerprints.db`（实际目录名以 GUID 十六进制为准）。
 
-备份即在 Jellyfin 停止时复制上述文件；恢复即放回同一路径后启动。插件不会自动删除或重建状态库；无 schema 变化时不需要迁移步骤。恢复失败时如实报告，不伪装成功。
+备份即在 Jellyfin 停止时复制上述文件；恢复即放回同一路径后启动。插件不会自动删除或重建状态库；无 schema 变化时不需要迁移步骤。恢复失败时如实报告，不伪装成功。包验收入口会在停止服务器后实际执行备份、通过正常 API 改动配置、再停止、恢复、重启并读回核对（`scripts/run_isolated_package_integration.py --scenario upgrade`）。
 
 ## 禁用、移除与重装
 
