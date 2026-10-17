@@ -117,6 +117,33 @@ def _scrub(value: object, key: str = "") -> object:
     return value
 
 
+def current_source_id_for_hash(auth: str, item_id: str, expected_hash: str) -> str | None:
+    """Return the current native MediaSource id whose path hashes to ``expected_hash``."""
+    status, payload = pe.request_json("GET", f"/Items/{item_id}?Fields=MediaSources,MediaStreams,Path",
+                                      headers={"Authorization": auth})
+    require(status == 200, "The current item read failed while resolving a source identity.")
+    for source in payload.get("MediaSources", []):
+        path = source.get("Path") or ""
+        if source.get("Id") and digest(path) == expected_hash:
+            return str(source["Id"])
+    return None
+
+
+def assert_committed_address_survives(auth: str, item_id: str, expected_hash: str, label: str) -> None:
+    """After a restart, prove a committed address is still returned and explicit selection still works.
+
+    The physical source id can be re-keyed by a native library scan, so the current identity is resolved
+    from the current native MediaSources rather than assumed to be the pre-scan id; the explicit selection
+    then must return exactly that current source with the committed address.
+    """
+    current_id = current_source_id_for_hash(auth, item_id, expected_hash)
+    require(current_id is not None,
+            f"The {label} committed address is no longer present in the current native source set after the restart.")
+    status, response = playback_info_selected(auth, item_id, current_id)
+    require(status == 200, f"The explicit {label} selection failed after the restart ({status}).")
+    _require_selected_source(response, current_id, expected_hash, label)
+
+
 class EvidenceRecorder:
     """Incrementally persist redacted, reviewable evidence outside the instance workspace."""
 
@@ -1301,8 +1328,8 @@ def convergence(auth: str, fixture: dict, recorder: EvidenceRecorder) -> dict:
 
     reconciliation = reconcile_expected_sources(auth, libraries["strm"])
     # Restart and prove the committed addresses survive, covering a URL-changed source and a merged
-    # multi-version source. A merged version must be queried through its canonical project id, because
-    # the physical id is no longer the canonical native item after MergeVersions.
+    # multi-version source. A native scan may re-key a physical source id, so the current identity is
+    # resolved from the current native MediaSources before the explicit selection check.
     batch_item = fixture["items"][fixture["batch_name"]]["Id"]
     mv_a = fixture["items"][fixture["mv_a_name"]]["Id"]
     batch_row = fingerprint_row(batch_item)
@@ -1315,9 +1342,7 @@ def convergence(auth: str, fixture: dict, recorder: EvidenceRecorder) -> dict:
     status, response = playback_info(auth, batch_item)
     require(status == 200 and source_path_matches_hash(response, batch_row["url_hash"]),
             "The URL-changed batch source address did not survive the restart.")
-    status, response = playback_info_selected(auth, canonical, mv_a)
-    require(status == 200, "The multi-version selected PlaybackInfo failed after the restart.")
-    _require_selected_source(response, mv_a, mv_row["url_hash"], "A-after-restart")
+    assert_committed_address_survives(auth, canonical, mv_row["url_hash"], "multi-version")
     recorder.record("convergence", stable=fields, repeat=repeat_fields, reconciliation=reconciliation)
     recorder.snapshot("convergence", {"stable": fields, "repeat": repeat_fields,
                                       "reconciliation": reconciliation})
