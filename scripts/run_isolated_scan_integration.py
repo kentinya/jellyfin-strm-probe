@@ -101,6 +101,10 @@ _SCRUB_KEYS = ("url", "path", "token", "password", "cookie", "authorization", "a
 
 def _scrub(value: object, key: str = "") -> object:
     """Redact anything that could carry a signed URL, token, cookie or private path."""
+    if isinstance(value, datetime.datetime):
+        return value.isoformat()
+    if isinstance(value, Path):
+        return str(value)
     if isinstance(value, dict):
         return {str(k): _scrub(v, str(k)) for k, v in value.items()}
     if isinstance(value, (list, tuple)):
