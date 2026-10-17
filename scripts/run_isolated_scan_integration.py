@@ -1832,8 +1832,9 @@ def main() -> int:
             summary["recovery"] = scenario_recovery(package, evidence_dir, nonce, recorder)
         summary["status"] = "PASS"
         exit_code = 0
-    except (RuntimeError, OSError, ValueError, KeyError, json.JSONDecodeError, subprocess.SubprocessError,
-            pp.PackageError, pe.PackageEnvironmentError) as error:
+    except (RuntimeError, OSError, ValueError, KeyError, TypeError, AttributeError, NameError,
+            json.JSONDecodeError, subprocess.SubprocessError, pp.PackageError,
+            pe.PackageEnvironmentError) as error:
         summary["status"] = "FAIL"
         summary["error"] = f"{type(error).__name__}: {error}"
         exit_code = 1
