@@ -1297,20 +1297,24 @@ def convergence(auth: str, fixture: dict, recorder: EvidenceRecorder) -> dict:
     require_zero_probes(repeat_fields, repeat, "unchanged re-check run")
 
     reconciliation = reconcile_expected_sources(auth, libraries["strm"])
-    # Restart and prove the committed addresses survive, covering a URL-changed and a selected source.
+    # Restart and prove the committed addresses survive, covering a URL-changed source and a merged
+    # multi-version source. A merged version must be queried through its canonical project id, because
+    # the physical id is no longer the canonical native item after MergeVersions.
     batch_item = fixture["items"][fixture["batch_name"]]["Id"]
     mv_a = fixture["items"][fixture["mv_a_name"]]["Id"]
     batch_row = fingerprint_row(batch_item)
-    mv_row = fingerprint_row(mv_a)
-    require(batch_row is not None and mv_row is not None, "Expected committed fingerprints are missing before restart.")
+    mv_rows = fingerprint_rows_for_source(mv_a)
+    require(batch_row is not None and mv_rows, "Expected committed fingerprints are missing before restart.")
+    mv_row = mv_rows[0]
+    canonical = dashed(mv_row["item_id"])
     restart()
     auth = api_auth()
     status, response = playback_info(auth, batch_item)
     require(status == 200 and source_path_matches_hash(response, batch_row["url_hash"]),
             "The URL-changed batch source address did not survive the restart.")
-    status, response = playback_info(auth, mv_a)
-    require(status == 200 and source_path_matches_hash(response, mv_row["url_hash"]),
-            "The multi-version source address did not survive the restart.")
+    status, response = playback_info_selected(auth, canonical, mv_a)
+    require(status == 200, "The multi-version selected PlaybackInfo failed after the restart.")
+    _require_selected_source(response, mv_a, mv_row["url_hash"], "A-after-restart")
     recorder.record("convergence", stable=fields, repeat=repeat_fields, reconciliation=reconciliation)
     recorder.snapshot("convergence", {"stable": fields, "repeat": repeat_fields,
                                       "reconciliation": reconciliation})
