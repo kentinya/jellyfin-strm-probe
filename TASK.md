@@ -5,13 +5,13 @@
 ```text
 Task ID: 4.1
 Parent Slice: 4
-Status: FIX REQUIRED
+Status: READY FOR B REVIEW
 Task Base: ae265d0dba02aa1c5599871602d4350072b7155f
 Contract Checkpoint: ae265d0dba02aa1c5599871602d4350072b7155f
 Difficulty: High
 Test Level: T4
 Planner / Reviewer: A (user-authorized planning) / B (independent Task Review)
-Implementation Head: c1fb5ee57272f158c2ea7abd7545980d1f11337d
+Implementation Head: 7dbf36615bddea0aa65a14d84ae56806aea62aa8
 ```
 
 ## Goal
@@ -279,10 +279,22 @@ python3 scripts/package_plugin.py --verify artifacts/releases/Jellyfin.Plugin.St
 
 开发时先跑 `python3 -m unittest discover -s tests -p 'test_*package*.py' -v` 及相关 `invalid`／`upgrade`／`recovery` 场景，确认反例已修正、恢复已真正执行，再对最后修正候选重建包并执行上文“最终检查点门槛”全部命令；实机串行。准确测试数、包／部署摘要、原始失败与每次重跑、恢复／清理结果写入新证据索引。随后追加实现提交及完成报告，交为 READY FOR B REVIEW；B 独立复审后才决定 PASS。本轮仅补充指导，未实施修复、未运行新的产品验收，FIX REQUIRED 保持。
 
+### Developer 修正报告（2026-10-17，BR-41-1 剩余／BR-41-3a／BR-41-3b）
+
+- 修正提交：`7dbf36615bddea0aa65a14d84ae56806aea62aa8`（`fix: verify package version identity and isolate run state writes`），在 Task Base `ae265d0d…` 之后追加，未改写已审查历史。
+- Changed Files：`scripts/package_plugin.py`、`scripts/package_environment.py`、`scripts/run_isolated_package_integration.py`、`tests/test_package_plugin.py`、`tests/test_isolated_package_integration.py`、`docs/package-installation.md`。未改产品决策／权限／取消／Coordinator／SQLite schema／指纹门槛，未改 C# 产品代码。
+- BR-41-1（剩余）：新增 `normalize_dotnet_version` 与 `verify_version_identity`，始终读取主插件 DLL 的实际 `AssemblyVersion`，并核对目录名、`meta.json`、deps 中主项目版本（`0.1.0` 与 `0.1.0.0` 归一化）。`build_archive_layout` 与 `verify_archive` 共用同一检查；B 的“目录＋meta 同改、DLL 不改”与“只改 deps 项目版本”两类反例现均在写出／替换有效安装前被结构校验拒绝，不再依赖旁置摘要。
+- BR-41-3a：`require_owned_path` 改为沿原始词法路径逐级拒绝符号链接（含指向区内的内部链接）后再解析校验，并对备份／恢复及 STRM／媒体／媒体服务器／compose 写入校验最终目标文件本身；备份叶链接与内部父目录链接反例现被拒且外部 sentinel 原样保留。
+- BR-41-3b：每轮验收使用 `artifacts/package-env/runs/` 下新建、带 `.package-run` 归属标记的独立工作区；非空且无标记的目录在任何写入前被拒。`capture_instance_state`／`reconcile_instance_state` 现覆盖配置、指纹库、媒体、STRM、原生任务触发器与库条目，任一已有输入被移除或修改即使整轮 FAIL；`cleanup_instance` 仅删除确认属于本轮的工作区，无标记目录拒绝清理，清理／收尾失败使总体 FAIL。默认每轮自动清理，`--keep-workspace` 保留供检查。
+- Tests and Results（候选 `7dbf36615bddea0aa65a14d84ae56806aea62aa8`，工作区干净）：restore PASS；build 0 警告／0 错误；`dotnet test` 202/202 PASS；format PASS；`python3 -m unittest discover -s tests -v` 115/115 PASS；包工具测试 52/52 PASS；`package_plugin.py` 产出 ZIP SHA-256 `3c5625a2371d5c71088b716788f855b5019c50d39170c0cdfb719a139d704c1f`（来源 SHA 等于 HEAD）；`--verify` 与 `sha256sum -c` PASS；`run_isolated_package_integration.py --scenario all` PASS（clean／upgrade／recovery／invalid；`instance_reconciliation` 为 `CLEAN`、`disturbed` 为空、工作区已完整清理）；`run_isolated_plugin_integration.py` PASS；`run_isolated_batch_integration.py --scenario suite` PASS；`run_isolated_configuration_integration.py --scenario all` PASS；governance／`git diff --check`／Markdown 本地链接与锚点 PASS。
+- 证据索引：`.git/validation-evidence/7dbf36615bddea0aa65a14d84ae56806aea62aa8/dev-20261017-01/INDEX.md`（本地可读），含输入摘要、精确命令／输出、包／清单摘要与包验收原始 JSON。
+- Remaining In-Slice Work：RO-2、RO-3、RO-4 与最终 Slice Final 未变，仍 NOT RUN。
+- Head SHA：`7dbf36615bddea0aa65a14d84ae56806aea62aa8`（本报告在后续文档提交记录，不预填自身 SHA）。
+
 ### Slice 重核与经验候选
 
 RO-1／安装、升级恢复及包身份 Surfaces 未通过本次 B 审查；RO-2 的真实十万库／成本、RO-3 的完整扫描重叠、RO-4 的真实代理及相应 Surfaces 均未完成。固定交付方案的 Task 4.2 依赖 4.1 B PASS，本轮不创建下一 Task，不运行 Slice Final、不提交 Closure Packet、不宣布 Slice 关闭。
 
 供 A 收尾时择要合并的经验：校验工具能列出新摘要不等于核验已发布输入 → 对重写 ZIP、依赖／元数据不一致构造反例并检查有效安装保留 → 用于包交接；恢复报告容易只证明备份文件存在 → 实际执行恢复／重启和业务读回，并记录失败收尾 → 用于升级与恢复审查。此处不改角色经验文件或增加验收义务。
 
-NEXT ACTION: DEVELOPER CORRECTS TASK 4.1 (BR-41-1 REMAINDER / BR-41-3a / BR-41-3b)
+NEXT ACTION: B REVIEWS TASK 4.1 (BR-41-1 REMAINDER / BR-41-3a / BR-41-3b CORRECTION CANDIDATE 7dbf36615bddea0aa65a14d84ae56806aea62aa8)
