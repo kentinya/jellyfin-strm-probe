@@ -5,7 +5,7 @@
 ```text
 Task ID: 4.1
 Parent Slice: 4
-Status: READY FOR B REVIEW
+Status: FIX REQUIRED
 Task Base: ae265d0dba02aa1c5599871602d4350072b7155f
 Contract Checkpoint: ae265d0dba02aa1c5599871602d4350072b7155f
 Difficulty: High
@@ -173,7 +173,36 @@ B 审查完整 `ae265d0dba02aa1c5599871602d4350072b7155f..Implementation Head`�
 
 ## B Review Result
 
-### 当前复审决定（2026-10-17，修正候选）
+### 当前复审决定（2026-10-17，候选 7dbf3661）
+
+```text
+Reviewed: ae265d0dba02aa1c5599871602d4350072b7155f..7dbf36615bddea0aa65a14d84ae56806aea62aa8
+Correction Delta: c1fb5ee57272f158c2ea7abd7545980d1f11337d..7dbf36615bddea0aa65a14d84ae56806aea62aa8
+Review Start HEAD: 344779e9a912d5930fbb5bab765043973b7b6dea
+Reviewer: B
+Decision: FIX REQUIRED
+Remaining P1: BR-41-3b — a previous run marker is accepted as current-run cleanup authority
+Slice Required Outcomes all satisfied: NO — RO-1 cleanup remains blocked; RO-2/3/4 remain NOT RUN
+Next: Developer corrects the same Task 4.1; no Task 4.2 is activated
+```
+
+本轮起始工作区干净，完成必读、已提交合同核对及治理 PASS。复核 Base..Head 的 25 文件范围与最新六个实施文件，后继报告仅修改 TASK；61 项源码／工具／测试／依赖／环境输入均与实现头字节一致。正确 ZIP 的 SHA-256 为 `3c5625a2371d5c71088b716788f855b5019c50d39170c0cdfb719a139d704c1f`，旁置清单和实际 DLL 构建 revision 均关联 `7dbf3661…`。未修改产品、Slice、Roadmap 或稳定需求，未操作运行中的 Jellyfin／Docker。
+
+B 独立执行包工具测试 **52/52 PASS**、0 失败／0 跳过，正确包 CLI 校验 PASS。另以真实候选 ZIP 独立重造“目录＋meta 同改”及“deps 项目版本单改”，二者均被结构校验拒绝；备份叶文件链接被拒，外部 sentinel 保持原样，指向区内的父目录链接同样被拒。**BR-41-1 剩余项及 BR-41-3a 的上轮反例已修正，不继续列为当前阻塞。** 读取 Developer 原始构建／测试／实机产物；默认新建工作区的包验收确有 CLEAN／CLEANED 记录，保留该 Developer 观察，不由此签发整体 PASS。
+
+**当前唯一 P1：BR-41-3b 仍把旧轮数据当作本轮所有，AC-8／不变量 11 未满足。** `scripts/package_environment.py:86` 对非空目录只检查是否存在 `.package-run`，不区分是哪一轮创建；第 676 行 cleanup 也只检查标记存在。`scripts/run_isolated_package_integration.py:876` 在验证包前先把选中目录记为 workspace，第 920 行 finally 只要该变量非空就尝试整目录清理。现有测试甚至显式接受“previously marked workspace may be re-selected”，与只操作本轮新建输入的指导及安装说明不符。
+
+B 用真实 `select_workspace`／`workspace` 创建一份旧轮标记和旧 STRM，再模拟新进程调用真实 CLI 的 `main()`：指定这份 `--workspace`，提供不存在的 `--package`，场景尚未开始便报 FAIL，但 finally 同时输出 `cleanup: CLEANED`，旧工作区及 STRM 均被删除。仅 Docker 的 compose 调用被 mock；选择、验证、异常路径及删除均使用真实代码，全部输入是临时目录。脚本退出 0 表示反例确认，旧数据保留保护为 **FAIL**。这条路径可由验收执行者把 `--keep-workspace` 留存的目录传给下一轮 `--workspace` 触发，无需伪造标记或符号链接；当前默认随机新目录及普通用户播放不据此认定失败，未对生产数据作任何试验。
+
+**最小修正指导：** 沿用新建工作区方案，下一轮选择时拒绝任何已有非空目录，包括带旧标记的目录；无需增加跨轮恢复功能。记录本次实际创建／取得的工作区身份，cleanup 同时核对本次身份与标记，不能凭固定文字标记授权删除；`workspace()` 不能给未经本轮取得的目录补标记后清理。包校验可前移以减少副作用，但不能代替归属检查。补两项真实 CLI 异常控制：旧标记目录＋缺失／损坏包应在任何写入／停止／删除前拒绝并保持全部旧文件摘要不变；本轮新目录在场景中途异常时仍正确收尾，收尾失败使总体 FAIL。修正现有“旧标记可重选”测试，保留正常新目录及版本／链接保护。同步说明，避免承诺实际未保护的旧数据。
+
+新增 `--workspace`／`--keep-workspace` 的意图可作为上次简单方案的具体工具接口，B 在此登记；`--workspace` 只选择本轮新工作区，`--keep-workspace` 只用于留存观察，不授予后续轮次修改／删除旧目录的权限。原默认 `--scenario all` 及最终验收命令不变，没有删减覆盖。继续原 Task ID／Base／Goal／Scope／High／T4，Contract 可满足，无需 A 改合同。先修上述单一阻塞，再在最后已提交候选重建包并执行上文完整门槛；追加提交、保留失败／重跑和证据，交为 READY FOR B REVIEW。
+
+本机索引：[B 本轮复审证据](.git/validation-evidence/7dbf36615bddea0aa65a14d84ae56806aea62aa8/b-review-20261017-02/INDEX.md)，含输入摘要、起点快照、精确命令／输出、独立控制及 CLI 原始结果，仅本机可读。已有明确 P1，按流程提前拒绝；本轮 B 的独立包实机／Web／升级恢复及其余完整 T4 重跑均 **NOT RUN**，不把 Developer 标签当作这些门槛的 B PASS。
+
+重核四个 RO／全部 Surfaces：RO-1 的恢复清理 Surface 仍未满足，RO-2 的真实十万库／成本、RO-3 的完整扫描重叠、RO-4 的实际代理均未完成；停止下一 Task 规划，不执行 Slice Final、不提交 Closure Packet、不宣布 Slice 关闭。经验候选：目录标记只能证明历史来源，本轮删除权限还须绑定本轮实际创建事实；留待 Slice 收尾择要合并。
+
+### 前次复审决定（2026-10-17，候选 c1fb5ee5，历史）
 
 ```text
 Reviewed: ae265d0dba02aa1c5599871602d4350072b7155f..c1fb5ee57272f158c2ea7abd7545980d1f11337d
@@ -297,4 +326,4 @@ RO-1／安装、升级恢复及包身份 Surfaces 未通过本次 B 审查；RO-
 
 供 A 收尾时择要合并的经验：校验工具能列出新摘要不等于核验已发布输入 → 对重写 ZIP、依赖／元数据不一致构造反例并检查有效安装保留 → 用于包交接；恢复报告容易只证明备份文件存在 → 实际执行恢复／重启和业务读回，并记录失败收尾 → 用于升级与恢复审查。此处不改角色经验文件或增加验收义务。
 
-NEXT ACTION: B REVIEWS TASK 4.1 (BR-41-1 REMAINDER / BR-41-3a / BR-41-3b CORRECTION CANDIDATE 7dbf36615bddea0aa65a14d84ae56806aea62aa8)
+NEXT ACTION: DEVELOPER CORRECTS TASK 4.1 (BR-41-3b — PREVIOUS RUN OWNERSHIP / EARLY-FAILURE CLEANUP)
