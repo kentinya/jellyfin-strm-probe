@@ -542,14 +542,21 @@ class ScanCandidateManifestTests(unittest.TestCase):
 
 
 class ScanReconciliationTests(unittest.TestCase):
-    def test_full_refresh_targets_the_named_version_item_not_its_shared_project(self):
+    def test_full_refresh_targets_the_current_project_version_and_source(self):
         items = {
             "Scan MV A": {"Id": "fc9b4705125239edb88e1a72dd56616a"},
             "Scan MV B": {"Id": "a01a9461d89f3d18d5c58657b26f1a20"},
         }
-        target = scan.full_refresh_target_item_id(items, "Scan MV A")
-        self.assertEqual(target, "fc9b4705125239edb88e1a72dd56616a")
-        self.assertNotEqual(target, items["Scan MV B"]["Id"])
+        source_keys = {"Scan MV A": "11111111111111111111111111111111",
+                       "Scan MV B": "22222222222222222222222222222222"}
+        target_b = scan.full_refresh_target_for_project(items, items["Scan MV B"]["Id"], source_keys)
+        self.assertEqual(target_b, {"item_id": "a01a9461d89f3d18d5c58657b26f1a20",
+                                    "item_name": "Scan MV B",
+                                    "source_key": "22222222222222222222222222222222"})
+        target_a = scan.full_refresh_target_for_project(items, items["Scan MV A"]["Id"], source_keys)
+        self.assertEqual(target_a["item_name"], "Scan MV A")
+        with self.assertRaises(RuntimeError):
+            scan.full_refresh_target_for_project(items, "ffffffffffffffffffffffffffffffff", source_keys)
 
     def test_source_path_matches_hash_only_accepts_the_current_address(self):
         url = "http://media:8080/package-mp4.mp4"

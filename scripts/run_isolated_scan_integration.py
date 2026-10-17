@@ -854,12 +854,22 @@ def force_full_refresh(auth: str, item_id: str) -> int:
     return status
 
 
-def full_refresh_target_item_id(items: dict[str, dict], item_name: str) -> str:
-    """Resolve the exact pre-merge item to refresh, rather than the shared project's display ID."""
-    item = items.get(item_name)
-    require(isinstance(item, dict) and item.get("Id"),
-            f"The selected FullRefresh source item {item_name!r} has no native item ID.")
-    return canonical_guid(item["Id"], "FullRefresh source item")
+def full_refresh_target_for_project(items: dict[str, dict], project_item_id: str,
+                                   source_keys_by_name: dict[str, str]) -> dict[str, str]:
+    """Resolve the visible merged-project ID to its current version item and source key."""
+    project_id = canonical_guid(project_item_id, "FullRefresh project item")
+    matches = []
+    for item_name, source_key in source_keys_by_name.items():
+        item = items.get(item_name)
+        if isinstance(item, dict) and item.get("Id"):
+            item_id = canonical_guid(item["Id"], f"FullRefresh version item {item_name!r}")
+            if item_id == project_id:
+                matches.append((item_name, item_id, canonical_guid(source_key,
+                                                                    f"FullRefresh source {item_name!r}")))
+    require(len(matches) == 1,
+            f"The shared FullRefresh project {project_id} did not map to exactly one current version item.")
+    item_name, item_id, source_key = matches[0]
+    return {"item_id": item_id, "item_name": item_name, "source_key": source_key}
 
 
 def merge_versions(auth: str, item_ids: list[str]) -> int:
@@ -2479,75 +2489,111 @@ def multi_version_and_refresh(auth: str, fixture: dict, recorder: EvidenceRecord
     require(rb["url_hash"] == expected_url_hash(url_b), "Version B did not commit its own address.")
     canonical = ra["item_id"]
 
-    # Change A's current fixture manifest, then require this operation's own processing marker, ETag/native
-    # address change and stable end state. The Jellyfin FullRefresh must not itself commit the plugin fingerprint.
+    # FullRefresh accepts the visible shared project ID. Resolve which current version that ID names, mutate that
+    # version, and bind the processing/end marker to its source; never send a hidden pre-merge child ID and wait
+    # for a different version's log entry.
+    source_keys_by_name = {fixture["mv_a_name"]: mv_a, fixture["mv_b_name"]: mv_b}
+    refresh_target = full_refresh_target_for_project(items, canonical, source_keys_by_name)
+    refresh_source_key = refresh_target["source_key"]
+    refresh_item_name = refresh_target["item_name"]
+    refresh_path = fixture["strm_dir"] / (refresh_item_name + ".strm")
     refresh_url = unique_url(fixture["plain_url"], "mv-refresh-" + uuid.uuid4().hex[:8])
-    rewrite_strm(mv_a_path, refresh_url, fixture["media_sha"], fixture["media_size"])
+    rewrite_strm(refresh_path, refresh_url, fixture["media_sha"], fixture["media_size"])
     before_row_a = fingerprint_row_for_key(canonical, mv_a)
     before_row_b = fingerprint_row_for_key(canonical, mv_b)
     require(before_row_a == ra and before_row_b == rb,
             "The exact merged project/source rows changed before independent FullRefresh.")
     before_native_a = current_source_state(auth, canonical, mv_a, fixture, recorder, "before FullRefresh A")
     before_native_b = current_source_state(auth, canonical, mv_b, fixture, recorder, "before FullRefresh B")
+    target_is_a = refresh_source_key == mv_a
+    before_refresh_target = before_native_a if target_is_a else before_native_b
+    before_other_source = before_native_b if target_is_a else before_native_a
     refresh_started = now_utc()
-    mtime_evidence = advance_fixture_mtime_for_native_refresh(mv_a_path)
-    recorder.record("full_refresh_fixture_mtime", item_id=canonical, source_key=mv_a,
-                    manifest=read_versioned_manifest(mv_a_path), mtime=mtime_evidence)
-    refresh_target_item_id = full_refresh_target_item_id(items, fixture["mv_a_name"])
-    refresh_status = force_full_refresh(auth, dashed(refresh_target_item_id))
+    mtime_evidence = advance_fixture_mtime_for_native_refresh(refresh_path)
+    recorder.record("full_refresh_fixture_mtime", item_id=canonical, source_key=refresh_source_key,
+                    item_name=refresh_item_name, manifest=read_versioned_manifest(refresh_path),
+                    mtime=mtime_evidence)
+    refresh_status = force_full_refresh(auth, dashed(canonical))
     if ACTIVE_RECORDER is not None:
-        ACTIVE_RECORDER.record("full_refresh_request", item_id=canonical, source_key=mv_a,
-                               request_item_id=refresh_target_item_id,
+        ACTIVE_RECORDER.record("full_refresh_request", item_id=canonical, source_key=refresh_source_key,
+                               request_item_id=canonical, item_name=refresh_item_name,
                                status=refresh_status, started_at=refresh_started)
     require(refresh_status == 204, f"Jellyfin rejected the independent FullRefresh ({refresh_status}).")
-    refreshed_a, refresh_events, refresh_completed = wait_for_full_refresh_completion(
-        auth, canonical, mv_a, fixture["mv_a_name"], before_native_a,
+    refreshed_target, refresh_events, refresh_completed = wait_for_full_refresh_completion(
+        auth, canonical, refresh_source_key, refresh_item_name, before_refresh_target,
         expected_url_hash(refresh_url), refresh_started, fixture)
-    require_refresh_completed(before_native_a, refreshed_a, refresh_events,
-                              fixture["mv_a_name"], refresh_started, refresh_completed,
+    require_refresh_completed(before_refresh_target, refreshed_target, refresh_events,
+                              refresh_item_name, refresh_started, refresh_completed,
                               "independent FullRefresh")
+    after_native_a = current_source_state(auth, canonical, mv_a, fixture, recorder, "after FullRefresh A")
     after_native_b = current_source_state(auth, canonical, mv_b, fixture, recorder, "after FullRefresh B")
+    after_other_source = after_native_b if target_is_a else after_native_a
     require(fingerprint_row_for_key(canonical, mv_a) == before_row_a
             and fingerprint_row_for_key(canonical, mv_b) == before_row_b,
             "The native FullRefresh directly changed a plugin fingerprint before a verified plugin probe.")
-    require(after_native_b["fingerprint"] == before_row_b and after_native_b["has_main_stream"],
+    require(after_other_source["fingerprint"] == before_other_source["fingerprint"]
+            and after_other_source["native_url_hash"] == before_other_source["native_url_hash"]
+            and after_other_source["has_main_stream"],
             "The independent FullRefresh corrupted the unselected version's source or exact fingerprint row.")
     if ACTIVE_RECORDER is not None:
-        ACTIVE_RECORDER.record("full_refresh_completed", item_id=canonical, source_key=mv_a,
-                               before=before_native_a, after=refreshed_a, events=refresh_events,
+        ACTIVE_RECORDER.record("full_refresh_completed", item_id=canonical, source_key=refresh_source_key,
+                               item_name=refresh_item_name, before=before_refresh_target,
+                               after=refreshed_target, events=refresh_events,
                                completed_at=refresh_completed)
         ACTIVE_RECORDER.snapshot(f"full-refresh-{time.time_ns()}", {
             "request_status": refresh_status, "started_at": refresh_started,
-            "completed_at": refresh_completed, "before_a": before_native_a,
-            "after_a": refreshed_a, "before_b": before_native_b,
-            "after_b": after_native_b, "events": refresh_events,
+            "completed_at": refresh_completed, "target": refresh_target,
+            "before_a": before_native_a, "after_a": after_native_a,
+            "before_b": before_native_b, "after_b": after_native_b,
+            "target_before": before_refresh_target, "target_after": refreshed_target,
+            "other_source_before": before_other_source, "other_source_after": after_other_source,
+            "events": refresh_events,
             "row_a_before_and_after": before_row_a, "row_b_before_and_after": before_row_b,
         })
 
-    # Only a new plugin task run may verify and commit A's refreshed manifest version.
+    # Only a new plugin task run may verify and commit the refreshed source's current manifest version.
     plugin_round_started = now_utc()
     refresh_round = run_plugin_task_completed(auth, "post-FullRefresh source commit")
     refresh_summary = summary_fields_complete(latest_summary_after(plugin_round_started))
-    a_starts = probe_start_events(container(), since=plugin_round_started)
-    a_start = probe_start_for_item(a_starts, canonical)
-    a_outcomes = [event for event in probe_outcome_events(container(), since=plugin_round_started)
-                  if event["item_id"] == canonical and event["kind"] == "accepted"]
-    require(a_start is not None and a_outcomes,
-            "The plugin did not perform and accept a real source-A probe after independent FullRefresh.")
-    refreshed_manifest = read_versioned_manifest(mv_a_path)
-    require(refreshed_manifest is not None, "The refreshed version-A Manifest is unreadable.")
-    expected_a = expected_fingerprint_row(canonical, mv_a, refreshed_manifest, before_row_a)
-    final_native_a = current_source_state(auth, canonical, mv_a, fixture, recorder, "after plugin FullRefresh reconciliation")
-    validate_source_reconciliation(expected_a, final_native_a["source"], final_native_a["fingerprint"],
-                                   "post-FullRefresh version A")
+    post_refresh_starts = probe_start_events(container(), since=plugin_round_started)
+    target_starts = [event for event in post_refresh_starts
+                     if event["item_id"] == canonical and event.get("source_key") == refresh_source_key]
+    target_outcomes = [event for event in probe_outcome_events(container(), since=plugin_round_started)
+                       if event["item_id"] == canonical and event.get("source_key") == refresh_source_key
+                       and event["kind"] == "accepted"]
+    require(target_starts and target_outcomes,
+            f"The plugin did not perform and accept a real probe for the refreshed source {refresh_item_name}.")
+    refreshed_manifest = read_versioned_manifest(refresh_path)
+    require(refreshed_manifest is not None, "The refreshed version Manifest is unreadable.")
+    before_target_row = before_row_a if target_is_a else before_row_b
+    expected_target = expected_fingerprint_row(canonical, refresh_source_key, refreshed_manifest, before_target_row)
+    final_native_a = current_source_state(auth, canonical, mv_a, fixture, recorder,
+                                          "after plugin FullRefresh reconciliation A")
+    final_native_b = current_source_state(auth, canonical, mv_b, fixture, recorder,
+                                          "after plugin FullRefresh reconciliation B")
+    final_native_target = final_native_a if target_is_a else final_native_b
+    final_native_other = final_native_b if target_is_a else final_native_a
+    validate_source_reconciliation(expected_target, final_native_target["source"],
+                                   final_native_target["fingerprint"],
+                                   f"post-FullRefresh {refresh_item_name}")
     require((refresh_summary.get("need_probe") or 0) == 1
             and (refresh_summary.get("actual_probe_calls") or 0) == 1
             and (refresh_summary.get("reliable_success") or 0) == 1,
-            f"The post-FullRefresh batch did not account for exactly one successful A probe: {refresh_summary}.")
-    ra = final_native_a["fingerprint"]
-    url_a = refresh_url
+            f"The post-FullRefresh batch did not account for exactly one successful source probe: {refresh_summary}.")
+    if target_is_a:
+        ra = final_native_a["fingerprint"]
+        rb = before_row_b
+        url_a = refresh_url
+    else:
+        ra = before_row_a
+        rb = final_native_b["fingerprint"]
+        url_b = refresh_url
     require(fingerprint_row_for_key(canonical, mv_b) == rb,
-            "The post-FullRefresh A probe changed the distinct version-B fingerprint.")
+            "The post-FullRefresh probe changed the other version's exact fingerprint.")
+    require(final_native_other["native_url_hash"] == after_other_source["native_url_hash"]
+            and final_native_other["fingerprint"] == after_other_source["fingerprint"]
+            and final_native_other["has_main_stream"],
+            "The post-FullRefresh source probe changed the other version's address, stream or fingerprint.")
 
     # Explicit MediaSourceId selection must return the selected version's own source identity and address.
     status_a, response_a = playback_info_selected(auth, dashed(canonical), mv_a)
@@ -2556,10 +2602,16 @@ def multi_version_and_refresh(auth: str, fixture: dict, recorder: EvidenceRecord
     _require_selected_source(response_a, mv_a, ra["url_hash"], "A")
     _require_selected_source(response_b, mv_b, rb["url_hash"], "B")
     recorder.record("multi_version_refresh", shared_project=True, refresh_status=refresh_status,
+                    refresh_target=refresh_target,
                     refresh_round=task_result(refresh_round), refresh_summary=refresh_summary,
-                    source_a=final_native_a, source_b=after_native_b)
+                    source_a=final_native_a, source_b=final_native_b,
+                    full_refresh_target_before=before_refresh_target,
+                    full_refresh_target_after=refreshed_target,
+                    full_refresh_other_before=before_other_source,
+                    full_refresh_other_after=after_other_source)
     return {"multi_version_rows": 2, "shared_project": True,
             "independent_full_refresh_status": refresh_status, "cross_version_fingerprint_stable": True,
+            "full_refresh_target_name": refresh_item_name,
             "selected_version_a_matches": True, "selected_version_b_matches": True,
             "full_refresh_completed_at": refresh_completed.isoformat(),
             "post_refresh_actual_probe_calls": refresh_summary.get("actual_probe_calls"),
