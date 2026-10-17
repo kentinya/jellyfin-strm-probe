@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import hashlib
 import json
 import shutil
 import sys
@@ -193,7 +194,7 @@ class PackageEnvironmentTests(unittest.TestCase):
         self.assertEqual(restored["configuration"]["sha256"], backup["configuration"]["sha256"])
         self.assertEqual(config.read_bytes(), b"owned configuration")
 
-    def test_select_workspace_marks_fresh_and_refuses_unmarked_reuse(self):
+    def test_select_workspace_claims_fresh_and_refuses_any_existing_directory(self):
         base = Path(tempfile.mkdtemp())
         with patch.object(package_environment, "BASE", base):
             reused = base / "reused"
@@ -206,8 +207,38 @@ class PackageEnvironmentTests(unittest.TestCase):
             with patch.object(package_environment, "WORK", fresh):
                 package_environment.workspace()
             self.assertTrue((fresh / package_environment.RUN_MARKER).is_file())
-            # A previously marked workspace may be re-selected.
-            self.assertEqual(package_environment.select_workspace(fresh), fresh)
+            # A workspace already claimed (even by this process) is never re-selected: a fresh
+            # run must use a new or empty directory.
+            with self.assertRaises(package_environment.PackageEnvironmentError):
+                package_environment.select_workspace(fresh)
+            # An existing empty directory is still claimable.
+            empty = base / "empty"
+            empty.mkdir()
+            self.assertEqual(package_environment.select_workspace(empty), empty)
+
+    def test_select_workspace_refuses_a_previous_runs_marked_directory(self):
+        # A directory left by an earlier run still carries its marker and data; the current run
+        # must refuse it rather than reuse or later delete it (BR-41-3b).
+        base = Path(tempfile.mkdtemp())
+        with patch.object(package_environment, "BASE", base):
+            previous = base / "run-previous"
+            previous.mkdir()
+            (previous / package_environment.RUN_MARKER).write_text("previous-run-token\n", encoding="utf-8")
+            prior = previous / "prior.strm"
+            prior.write_bytes(b"previous run data")
+            with self.assertRaises(package_environment.PackageEnvironmentError):
+                package_environment.select_workspace(previous)
+            self.assertEqual(prior.read_bytes(), b"previous run data")
+
+    def test_workspace_refuses_to_write_into_a_different_runs_workspace(self):
+        base = Path(tempfile.mkdtemp())
+        with patch.object(package_environment, "BASE", base):
+            owned = package_environment.select_workspace(base / "owned")
+            # A different run (simulated by replacing the on-disk token) must not be written to.
+            (owned / package_environment.RUN_MARKER).write_text("some-other-run\n", encoding="utf-8")
+            with patch.object(package_environment, "WORK", owned):
+                with self.assertRaises(package_environment.PackageEnvironmentError):
+                    package_environment.workspace()
 
     def test_reconcile_refuses_disturbed_input_and_cleanup_requires_marker(self):
         base = Path(tempfile.mkdtemp())
@@ -231,12 +262,126 @@ class PackageEnvironmentTests(unittest.TestCase):
                 with self.assertRaises(package_environment.PackageEnvironmentError):
                     package_environment.cleanup_instance()
             self.assertTrue((foreign / "keep.txt").is_file())
+            # A previous run's marked workspace is also never cleaned up by this run.
+            previous = base / "previous"
+            previous.mkdir()
+            (previous / package_environment.RUN_MARKER).write_text("previous-token\n", encoding="utf-8")
+            prior = previous / "prior.strm"
+            prior.write_bytes(b"previous run data")
+            with patch.object(package_environment, "WORK", previous), \
+                    patch.object(package_environment, "compose"):
+                with self.assertRaises(package_environment.PackageEnvironmentError):
+                    package_environment.cleanup_instance()
+            self.assertEqual(prior.read_bytes(), b"previous run data")
             # The marked workspace is removed in full.
             with patch.object(package_environment, "WORK", workspace), \
                     patch.object(package_environment, "compose"):
                 result = package_environment.cleanup_instance()
             self.assertEqual(result["status"], "CLEANED")
             self.assertFalse(workspace.exists())
+
+
+class PackageRunOwnershipTests(unittest.TestCase):
+    """CLI-level ownership and teardown behaviour for the package-acceptance run (BR-41-3b)."""
+
+    def _valid_package(self, directory: Path) -> Path:
+        import tests.test_package_plugin as builder
+
+        directory.mkdir(parents=True, exist_ok=True)
+        return builder.build_valid_archive_with_sidecar(directory)
+
+    def _run_main(self, argv: list[str]) -> int:
+        with patch.object(sys, "argv", ["run_isolated_package_integration", *argv]):
+            return integration.main()
+
+    def _digests(self, directory: Path) -> dict[str, str]:
+        return {path.name: hashlib.sha256(path.read_bytes()).hexdigest()
+                for path in directory.iterdir()}
+
+    def test_missing_package_leaves_a_previous_runs_workspace_untouched(self):
+        base = Path(tempfile.mkdtemp())
+        previous = base / "run-previous"
+        previous.mkdir()
+        (previous / package_environment.RUN_MARKER).write_text("previous-run-token\n", encoding="utf-8")
+        (previous / "prior.strm").write_bytes(b"previous run data")
+        before = self._digests(previous)
+        with patch.object(package_environment, "BASE", base), \
+                patch.object(package_environment, "compose") as compose:
+            code = self._run_main(["--package", str(base / "missing.zip"),
+                                   "--scenario", "invalid", "--workspace", str(previous)])
+        self.assertEqual(code, 1)
+        compose.assert_not_called()
+        self.assertTrue(previous.is_dir(), "a previous run's workspace was removed")
+        self.assertEqual(self._digests(previous), before)
+
+    def test_broken_package_leaves_a_previous_runs_workspace_untouched(self):
+        base = Path(tempfile.mkdtemp())
+        valid = self._valid_package(base / "pkg")
+        broken = base / "broken.zip"
+        broken.write_bytes(valid.read_bytes()[: len(valid.read_bytes()) // 2])
+        previous = base / "run-previous"
+        previous.mkdir()
+        (previous / package_environment.RUN_MARKER).write_text("previous-run-token\n", encoding="utf-8")
+        (previous / "prior.strm").write_bytes(b"previous run data")
+        before = self._digests(previous)
+        with patch.object(package_environment, "BASE", base), \
+                patch.object(package_environment, "compose") as compose:
+            code = self._run_main(["--package", str(broken),
+                                   "--scenario", "invalid", "--workspace", str(previous)])
+        self.assertEqual(code, 1)
+        compose.assert_not_called()
+        self.assertTrue(previous.is_dir(), "a previous run's workspace was removed")
+        self.assertEqual(self._digests(previous), before)
+
+    def test_fresh_run_cleans_up_its_own_workspace_on_scenario_failure(self):
+        base = Path(tempfile.mkdtemp())
+        package = self._valid_package(base / "pkg")
+        created: dict[str, Path] = {}
+        real_select = package_environment.select_workspace
+
+        def spy_select(path=None):
+            workspace = real_select(path)
+            created["workspace"] = workspace
+            return workspace
+
+        with patch.object(package_environment, "BASE", base), \
+                patch.object(package_environment, "select_workspace", side_effect=spy_select), \
+                patch.object(package_environment, "compose"), \
+                patch.object(integration, "scenario_invalid", side_effect=RuntimeError("scenario boom")):
+            code = self._run_main(["--package", str(package), "--scenario", "invalid"])
+        self.assertEqual(code, 1)
+        self.assertIn("workspace", created)
+        self.assertFalse(created["workspace"].exists(), "the run did not clean up its own workspace")
+
+    def test_cleanup_failure_turns_the_overall_result_into_fail(self):
+        base = Path(tempfile.mkdtemp())
+        package = self._valid_package(base / "pkg")
+        with patch.object(package_environment, "BASE", base), \
+                patch.object(package_environment, "compose"), \
+                patch.object(integration, "scenario_invalid", return_value={}), \
+                patch.object(package_environment, "cleanup_instance",
+                             side_effect=package_environment.PackageEnvironmentError("cleanup failed")):
+            code = self._run_main(["--package", str(package), "--scenario", "invalid"])
+        self.assertEqual(code, 1)
+
+    def test_keep_workspace_leaves_the_fresh_workspace(self):
+        base = Path(tempfile.mkdtemp())
+        package = self._valid_package(base / "pkg")
+        created: dict[str, Path] = {}
+        real_select = package_environment.select_workspace
+
+        def spy_select(path=None):
+            workspace = real_select(path)
+            created["workspace"] = workspace
+            return workspace
+
+        with patch.object(package_environment, "BASE", base), \
+                patch.object(package_environment, "select_workspace", side_effect=spy_select), \
+                patch.object(package_environment, "compose"), \
+                patch.object(integration, "scenario_invalid", return_value={}):
+            code = self._run_main(["--package", str(package), "--scenario", "invalid", "--keep-workspace"])
+        self.assertEqual(code, 0)
+        self.assertTrue(created["workspace"].is_dir())
 
 
 class IntegrationHelperTests(unittest.TestCase):

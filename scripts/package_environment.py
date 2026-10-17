@@ -42,9 +42,17 @@ STRM_LIBRARY = "Package STRM Fixtures"
 # Distinct basenames so Jellyfin never groups them as alternate versions of one another.
 MEDIA_MP4 = "package-mp4.mp4"
 MEDIA_MKV = "package-mkv.mkv"
-# Each acceptance run owns a fresh subdirectory under BASE and writes this marker; the marker
-# is what proves the directory belongs to this run before anything is deleted.
+# Each acceptance run owns a fresh subdirectory under BASE and writes this marker. The marker
+# records this run's unique token; cleanup requires both that this run actually created the
+# workspace (module-global ownership) and that the on-disk token matches, so a marker left by a
+# previous run can never authorise this run to delete that previous run's data.
 RUN_MARKER = ".package-run"
+
+# Set by ``select_workspace`` when this process claims a fresh workspace. Only a workspace this
+# run created is eligible for cleanup; a directly patched ``WORK`` (unit tests/tools) is never
+# treated as owned.
+_OWNED_WORKSPACE: Path | None = None
+_RUN_TOKEN: str | None = None
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -67,12 +75,17 @@ def default_run_workspace() -> Path:
 
 
 def select_workspace(path: Path | None = None) -> Path:
-    """Point the module at a fresh, run-owned workspace.
+    """Claim a fresh, run-owned workspace and record this run's ownership token.
 
-    A pre-existing directory that has files but no run marker is refused before any write, so
-    a reused or foreign directory can never be modified or cleaned up by this run.
+    Only a directory that does not yet exist, or an existing *empty* directory, may be claimed.
+    Any pre-existing non-empty directory is refused before any write — including one that still
+    carries an earlier run's ``.package-run`` marker. A marker only proves historical origin, so
+    it never grants this run permission to modify or delete that earlier run's data.
     """
-    global WORK
+    global WORK, _OWNED_WORKSPACE, _RUN_TOKEN
+    # A refused selection must never leave a previous selection's ownership behind.
+    _OWNED_WORKSPACE = None
+    _RUN_TOKEN = None
     candidate = (path if path is not None else default_run_workspace())
     candidate = candidate if candidate.is_absolute() else (ROOT / candidate)
     resolved = candidate.resolve(strict=False)
@@ -83,11 +96,22 @@ def select_workspace(path: Path | None = None) -> Path:
         )
     if candidate.is_symlink():
         raise PackageEnvironmentError("The package workspace must not be a symbolic link.")
-    if candidate.exists() and any(candidate.iterdir()) and not (candidate / RUN_MARKER).is_file():
-        raise PackageEnvironmentError(
-            f"Refusing to reuse {candidate}: it contains data that is not owned by this run."
-        )
+    if candidate.exists():
+        if not candidate.is_dir():
+            raise PackageEnvironmentError(f"The package workspace {candidate} is not a directory.")
+        if any(candidate.iterdir()):
+            raise PackageEnvironmentError(
+                f"Refusing to reuse {candidate}: this run may only use a new or empty workspace."
+            )
+    candidate.mkdir(parents=True, exist_ok=True)
+    token = uuid.uuid4().hex
+    marker = candidate / RUN_MARKER
+    if marker.is_symlink():
+        raise PackageEnvironmentError("The package run marker must not be a symbolic link.")
+    marker.write_text(token + "\n", encoding="utf-8")
     WORK = candidate
+    _OWNED_WORKSPACE = candidate.resolve()
+    _RUN_TOKEN = token
     return WORK
 
 
@@ -145,8 +169,16 @@ def workspace() -> None:
     marker = WORK / RUN_MARKER
     if marker.is_symlink():
         raise PackageEnvironmentError("The package run marker must not be a symbolic link.")
-    if not marker.is_file():
-        marker.write_text("owned by the current package acceptance run\n", encoding="utf-8")
+    owned = _OWNED_WORKSPACE is not None and _OWNED_WORKSPACE == WORK.resolve()
+    if marker.is_file():
+        # A marker that this run did not write means another run owns the directory; refuse to
+        # touch it rather than silently reusing or overwriting its data.
+        if not owned or marker.read_text(encoding="utf-8").strip() != (_RUN_TOKEN or ""):
+            raise PackageEnvironmentError(
+                "Refusing to write into a package workspace owned by a different run."
+            )
+    elif owned:
+        marker.write_text((_RUN_TOKEN or "") + "\n", encoding="utf-8")
     for name in ("config", "cache", "strm", "media", "media-server"):
         path = WORK / name
         if path.is_symlink():
@@ -668,13 +700,19 @@ def reconcile_instance_state(before: dict[str, object]) -> dict[str, object]:
 
 
 def cleanup_instance() -> dict[str, object]:
-    """Stop the owned package instance and remove this run's entire marker-owned workspace.
+    """Stop the instance and remove only the workspace this run actually created.
 
-    The run marker is checked before anything else (and before ``workspace()`` would create one),
-    so a foreign or reused directory can never be cleaned up by this run.
+    Cleanup requires both this run's module-global ownership and the on-disk token to match.
+    A marker left behind by a previous run therefore never authorises deletion of that run's
+    data, and a directly patched ``WORK`` is never treated as owned.
     """
-    if not (WORK / RUN_MARKER).is_file():
+    if _OWNED_WORKSPACE is None or _OWNED_WORKSPACE != WORK.resolve():
+        raise PackageEnvironmentError("Refusing to clean a workspace this run did not create.")
+    marker = WORK / RUN_MARKER
+    if marker.is_symlink() or not marker.is_file():
         raise PackageEnvironmentError("Refusing to clean a workspace without this run's marker.")
+    if marker.read_text(encoding="utf-8").strip() != (_RUN_TOKEN or ""):
+        raise PackageEnvironmentError("Refusing to clean a workspace owned by a different run.")
     workspace()
     root = require_owned_path(WORK, label="run workspace")
     compose("stop")

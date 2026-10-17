@@ -873,8 +873,8 @@ def main() -> int:
     before_state = None
     workspace = None
     try:
-        workspace = pe.select_workspace(args.workspace)
-        summary["workspace"] = str(workspace)
+        # Validate the package before claiming a workspace, so a missing or invalid archive has no
+        # filesystem side effect at all (and never touches an existing workspace).
         verification = package_plugin.verify_archive(package)
         summary["package_identity"] = {
             "archiveSha256": verification["archiveSha256"],
@@ -884,6 +884,8 @@ def main() -> int:
             "runtime": verification["runtime"],
             "entries": verification["entries"],
         }
+        workspace = pe.select_workspace(args.workspace)
+        summary["workspace"] = str(workspace)
         before_state = pe.capture_instance_state()
         if args.scenario in {"all", "invalid"}:
             summary["invalid"] = scenario_invalid(package, evidence_dir)
