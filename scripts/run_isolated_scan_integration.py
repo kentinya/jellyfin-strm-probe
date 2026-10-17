@@ -133,12 +133,20 @@ def assert_committed_address_survives(auth: str, item_id: str, expected_hash: st
     """After a restart, prove a committed address is still returned and explicit selection still works.
 
     The physical source id can be re-keyed by a native library scan, so the current identity is resolved
-    from the current native MediaSources rather than assumed to be the pre-scan id; the explicit selection
-    then must return exactly that current source with the committed address.
+    from the current native MediaSources rather than assumed to be the pre-scan id; the fingerprint is then
+    read for that current (item_id, source_key) pair and the explicit selection must return exactly that
+    current source with the committed address.
     """
-    current_id = current_source_id_for_hash(auth, item_id, expected_hash)
+    status, payload = pe.request_json("GET", f"/Items/{item_id}?Fields=MediaSources,MediaStreams,Path",
+                                      headers={"Authorization": auth})
+    require(status == 200, "The current item read failed while resolving a source identity.")
+    current_id = next((str(source["Id"]) for source in payload.get("MediaSources", [])
+                       if source.get("Id") and digest(source.get("Path") or "") == expected_hash), None)
     require(current_id is not None,
             f"The {label} committed address is no longer present in the current native source set after the restart.")
+    row = pkg.fingerprint_row(item_id, current_id)
+    require(row is not None and row["url_hash"] == expected_hash,
+            f"The {label} current source has no committed fingerprint for its address after the restart.")
     status, response = playback_info_selected(auth, item_id, current_id)
     require(status == 200, f"The explicit {label} selection failed after the restart ({status}).")
     _require_selected_source(response, current_id, expected_hash, label)
@@ -1295,7 +1303,8 @@ def multi_version_and_refresh(auth: str, fixture: dict, recorder: EvidenceRecord
     recorder.record("multi_version_refresh", shared_project=True, refresh_status=refresh_status)
     return {"multi_version_rows": 2, "shared_project": True,
             "independent_full_refresh_status": refresh_status, "cross_version_fingerprint_stable": True,
-            "selected_version_a_matches": True, "selected_version_b_matches": True}
+            "selected_version_a_matches": True, "selected_version_b_matches": True,
+            "committed_url_a_hash": ra["url_hash"], "committed_url_b_hash": rb["url_hash"]}
 
 
 def _require_selected_source(response: dict, source_id: str, expected_hash: str, label: str) -> None:
@@ -1310,7 +1319,7 @@ def _require_selected_source(response: dict, source_id: str, expected_hash: str,
             f"The selected version {label} did not return its own address.")
 
 
-def convergence(auth: str, fixture: dict, recorder: EvidenceRecorder) -> dict:
+def convergence(auth: str, fixture: dict, recorder: EvidenceRecorder, multi_version: dict) -> dict:
     """A fresh stable-set run converges with zero extra plugin probes and per-source reconciliation."""
     libraries = library_roots(auth)
     _, stable_scan = run_native_scan_completed(auth, "stable-set native scan")
@@ -1331,18 +1340,19 @@ def convergence(auth: str, fixture: dict, recorder: EvidenceRecorder) -> dict:
     # multi-version source. A native scan may re-key a physical source id, so the current identity is
     # resolved from the current native MediaSources before the explicit selection check.
     batch_item = fixture["items"][fixture["batch_name"]]["Id"]
-    mv_a = fixture["items"][fixture["mv_a_name"]]["Id"]
     batch_row = fingerprint_row(batch_item)
-    mv_rows = fingerprint_rows_for_source(mv_a)
-    require(batch_row is not None and mv_rows, "Expected committed fingerprints are missing before restart.")
-    mv_row = mv_rows[0]
-    canonical = dashed(mv_row["item_id"])
+    require(batch_row is not None, "The URL-changed source has no committed fingerprint before restart.")
+    mv_a = fixture["items"][fixture["mv_a_name"]]["Id"]
+    mv_rows = [row for row in fingerprint_rows_for_source(mv_a)
+               if row["url_hash"] == multi_version["committed_url_a_hash"]]
+    require(mv_rows, "The multi-version source has no committed fingerprint for its changed address before restart.")
+    canonical = dashed(mv_rows[0]["item_id"])
     restart()
     auth = api_auth()
     status, response = playback_info(auth, batch_item)
     require(status == 200 and source_path_matches_hash(response, batch_row["url_hash"]),
             "The URL-changed batch source address did not survive the restart.")
-    assert_committed_address_survives(auth, canonical, mv_row["url_hash"], "multi-version")
+    assert_committed_address_survives(auth, canonical, multi_version["committed_url_a_hash"], "multi-version")
     recorder.record("convergence", stable=fields, repeat=repeat_fields, reconciliation=reconciliation)
     recorder.snapshot("convergence", {"stable": fields, "repeat": repeat_fields,
                                       "reconciliation": reconciliation})
@@ -1965,7 +1975,7 @@ def scenario_overlap_phase(package: Path, evidence_dir: Path | None, nonce: str,
     auth = api_auth()
     summary["multi_version_and_refresh"] = multi_version_and_refresh(auth, fixture, recorder)
     auth = api_auth()
-    summary["convergence"] = convergence(auth, fixture, recorder)
+    summary["convergence"] = convergence(auth, fixture, recorder, summary["multi_version_and_refresh"])
     return summary
 
 
