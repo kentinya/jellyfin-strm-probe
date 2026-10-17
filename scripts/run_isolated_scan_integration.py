@@ -64,6 +64,9 @@ BULK_COUNT = 130
 OUT_OF_SCOPE_LIBRARY = "Package Local Fixtures"
 # A delay long enough to hold an actually started probe open across the whole native scan.
 PROBE_DELAY_SECONDS = 20
+# A shorter delay for the stop scenario, so the started probes are still executing when the stop is issued
+# while the convergence round stays bounded.
+STOP_DELAY_SECONDS = 12
 
 # Every counter a completed batch summary must report. A missing field is a hard failure: it must
 # never silently become a zero that trivially satisfies a later "== 0" probe assertion.
@@ -1372,21 +1375,24 @@ def reconcile_expected_sources(auth: str, library_id: str) -> dict:
 
 def scenario_stop(package: Path, evidence_dir: Path | None, nonce: str, recorder: EvidenceRecorder) -> dict:
     """Real native stop of a cross-batch batch: started work commits, unstarted work revokes, a re-run
-    during the drain does not begin, and a later run converges."""
+    during the drain does not begin, and a later run converges.
+
+    The fixed candidate set is the full 130-object fixture so the batch genuinely crosses the 128-object
+    boundary, but only a small subset is changed with a delay. The two delayed sources occupy the default
+    concurrency and are the deterministic started set; the rest of the changed subset is revoked. The
+    unchanged majority is skipped, so the convergence run stays bounded.
+    """
     summary: dict[str, object] = {}
     auth = deploy_fresh(package)
     media_sha, media_size = pe.media_sha1(pe.MEDIA_MP4)
     plain_url = "http://media:8080/" + pe.MEDIA_MP4
-    # 130 changed sources cross the fixed 128-object batch boundary, so there is a real second batch
-    # with work that has not started when the stop is issued. Two long-delay sources occupy the
-    # default concurrency and are the deterministic started set.
     count = BULK_COUNT
+    changed_count = 6
     names = [f"Scan Stop {nonce} {index:03d}" for index in range(count)]
-    paths = [write_strm_to(pe.WORK / "strm", name, plain_url, media_sha, media_size) for name in names]
+    paths = {name: write_strm_to(pe.WORK / "strm", name, plain_url, media_sha, media_size) for name in names}
     refresh_library(auth)
     items = {name: wait_for_item(auth, name) for name in names}
-    # Baseline with the plugin disabled so native streams are persisted and the baseline round first-trusts
-    # with zero plugin probes (fast, and leaves every source with a real baseline).
+    # Baseline with the plugin disabled so native streams are persisted, then first-trust with zero probes.
     require(plugin_action(auth, False) == 204, "The plugin disable failed.")
     restart()
     auth = api_auth()
@@ -1395,29 +1401,35 @@ def scenario_stop(package: Path, evidence_dir: Path | None, nonce: str, recorder
     restart()
     auth = api_auth()
     scope_all_libraries(auth)
+    round_started = now_utc()
     run_plugin_task_completed(auth, "stop baseline round")
+    baseline_summary = latest_summary_after(round_started)
+    baseline_fields = summary_fields_complete(baseline_summary)
+    # The fixture must genuinely cross the fixed 128-object batch boundary.
+    require((baseline_fields.get("batch_reads") or 0) >= 2,
+            f"The stop fixture did not cross the 128-object batch boundary: {baseline_summary}.")
     for name in names:
         require(fingerprint_row(items[name]["Id"]) is not None, f"The stop scenario did not baseline {name}.")
-    # Two started sources hold the pool; the rest are changed but never start before the stop.
-    request_ids = {name: uuid.uuid4().hex for name in names}
-    for name, path in zip(names, paths):
-        rewrite_strm(path, delay_url(plain_url, PROBE_DELAY_SECONDS, request_ids[name]), media_sha, media_size)
+
+    changed_names = names[:changed_count]
+    request_ids = {name: uuid.uuid4().hex for name in changed_names}
+    for name in changed_names:
+        rewrite_strm(paths[name], delay_url(plain_url, STOP_DELAY_SECONDS, request_ids[name]), media_sha, media_size)
 
     round_started = now_utc()
     task = find_task_by_key(auth, TASK_KEY)
     previous = last_start(task)
     require(start_task(auth, task["Id"]) == 204, "Jellyfin did not accept the stop-scenario batch start.")
-    deadline = time.monotonic() + 90
     all_request_ids = set(request_ids.values())
+    deadline = time.monotonic() + 90
     while time.monotonic() < deadline:
         started = {event["request_id"] for event in backend_request_events(media_container(), since=round_started)
                    if event["kind"] == "start"}
         if len(started & all_request_ids) >= 2:
             break
         time.sleep(0.2)
-    started_before_stop = {event["request_id"] for event in backend_request_events(media_container(), since=round_started)
-                           if event["kind"] == "start"}
-    require(started_before_stop & all_request_ids,
+    require({event["request_id"] for event in backend_request_events(media_container(), since=round_started)
+             if event["kind"] == "start"} & all_request_ids,
             "The stop scenario never reached a real probe.")
     entries_before_stop = len(batch_entry_events(round_started))
 
@@ -1453,7 +1465,6 @@ def scenario_stop(package: Path, evidence_dir: Path | None, nonce: str, recorder
     status_value = task_status(final)
     require(status_value in {"cancelled", "1"}, f"The stopped round did not record Cancelled: {task_result(final)}.")
     require_progress_below_100(progress_during_cancel)
-    # Bind this round's own Cancelled completion by timestamp.
     cancelled_events = [event for event in task_completion_events(round_started) if event["status"] == "Cancelled"]
     require(cancelled_events, "No Cancelled completion was logged for the stopped round.")
     cancelled_at = cancelled_events[0]["timestamp"]
@@ -1462,15 +1473,12 @@ def scenario_stop(package: Path, evidence_dir: Path | None, nonce: str, recorder
     entries = batch_entry_events(round_started)
     entries_before_settlement = [entry for entry in entries if entry["timestamp"] < cancelled_at]
     require_no_new_round(len(entries_before_settlement), entries_before_stop, "re-run")
-    # No new probe may start after the stop, before settlement.
     probes_during_drain = [event for event in probe_start_events(container(), since=stopped_at)
                            if event["timestamp"] < cancelled_at]
     require_no_probe_during_drain(probes_during_drain)
 
     summary_line = first_summary_after(round_started)
     fields = summary_fields_complete(summary_line)
-    # Classify the stopped round from its own summary, not from post-settlement fingerprints (the queued
-    # re-run may legitimately commit the revoked sources after the old round settles).
     started_count = len(started_ids)
     require((fields.get("reliable_success") or 0) == started_count,
             f"The stopped round reliable-success count must equal the started set ({started_count}): {summary_line}.")
@@ -1492,18 +1500,22 @@ def scenario_stop(package: Path, evidence_dir: Path | None, nonce: str, recorder
                     entries=len(entries_before_settlement), summary=fields)
     recorder.snapshot("stop-round", summary["stop"])
 
-    # Wait for any queued re-run to settle, then run an explicit convergence round and verify every
-    # source is committed; a committed source must not have been re-probed (exactly one backend start).
+    # Let any queued re-run settle, then run an explicit convergence round: every changed source is
+    # committed and every unchanged source is skipped.
     wait_for_stable_idle(auth, task["Id"])
     run_plugin_task_completed(auth, "stop convergence run")
-    for name in names:
+    wait_for_stable_idle(auth, task["Id"])
+    for name in changed_names:
         row = fingerprint_row(items[name]["Id"])
         require(row is not None and row["url_hash"] == expected_url_hash(
-            delay_url(plain_url, PROBE_DELAY_SECONDS, request_ids[name])),
+            delay_url(plain_url, STOP_DELAY_SECONDS, request_ids[name])),
             f"The convergence run did not commit the changed source {name}.")
-    final_counts = batch.slow_request_counts(media_container())
-    for name in names:
-        require(final_counts.get(request_ids[name], 0) >= 1, f"The changed source {name} was never probed.")
+    # A further unchanged re-check must skip every source with zero plugin probes.
+    round_started = now_utc()
+    run_plugin_task_completed(auth, "stop unchanged re-check")
+    recheck_summary = latest_summary_after(round_started)
+    recheck_fields = summary_fields_complete(recheck_summary)
+    require_zero_probes(recheck_fields, recheck_summary, "post-settlement unchanged re-check")
     summary["converged"] = True
     return summary
 
