@@ -69,7 +69,7 @@ OUT_OF_SCOPE_LIBRARY = "Package Local Fixtures"
 PROBE_DELAY_SECONDS = 20
 # A bounded long delay keeps the joined probes executing while the 130-candidate batch reaches the selected
 # source and the native stop request is issued; the post-stop convergence round uses stable, non-delayed URLs.
-STOP_DELAY_SECONDS = 45
+STOP_DELAY_SECONDS = 25
 BATCH_OBJECT_LIMIT = 128
 
 ACTIVE_RECORDER: "EvidenceRecorder | None" = None
@@ -2689,10 +2689,10 @@ def scenario_stop(package: Path, evidence_dir: Path | None, nonce: str, recorder
         names, {name: item["Id"] for name, item in items.items()}, first_batch, second_batch)
     require(len(first_names) == 3 and second_batch,
             "The stop candidate manifest does not contain three first-batch sources and a later-batch target.")
-    playback_first_name, second_name, queued_name = first_names
-    changed_names = [playback_first_name, second_name, queued_name, names_by_id[unread_id]]
+    playback_first_name, *other_first_batch_names = first_names
+    changed_names = [playback_first_name, *other_first_batch_names, names_by_id[unread_id]]
     changed_ids = [canonical_guid(items[name]["Id"], f"stop source {name}") for name in changed_names]
-    playback_first_id, second_id, queued_id = changed_ids[:3]
+    playback_first_id = changed_ids[0]
     request_ids = {name: uuid.uuid4().hex for name in changed_names}
     baseline_rows: dict[str, dict] = {}
     baseline_states: dict[str, dict] = {}
@@ -2706,13 +2706,13 @@ def scenario_stop(package: Path, evidence_dir: Path | None, nonce: str, recorder
         baseline_states[item_id] = current_source_state(auth, item_id, source_key, fixture, recorder,
                                                         f"stop baseline {name}")
 
-    playback_url = delay_url(plain_url, STOP_DELAY_SECONDS, request_ids[changed_names[0]])
-    batch_url = delay_url(plain_url, STOP_DELAY_SECONDS, request_ids[changed_names[1]])
-    queued_url = delay_url(plain_url, STOP_DELAY_SECONDS, request_ids[changed_names[2]])
-    unread_url = unique_url(plain_url, "stop-unread-" + uuid.uuid4().hex[:8])
-    for name, url in zip(changed_names, (playback_url, batch_url, queued_url, unread_url)):
+    target_urls = {
+        playback_first_name: delay_url(plain_url, STOP_DELAY_SECONDS, request_ids[playback_first_name]),
+        **{name: delay_url(plain_url, STOP_DELAY_SECONDS, request_ids[name]) for name in other_first_batch_names},
+        names_by_id[unread_id]: unique_url(plain_url, "stop-unread-" + uuid.uuid4().hex[:8]),
+    }
+    for name, url in target_urls.items():
         rewrite_strm(paths[name], url, media_sha, media_size)
-    target_urls = dict(zip(changed_names, (playback_url, batch_url, queued_url, unread_url)))
 
     first_name = changed_names[0]
     first_item = items[first_name]
@@ -2737,12 +2737,24 @@ def scenario_stop(package: Path, evidence_dir: Path | None, nonce: str, recorder
     previous = last_start(task)
     require(start_task(auth, task["Id"]) == 204, "Jellyfin did not accept the stop-scenario batch start.")
     joined = wait_for_probe_join(first_item["Id"], first_source_key, request_started)
-    second_name = changed_names[1]
-    second_item = items[second_name]
-    batch_backend_start = wait_for_backend_event(request_ids[second_name], "start", request_started)
-    second_probe = probe_start_for_item(probe_start_events(container(), since=request_started), second_item["Id"])
-    require(second_probe is not None,
-            "The stopped batch did not start the second source while the first remained joined and running.")
+    first_batch_source_ids = {canonical_guid(items[name]["Id"], f"stop first-batch source {name}")
+                              for name in first_names}
+    batch_owner_candidates = first_batch_source_ids - {playback_first_id}
+    batch_owner_probe = None
+    owner_deadline = time.monotonic() + MAX_WAIT
+    while time.monotonic() < owner_deadline:
+        batch_owner_probe = next((event for event in probe_start_events(container(), since=request_started)
+                                  if event["item_id"] in batch_owner_candidates), None)
+        if batch_owner_probe is not None:
+            break
+        time.sleep(0.1)
+    require(batch_owner_probe is not None,
+            "The stopped batch did not start a distinct first-batch source while the playback source remained joined.")
+    batch_owner_id = batch_owner_probe["item_id"]
+    batch_owner_name = names_by_id[batch_owner_id]
+    require(batch_owner_probe["timestamp"] > joined["timestamp"],
+            "The distinct batch-owned probe did not start after the playback-first join was observed.")
+    batch_backend_start = wait_for_backend_event(request_ids[batch_owner_name], "start", request_started)
     entries_before_stop = len(batch_entry_events(request_started))
 
     stop_status = stop_task(auth, task["Id"])
@@ -2779,7 +2791,7 @@ def scenario_stop(package: Path, evidence_dir: Path | None, nonce: str, recorder
     require(playback_holder.get("result", (None,))[0] == 200,
             "The playback-first owner did not return a successful native PlaybackInfo response.")
     playback_backend_finish = wait_for_backend_event(request_ids[first_name], "finish", request_started)
-    batch_backend_finish = wait_for_backend_event(request_ids[second_name], "finish", request_started)
+    batch_backend_finish = wait_for_backend_event(request_ids[batch_owner_name], "finish", request_started)
     cancelled_events = [event for event in task_completion_events(request_started) if event["status"] == "Cancelled"]
     require(cancelled_events, "No current-round Cancelled completion was logged.")
     cancelled_at = cancelled_events[0]["timestamp"]
@@ -2794,8 +2806,8 @@ def scenario_stop(package: Path, evidence_dir: Path | None, nonce: str, recorder
     fields = summary_fields_complete(summary_line)
     probe_events = probe_start_events(container(), since=request_started)
     started_ids = {event["item_id"] for event in probe_events
-                   if event["item_id"] in {playback_first_id, second_id}}
-    require(started_ids == {playback_first_id, second_id},
+                   if event["item_id"] in {playback_first_id, batch_owner_id}}
+    require(started_ids == {playback_first_id, batch_owner_id},
             f"The stopped round did not have exactly the playback owner plus one batch owner started: {started_ids}.")
     joined_ids = {joined["item_id"]}
     require(fields.get("reliable_success") == len(started_ids),
@@ -2843,7 +2855,9 @@ def scenario_stop(package: Path, evidence_dir: Path | None, nonce: str, recorder
         "stop_status": stop_status, "status": status_value, "task_result": task_result(final),
         "summary": summary_line, "fields": fields, "candidate_manifest": candidate_manifest,
         "changed_item_ids": changed_ids, "started_item_ids": sorted(started_ids),
-        "joined_item_ids": sorted(joined_ids), "baseline_rows": baseline_rows,
+        "joined_item_ids": sorted(joined_ids), "unstarted_item_ids": sorted(set(changed_ids) - started_ids),
+        "batch_owner_item_id": batch_owner_id,
+        "batch_owner_fixture_name_sha256": digest(batch_owner_name), "baseline_rows": baseline_rows,
         "observed_rows": observed_rows, "expected_rows": expected_rows,
         "native_states": native_states, "saw_cancelling": saw_cancelling,
         "progress_during_cancel": progress_during_cancel, "second_start_status": second_start_status,
@@ -2853,7 +2867,7 @@ def scenario_stop(package: Path, evidence_dir: Path | None, nonce: str, recorder
     }
     summary["stop"] = stop_snapshot
     recorder.record("stop_round_settled_before_rerun", snapshot=stop_snapshot,
-                    joined_event=joined, playback_probe=playback_probe, batch_probe=second_probe)
+                    joined_event=joined, playback_probe=playback_probe, batch_probe=batch_owner_probe)
     recorder.snapshot(f"stop-round-before-rerun-{time.time_ns()}", stop_snapshot)
 
     # Only now may a queued request or an explicit new round run. Detect a queued second execution rather than
