@@ -2708,7 +2708,7 @@ def scenario_stop(package: Path, evidence_dir: Path | None, nonce: str, recorder
 
     playback_url = delay_url(plain_url, STOP_DELAY_SECONDS, request_ids[changed_names[0]])
     batch_url = delay_url(plain_url, STOP_DELAY_SECONDS, request_ids[changed_names[1]])
-    queued_url = unique_url(plain_url, "stop-queued-" + uuid.uuid4().hex[:8])
+    queued_url = delay_url(plain_url, STOP_DELAY_SECONDS, request_ids[changed_names[2]])
     unread_url = unique_url(plain_url, "stop-unread-" + uuid.uuid4().hex[:8])
     for name, url in zip(changed_names, (playback_url, batch_url, queued_url, unread_url)):
         rewrite_strm(paths[name], url, media_sha, media_size)
