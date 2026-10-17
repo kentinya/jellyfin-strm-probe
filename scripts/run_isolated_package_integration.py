@@ -40,9 +40,6 @@ import package_environment as pe  # noqa: E402
 import package_plugin  # noqa: E402
 
 ROOT = pe.ROOT
-WORK = pe.WORK
-FINGERPRINT_DATABASE = WORK / "config" / "data" / "plugins" / "b061643ed17d4c6e8ba26b57e286bd20" / "strm-fingerprints.db"
-CONFIGURATION_FILE = WORK / "config" / "plugins" / "configurations" / "Jellyfin.Plugin.StrmProbeOptimizer.xml"
 PLUGIN_ID = "b061643e-d17d-4c6e-8ba2-6b57e286bd20"
 PAGE_NAME = "StrmProbeOptimizer"
 TASK_NAME = "STRM 媒体信息检查"
@@ -63,7 +60,7 @@ def run(*args: str, timeout: int = 120) -> subprocess.CompletedProcess[str]:
 
 
 def api_auth() -> str:
-    credentials = json.loads(pe.CREDENTIALS.read_text(encoding="utf-8"))
+    credentials = json.loads(pe.credentials_path().read_text(encoding="utf-8"))
     return pe.login(credentials["username"], credentials["password"])
 
 
@@ -143,11 +140,20 @@ def saved_stream_types(auth: str, item_id: str) -> list[str]:
     return sorted({stream.get("Type") for stream in payload.get("MediaStreams", [])})
 
 
+def fingerprint_database() -> Path:
+    return pe.WORK / "config" / "data" / "plugins" / "b061643ed17d4c6e8ba26b57e286bd20" / "strm-fingerprints.db"
+
+
+def configuration_file() -> Path:
+    return pe.WORK / "config" / "plugins" / "configurations" / "Jellyfin.Plugin.StrmProbeOptimizer.xml"
+
+
 def fingerprint_row(item_id: str, source_key: str) -> dict | None:
     import sqlite3
 
-    require(FINGERPRINT_DATABASE.is_file(), "The plugin fingerprint database was not created.")
-    uri = FINGERPRINT_DATABASE.as_posix() + "?mode=ro"
+    database = fingerprint_database()
+    require(database.is_file(), "The plugin fingerprint database was not created.")
+    uri = database.as_posix() + "?mode=ro"
     with sqlite3.connect("file:" + uri, uri=True, timeout=10) as connection:
         connection.row_factory = sqlite3.Row
         row = connection.execute(
@@ -297,7 +303,7 @@ def unexpected_console_errors(result: dict) -> list[dict]:
 
 
 def configuration_page_scenario(auth: str, evidence_dir: Path | None) -> dict:
-    credentials = json.loads(pe.CREDENTIALS.read_text(encoding="utf-8"))
+    credentials = json.loads(pe.credentials_path().read_text(encoding="utf-8"))
     scenario = {
         "scenario": "save_valid",
         "baseUrl": credentials["base_url"],
@@ -334,7 +340,7 @@ def configuration_page_scenario(auth: str, evidence_dir: Path | None) -> dict:
 
 
 def playback_scenario(auth: str, items: list[dict], evidence_dir: Path | None) -> dict:
-    credentials = json.loads(pe.CREDENTIALS.read_text(encoding="utf-8"))
+    credentials = json.loads(pe.credentials_path().read_text(encoding="utf-8"))
     scenario = {
         "baseUrl": credentials["base_url"],
         "username": credentials["username"],
@@ -505,7 +511,7 @@ def build_baseline_archive(baseline_revision: str, destination_dir: Path) -> dic
 
 
 def deploy_baseline(baseline_dir: Path) -> None:
-    owned_plugins = pe.require_owned_path(WORK / "config" / "plugins", label="package plugins directory")
+    owned_plugins = pe.require_owned_path(pe.WORK / "config" / "plugins", label="package plugins directory")
     owned_plugins.mkdir(parents=True, exist_ok=True)
     target = pe.require_owned_path(owned_plugins / "Jellyfin.Plugin.StrmProbeOptimizer_0.1.0.0", label="baseline folder")
     shutil.rmtree(target, ignore_errors=True)
@@ -515,7 +521,7 @@ def deploy_baseline(baseline_dir: Path) -> None:
 def scenario_upgrade(package: Path, baseline_revision: str, evidence_dir: Path | None) -> dict:
     summary: dict[str, object] = {}
     pe.prepare_clean_instance()
-    baseline_dir = WORK / "baseline"
+    baseline_dir = pe.WORK / "baseline"
     summary["baseline"] = build_baseline_archive(baseline_revision, baseline_dir)
     deploy_baseline(baseline_dir)
     restart()
@@ -543,7 +549,7 @@ def scenario_upgrade(package: Path, baseline_revision: str, evidence_dir: Path |
     baseline_fingerprint = fingerprint_row(item["Id"], item["Id"])
     require(unchanged_fingerprint is not None and baseline_fingerprint is not None,
             "The baseline fingerprints were not created.")
-    configuration_before = CONFIGURATION_FILE.read_bytes()
+    configuration_before = configuration_file().read_bytes()
     # Prepare a pending change (a new URL) so the upgrade must re-check it.
     write_versioned_strm("Upgrade Item", pending_url, mp4_sha, mp4_size)
     pe.compose("stop")
@@ -554,7 +560,7 @@ def scenario_upgrade(package: Path, baseline_revision: str, evidence_dir: Path |
     auth = api_auth()
     require(str(plugin_status(auth)).lower() in {"active", "0"}, "The candidate plugin is not Active after upgrade.")
     summary["payload_matches_archive"] = deployed_matches_archive(package)
-    require(CONFIGURATION_FILE.read_bytes() == configuration_before, "The upgrade changed the persisted configuration file.")
+    require(configuration_file().read_bytes() == configuration_before, "The upgrade changed the persisted configuration file.")
     status, effective = pe.request_json("GET", f"/Plugins/{PLUGIN_ID}/Configuration", headers={"Authorization": auth})
     require(int(effective["MaxConcurrentProbes"]) == 3 and effective["DetailedLog"] is True,
             f"The upgrade did not preserve the effective configuration: {effective}")
@@ -588,7 +594,7 @@ def scenario_upgrade(package: Path, baseline_revision: str, evidence_dir: Path |
 
     # Real backup and restore: stop the server, back up config + fingerprint, mutate the
     # live values through the normal API, then stop, restore the backup, restart and read back.
-    backup_dir = WORK / "backup"
+    backup_dir = pe.WORK / "backup"
     pe.compose("stop")
     time.sleep(1)
     summary["backup"] = pe.backup_state(backup_dir)
@@ -854,8 +860,10 @@ def main() -> int:
     parser.add_argument("--scenario", default="all",
                         choices=["all", "clean", "upgrade", "recovery", "invalid"])
     parser.add_argument("--evidence-dir", type=Path)
-    parser.add_argument("--cleanup", action="store_true",
-                        help="Stop the package instance and remove its own workspace data after the run.")
+    parser.add_argument("--workspace", type=Path,
+                        help="Fresh run-owned workspace under artifacts/package-env (default: auto-created).")
+    parser.add_argument("--keep-workspace", action="store_true",
+                        help="Leave this run's workspace and instance in place for inspection (default: clean up).")
     args = parser.parse_args()
 
     package = args.package.resolve()
@@ -863,7 +871,10 @@ def main() -> int:
     summary: dict[str, object] = {"scenario": args.scenario, "package": str(package)}
     exit_code = 1
     before_state = None
+    workspace = None
     try:
+        workspace = pe.select_workspace(args.workspace)
+        summary["workspace"] = str(workspace)
         verification = package_plugin.verify_archive(package)
         summary["package_identity"] = {
             "archiveSha256": verification["archiveSha256"],
@@ -896,15 +907,21 @@ def main() -> int:
         summary["error"] = f"{type(error).__name__}: {error}"
         exit_code = 1
     finally:
-        # Teardown: record the before/after instance inputs, then optionally remove only this
-        # run's owned workspace. A teardown failure turns the overall result into FAIL.
+        # Teardown: reconcile every owned input and, when requested, remove only this run's
+        # marker-owned workspace. A disturbed input or a teardown failure turns the overall
+        # result into FAIL, so a failed recovery can never still report PASS.
         if before_state is not None:
             try:
                 summary["instance_reconciliation"] = pe.reconcile_instance_state(before_state)
-                if args.cleanup:
-                    summary["cleanup"] = pe.cleanup_instance()
             except (OSError, pe.PackageEnvironmentError, subprocess.SubprocessError) as teardown_error:
                 summary["teardown_error"] = f"{type(teardown_error).__name__}: {teardown_error}"
+                summary["status"] = "FAIL"
+                exit_code = 1
+        if workspace is not None and not args.keep_workspace:
+            try:
+                summary["cleanup"] = pe.cleanup_instance()
+            except (OSError, pe.PackageEnvironmentError, subprocess.SubprocessError) as cleanup_error:
+                summary["cleanup_error"] = f"{type(cleanup_error).__name__}: {cleanup_error}"
                 summary["status"] = "FAIL"
                 exit_code = 1
         if evidence_dir is not None:

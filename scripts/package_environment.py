@@ -32,7 +32,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 ENVIRONMENT = ROOT / "scripts" / "development_environment.py"
 SPEC = json.loads((ROOT / "dev" / "environment-spec.json").read_text())
-WORK = ROOT / "artifacts" / "package-env"
+BASE = ROOT / "artifacts" / "package-env"
+WORK = BASE
 PROJECT = "jf-strm-probe-package-" + hashlib.sha256(str(ROOT).encode()).hexdigest()[:10]
 PORT = int(os.environ.get("JF_PROBE_PACKAGE_PORT", "18097"))
 DOCKER = ["docker", "--host", "unix:///var/run/docker.sock"]
@@ -41,14 +42,53 @@ STRM_LIBRARY = "Package STRM Fixtures"
 # Distinct basenames so Jellyfin never groups them as alternate versions of one another.
 MEDIA_MP4 = "package-mp4.mp4"
 MEDIA_MKV = "package-mkv.mkv"
-CREDENTIALS = WORK / "credentials.local.json"
-GENERATED_AT = WORK / ".media-prepared"
+# Each acceptance run owns a fresh subdirectory under BASE and writes this marker; the marker
+# is what proves the directory belongs to this run before anything is deleted.
+RUN_MARKER = ".package-run"
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 
 class PackageEnvironmentError(RuntimeError):
     """An isolation or ownership precondition failed."""
+
+
+def credentials_path() -> Path:
+    return WORK / "credentials.local.json"
+
+
+def generated_at_path() -> Path:
+    return WORK / ".media-prepared"
+
+
+def default_run_workspace() -> Path:
+    stamp = time.strftime("%Y%m%d-%H%M%S", time.gmtime())
+    return BASE / "runs" / f"run-{stamp}-{uuid.uuid4().hex[:8]}"
+
+
+def select_workspace(path: Path | None = None) -> Path:
+    """Point the module at a fresh, run-owned workspace.
+
+    A pre-existing directory that has files but no run marker is refused before any write, so
+    a reused or foreign directory can never be modified or cleaned up by this run.
+    """
+    global WORK
+    candidate = (path if path is not None else default_run_workspace())
+    candidate = candidate if candidate.is_absolute() else (ROOT / candidate)
+    resolved = candidate.resolve(strict=False)
+    base = BASE.resolve()
+    if resolved != base and not resolved.is_relative_to(base):
+        raise PackageEnvironmentError(
+            f"The package workspace {candidate} must live under {BASE}."
+        )
+    if candidate.is_symlink():
+        raise PackageEnvironmentError("The package workspace must not be a symbolic link.")
+    if candidate.exists() and any(candidate.iterdir()) and not (candidate / RUN_MARKER).is_file():
+        raise PackageEnvironmentError(
+            f"Refusing to reuse {candidate}: it contains data that is not owned by this run."
+        )
+    WORK = candidate
+    return WORK
 
 
 def run(*args: str, timeout: int = 120, cwd: Path = ROOT) -> subprocess.CompletedProcess[str]:
@@ -61,32 +101,34 @@ def require(condition: bool, message: str) -> None:
 
 
 def require_owned_path(path: Path, *, label: str | None = None) -> Path:
-    """Return ``path`` resolved only when it is safely inside the package workspace.
+    """Return ``path`` only when it and every parent stay inside the owned workspace.
 
-    Every write target (deploy, baseline, backup, removal and cleanup) must pass this check
-    first: the path and each of its parents below the workspace must exist without a
-    symbolic link, and the resolved path must stay inside ``WORK``. A foreign directory or a
-    symlinked ``config/plugins`` therefore fails before anything is deleted or replaced.
+    The original lexical path is validated component by component before any resolution, so a
+    symbolic link anywhere in the chain — including the final file and a link that points back
+    inside the workspace — is rejected rather than silently followed. The resolved path is then
+    required to stay inside the workspace as a second, independent guard.
     """
     workspace_root = WORK.resolve()
     candidate = path if path.is_absolute() else (WORK / path)
-    # Walk the chain from the workspace down so a symlinked parent cannot hide the target.
-    relative = None
-    try:
-        relative = candidate.resolve(strict=False).relative_to(workspace_root)
-    except ValueError:
-        relative = None
-    if relative is None:
+    lexical = Path(os.path.abspath(candidate))
+    if lexical != workspace_root and not lexical.is_relative_to(workspace_root):
         raise PackageEnvironmentError(
             f"Refusing to write outside the package workspace: {label or candidate}."
         )
+    if workspace_root.is_symlink():
+        raise PackageEnvironmentError("The package workspace must not be a symbolic link.")
     current = workspace_root
-    for part in relative.parts:
+    for part in lexical.relative_to(workspace_root).parts:
         current = current / part
         if current.is_symlink():
             raise PackageEnvironmentError(
                 f"Refusing to write through a symbolic link: {label or current}."
             )
+    resolved = candidate.resolve(strict=False)
+    if resolved != workspace_root and not resolved.is_relative_to(workspace_root):
+        raise PackageEnvironmentError(
+            f"Refusing to write outside the package workspace: {label or candidate}."
+        )
     return candidate
 
 
@@ -96,15 +138,44 @@ def workspace_owned_root() -> Path:
 
 
 def workspace() -> None:
-    for path in (ROOT / "artifacts", WORK):
+    for path in (ROOT / "artifacts", BASE, WORK):
         if path.is_symlink():
             raise PackageEnvironmentError("The package environment directory must not be a symlink.")
     WORK.mkdir(parents=True, exist_ok=True)
+    marker = WORK / RUN_MARKER
+    if marker.is_symlink():
+        raise PackageEnvironmentError("The package run marker must not be a symbolic link.")
+    if not marker.is_file():
+        marker.write_text("owned by the current package acceptance run\n", encoding="utf-8")
     for name in ("config", "cache", "strm", "media", "media-server"):
         path = WORK / name
         if path.is_symlink():
             raise PackageEnvironmentError(f"The package environment subdirectory {name!r} is a symlink.")
         path.mkdir(exist_ok=True)
+
+
+def write_owned_bytes(target: Path, data: bytes, *, label: str) -> Path:
+    """Write bytes to a validated path, refusing a symlinked target or parent.
+
+    The final component is validated (not just its directory), so a pre-existing file that is a
+    symbolic link to a foreign sentinel is refused instead of being followed and overwritten.
+    """
+    owned = require_owned_path(target, label=label)
+    owned.parent.mkdir(parents=True, exist_ok=True)
+    if owned.is_symlink():
+        raise PackageEnvironmentError(f"Refusing to write through a symbolic link: {label}.")
+    owned.write_bytes(data)
+    return owned
+
+
+def copy_owned(source: Path, target: Path, *, label: str) -> Path:
+    """Copy a file to a validated target, refusing a symlinked destination."""
+    owned = require_owned_path(target, label=label)
+    owned.parent.mkdir(parents=True, exist_ok=True)
+    if owned.is_symlink():
+        raise PackageEnvironmentError(f"Refusing to write through a symbolic link: {label}.")
+    shutil.copy2(source, owned)
+    return owned
 
 
 def load_image_lock() -> dict[str, str]:
@@ -182,7 +253,7 @@ def write_compose() -> Path:
                 lines.append(f"    {key}: {str(value).lower()}")
             else:
                 lines.append(f'    {key}: "{value}"')
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    write_owned_bytes(path, ("\n".join(lines) + "\n").encode("utf-8"), label="compose file")
     return path
 
 
@@ -195,11 +266,14 @@ def guard_containers() -> None:
         return
     inspected = run(*DOCKER, "inspect", *ids.split())
     require(inspected.returncode == 0, "Could not inspect existing package-environment containers.")
+    base = BASE.resolve()
     for container in json.loads(inspected.stdout):
         mounts = container.get("Mounts", [])
         require(mounts, "An existing package-environment container has no mounts; refusing to touch it.")
         for mount in mounts:
-            require(mount["Type"] == "bind" and Path(mount["Source"]).resolve().is_relative_to(WORK.resolve()),
+            # Any run directory under the package environment root belongs to this project, so a
+            # previous run's containers may be recreated. A mount outside that root is foreign.
+            require(mount["Type"] == "bind" and Path(mount["Source"]).resolve().is_relative_to(base),
                     "An existing package-environment container has foreign mounts; refusing to change it.")
 
 
@@ -227,7 +301,7 @@ def stage_media_server() -> None:
     destination = WORK / "media-server" / source.name
     source_bytes = source.read_bytes()
     if not destination.is_file() or destination.read_bytes() != source_bytes:
-        destination.write_bytes(source_bytes)
+        write_owned_bytes(destination, source_bytes, label="isolated media server")
 
 
 def container_name(service: str) -> str:
@@ -247,7 +321,7 @@ def ensure_media() -> None:
         MEDIA_MP4: ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac"],
         MEDIA_MKV: ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac"],
     }
-    if GENERATED_AT.is_file() and all((media / name).is_file() for name in targets):
+    if generated_at_path().is_file() and all((media / name).is_file() for name in targets):
         return
     images = load_image_lock()
     # `python:...` base image has no ffmpeg; the pinned Jellyfin server image ships the pinned ffmpeg.
@@ -262,9 +336,9 @@ def ensure_media() -> None:
         result = run(*command, timeout=180)
         require(result.returncode == 0, f"Could not generate the synthetic {name} fixture: {result.stderr.strip()[-300:]}")
     # Alternate fixtures must be byte-identical so a same-SHA-1 URL change is meaningful.
-    shutil.copy2(media / MEDIA_MP4, media / "package-mp4-alt.mp4")
-    shutil.copy2(media / MEDIA_MKV, media / "package-mkv-alt.mkv")
-    GENERATED_AT.write_text("prepared\n", encoding="utf-8")
+    copy_owned(media / MEDIA_MP4, media / "package-mp4-alt.mp4", label="alternate MP4 fixture")
+    copy_owned(media / MEDIA_MKV, media / "package-mkv-alt.mkv", label="alternate MKV fixture")
+    write_owned_bytes(generated_at_path(), b"prepared\n", label="media-prepared marker")
 
 
 def media_sha1(name: str) -> tuple[str, int]:
@@ -281,8 +355,7 @@ def write_strm(name: str, url: str, sha1: str | None, size: int | None) -> Path:
     if size is not None:
         lines.append(f"# strm-probe-size:{size}")
     lines.append(url)
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    return path
+    return write_owned_bytes(path, ("\n".join(lines) + "\n").encode("utf-8"), label=f"STRM fixture {name}")
 
 
 def wait_healthy(timeout: int = 150) -> str:
@@ -343,9 +416,12 @@ def bootstrap_fresh_instance(username: str, password: str) -> None:
 
 
 def write_credentials(base_url: str, username: str, password: str) -> None:
-    CREDENTIALS.write_text(json.dumps({"base_url": base_url, "username": username, "password": password}),
-                           encoding="utf-8")
-    CREDENTIALS.chmod(0o600)
+    credentials = write_owned_bytes(
+        credentials_path(),
+        json.dumps({"base_url": base_url, "username": username, "password": password}).encode("utf-8"),
+        label="credentials file",
+    )
+    credentials.chmod(0o600)
 
 
 def prepare_clean_instance() -> dict:
@@ -354,8 +430,9 @@ def prepare_clean_instance() -> dict:
     ensure_media()
     compose("stop")
     for name in ("config", "cache"):
-        shutil.rmtree(WORK / name, ignore_errors=True)
-        (WORK / name).mkdir(parents=True, exist_ok=True)
+        target = require_owned_path(WORK / name, label=f"fresh-instance {name}")
+        shutil.rmtree(target, ignore_errors=True)
+        target.mkdir(parents=True, exist_ok=True)
     compose("up")
     container = wait_healthy()
     username = "package-admin"
@@ -370,7 +447,7 @@ def prepare_clean_instance() -> dict:
     # The library is created through the authenticated API, so authenticate first.
     token = login(username, password)
     add_library_authenticated(token, STRM_LIBRARY, ["/media/strm"])
-    return {"container": container, "port": PORT, "credentials": str(CREDENTIALS)}
+    return {"container": container, "port": PORT, "credentials": str(credentials_path())}
 
 
 def login(username: str, password: str) -> str:
@@ -503,8 +580,9 @@ def backup_state(destination: Path) -> dict:
     copied: dict[str, dict[str, str]] = {}
     for label, source in sources.items():
         require(source.is_file(), f"The package instance has no {label} to back up: {source}.")
-        target = owned_destination / source.name
-        shutil.copy2(source, target)
+        # The individual destination file is validated, not only the directory, so a symlinked
+        # backup leaf cannot redirect the copy to a foreign sentinel.
+        target = copy_owned(source, owned_destination / source.name, label=f"backup {label}")
         copied[label] = {"path": str(target), "sha256": hashlib.sha256(target.read_bytes()).hexdigest()}
     return copied
 
@@ -522,9 +600,7 @@ def restore_state(backup: Path) -> dict:
     restored: dict[str, dict[str, str]] = {}
     for label, (source, target) in sources.items():
         require(source.is_file(), f"The backup has no {label}: {source}.")
-        owned_target = require_owned_path(target, label=f"{label} target")
-        owned_target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, owned_target)
+        owned_target = copy_owned(source, target, label=f"{label} target")
         restored[label] = {"path": str(owned_target), "sha256": hashlib.sha256(owned_target.read_bytes()).hexdigest()}
     return restored
 
@@ -541,7 +617,12 @@ def _tree_fingerprint(root: Path) -> dict[str, str]:
 
 
 def capture_instance_state() -> dict[str, object]:
-    """Snapshot the owned instance inputs (config, media, STRM, libraries) before a run."""
+    """Snapshot every owned instance input that a run may read or write.
+
+    Besides the plugin configuration, fingerprint database, media and STRM files, this records
+    the native scheduled-task state (all triggers) and the library entries under ``config/root``
+    so a run cannot silently leave a trigger or library change behind.
+    """
     workspace()
     state: dict[str, object] = {
         "configuration": _tree_fingerprint(WORK / "config" / "plugins" / "configurations"),
@@ -549,36 +630,54 @@ def capture_instance_state() -> dict[str, object]:
             WORK / "config" / "data" / "plugins" / "b061643ed17d4c6e8ba26b57e286bd20"),
         "media": _tree_fingerprint(WORK / "media"),
         "strm": _tree_fingerprint(WORK / "strm"),
+        "scheduled_tasks": _tree_fingerprint(WORK / "config" / "data" / "ScheduledTasks"),
+        "libraries": _tree_fingerprint(WORK / "config" / "root"),
     }
     return state
 
 
-def reconcile_instance_state(before: dict[str, object]) -> dict[str, object]:
-    """Compare the current owned inputs with a captured snapshot and report per-area deltas.
+STATE_AREAS = ("configuration", "fingerprint_database", "media", "strm", "scheduled_tasks", "libraries")
 
-    The package instance is disposable acceptance data, so this reports rather than silently
-    deleting anything the test itself did not create; it never touches a path outside WORK.
+
+def reconcile_instance_state(before: dict[str, object]) -> dict[str, object]:
+    """Compare the owned inputs with the pre-run snapshot and refuse any disturbed input.
+
+    The run always uses a fresh, marker-owned workspace, so every file it creates is
+    run-owned and every file it removes is a pre-existing input it must not have touched. A
+    removed or modified pre-existing input makes the whole run FAIL rather than being reported
+    and forgotten.
     """
     after = capture_instance_state()
     areas: dict[str, object] = {}
-    for area in ("configuration", "fingerprint_database", "media", "strm"):
+    disturbed: list[str] = []
+    for area in STATE_AREAS:
         previous = dict(before.get(area, {}))
         current = dict(after.get(area, {}))
         added = sorted(set(current) - set(previous))
         removed = sorted(set(previous) - set(current))
         changed = sorted(path for path in set(previous) & set(current) if previous[path] != current[path])
         areas[area] = {"added": added, "removed": removed, "changed": changed}
-    return {"status": "RECORDED", "areas": areas}
+        if removed or changed:
+            disturbed.append(area)
+    result = {"status": "CLEAN" if not disturbed else "MISMATCH", "areas": areas, "disturbed": disturbed}
+    if disturbed:
+        raise PackageEnvironmentError(
+            "The run disturbed pre-existing instance inputs in: " + ", ".join(disturbed) + "."
+        )
+    return result
 
 
 def cleanup_instance() -> dict[str, object]:
-    """Stop the owned package instance and remove only its own workspace data."""
+    """Stop the owned package instance and remove this run's entire marker-owned workspace.
+
+    The run marker is checked before anything else (and before ``workspace()`` would create one),
+    so a foreign or reused directory can never be cleaned up by this run.
+    """
+    if not (WORK / RUN_MARKER).is_file():
+        raise PackageEnvironmentError("Refusing to clean a workspace without this run's marker.")
     workspace()
+    root = require_owned_path(WORK, label="run workspace")
     compose("stop")
-    removed: list[str] = []
-    for name in ("config", "cache", "strm", "media", "baseline", "backup"):
-        target = require_owned_path(WORK / name, label=f"cleanup target {name}")
-        if target.exists() and not target.is_symlink():
-            shutil.rmtree(target)
-            removed.append(name)
-    return {"status": "CLEANED", "removed": removed}
+    removed = sorted(path.name for path in root.iterdir())
+    shutil.rmtree(root)
+    return {"status": "CLEANED", "removed": removed, "workspace": str(root)}

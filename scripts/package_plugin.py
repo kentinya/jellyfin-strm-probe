@@ -354,6 +354,10 @@ def build_archive_layout(
     files["THIRD-PARTY-NOTICES.txt"] = notice_text.encode("utf-8")
 
     folder = f"{PROJECT.name}_{version}"
+    # The builder refuses an internally inconsistent candidate before it writes the archive, so a
+    # publish whose folder/meta/deps/assembly versions disagree never reaches a valid install.
+    verify_version_identity(version, folder, json.loads(files[deps_name]),
+                            read_assembly_version(files[plugin_dll]))
     identity = {
         "plugin": PROJECT.name,
         "guid": manifest["guid"],
@@ -489,6 +493,10 @@ def verify_archive(
                 raise PackageError(
                     f"The package assembly {name!r} is version {actual_version}, not the required {expected_version}."
                 )
+        # The plugin's own version is compared across the folder, meta.json, the dependency
+        # manifest project entry and the shipped assembly. A folder/meta-only rewrite therefore
+        # fails on the actual assembly, and a dependency-only rewrite fails on the project entry.
+        verify_version_identity(version, root, deps, read_assembly_version(bundle.read(f"{root}/{plugin_dll}")))
         entries = []
         for name in sorted(names):
             if name.endswith("/"):
@@ -514,6 +522,45 @@ def verify_archive(
         "assemblies": declared,
         "entries": entries,
     }
+
+
+def normalize_dotnet_version(value: str) -> str:
+    """Normalise a .NET version to four parts so ``0.1.0`` and ``0.1.0.0`` compare equal."""
+    text = str(value).strip()
+    if not re.fullmatch(r"\d+(\.\d+){1,3}", text):
+        return text
+    parts = text.split(".")
+    while len(parts) < 4:
+        parts.append("0")
+    return ".".join(parts)
+
+
+def verify_version_identity(manifest_version: str, root: str, deps: dict, assembly_version: str | None) -> None:
+    """Require the folder, meta.json, dependency project entry and actual assembly to agree.
+
+    Comparing only some of these lets a coordinated rewrite (folder plus meta.json) pass while
+    the shipped DLL and dependency manifest still name the old version. All four are read
+    independently here so no single mutable field can satisfy the check on its own.
+    """
+    expected = normalize_dotnet_version(manifest_version)
+    if not re.fullmatch(r"\d+\.\d+\.\d+\.\d+", expected):
+        raise PackageError(f"The manifest version {manifest_version!r} is not a .NET version.")
+    if root != f"{PROJECT.name}_{manifest_version}":
+        raise PackageError(f"The plugin folder {root!r} does not match the manifest version {manifest_version!r}.")
+    if assembly_version is None:
+        raise PackageError("The plugin assembly has no readable AssemblyVersion; refusing an unverifiable package.")
+    if normalize_dotnet_version(assembly_version) != expected:
+        raise PackageError(
+            f"The plugin assembly version {assembly_version} does not match the manifest version {manifest_version}."
+        )
+    project_ids = [key for key in deps.get("libraries", {}) if key.split("/", 1)[0] == PROJECT.name]
+    if len(project_ids) != 1:
+        raise PackageError("The dependency manifest must declare exactly one entry for the plugin project.")
+    project_version = project_ids[0].split("/", 1)[1]
+    if normalize_dotnet_version(project_version) != expected:
+        raise PackageError(
+            f"The dependency manifest project version {project_version} does not match the manifest version {manifest_version}."
+        )
 
 
 def read_assembly_version(data: bytes) -> str | None:

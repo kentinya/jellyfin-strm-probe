@@ -150,6 +150,94 @@ class PackageEnvironmentTests(unittest.TestCase):
             # A normal owned path resolves.
             self.assertTrue(str(package_environment.require_owned_path(work / "config")))
 
+    def test_require_owned_path_rejects_an_internal_parent_symlink(self):
+        # A symlink that points back inside the workspace must still be refused: resolve() would
+        # otherwise strip it and the raw path chain would be missed.
+        work = Path(tempfile.mkdtemp())
+        (work / "actual").mkdir()
+        (work / "alias").symlink_to(work / "actual", target_is_directory=True)
+        with patch.object(package_environment, "WORK", work):
+            with self.assertRaises(package_environment.PackageEnvironmentError):
+                package_environment.require_owned_path(work / "alias" / "file")
+
+    def test_backup_state_refuses_a_symlinked_destination_file(self):
+        work = Path(tempfile.mkdtemp())
+        config = work / "config" / "plugins" / "configurations" / "Jellyfin.Plugin.StrmProbeOptimizer.xml"
+        database = work / "config" / "data" / "plugins" / "b061643ed17d4c6e8ba26b57e286bd20" / "strm-fingerprints.db"
+        config.parent.mkdir(parents=True)
+        database.parent.mkdir(parents=True)
+        config.write_bytes(b"owned configuration")
+        database.write_bytes(b"owned fingerprint")
+        backup = work / "backup"
+        backup.mkdir()
+        foreign = Path(tempfile.mkdtemp()) / "sentinel"
+        foreign.write_bytes(b"foreign must remain untouched")
+        (backup / config.name).symlink_to(foreign)
+        with patch.object(package_environment, "WORK", work):
+            with self.assertRaises(package_environment.PackageEnvironmentError):
+                package_environment.backup_state(backup)
+        self.assertEqual(foreign.read_bytes(), b"foreign must remain untouched")
+
+    def test_backup_and_restore_round_trip_on_owned_paths(self):
+        work = Path(tempfile.mkdtemp())
+        config = work / "config" / "plugins" / "configurations" / "Jellyfin.Plugin.StrmProbeOptimizer.xml"
+        database = work / "config" / "data" / "plugins" / "b061643ed17d4c6e8ba26b57e286bd20" / "strm-fingerprints.db"
+        config.parent.mkdir(parents=True)
+        database.parent.mkdir(parents=True)
+        config.write_bytes(b"owned configuration")
+        database.write_bytes(b"owned fingerprint")
+        with patch.object(package_environment, "WORK", work):
+            backup = package_environment.backup_state(work / "backup")
+            config.write_bytes(b"mutated")
+            restored = package_environment.restore_state(work / "backup")
+        self.assertEqual(restored["configuration"]["sha256"], backup["configuration"]["sha256"])
+        self.assertEqual(config.read_bytes(), b"owned configuration")
+
+    def test_select_workspace_marks_fresh_and_refuses_unmarked_reuse(self):
+        base = Path(tempfile.mkdtemp())
+        with patch.object(package_environment, "BASE", base):
+            reused = base / "reused"
+            reused.mkdir()
+            (reused / "prior.strm").write_bytes(b"pre-existing fixture")
+            with self.assertRaises(package_environment.PackageEnvironmentError):
+                package_environment.select_workspace(reused)
+            self.assertEqual((reused / "prior.strm").read_bytes(), b"pre-existing fixture")
+            fresh = package_environment.select_workspace(base / "fresh")
+            with patch.object(package_environment, "WORK", fresh):
+                package_environment.workspace()
+            self.assertTrue((fresh / package_environment.RUN_MARKER).is_file())
+            # A previously marked workspace may be re-selected.
+            self.assertEqual(package_environment.select_workspace(fresh), fresh)
+
+    def test_reconcile_refuses_disturbed_input_and_cleanup_requires_marker(self):
+        base = Path(tempfile.mkdtemp())
+        with patch.object(package_environment, "BASE", base):
+            workspace = package_environment.select_workspace(base / "run")
+            with patch.object(package_environment, "WORK", workspace):
+                package_environment.workspace()
+                (workspace / "strm").mkdir(exist_ok=True)
+                prior = workspace / "strm" / "prior.strm"
+                prior.write_bytes(b"pre-existing fixture")
+                before = package_environment.capture_instance_state()
+                prior.write_bytes(b"changed during run")
+                with self.assertRaises(package_environment.PackageEnvironmentError):
+                    package_environment.reconcile_instance_state(before)
+            # A foreign directory without the marker must never be cleaned up.
+            foreign = base / "foreign"
+            foreign.mkdir()
+            (foreign / "keep.txt").write_bytes(b"keep")
+            with patch.object(package_environment, "WORK", foreign), \
+                    patch.object(package_environment, "compose"):
+                with self.assertRaises(package_environment.PackageEnvironmentError):
+                    package_environment.cleanup_instance()
+            self.assertTrue((foreign / "keep.txt").is_file())
+            # The marked workspace is removed in full.
+            with patch.object(package_environment, "WORK", workspace), \
+                    patch.object(package_environment, "compose"):
+                result = package_environment.cleanup_instance()
+            self.assertEqual(result["status"], "CLEANED")
+            self.assertFalse(workspace.exists())
+
 
 class IntegrationHelperTests(unittest.TestCase):
     def test_source_for_url_matches_by_hashed_path(self):

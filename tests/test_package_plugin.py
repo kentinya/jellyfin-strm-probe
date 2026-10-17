@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import struct
 import tempfile
 import unittest
 import zipfile
@@ -19,6 +20,80 @@ ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location("package_plugin", ROOT / "scripts" / "package_plugin.py")
 package_plugin = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(package_plugin)
+
+
+def _align(value: int, alignment: int) -> int:
+    return (value + alignment - 1) & ~(alignment - 1)
+
+
+def make_assembly(version: str) -> bytes:
+    """Build a minimal but structurally valid .NET PE carrying ``AssemblyVersion``.
+
+    ``read_assembly_version`` walks the real CLI metadata, so the fixture is a genuine (if
+    empty) assembly rather than a stub blob. This keeps the version-identity check exercised
+    against the same code path used for the shipped DLL.
+    """
+    major, minor, build, revision = (int(part) for part in package_plugin.normalize_dotnet_version(version).split("."))
+    tables = bytearray()
+    tables += struct.pack("<I", 0)
+    tables += bytes([2, 0, 0, 1])
+    tables += struct.pack("<Q", (1 << 0) | (1 << 32))
+    tables += struct.pack("<Q", 0)
+    tables += struct.pack("<I", 1) + struct.pack("<I", 1)
+    tables += struct.pack("<HHHHH", 0, 0, 0, 0, 0)
+    tables += struct.pack("<IHHHH", 0x8004, major, minor, build, revision)
+    tables += struct.pack("<IHHH", 0, 0, 0, 0)
+    strings = b"\x00"
+    version_blob = b"v4.0.30319\x00\x00"
+    root = bytearray()
+    root += struct.pack("<IHH", 0x424A5342, 1, 1) + struct.pack("<I", 0)
+    root += struct.pack("<I", len(version_blob)) + version_blob
+    root += struct.pack("<HH", 0, 2)
+    names = ["#~", "#Strings"]
+    pos = len(root)
+    offsets = []
+    for name in names:
+        offsets.append(pos)
+        pos += len(struct.pack("<II", 0, 0) + name.encode() + b"\x00")
+        pos = _align(pos, 4)
+    tables_off = pos
+    strings_off = tables_off + len(tables)
+    for name, length in zip(names, [len(tables), len(strings)]):
+        root += struct.pack("<II", tables_off if name == "#~" else strings_off, length) + name.encode() + b"\x00"
+        while len(root) % 4:
+            root += b"\x00"
+    metadata = bytes(root) + bytes(tables) + strings
+    cli = bytearray(72)
+    struct.pack_into("<IHHII", cli, 0, 72, 2, 5, 0x2000, len(metadata))
+    blob = bytearray(0x200)
+    blob[0x100:0x100 + len(cli)] = cli
+    blob[0x200:0x200 + len(metadata)] = metadata
+    struct.pack_into("<I", blob, 0x108, 0x2000 + 0x200)
+    struct.pack_into("<I", blob, 0x10C, len(metadata))
+    dos = bytearray(0x80)
+    dos[0:2] = b"MZ"
+    struct.pack_into("<I", dos, 0x3C, 0x80)
+    optional = bytearray(240)
+    struct.pack_into("<H", optional, 0, 0x20B)
+    struct.pack_into("<I", optional, 56, 0x4000)
+    struct.pack_into("<I", optional, 60, 0x200)
+    struct.pack_into("<H", optional, 68, 3)
+    struct.pack_into("<I", optional, 108, 16)
+    struct.pack_into("<II", optional, 112 + 14 * 8, 0x2000 + 0x100, len(cli))
+    coff = struct.pack("<HHIIIHH", 0x8664, 1, 0, 0, 0, 240, 0x2002)
+    section = bytearray(40)
+    section[0:8] = b".text\x00\x00\x00"
+    struct.pack_into("<I", section, 8, len(blob))
+    struct.pack_into("<I", section, 12, 0x2000)
+    struct.pack_into("<I", section, 16, _align(len(blob), 0x200))
+    struct.pack_into("<I", section, 20, 0x200)
+    struct.pack_into("<I", section, 36, 0x60000020)
+    output = bytearray()
+    output += dos + b"PE\x00\x00" + coff + optional + section
+    output += bytes(0x200 - len(output))
+    output += blob
+    output += bytes(_align(len(blob), 0x200) - len(blob))
+    return bytes(output)
 
 DEPS_TARGET = ".NETCoreApp,Version=v10.0/linux-x64"
 DEPS = {
@@ -72,7 +147,7 @@ MANIFEST = {
 }
 
 PAYLOAD_FILES = {
-    "Jellyfin.Plugin.StrmProbeOptimizer.dll": b"plugin-bytes",
+    "Jellyfin.Plugin.StrmProbeOptimizer.dll": make_assembly("0.1.0.0"),
     "Microsoft.Data.Sqlite.dll": b"sqlite-managed",
     "SQLitePCLRaw.batteries_v2.dll": b"batteries",
     "SQLitePCLRaw.core.dll": b"core",
@@ -422,6 +497,55 @@ class PackageIntegrityTests(unittest.TestCase):
                     target.writestr(name, data)
             with self.assertRaises(package_plugin.PackageError):
                 package_plugin.verify_archive(broken)
+
+    def test_normalize_dotnet_version_aligns_three_and_four_part_forms(self):
+        self.assertEqual(package_plugin.normalize_dotnet_version("0.1.0"), "0.1.0.0")
+        self.assertEqual(package_plugin.normalize_dotnet_version("0.1.0.0"), "0.1.0.0")
+        self.assertNotEqual(package_plugin.normalize_dotnet_version("0.1.0.0"),
+                            package_plugin.normalize_dotnet_version("9.9.9.9"))
+
+    def test_coordinated_folder_and_meta_version_change_is_rejected(self):
+        # The folder and meta.json are rewritten together, but the shipped DLL and the deps
+        # project entry still name 0.1.0.0: the actual assembly must reject it structurally.
+        with tempfile.TemporaryDirectory() as tmp:
+            archive = build_valid_archive(Path(tmp))
+            broken = Path(tmp) / "coordinated.zip"
+            with zipfile.ZipFile(archive) as source, zipfile.ZipFile(broken, "w") as target:
+                for name in source.namelist():
+                    root, leaf = name.split("/", 1)
+                    data = source.read(name)
+                    if leaf == "meta.json":
+                        manifest = json.loads(data)
+                        manifest["version"] = "9.9.9.9"
+                        data = json.dumps(manifest).encode()
+                    target.writestr("Jellyfin.Plugin.StrmProbeOptimizer_9.9.9.9/" + leaf, data)
+            with self.assertRaises(package_plugin.PackageError):
+                package_plugin.verify_archive(broken)
+
+    def test_deps_project_version_change_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            archive = build_valid_archive(Path(tmp))
+            broken = Path(tmp) / "deps-version.zip"
+            with zipfile.ZipFile(archive) as source, zipfile.ZipFile(broken, "w") as target:
+                for name in source.namelist():
+                    data = source.read(name)
+                    if name.endswith("Jellyfin.Plugin.StrmProbeOptimizer.deps.json"):
+                        deps = json.loads(data)
+                        deps["libraries"]["Jellyfin.Plugin.StrmProbeOptimizer/9.9.9.9"] = \
+                            deps["libraries"].pop("Jellyfin.Plugin.StrmProbeOptimizer/0.1.0")
+                        data = json.dumps(deps).encode()
+                    target.writestr(name, data)
+            with self.assertRaises(package_plugin.PackageError):
+                package_plugin.verify_archive(broken)
+
+    def test_build_layout_rejects_an_inconsistent_publish(self):
+        # A publish whose deps project entry disagrees with the requested version is refused
+        # before any archive is written.
+        with tempfile.TemporaryDirectory() as tmp:
+            publish_dir = make_publish(Path(tmp))
+            with self.assertRaises(package_plugin.PackageError):
+                package_plugin.build_archive_layout(
+                    publish_dir, MANIFEST, "9.9.9.9", "a" * 40, "10.0.401", "linux-x64", "Release")
 
     def test_extra_core_assembly_is_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
