@@ -1073,6 +1073,23 @@ def probe_start_for_item(events: list[dict], item_id: str) -> dict | None:
     return next((event for event in events if event["item_id"] == key), None)
 
 
+def accepted_probe_after_change(item_id: str, source_key: str, changed_at: datetime.datetime,
+                                starts: list[dict], outcomes: list[dict]) -> dict | None:
+    """Match a successful probe that started after an observed STRM change."""
+    item_id = canonical_guid(item_id, "changed probe item")
+    source_key = canonical_guid(source_key, "changed probe source")
+    eligible_starts = [event for event in starts
+                       if event.get("item_id") == item_id and event.get("source_key") == source_key
+                       and event["timestamp"] >= changed_at]
+    for start in eligible_starts:
+        accepted = [event for event in outcomes
+                    if event.get("item_id") == item_id and event.get("source_key") == source_key
+                    and event.get("kind") == "accepted" and event["timestamp"] >= start["timestamp"]]
+        if accepted:
+            return {"probe_start": start, "accepted": accepted[-1]}
+    return None
+
+
 def batch_entry_events(since: datetime.datetime | None = None, tail: int = 8000) -> list[dict]:
     """Return the plugin task's ExecuteAsync entry markers with UTC times."""
     entries: list[dict] = []
@@ -2023,9 +2040,10 @@ def overlap_round(auth: str, fixture: dict, recorder: EvidenceRecorder) -> dict:
     # URL B -> C on the source whose batch probe is actually running: B must never commit.
     rewrite_strm(batch_path, batch_c_url, fixture["media_sha"], fixture["media_size"])
     changes.append({"change": "batch_url_b_to_c", "utc": now_utc().isoformat(), "c_sha": digest(batch_c_url)})
-    # Content SHA-1 change at the same URL on a not-started source.
+    # Content SHA-1 change at the same URL on another supported source.
     rewrite_strm(content_path, fixture["plain_url"], "a" * 40, fixture["media_size"])
     changes.append({"change": "content_sha1", "utc": now_utc().isoformat()})
+    content_changed_at = _parse_utc(changes[-1]["utc"])
     # SHA-1 incomparable + valid Size change on another source.
     rewrite_strm(size_path, fixture["plain_url"], None, fixture["media_size"] + 1)
     changes.append({"change": "size_only", "utc": now_utc().isoformat()})
@@ -2066,19 +2084,45 @@ def overlap_round(auth: str, fixture: dict, recorder: EvidenceRecorder) -> dict:
     require(any(event["kind"] in {"manifest_changed", "failed", "not_committed"} for event in batch_outcomes),
             f"No mid-probe rejection/change event was observed for the batch source: {batch_outcomes}.")
 
+    # The fixed-set batch may reach a later candidate while an earlier delayed probe is still running.
+    # If it starts and commits the same-URL content change during this overlap run, retain that exact
+    # evidence instead of incorrectly requiring the following run to probe it a second time.
+    content_item = items[fixture["content_name"]]
+    content_source_id = fixture_source_id(fixture, fixture["content_name"])
+    content_commit = accepted_probe_after_change(
+        content_item["Id"], content_source_id, content_changed_at,
+        probe_start_events(container(), since=round_started), outcomes)
+    content_probe_state = None
+    if content_commit is not None:
+        content_manifest = read_versioned_manifest(content_path)
+        require(content_manifest is not None and content_manifest["sha1"] == "a" * 40
+                and content_manifest["url_hash"] == expected_url_hash(fixture["plain_url"]),
+                "The overlapping content fixture no longer contains the expected same-URL SHA-1 change.")
+        content_expected = expected_fingerprint_row(
+            content_item["Id"], content_source_id, content_manifest,
+            fingerprint_row_for_key(content_item["Id"], content_source_id))
+        content_probe_state = current_source_state(
+            auth, content_item["Id"], content_source_id, fixture, recorder,
+            "overlap content SHA-1 commit")
+        validate_source_reconciliation(content_expected, content_probe_state["source"],
+                                       content_probe_state["fingerprint"], "overlap content SHA-1")
+
     round_summary = latest_summary_after(round_started)
     fields = summary_fields_complete(round_summary)
     recorder.record("overlap_round", container=container_before, scan=scan_interval, overlap=scan_overlap,
                     candidate_manifest=candidate_manifest, changes=changes, summary=fields,
                     baseline_a=baseline_a, after_b=batch_row, after_b_native=b_state,
-                    native_b_observed_during_scan=b_state["native_url_hash"] == expected_url_hash(batch_b_url))
+                    native_b_observed_during_scan=b_state["native_url_hash"] == expected_url_hash(batch_b_url),
+                    content_commit=content_commit, content_probe_state=content_probe_state)
     recorder.snapshot("overlap-round", {"scan": scan_overlap, "changes": changes, "fields": fields,
                                         "candidate_manifest": candidate_manifest,
                                         "batch_probe_start": batch_probe, "playback_probe_start": playback_probe,
                                         "baseline_a": baseline_a, "after_b": batch_row,
                                         "after_b_native": b_state,
                                         "native_b_observed_during_scan":
-                                            b_state["native_url_hash"] == expected_url_hash(batch_b_url)})
+                                            b_state["native_url_hash"] == expected_url_hash(batch_b_url),
+                                        "content_commit": content_commit,
+                                        "content_probe_state": content_probe_state})
 
     result = {
         "captured_candidates": candidate_manifest["candidate_count"],
@@ -2090,19 +2134,22 @@ def overlap_round(auth: str, fixture: dict, recorder: EvidenceRecorder) -> dict:
         "playback_address": source_for_url(playback_holder["result"][1], playback_url) is not None,
         "overlap_summary": round_summary,
         "actual_probe_calls": fields.get("actual_probe_calls"),
+        "content_commit": content_commit,
+        "content_probe_state": content_probe_state,
     }
     # The playback source is out of scope and probes its own changed address.
     require(result["playback_address"], "The playback source did not return its changed address after the overlap.")
     return result
 
 
-def finite_changes(auth: str, fixture: dict, recorder: EvidenceRecorder) -> dict:
+def finite_changes(auth: str, fixture: dict, recorder: EvidenceRecorder, overlap: dict) -> dict:
     """Content / size changes, the C convergence and add / delete / move scope changes."""
     items = fixture["items"]
     result: dict[str, object] = {}
 
-    # The content SHA-1, size-only and mid-probe C changes were all issued during the overlap window
-    # and must all be committed by a real probe in the next fixed-set round.
+    # All changes were issued during the overlap window. A content SHA-1 probe can finish in that
+    # same batch run if its candidate is reached before the held URL probe drains; otherwise the
+    # next fixed-set round must start and commit it.
     batch_path = fixture["strm_dir"] / (fixture["batch_name"] + ".strm")
     c_url = _read_url(batch_path)
     require(c_url is not None and c_url != fixture["plain_url"], "The batch source did not retain its C rewrite.")
@@ -2113,6 +2160,7 @@ def finite_changes(auth: str, fixture: dict, recorder: EvidenceRecorder) -> dict
     outcomes = probe_outcome_events(container(), since=round_started)
     actual_starts = probe_start_events(container(), since=round_started)
     expected_sources = []
+    content_committed_in_overlap = overlap.get("content_commit")
     for name in (fixture["batch_name"], fixture["content_name"], fixture["size_name"]):
         item = items[name]
         source_id = fixture_source_id(fixture, name)
@@ -2121,21 +2169,27 @@ def finite_changes(auth: str, fixture: dict, recorder: EvidenceRecorder) -> dict
         require(manifest is not None, f"The expected current manifest for {name} is not versioned.")
         expected = expected_fingerprint_row(item["Id"], source_id, manifest,
                                             fingerprint_row_for_key(item["Id"], source_id))
-        start = probe_start_for_item(actual_starts, item["Id"])
-        require(start is not None, f"The post-overlap run never actually started the required probe for {name}.")
-        accepted = [event for event in outcomes if event["item_id"] == canonical_guid(item["Id"], name)
-                    and event["kind"] == "accepted" and event["timestamp"] >= start["timestamp"]]
-        require(accepted, f"The post-overlap run did not report a committed native probe for {name}.")
+        current_commit = accepted_probe_after_change(item["Id"], source_id, round_started,
+                                                     actual_starts, outcomes)
+        overlap_commit = content_committed_in_overlap if name == fixture["content_name"] else None
+        commit = current_commit or overlap_commit
+        require(commit is not None,
+                f"No successful probe after the recorded change was observed for {name} in either overlap or follow-up run.")
         state = current_source_state(auth, item["Id"], source_id, fixture, recorder,
                                      f"post-overlap {name}")
         validate_source_reconciliation(expected, state["source"], state["fingerprint"], name)
         expected_sources.append({"name": name, "expected": expected, "state": state,
-                                 "probe_start": start, "accepted": accepted[-1]})
-    require((fields.get("need_probe") or 0) >= 3 and (fields.get("actual_probe_calls") or 0) >= 3,
-            f"The post-overlap summary does not account for the three required source probes: {summary_line}.")
+                                 "probe_phase": "post-overlap" if current_commit is not None else "overlap",
+                                 "probe_start": commit["probe_start"], "accepted": commit["accepted"]})
+    required_followup_probes = 2 if content_committed_in_overlap is not None else 3
+    require((fields.get("need_probe") or 0) >= required_followup_probes
+            and (fields.get("actual_probe_calls") or 0) >= required_followup_probes,
+            f"The post-overlap summary does not account for the {required_followup_probes} sources still pending then: {summary_line}.")
     recorder.record("post_overlap_commit", task_result=task_result(final), summary=fields,
+                    overlap_content_commit=content_committed_in_overlap,
                     sources=expected_sources, outcomes=outcomes)
     recorder.snapshot(f"post-overlap-commit-{time.time_ns()}", {"summary": fields,
+                                                               "overlap_content_commit": content_committed_in_overlap,
                                                                "sources": expected_sources,
                                                                "outcomes": outcomes})
     result["content_sha1_change_probed"] = True
@@ -3489,7 +3543,7 @@ def scenario_overlap_phase(package: Path, evidence_dir: Path | None, nonce: str,
     require(merge_status == 204, f"Jellyfin did not merge the multi-version pair ({merge_status}).")
     summary["overlap_round"] = overlap_round(auth, fixture, recorder)
     auth = api_auth()
-    summary["finite_changes"] = finite_changes(auth, fixture, recorder)
+    summary["finite_changes"] = finite_changes(auth, fixture, recorder, summary["overlap_round"])
     auth = api_auth()
     summary["multi_version_and_refresh"] = multi_version_and_refresh(auth, fixture, recorder)
     auth = api_auth()

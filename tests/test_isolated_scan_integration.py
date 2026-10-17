@@ -165,6 +165,49 @@ class ScanLogAttributionTests(unittest.TestCase):
         self.assertIsNotNone(scan.probe_start_for_item(events, "01234567-89ab-cdef-0123-456789abcdef"))
         self.assertIsNone(scan.probe_start_for_item(events, "ffffffff-ffff-ffff-ffff-ffffffffffff"))
 
+    def test_probe_commit_after_change_accepts_same_round_completion(self):
+        item_id = "0123456789abcdef0123456789abcdef"
+        source_key = "abcdef0123456789abcdef0123456789"
+        starts = [{"item_id": item_id, "source_key": source_key, "timestamp": _utc(2)}]
+        outcomes = [{"item_id": item_id, "source_key": source_key, "kind": "accepted", "timestamp": _utc(3)}]
+        result = scan.accepted_probe_after_change(item_id, source_key, _utc(1), starts, outcomes)
+        self.assertIsNotNone(result)
+        self.assertEqual(result["probe_start"]["timestamp"], _utc(2))
+        self.assertEqual(result["accepted"]["timestamp"], _utc(3))
+
+    def test_probe_commit_after_change_rejects_probe_that_started_before_change(self):
+        item_id = "0123456789abcdef0123456789abcdef"
+        source_key = "abcdef0123456789abcdef0123456789"
+        starts = [{"item_id": item_id, "source_key": source_key, "timestamp": _utc(1)}]
+        outcomes = [{"item_id": item_id, "source_key": source_key, "kind": "accepted", "timestamp": _utc(3)}]
+        self.assertIsNone(scan.accepted_probe_after_change(item_id, source_key, _utc(2), starts, outcomes))
+
+    def test_probe_commit_after_change_skips_stale_start_when_later_probe_succeeds(self):
+        item_id = "0123456789abcdef0123456789abcdef"
+        source_key = "abcdef0123456789abcdef0123456789"
+        starts = [
+            {"item_id": item_id, "source_key": source_key, "timestamp": _utc(1)},
+            {"item_id": item_id, "source_key": source_key, "timestamp": _utc(3)},
+        ]
+        outcomes = [
+            {"item_id": item_id, "source_key": source_key, "kind": "accepted", "timestamp": _utc(2)},
+            {"item_id": item_id, "source_key": source_key, "kind": "accepted", "timestamp": _utc(4)},
+        ]
+        result = scan.accepted_probe_after_change(item_id, source_key, _utc(2), starts, outcomes)
+        self.assertIsNotNone(result)
+        self.assertEqual(result["probe_start"]["timestamp"], _utc(3))
+        self.assertEqual(result["accepted"]["timestamp"], _utc(4))
+
+    def test_probe_commit_after_change_requires_matching_source_and_acceptance(self):
+        item_id = "0123456789abcdef0123456789abcdef"
+        source_key = "abcdef0123456789abcdef0123456789"
+        starts = [{"item_id": item_id, "source_key": source_key, "timestamp": _utc(2)}]
+        wrong_source = [{"item_id": item_id, "source_key": "ffffffffffffffffffffffffffffffff",
+                         "kind": "accepted", "timestamp": _utc(3)}]
+        failed = [{"item_id": item_id, "source_key": source_key, "kind": "failed", "timestamp": _utc(3)}]
+        self.assertIsNone(scan.accepted_probe_after_change(item_id, source_key, _utc(1), starts, wrong_source))
+        self.assertIsNone(scan.accepted_probe_after_change(item_id, source_key, _utc(1), starts, failed))
+
 
 class ScanStopControlTests(unittest.TestCase):
     def test_stop_sources_follow_fixture_name_order_within_the_actual_batch(self):
