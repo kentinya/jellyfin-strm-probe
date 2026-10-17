@@ -2,9 +2,9 @@
 
 ## 当前结论
 
-当前固定组合上的 Slice 1／2／3 均已 PASS / CLOSED；单版本安装包（Slice 4 RO-1）已实现并待 B 独立审查，没有跨版本兼容声明。真实插件已用 Jellyfin Controller／Model `12.2.0`、`net10.0` 和 SDK `10.0.401` 构建，并在隔离 Jellyfin `12.2.0` 容器加载；镜像 digest、媒体服务和环境身份见 [环境交接](development-environment.md)。当前证据已覆盖完整播放／SQLite／稳定多源／共享协调、完整配置页、原生批量，以及固定 Jellyfin `12.2.0`／Linux x64 安装包的干净安装、升级替换、禁用／移除／重装与 MP4／MKV 原生 Web 播放；完整产品与发布支持仍未验证，分层状态见 [测试矩阵](test-matrix.md)。
+当前固定组合上的 Slice 1／2／3 均已 PASS / CLOSED；单版本安装包（Slice 4 RO-1）与完整扫描重叠（Slice 4 RO-3）均已实现并待 B 独立审查，没有跨版本兼容声明。真实插件已用 Jellyfin Controller／Model `12.2.0`、`net10.0` 和 SDK `10.0.401` 构建，并在隔离 Jellyfin `12.2.0` 容器加载；镜像 digest、媒体服务和环境身份见 [环境交接](development-environment.md)。当前证据已覆盖完整播放／SQLite／稳定多源／共享协调、完整配置页、原生批量、固定 Jellyfin `12.2.0`／Linux x64 安装包的干净安装、升级替换、禁用／移除／重装与 MP4／MKV 原生 Web 播放，以及固定 ZIP 安装候选上原生全库扫描与批量／播放实际探测的三方重叠、有限增删／移库／URL／内容变化、多版本与独立 FullRefresh、停止收尾与恢复；完整产品与发布支持仍未验证，分层状态见 [测试矩阵](test-matrix.md)。
 
-历史 FIX REQUIRED 和失败保持原事实。Slice 3 的 AF-1 已在同一 Task 纠正并经 B 复审及新独立 Final 后由 A 关闭，接受实现 `7c64eb5dcad6e5f20fb7eb41819be2521f65484d`，详情见 [关闭记录](progress.md#slice-3-closed) 与 [A 最终审查快照](progress.md#slice-3-closed)。[Slice 4](../SLICE.md) 已 ACTIVE；[Task 4.1](../TASK.md) 已实现并交为 READY FOR B REVIEW，后续 B 依 [固定交付方案](slice-4-delivery-plan.md) 独立审查。固定 Jellyfin 12.2.0／Linux x64 包已由本 Task 实现并待审查；代表 MP4／MKV／原生 Web 已由本 Task 实测，实际 JellyfinProxy 路径仍 NOT RUN；后端只用 HTTP 服务时不宣称 OpenList 专有行为通过。播放取消范围保留原生取消异常处理，不要求成功返回后的额外取消检查或人为注入实机门槛；只共享实际已开始探测，批量停止只撤销未开始工作。Slice 3 已实测原生任务停止与已开始工作收尾。
+历史 FIX REQUIRED 和失败保持原事实。Slice 3 的 AF-1 已在同一 Task 纠正并经 B 复审及新独立 Final 后由 A 关闭，接受实现 `7c64eb5dcad6e5f20fb7eb41819be2521f65484d`，详情见 [关闭记录](progress.md#slice-3-closed) 与 [A 最终审查快照](progress.md#slice-3-closed)。[Slice 4](../SLICE.md) 已 ACTIVE；[Task 4.1](../TASK.md) 与 [Task 4.2](../TASK.md) 已实现并交为 READY FOR B REVIEW，后续 B 依 [固定交付方案](slice-4-delivery-plan.md) 独立审查。固定 Jellyfin 12.2.0／Linux x64 包已由 Task 4.1 实现；代表 MP4／MKV／原生 Web 已实测；Task 4.2 在固定 ZIP 安装候选上实测完整扫描重叠与恢复控制；实际 JellyfinProxy 路径仍 NOT RUN；后端只用 HTTP 服务时不宣称 OpenList 专有行为通过。播放取消范围保留原生取消异常处理，不要求成功返回后的额外取消检查或人为注入实机门槛；只共享实际已开始探测，批量停止只撤销未开始工作。Slice 3 已实测原生任务停止与已开始工作收尾。
 
 下表是早期源码定位候选；当前固定组合的加载／运行事实以上文及关闭证据为准。
 

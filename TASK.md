@@ -5,13 +5,13 @@
 ```text
 Task ID: 4.2
 Parent Slice: 4
-Status: PLANNED
+Status: READY FOR B REVIEW
 Task Base: 0e7b26b381ed5f71781e75d317275afa51d791e9
 Contract Checkpoint: ae265d0dba02aa1c5599871602d4350072b7155f
 Difficulty: High
 Test Level: T4
 Planner / Reviewer: B
-Implementation Head: NOT SET
+Implementation Head: 4837cb6d98ebbc60281ab3a66c888588a1120110
 ```
 
 ## Goal
@@ -154,21 +154,35 @@ RO-2 的十万原生候选／成本验收（后续 4.3）、RO-4 的真实代理
 
 ## Developer Completion Report
 
-- Changed Files：NOT IMPLEMENTED。
-- Implemented：NOT IMPLEMENTED。
-- Tests and Results：NOT RUN；提交时填写本候选索引、准确命令／计数／耗时、首败／重跑及明确复用边界。
-- Decisions：按步骤先复用现有能力，只修实际阻碍本行为的问题；合同不可满足交 A。
-- Remaining In-Slice Work：本 Task 的 RO-3、RO-2、RO-4 与单独 Slice Final 尚未完成。
-- Risks / Deviations：NOT ASSESSED BY DEVELOPER。
-- Head SHA：NOT SET。
+- Changed Files：`scripts/run_isolated_scan_integration.py`（新增）、`tests/test_isolated_scan_integration.py`（新增）；本 Task 后继续以纯报告更新 `TASK.md`、`docs/test-matrix.md`、`docs/compatibility.md`、`docs/development-environment.md`、`README.md`、`docs/roadmap.md`、`docs/progress.md` 的 CURRENT 事实指针。没有修改产品源码、schema、业务规则或既有工具。
+- Implemented：
+  - 新增 `scripts/run_isolated_scan_integration.py`，只消费指定 ZIP 并部署到 4.1 的独立包实例（Compose project `jf-strm-probe-package-*`、端口 `18097`、工作区 `artifacts/package-env`），不调用 `deploy_plugin()`、不在验收期间补 DLL 或重建包；复用 `package_environment` 的新工作区选择、镜像锁、Compose 归属检查、ZIP 校验／部署、鉴权、媒体准备、对账与清理。
+  - 真实三方重叠：在所选 STRM 库放 130 个受支持 STRM（跨 128 对象批次），另有范围外本地库对照。插件禁用时用原生探测持久化主流，启用后首轮批量对全部候选零插件探测首次信任；随后让一个批量探测（所选库源）和一个播放探测（范围外不同源）实际开始并保持执行，再触发原生 `RefreshLibrary` 全库扫描任务，用原生 `LastExecutionResult` 的 UTC Running 区间与真实后端请求开始时间断言交集（缺失交集不能 PASS）。
+  - 有限变化：URL 探测期间再变（B→C，B 不得成为可信指纹、旧基线保留、后续 C 提交）；同 URL 内容 SHA-1 变化探测；SHA-1 不可比且有效 Size 变化探测；移出所选库不批量探测、移入下轮发现；新增下轮发现、消失安全结算；多版本经原生 `MergeVersions` 合并后按共享 project／独立 source_key 校验、显式 `MediaSourceId` 选源返回各自地址；独立 `Items/{id}/Refresh` FullRefresh 不改任一版本指纹；稳定集合重跑与未变复查零插件探测、重启后地址稳定。
+  - 停止：原生停止已开始与未开始工作的批量，已开始源结算并提交、未开始源撤销；提交／撤销按持久指纹而非时序日志分类；下一轮收敛。
+  - 共同控制（在 ZIP 安装实例）：真实定时触发持久化与触发、双向同源共享各只一次真实探测、不同源混合并发峰值按插件运行计数归因（默认 2）。
+  - 恢复：普通媒体／旧 STRM 委托原生且无插件事件；禁用后不发起新探测；SQLite 全局故障失败且不探测、恢复重启后正常。
+  - 收尾：finally 恢复并核验全部原生任务触发器与插件配置，对账实例输入，默认清理本轮临时实例；旧非空工作区即使带旧标记也拒绝。
+- Tests and Results（候选 Implementation Head `4837cb6d98ebbc60281ab3a66c888588a1120110`，证据索引 `.git/validation-evidence/4837cb6d98ebbc60281ab3a66c888588a1120110/run-20261017T102059Z-f765f3d7/`，本机可读）：
+  - `bash scripts/dotnet-local restore … --locked-mode` PASS（2s）；`build --configuration Release --no-restore` 0 警告／0 错误（6s）；`test` 202/202 PASS（8s）；`format --verify-no-changes` PASS（15s）。
+  - `python3 -m unittest discover -s tests -v` 141/141 PASS（3s），其中本 Task 新增 `tests/test_isolated_scan_integration.py` 19 项。
+  - `python3 scripts/package_plugin.py --configuration Release --runtime linux-x64 --output-dir artifacts/releases` PASS；归档 SHA-256 `58a0e22c26827c1ce2b6ff65b6ece3468b837f63a5cd589f4c9a7ab6d6793353`，来源 SHA `4837cb6d…`，与当前 HEAD 一致。
+  - `python3 scripts/run_isolated_package_integration.py --package … --baseline-revision 7c64eb5dcad6e5f20fb7eb41819be2521f65484d --scenario all` PASS；消费归档 SHA-256 与上一致；clean／upgrade／recovery／invalid 全过，实例对账 CLEAN、清理 CLEANED。
+  - `python3 scripts/run_isolated_scan_integration.py --package … --scenario all` PASS；消费同一归档 SHA-256；overlap／controls／stop／recovery 全过，`trigger_restoration` = restored and verified，实例对账 CLEAN、清理 CLEANED。三方交集实测：扫描 `10:34:19.376947Z`–`10:34:21.755303Z`，批量探测 `10:34:19.107135Z`–`10:34:39.134173Z`，播放探测 `10:34:19.106805Z`–`10:34:39.136686Z`，两次真实插件探测开始。有限变化均按预期：URL 再变 B 拒绝／C 提交、内容／Size 变化探测、移入发现／移出不探测、新增发现／删除结算、多版本共享 project 与独立 source_key 且显式选源正确、FullRefresh 不改指纹、稳定集合与未变复查 `actual probe calls 0`、重启地址稳定。停止轮：2 提交／1 撤销、`Cancelled`、下一轮收敛。共同控制：定时触发持久化且触发、双向共享各 1 次后端探测（batch_first `actual probe calls 1`、playback_first `0`）、混合峰值 `peak_running_probes 2` 且播放开始 `running 2`。
+  - 既有开发部署回归（另列，明确不是归档安装证据）：`run_isolated_plugin_integration.py` PASS；`run_isolated_batch_integration.py --scenario suite` PASS（fixture／state restoration 均验证）。`run_isolated_configuration_integration.py --scenario all` 首次在浏览器场景因 Jellyfin Web `hometab` 无害噪声被现有分类器误判 FAIL（与 Task 4.1 已记录的同脚本 flake 一致），首次立即重跑又因 Chromium `headless_shell` SIGSEGV FAIL，第二次重跑完整 19 场景 PASS；该脚本与 Task Base／Slice Base 字节一致，非本 Task 引入，首败与两次重跑原始日志均保留，交 B 判断。
+  - `python3 scripts/check_governance.py` PASS；`git diff --check` 无输出；本地 Markdown 链接／锚点检查 25 文件 0 断链。
+- Decisions：只新增扫描验收入口与对应工具回归，未改产品源码／schema／规则／取消语义。复用 4.1 的包实例与既有 `package_environment`／`package_plugin`／包验收 API；不新建环境框架。三方交集以原生任务 `LastExecutionResult` 区间与真实后端请求开始／完成时间判定，不以排队或 POST 返回冒充。停止提交／撤销按持久指纹分类，避免时序窗口误判。
+- Remaining In-Slice Work：RO-2 真实十万原生库与分层成本（后续 4.3）、RO-4 实际 JellyfinProxy 联调（后续 4.4）、单独 Slice Final／Closure Packet 尚未完成。
+- Risks / Deviations：RO-3 已在固定 ZIP 安装候选的代表性多库／多版本夹具上取得；未覆盖真实十万库或完整生产扫描压力，也未使用实际代理。audio-only 实机、物理 Jellyfin 数据库保存故障注入与通用 FullRefresh 性能证明沿用已接受限制，未新增。首败配置回归为既有 flake，未自行豁免，交 B 判定。
+- Head SHA：`4837cb6d98ebbc60281ab3a66c888588a1120110`。
 
 ## B Review Result
 
 ```text
 Reviewed: NOT SET
 Decision: PENDING
-Slice Required Outcomes all satisfied: NO — RO-3 pending; RO-2/RO-4 NOT RUN
-Next: Developer implements Task 4.2
+Slice Required Outcomes all satisfied: NO — RO-2/RO-4 NOT RUN
+Next: B reviews Task 4.2 at Implementation Head 4837cb6d98ebbc60281ab3a66c888588a1120110
 ```
 
-NEXT ACTION: DEVELOPER IMPLEMENTS TASK 4.2
+NEXT ACTION: B REVIEWS TASK 4.2
