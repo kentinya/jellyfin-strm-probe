@@ -5,13 +5,13 @@
 ```text
 Task ID: 4.1
 Parent Slice: 4
-Status: FIX REQUIRED
+Status: READY FOR B REVIEW
 Task Base: ae265d0dba02aa1c5599871602d4350072b7155f
 Contract Checkpoint: ae265d0dba02aa1c5599871602d4350072b7155f
 Difficulty: High
 Test Level: T4
 Planner / Reviewer: A (user-authorized planning) / B (independent Task Review)
-Implementation Head: 4bad6eb43e3b8bb87ce9df9bc0aa1adb952044f2
+Implementation Head: c1fb5ee57272f158c2ea7abd7545980d1f11337d
 ```
 
 ## Goal
@@ -157,6 +157,20 @@ B 审查完整 `ae265d0dba02aa1c5599871602d4350072b7155f..Implementation Head`�
 - Risks / Deviations：浏览器执行链依赖仓库内固定 Playwright／Chromium（已在包实例实测）；升级基线需隔离 worktree 重建（本次实际使用 `7c64eb5d…`，记录了其发布文件摘要）；真实代理来源与十万库资源仍是后续 Task 风险，不在本 Task 扩大。
 - Head SHA：`4bad6eb43e3b8bb87ce9df9bc0aa1adb952044f2`（功能检查点 `492b37da25222a7dd1f7071d27c84cbb3f65825d`；本报告在后续文档提交记录，不预填自身 SHA）。
 
+### Developer 修正报告（2026-10-17，BR-41-1～4）
+
+- 修正提交：`c1fb5ee57272f158c2ea7abd7545980d1f11337d`（`fix: enforce package integrity, ownership and real upgrade/restore acceptance`），在 Task Base `ae265d0d…` 之后追加，未改写已审查历史。
+- Changed Files：`scripts/package_plugin.py`、`scripts/package_environment.py`、`scripts/run_isolated_package_integration.py`、`tests/test_package_plugin.py`、`tests/test_isolated_package_integration.py`、`docs/package-installation.md`。未改产品决策／权限／取消／Coordinator／SQLite schema／指纹门槛。
+- BR-41-1：`verify_archive` 现与已发布旁置清单比对归档 SHA-256 及每个负载文件摘要，并校验依赖完整性、meta／deps 版本一致、汇编白名单与实际 `AssemblyVersion`（从 CLI 元数据读取）、允许负载集合与固定 ABI；`--verify` 与 `deploy_archive`／`unpack_archive` 默认读取同名 `.manifest.json`，缺清单或任何不符即在部署前拒绝。B 的四类反例与缺清单均被拒且不损伤有效安装；结构检查与摘要比较相互独立（缺托管依赖／版本冲突／额外核心库由结构检查独立拒绝，`changed_native_payload` 由摘要拒绝）。
+- BR-41-2：`scenario_upgrade` 新增一个未变项目（替换后零探测复用）与一个待处理变化项目；新增真实恢复：停止服务器 → 备份配置／指纹 → 通过正常 API 改动配置 → 再停止 → 恢复备份 → 重启 → 读回核对配置、指纹与播放；新增恢复失败拒绝控制（缺失备份目录）。复制文件不再被当作恢复 PASS。
+- BR-41-3：`package_environment.require_owned_path` 在部署、基线、备份、恢复、移除与清理的所有写入口前校验路径与父链归属及符号链接；`config/plugins` 为符号链接或目标逃出工作区即拒绝，外部 sentinel 保持原样；Docker 归属查询非零退出即停止。`main()` 的 finally 记录前后配置／指纹／媒体／STRM 对账，`--cleanup` 仅删除确认本轮所有的输入，收尾失败使总体失败。
+- BR-41-4：打包把 `SourceRevisionId` 显式传给 `publish`，并在发布后从程序集读回构建标识核对；`--source-revision` 现要求为真实可达且等于当前 HEAD 的提交，拒绝全零／虚构 SHA；清单记录锁文件摘要、构建输入摘要与准确构建命令。两次独立 publish 产出同一 DLL 摘要，与清单条目一致。
+- Tests and Results（候选 `c1fb5ee5…`，工作区干净）：restore PASS；build 0 警告／0 错误；`dotnet test` 202/202 PASS；format PASS；`python3 -m unittest discover -s tests -v` 106/106 PASS；`package_plugin.py` 产出 ZIP SHA-256 `1a8b32c58b4dfabac3fba4671fd5751b8ce3e6673d7b9922e7d5c1951e6ac1d5`；`run_isolated_package_integration.py --scenario all` PASS（clean／upgrade／recovery／invalid）；`run_isolated_plugin_integration.py` PASS；`run_isolated_batch_integration.py --scenario suite` 首败（见下）后重跑 PASS；`run_isolated_configuration_integration.py --scenario all` PASS；governance／`git diff --check`／Markdown 本地链接与锚点 PASS。
+- 首败与重跑：batch 首次 FAIL `The current round must have exactly one Execute entry, found 42`；诊断为既有测试夹具的“一天内日志”秒过滤缺陷，`--tail 8000` 含前一日 `15:xx` 行（41 行）被计入当前 `00:27` 轮次；`run_isolated_batch_integration.py` 与产品源码与本 Task Base 及被审查实现头字节一致。重建隔离容器清除跨日日志后，同一字节一致脚本 PASS。两次结果均保留，交 B 判断。
+- 证据索引：`.git/validation-evidence/fix-41/developer-20261017-01/INDEX.md`（本地可读）。
+- Remaining In-Slice Work：RO-2、RO-3、RO-4 与最终 Slice Final 未变，仍 NOT RUN。
+- Head SHA：`c1fb5ee57272f158c2ea7abd7545980d1f11337d`（本报告在后续文档提交记录，不预填自身 SHA）。
+
 ## B Review Result
 
 ```text
@@ -219,4 +233,4 @@ RO-1／安装、升级恢复及包身份 Surfaces 未通过本次 B 审查；RO-
 
 供 A 收尾时择要合并的经验：校验工具能列出新摘要不等于核验已发布输入 → 对重写 ZIP、依赖／元数据不一致构造反例并检查有效安装保留 → 用于包交接；恢复报告容易只证明备份文件存在 → 实际执行恢复／重启和业务读回，并记录失败收尾 → 用于升级与恢复审查。此处不改角色经验文件或增加验收义务。
 
-NEXT ACTION: DEVELOPER CORRECTS TASK 4.1
+NEXT ACTION: B REVIEWS TASK 4.1 CORRECTION (ae265d0d..c1fb5ee5)
