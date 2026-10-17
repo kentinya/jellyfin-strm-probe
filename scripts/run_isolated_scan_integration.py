@@ -1027,6 +1027,7 @@ def probe_outcome_events(name: str, since: datetime.datetime | None = None) -> l
     patterns = {
         "accepted": "Native probe accepted for STRM item",
         "failed": "Native STRM probe failed for item",
+        "not_accepted": "Native probe result was not accepted for item",
         "canceled": "Native STRM probe canceled for item",
         "not_committed": "Native probe result was not committed for item",
         "manifest_changed": "STRM manifest changed during native probe for item",
@@ -3217,9 +3218,10 @@ def scenario_recovery(package: Path, evidence_dir: Path | None, nonce: str, reco
     failure_outcomes = probe_outcome_events(container(), since=failure_round_started)
     require(probe_start_for_item(failure_starts, fail_item["Id"]) is not None,
             "The failing source did not reach an actually started native probe.")
-    require(any(event["kind"] == "failed" and event["item_id"] == canonical_guid(fail_item["Id"], "failed source")
+    require(any(event["kind"] in {"failed", "not_accepted"}
+                and event["item_id"] == canonical_guid(fail_item["Id"], "failed source")
                 for event in failure_outcomes),
-            "The unreachable source has no failed native probe outcome in this batch round.")
+            "The unreachable source has no failed or rejected native probe outcome in this batch round.")
     fail_after = fingerprint_row_for_key(fail_item["Id"], fail_source_id)
     require(fail_after == fail_before, "A failed single-item probe overwrote its trusted baseline.")
     healthy_manifest = read_versioned_manifest(healthy_path)

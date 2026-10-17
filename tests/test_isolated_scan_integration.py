@@ -138,6 +138,22 @@ class ScanExecutionControlTests(unittest.TestCase):
 
 
 class ScanLogAttributionTests(unittest.TestCase):
+    def test_probe_outcome_events_include_unaccepted_native_results(self):
+        item_id = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+        source_key = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+        lines = [
+            "2026-10-16T23:59:59.000000000Z [WRN] Native probe result was not accepted for item "
+            "ffffffff-ffff-ffff-ffff-ffffffffffff, source cccccccc-cccc-cccc-cccc-cccccccccccc; calls 1.",
+            "2026-10-17T08:00:01.000000000Z [WRN] Native probe result was not accepted for item "
+            f"{item_id}, source {source_key}; calls 1, encoder primary False.",
+        ]
+        with patch.object(scan, "docker_log_lines", return_value=lines):
+            events = scan.probe_outcome_events("container", since=_utc(0))
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["kind"], "not_accepted")
+        self.assertEqual(events[0]["item_id"], "a" * 32)
+        self.assertEqual(events[0]["source_key"], "b" * 32)
+
     def test_probe_start_events_exclude_older_sessions(self):
         lines = [
             "2026-10-16T23:59:59.000000000Z [INF] Native STRM probe started for item AAAA; running probes 1, active permits 1.",
