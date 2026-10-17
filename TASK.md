@@ -1,11 +1,13 @@
-# Task 4.1 — 单版本安装包与完整安装恢复旅程
+# NO ACTIVE IMPLEMENTATION TASK
 
-必读：[Slice 4 合同](SLICE.md)、[固定交付方案](docs/slice-4-delivery-plan.md)、[开发流程](docs/development-workflow.md)、[B 经验](docs/agent-experience/task-planner-reviewer.md)、[Developer 经验](docs/agent-experience/developer-implementation-role.md)。原计划由用户明确授权 A 规划，后续 B 根据固定方案规划并独立审查；当前为 B 审查后的同 Task 修正交接，具体决定见文末。
+## Task 4.1 — 单版本安装包与完整安装恢复旅程
+
+必读：[Slice 4 合同](SLICE.md)、[固定交付方案](docs/slice-4-delivery-plan.md)、[开发流程](docs/development-workflow.md)、[B 经验](docs/agent-experience/task-planner-reviewer.md)、[Developer 经验](docs/agent-experience/developer-implementation-role.md)。原计划由用户明确授权 A 规划，后续 B 根据固定方案规划并独立审查；当前已由 B 独立复审 PASS，本检查点保留完整计划／报告／历史失败，无活动实施任务，随后按固定方案规划 4.2。
 
 ```text
 Task ID: 4.1
 Parent Slice: 4
-Status: READY FOR B REVIEW
+Status: PASS
 Task Base: ae265d0dba02aa1c5599871602d4350072b7155f
 Contract Checkpoint: ae265d0dba02aa1c5599871602d4350072b7155f
 Difficulty: High
@@ -57,13 +59,13 @@ Implementation Head: b5d4f2836229d16ac8add7034294c4306ddf5be1
 
 ## 验收条件
 
-- [ ] AC-1：一个命令产出可交接 ZIP 与清单／摘要，GUID／版本／ABI／来源／依赖／许可准确；负载满足最小 Linux x64 运行需求，无秘密、数据或无关核心库。缺失／损坏／非法路径包在部署前拒绝，保留已有有效文件。
-- [ ] AC-1：新建干净专用隔离实例，仅解包安装候选后插件 Active；进程加载负载摘要匹配 ZIP，未调用开发部署补文件，正常完成原生 SQLite 创建／读写／重启恢复。
-- [ ] AC-1：真实 HTML 配置页五项操作与错误反馈、生效时机正确；仅一个原生任务且默认无触发，手动任务可运行并报告真实进度／结果。首次已有主流信任和未变复查零插件探测，信任不计成功探测。
-- [ ] AC-1：MP4／MKV 在原生 Web 客户端实际播放，记录所测封装／codec、原生播放路径和媒体时间／视频帧推进证据，不只看 HTTP 200。同 SHA-1／Size 换 URL 后实际探测，最新地址／主流／指纹一致，重启仍正确。
-- [ ] AC-2：从上述 Slice 3 接受构建替换安装，配置和可信指纹保留，未变复用，待处理变化可重试；不假造旧版本／旧数据。备份／恢复、禁用／移除／重装／启用按交付说明可操作，原生播放与恢复检查正确。
-- [ ] AC-8 对应部分：清单、部署文件、源码／构建及测试身份可核验；必要负向用例、全部既有回归／实机和本 Task 包验收通过，失败和重跑保留。专用实例／原共享隔离实例的配置、全部触发器、媒体／STRM、库条目和恢复／清理有记录。
-- [ ] 支持声明限定固定组合及实测格式／客户端，README／安装说明／兼容性／矩阵按真实结果同步；RO-2／RO-3／RO-4 保持未完成，既有安全及隐私边界不变。
+- [x] AC-1：一个命令产出可交接 ZIP 与清单／摘要，GUID／版本／ABI／来源／依赖／许可准确；负载满足最小 Linux x64 运行需求，无秘密、数据或无关核心库。缺失／损坏／非法路径包在部署前拒绝，保留已有有效文件。
+- [x] AC-1：新建干净专用隔离实例，仅解包安装候选后插件 Active；进程加载负载摘要匹配 ZIP，未调用开发部署补文件，正常完成原生 SQLite 创建／读写／重启恢复。
+- [x] AC-1：真实 HTML 配置页五项操作与错误反馈、生效时机正确；仅一个原生任务且默认无触发，手动任务可运行并报告真实进度／结果。首次已有主流信任和未变复查零插件探测，信任不计成功探测。
+- [x] AC-1：MP4／MKV 在原生 Web 客户端实际播放，记录所测封装／codec、原生播放路径和媒体时间／视频帧推进证据，不只看 HTTP 200。同 SHA-1／Size 换 URL 后实际探测，最新地址／主流／指纹一致，重启仍正确。
+- [x] AC-2：从上述 Slice 3 接受构建替换安装，配置和可信指纹保留，未变复用，待处理变化可重试；不假造旧版本／旧数据。备份／恢复、禁用／移除／重装／启用按交付说明可操作，原生播放与恢复检查正确。
+- [x] AC-8 对应部分：清单、部署文件、源码／构建及测试身份可核验；必要负向用例、全部既有回归／实机和本 Task 包验收通过，失败和重跑保留。专用实例／原共享隔离实例的配置、全部触发器、媒体／STRM、库条目和恢复／清理有记录。
+- [x] 支持声明限定固定组合及实测格式／客户端，README／安装说明／兼容性／矩阵按真实结果同步；RO-2／RO-3／RO-4 保持未完成，既有安全及隐私边界不变。
 
 ## 必要测试
 
@@ -173,7 +175,49 @@ B 审查完整 `ae265d0dba02aa1c5599871602d4350072b7155f..Implementation Head`�
 
 ## B Review Result
 
-### 当前复审决定（2026-10-17，候选 7dbf3661）
+### 当前复审决定（2026-10-17，候选 b5d4f283）
+
+```text
+Reviewed: ae265d0dba02aa1c5599871602d4350072b7155f..b5d4f2836229d16ac8add7034294c4306ddf5be1
+Correction Delta: 7dbf36615bddea0aa65a14d84ae56806aea62aa8..b5d4f2836229d16ac8add7034294c4306ddf5be1
+Review Start HEAD: 6b80494466fccbab21c881108698fa265053b15f
+Reviewer: B
+Decision: PASS
+P0/P1 Blockers: NONE
+Slice Required Outcomes all satisfied: NO — RO-1 satisfied; RO-2/RO-3/RO-4 NOT RUN
+Next: B plans Task 4.2 under the committed fixed delivery plan
+```
+
+起点 main 干净，完成必读、已提交合同／固定方案、B 经验和原始证据核对，治理 PASS。审查完整 Base..Implementation Head 的 25 文件与本轮修正，核对后继报告只有 TASK 改动；61 项源码／工具／测试／锁／环境输入与 b5d4f283 字节一致。本轮 B 未改产品实现、合同、Roadmap 或稳定需求。此前 FIX REQUIRED 和失败留在下方原文与 Git 历史；本次决定覆盖此前当前状态，不把旧失败改写为通过。
+
+**BR-41-3b 当前轮归属阻塞已闭合。** 独立使用真实 CLI／文件系统，在临时目录复现六项控制：旧标记目录配缺包、坏包、有效包均在写入／Docker／场景前拒绝，旧文件字节不变；本轮新目录中途异常仍能清理；清理异常使总体 FAIL；磁盘 token 不匹配拒绝删除。Docker／场景在这组控制中被 mock，真实选择／校验／finally／删除未 mock；不扩大为生产或观影故障结论。
+
+B 独立 locked restore／Release build／format PASS，build 0 警告／0 错误；C# 202/202、Python 122/122 PASS，0 失败／0 跳过，完整 Python 已包括 59 项包测试。归档校验 PASS。B 实际消费同一 ZIP 的 `--scenario all` PASS，覆盖 clean／upgrade／recovery／invalid；独立播放、批量 suite、配置页 all 的三条既有实机回归 均 PASS（分别 705.471／301.388／232.268 秒），配置／全部触发器及夹具／原生地址恢复已核验。准确命令／cwd／UTC／耗时／退出码及原始输出在索引，无仅凭报告标签的门槛替代。
+
+候选 ZIP SHA-256 为 `2d5edd4afcb77850b11d56d22648088fad7e0ffd9440c15ba29662f83efae788`。来源与 DLL 嵌入 revision 为 b5d4f283；干净安装 Active，运行负载匹配归档，无开发部署补文件；五项页面保存／重启生效、原生任务唯一／默认无触发、首次信任和未变零插件探测均有实际记录。MP4／MKV 原生 Web 的媒体时间和视频帧均推进，不止 HTTP 200；同 SHA-1／Size 换 URL 后实际探测、保存／指纹／重启正确。
+
+升级使用真实已接受 Slice 3 `7c64eb5dcad6e5f20fb7eb41819be2521f65484d` 的独立构建，旧配置／可信基线保留，未变零探测，待处理变化正常重试。按步骤实际执行备份、正常修改、恢复及重启读回，配置和 SQLite 恢复摘要与备份一致；恢复失败控制拒绝。禁用／移除后的原生播放及重装检查通过。十一项坏包／缺清单等拒绝场景和有效安装保留通过（结果十二个键包含保留标志，不写成十二项负例）。专用实例对账 CLEAN、disturbed 为空、收尾 CLEANED，新工作区已移除；旧开发回归恢复结果见索引，二者分别报告。
+
+可重复构建独立验证：额外的不同源码目录 worktree 实验曾出现 DLL 字节不一致，原始失败完整保留；原源码目录、固定输入和原 SourceRevisionId 下，B 强制非增量构建再 publish，七个 DLL／deps／native 文件与 ZIP 摘要全部相同。因此接受已记录固定路径／输入的复建，不宣称任意源码目录均字节一致。最初 Node 不在 PATH 的只读预检失败也如实保留，后续使用已有固定 Node，没有把依赖缺失写成产品 PASS。
+
+本机证据：[本轮 B 原始索引](.git/validation-evidence/b5d4f2836229d16ac8add7034294c4306ddf5be1/b-review-20261017-03/INDEX.md)。索引与日志只在本机，不声称远程可读；包含独立控制、包身份／Web 截图、升级恢复、三条既有实机、首败／重跑和源码／环境摘要。消费文档的治理／本地 Markdown 链接与锚点、`git diff --check` 在决定检查点重跑。
+
+#### PASS 后全部 RO／Surfaces 重核
+
+| RO／Surface | 本轮判断 | 后续 |
+|---|---|---|
+| RO-1；solution／依赖／元数据／ZIP 与清单、干净／旧安装、页面／任务、配置／SQLite、禁用移除恢复、代表 Web 播放、安装支持说明 | 本 Task PASS；AC-1／AC-2 及 AC-8 对应部分满足 | 最后产品／工具输入改变时重新验证最终包，不代替 Slice Final |
+| RO-3；全库扫描／强制刷新、变化中的 STRM、两入口与实际开始／保存／指纹、停止再运行和重启 | 完整扫描重叠仍 NOT RUN；已有共享／停止控制不冒充扫描通过 | 按固定顺序规划 Task 4.2 |
+| RO-2；真实十万候选／分批／范围、静态对账、原生进度统计与分层成本／停止 | NOT RUN | 后续 4.3 |
+| RO-4；实际代理、MediaSourceId／302／最终媒体、配置与组件身份 | NOT RUN | 后续 4.4 |
+| 共同证据／恢复／说明／CURRENT 指针与 AC-8 | RO-1 对应部分已核对；全 Slice 的扫描／规模／代理与最终协调未完成 | 保留限制，全部满足后单独 Slice Final／Closure Packet 交 A |
+
+本检查点按流程以“无活动实施任务”保存已经通过的 Task 4.1 完整报告；不是冻结 Slice，Slice 保持 ACTIVE。随后 B 在该真实提交上再次治理检查，再将根 TASK 换成 4.2 PLANNED，Base 指向本 PASS 检查点。没有运行 Slice Final、提交 Closure Packet 或宣布 Slice 关闭；A 保留最终审查责任。
+
+经验候选仅留待 Slice 收尾择要合并：历史目录标记不能单独授予本轮删除权限，异常路径必须用真实 CLI 和文件系统验证；备份存在不等于恢复可用，须实际恢复／重启并业务读回。角色经验文件本轮不增加流水账。
+
+
+### 前次复审决定（2026-10-17，候选 7dbf3661，历史）
 
 ```text
 Reviewed: ae265d0dba02aa1c5599871602d4350072b7155f..7dbf36615bddea0aa65a14d84ae56806aea62aa8
@@ -336,4 +380,4 @@ RO-1／安装、升级恢复及包身份 Surfaces 未通过本次 B 审查；RO-
 - Remaining In-Slice Work：RO-2、RO-3、RO-4 与最终 Slice Final 未变，仍 NOT RUN。
 - Head SHA：`b5d4f2836229d16ac8add7034294c4306ddf5be1`（本报告在后续文档提交记录，不预填自身 SHA）。
 
-NEXT ACTION: B REVIEWS TASK 4.1 (candidate b5d4f283, BR-41-3b correction)
+NEXT ACTION: B CHECKS GOVERNANCE AND PLANS TASK 4.2
