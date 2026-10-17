@@ -1,0 +1,33 @@
+services:
+  jellyfin:
+    image: ${JF_PROBE_SERVER_IMAGE:?Run provision first to resolve the image digest}
+    platform: linux/amd64
+    user: "${JF_PROBE_UID:?}:${JF_PROBE_GID:?}"
+    restart: "no"
+    ports:
+      - "127.0.0.1:${JF_PROBE_PORT:-18096}:8096"
+    volumes:
+      - ${JF_PROBE_WORK:?}/config:/config
+      - ${JF_PROBE_WORK:?}/cache:/cache
+      - ${JF_PROBE_WORK:?}/strm:/media/strm:ro
+      - ${JF_PROBE_WORK:?}/media:/media/local:ro
+    networks:
+      - acceptance
+      - frontend
+  media:
+    image: ${JF_PROBE_MEDIA_IMAGE:?Run provision first to resolve the image digest}
+    platform: linux/amd64
+    user: "${JF_PROBE_UID:?}:${JF_PROBE_GID:?}"
+    restart: "no"
+    read_only: true
+    command: ["python", "/server/isolated_media_server.py", "--directory", "/media", "--port", "8080"]
+    volumes:
+      - ${JF_PROBE_WORK:?}/media:/media:ro
+      - ${JF_PROBE_WORK:?}/media-server:/server:ro
+    networks:
+      - acceptance
+networks:
+  acceptance:
+    internal: true
+  frontend:
+    driver: bridge

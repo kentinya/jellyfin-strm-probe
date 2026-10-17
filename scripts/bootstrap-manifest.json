@@ -1,0 +1,105 @@
+{
+  "schema_version": 1,
+  "files": [
+    {
+      "path": ".editorconfig",
+      "sha256": "036492724bf1f31b3b894de72f48367648a85aab508228b837a6ae9b8c8ddffb"
+    },
+    {
+      "path": ".gitattributes",
+      "sha256": "eaf6f19af1dbf182c30aabd0ca9142c66e01460813577312bda6f249231086fc"
+    },
+    {
+      "path": ".github/workflows/quality.yml",
+      "sha256": "56b9e8c32f0d5e4aef8f4d4712f3764479ef7b7420558fe25e3744708058b481"
+    },
+    {
+      "path": ".gitignore",
+      "sha256": "d283df804ed32475135f5d8156fadaf1f10d54942af21eda7ef3220f8b4a3b59"
+    },
+    {
+      "path": "AGENTS.md",
+      "sha256": "c66617450c78fb65efee4d91a2adca74e4dacee86664d7b0b8ee65a2af0919e9"
+    },
+    {
+      "path": "CLAUDE.md",
+      "sha256": "73d87bb708dd690afdca760706b96944a3f37204fc3d5bd58bbabcf79cc60d6d"
+    },
+    {
+      "path": "Jellyfin STRM Probe Optimizer 完整开发方案 V3.0.md",
+      "sha256": "d236cab6b3992636b524f30bbe49a91adb9ef5d6b7010ed5695cae7d65f228ae"
+    },
+    {
+      "path": "README.md",
+      "sha256": "832b7ac534060edf07714c379952f56f5b963d65e704c339134905b943993c53"
+    },
+    {
+      "path": "SLICE.md",
+      "sha256": "8fdd54ec36c83d9613e4ecb2f5f245a3e22b37c0d8f074d3659e2c028c6f6950"
+    },
+    {
+      "path": "TASK.md",
+      "sha256": "ca4dce0723403cfd16036a9506c87effdc9b457475b8038b65fb3670d157e978"
+    },
+    {
+      "path": "Task/FIRST_TASK.md",
+      "sha256": "5f6cfcc403d8fb5338e95517613d1f4979f7fbe86260b220bb9aadd7394bb90a"
+    },
+    {
+      "path": "Task/TEMPLATE.md",
+      "sha256": "90edce4eb2253e9fa8ef8434594ee54f24402f0e64c48eec8b3fe3990cdc785c"
+    },
+    {
+      "path": "docs/architecture.md",
+      "sha256": "77f6f1cdd6f32cb1695c7ac68980605b20328ebac675ba2e449c214c6e30f6be"
+    },
+    {
+      "path": "docs/compatibility.md",
+      "sha256": "7c5353e098d138a83fd8626615cdf4e3a91aff0bacb13a121773a79c87b43cc5"
+    },
+    {
+      "path": "docs/development-workflow.md",
+      "sha256": "0ac5069747347c23bb079b4027c3b19d1b50a64e97ec6334a0067d2364dff20a"
+    },
+    {
+      "path": "docs/product-experience.md",
+      "sha256": "7369b17643aab4499dd7a799eb5b9f9bdd76504e4f04290180dbe74346b379ea"
+    },
+    {
+      "path": "docs/progress.md",
+      "sha256": "c253ea8fe96e42198d4c0bd88c7e0eea3e98c79f24b113fe41efc975adeee109"
+    },
+    {
+      "path": "docs/references.md",
+      "sha256": "7f8a0cfb2214feeacb2bd45c680b3743ee3dabb66f8c1a886b0bbef15b992c76"
+    },
+    {
+      "path": "docs/requirements.md",
+      "sha256": "1a368be42e2bb41aa70fd99b3a063c29789181fe5611c4b8fb3db0004f047494"
+    },
+    {
+      "path": "docs/roadmap.md",
+      "sha256": "3076ad892dde07626fb7b765a774a38e469734c4ff8eda01972ecaa7881fe1c4"
+    },
+    {
+      "path": "docs/scope.md",
+      "sha256": "3afc2cd6f59706c290002aaba7995c8dd6e53ecd6bf3e7260a4eb2cf5f3b6775"
+    },
+    {
+      "path": "docs/test-matrix.md",
+      "sha256": "60a6040c6663acb3d3b1d370cd3819b9411de7a4d911a1b9e8e0122e954185f7"
+    },
+    {
+      "path": "scripts/bootstrap-manifest.json",
+      "sha256": null
+    },
+    {
+      "path": "scripts/bootstrap_repository.py",
+      "sha256": "4fbec0257681e70333aedc90225996593f08a928cbd8ec429f4324d3eda4d01d"
+    },
+    {
+      "path": "scripts/check_governance.py",
+      "sha256": "d8de1f10231a435c201a0406a8ef2e6e05f38b1d60f9e1aa9aa05d2b9ab35a48"
+    }
+  ]
+}
