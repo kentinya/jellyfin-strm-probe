@@ -188,6 +188,18 @@ class ScanLogAttributionTests(unittest.TestCase):
         self.assertEqual([event["item_id"] for event in all_events], ["aaaa", "bbbb"])
         self.assertEqual([event["item_id"] for event in current], ["bbbb"])
 
+    def test_store_fault_probe_check_ignores_a_matching_start_before_the_round(self):
+        item_id = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+        old = ("2026-10-17T08:00:00.500000000Z [INF] Native STRM probe started for item "
+               "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa; running probes 1, active permits 1.")
+        current = ("2026-10-17T08:00:02.000000000Z [INF] Native STRM probe started for item "
+                   "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa; running probes 1, active permits 1.")
+        with patch.object(scan, "docker_log_lines", return_value=[old]):
+            scan.require_no_item_probe_after("container", _utc(1), item_id, "SQLite fault")
+        with patch.object(scan, "docker_log_lines", return_value=[old, current]):
+            with self.assertRaises(RuntimeError):
+                scan.require_no_item_probe_after("container", _utc(1), item_id, "SQLite fault")
+
     def test_backend_request_events_exclude_older_sessions(self):
         lines = [
             "2026-10-16T23:59:59.000000000Z SLOW_MEDIA_REQUEST_STARTED old-request",

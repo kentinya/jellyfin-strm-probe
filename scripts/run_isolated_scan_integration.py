@@ -1430,6 +1430,15 @@ def require_no_probe_during_drain(probes_during_drain: list[dict]) -> None:
             f"A new probe started during the stopped round's drain: {probes_during_drain}.")
 
 
+def require_no_item_probe_after(container_name: str, round_started: datetime.datetime,
+                                item_id: str, label: str) -> None:
+    """Bind a no-probe assertion to this round so earlier same-item probes cannot contaminate it."""
+    target = canonical_guid(item_id, f"{label} item")
+    events = probe_start_events(container_name, since=round_started)
+    matching = [event for event in events if event.get("item_id") == target]
+    require(not matching, f"A probe started for the {label} item in this round: {matching}.")
+
+
 def require_progress_below_100(progress_during_cancel: list[float]) -> None:
     """A stopped round must not report Completed/100% while it is Cancelling (BR-42-3)."""
     require(all(value < 100.0 for value in progress_during_cancel),
@@ -3364,13 +3373,12 @@ def scenario_recovery(package: Path, evidence_dir: Path | None, nonce: str, reco
         database.unlink()
         database.mkdir()
         before_activity = backend_activity()
+        fault_round_started = now_utc()
         final = run_plugin_task(auth)
         status_value = task_status(final)
         require(status_value in {"failed", "3"}, f"A SQLite fault did not fail the task: {status_value}.")
         require_no_new_activity(before_activity, backend_activity(), "A SQLite fault")
-        fault_events = probe_start_events(container(), since=now_utc() - datetime.timedelta(minutes=5))
-        require(not [event for event in fault_events if event["item_id"] == canonical_guid(healthy_item["Id"], "SQLite source")],
-                "A probe started for the pending source while the fingerprint store was unavailable.")
+        require_no_item_probe_after(container(), fault_round_started, healthy_item["Id"], "SQLite fault")
         summary["store_fault"] = {"status": status_value, "task_result": task_result(final),
                                   "before_activity": before_activity, "after_activity": backend_activity()}
     finally:
