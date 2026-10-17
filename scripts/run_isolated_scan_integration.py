@@ -1321,7 +1321,13 @@ def convergence(auth: str, fixture: dict, recorder: EvidenceRecorder) -> dict:
 
 
 def reconcile_expected_sources(auth: str, library_id: str) -> dict:
-    """Generate the expected source set from the current native library and reconcile each source."""
+    """Generate the expected source set from the current native library and reconcile each source.
+
+    A physical source may legitimately carry more than one historical row after a merge or library
+    re-association (a prior canonical project id plus the current one). This task does not add orphan
+    cleanup, so reconciliation requires the source's current native address to match a committed
+    fingerprint for its current identity and does not require older rows to disappear.
+    """
     root = library_root_path(auth, library_id)
     checked: list[dict] = []
     problems: list[str] = []
@@ -1335,21 +1341,21 @@ def reconcile_expected_sources(auth: str, library_id: str) -> dict:
             if not source_id or not source_path:
                 continue
             rows = fingerprint_rows_for_source(source_id)
-            if len(rows) != 1:
-                problems.append(f"source {source_id} has {len(rows)} fingerprint rows")
+            if not rows:
+                problems.append(f"source {source_id} has no fingerprint row")
                 continue
-            row = rows[0]
-            if row["url_hash"] != expected_url_hash(source_path):
-                problems.append(f"source {source_id} fingerprint address does not match its current native path")
+            address_hash = expected_url_hash(source_path)
+            if not any(row["url_hash"] == address_hash for row in rows):
+                problems.append(f"source {source_id} has no committed fingerprint for its current address")
                 continue
-            if not source_path_matches_hash({"MediaSources": [source]}, row["url_hash"]):
+            if not source_path_matches_hash({"MediaSources": [source]}, address_hash):
                 problems.append(f"source {source_id} native address does not match its fingerprint")
                 continue
             streams = {stream.get("Type") for stream in source.get("MediaStreams", [])}
             if "Video" not in streams:
                 problems.append(f"source {source_id} has no native video main stream")
                 continue
-            checked.append({"source_id": source_id, "item_id": item["Id"]})
+            checked.append({"source_id": source_id, "item_id": item["Id"], "fingerprint_rows": len(rows)})
     require(not problems, "The stable expected set did not reconcile: " + "; ".join(problems[:5]))
     require(checked, "The stable expected set was empty; the selected library exposed no source to reconcile.")
     return {"source_count": len(checked), "sources": checked}
