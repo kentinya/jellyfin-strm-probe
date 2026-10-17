@@ -2,9 +2,11 @@
 
 ## 当前结论
 
-当前固定组合上的 Slice 1／2／3 均已 PASS / CLOSED；单版本安装包（Slice 4 RO-1）已实现并待 B 独立审查，没有跨版本兼容声明。真实插件已用 Jellyfin Controller／Model `12.2.0`、`net10.0` 和 SDK `10.0.401` 构建，并在隔离 Jellyfin `12.2.0` 容器加载；镜像 digest、媒体服务和环境身份见 [环境交接](development-environment.md)。当前证据已覆盖完整播放／SQLite／稳定多源／共享协调、完整配置页、原生批量，以及固定 Jellyfin `12.2.0`／Linux x64 安装包的干净安装、升级替换、禁用／移除／重装与 MP4／MKV 原生 Web 播放；完整产品与发布支持仍未验证，分层状态见 [测试矩阵](test-matrix.md)。
+当前固定组合上的 Slice 1／2／3 均已 PASS / CLOSED；Slice 4 RO-1 单版本安装包已在 Task 4.1 经 B 独立 PASS（审查快照 `0e7b26b381ed5f71781e75d317275afa51d791e9:TASK.md`），没有跨版本兼容声明。真实插件使用 Jellyfin Controller／Model `12.2.0`、`net10.0` 和 SDK `10.0.401`，隔离服务器为 Jellyfin `12.2.0`；镜像及媒体身份见 [环境交接](development-environment.md)。已接受的分层证据覆盖核心播放／SQLite／多源／共享协调、配置页、原生批量，以及固定 Linux x64 包的干净安装、升级替换、禁用／移除／重装与 MP4／MKV 原生 Web 播放。
 
-历史 FIX REQUIRED 和失败保持原事实。Slice 3 的 AF-1 已在同一 Task 纠正并经 B 复审及新独立 Final 后由 A 关闭，接受实现 `7c64eb5dcad6e5f20fb7eb41819be2521f65484d`，详情见 [关闭记录](progress.md#slice-3-closed) 与 [A 最终审查快照](progress.md#slice-3-closed)。[Slice 4](../SLICE.md) 已 ACTIVE；[Task 4.1](../TASK.md) 已实现并交为 READY FOR B REVIEW，后续 B 依 [固定交付方案](slice-4-delivery-plan.md) 独立审查。固定 Jellyfin 12.2.0／Linux x64 包已由本 Task 实现并待审查；代表 MP4／MKV／原生 Web 已由本 Task 实测，实际 JellyfinProxy 路径仍 NOT RUN；后端只用 HTTP 服务时不宣称 OpenList 专有行为通过。播放取消范围保留原生取消异常处理，不要求成功返回后的额外取消检查或人为注入实机门槛；只共享实际已开始探测，批量停止只撤销未开始工作。Slice 3 已实测原生任务停止与已开始工作收尾。
+[Task 4.2](../TASK.md) 的扫描验收候选 `4837cb6d98ebbc60281ab3a66c888588a1120110` 已由 B 判为 FIX REQUIRED：有限变化发生在三方结束之后，逐源／选源和成功断言不足，停止／故障控制及原始证据未齐。候选输出的 PASS 不构成 RO-3 兼容验收，需在同 Task 修正；分项见 [测试矩阵](test-matrix.md)。真实十万库、实际 JellyfinProxy、Slice Final 和完整发布支持仍 NOT RUN；只用 HTTP 后端不宣称 OpenList 专有行为通过。
+
+历史失败及已关闭 Slice 的决定保留，Slice 3 AF-1 关闭事实见 [关闭记录](progress.md#slice-3-closed)。播放沿用原生取消异常处理，不增加客户端取消关联或成功后的额外否决；只共享已实际开始的探测。Slice 3 已接受批量停止及收尾证据，不替代 Slice 4 最终 ZIP 的共同控制。
 
 下表是早期源码定位候选；当前固定组合的加载／运行事实以上文及关闭证据为准。
 

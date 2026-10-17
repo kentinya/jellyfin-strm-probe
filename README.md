@@ -4,7 +4,7 @@
 
 项目：`Jellyfin.Plugin.StrmProbeOptimizer`，C# 插件。SQLite 仅保存最小历史指纹，媒体流继续保存在 Jellyfin 原生库，不维护独立探测状态机。
 
-**Slice 1／2／3 已由 A 最终审查 PASS / CLOSED，完整产品尚未交付。** [Slice 3 最终审查快照](docs/progress.md#slice-3-closed) 接受完整配置页、所选库按需批量检查、原生运行／停止／定时、播放混合共享及准确故障反馈；[关闭账本](docs/progress.md#slice-3-closed) 保留范围与分层证据。固定 SDK `10.0.401`、Jellyfin `12.2.0`、源码／依赖与镜像 digest 见 [开发环境](docs/development-environment.md)。操作与恢复见 [配置说明](docs/core-configuration.md)。[Slice 4](SLICE.md) 已 ACTIVE，承接真实十万库／完整扫描、实际代理播放链及固定 Jellyfin／Linux x64 安装包与恢复；RO-1 安装包已实现并待 B 独立审查，其余结果仍 NOT RUN。
+**Slice 1／2／3 已由 A 最终审查 PASS / CLOSED，完整产品尚未交付。** [Slice 3 最终审查快照](docs/progress.md#slice-3-closed) 接受完整配置页、所选库按需批量检查、原生运行／停止／定时、播放混合共享及准确故障反馈；[关闭账本](docs/progress.md#slice-3-closed) 保留范围与分层证据。固定 SDK `10.0.401`、Jellyfin `12.2.0`、源码／依赖与镜像 digest 见 [开发环境](docs/development-environment.md)。操作与恢复见 [配置说明](docs/core-configuration.md)。[Slice 4](SLICE.md) 已 ACTIVE，承接真实十万库／完整扫描、实际代理播放链及固定 Jellyfin／Linux x64 安装包与恢复；RO-1 安装包与 RO-3 完整扫描重叠已实现并待 B 独立审查，RO-2／RO-4 仍 NOT RUN。
 
 ## 开发基准与范围
 
@@ -19,7 +19,7 @@
 3. 查看 [当前 Slice](SLICE.md)、[当前 Task](TASK.md)、[四个 Slice 路线图](docs/roadmap.md) 和 [进度](docs/progress.md)。
 4. 开发环境执行 `python3 scripts/development_environment.py doctor`；安装与隔离运行见 [环境交接](docs/development-environment.md)；单版本安装包、配置与恢复见 [安装包说明](docs/package-installation.md)。
 
-Slice 4 Base 固定为 Slice 3 关闭提交 `03169b07d110964562f7da31d2c3d7add82e5ff5`，Implementation Head 为 NOT SET；最新接受产品实现仍是 `7c64eb5dcad6e5f20fb7eb41819be2521f65484d`。[Task 4.1](TASK.md) 交付单版本安装包与安装恢复，现已实现并交为 READY FOR B REVIEW；后续 B 必须按 [固定交付方案](docs/slice-4-delivery-plan.md) 继续规划。安装、配置与恢复说明见 [安装包说明](docs/package-installation.md)。详细历史与本机证据见 [进度](docs/progress.md#当前开发指针)。
+Slice 4 Base 固定为 Slice 3 关闭提交 `03169b07d110964562f7da31d2c3d7add82e5ff5`，Implementation Head 为 NOT SET；最新接受产品实现仍是 `7c64eb5dcad6e5f20fb7eb41819be2521f65484d`。Task 4.1 的单版本安装包与安装恢复已由 B 独立 PASS（审查快照 `0e7b26b381ed5f71781e75d317275afa51d791e9:TASK.md`）；[Task 4.2](TASK.md) 的扫描／播放／批量验收被 B 判为 FIX REQUIRED，需在原 Task 修正并发变化、逐源断言、停止恢复控制与原始证据。后续 B 必须按 [固定交付方案](docs/slice-4-delivery-plan.md) 继续规划。安装、配置与恢复说明见 [安装包说明](docs/package-installation.md)。详细历史与本机证据见 [进度](docs/progress.md#当前开发指针)。
 
 ## 产品目标
 
