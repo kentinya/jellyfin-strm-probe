@@ -1442,6 +1442,24 @@ def require_no_new_activity(before: dict[str, int], after: dict[str, int], label
             f"{label} still started backend/probe work on some route: {before} -> {after}.")
 
 
+def require_disabled_no_probe(task: dict, fields: dict, before_activity: dict[str, int],
+                              after_activity: dict[str, int], before_fingerprint: dict | None,
+                              after_fingerprint: dict | None) -> None:
+    """A disabled batch must be cancelled as incomplete, start no probe and keep its trusted row."""
+    result = task_result(task)
+    require(task_status(task) in {"cancelled", "1"},
+            f"The disabled batch did not report its incomplete native task result: {result}.")
+    require(bool(result.get("StartTimeUtc")) and bool(result.get("EndTimeUtc")),
+            f"The disabled batch result has no complete execution interval: {result}.")
+    require(fields.get("disabled") is True,
+            f"The disabled batch summary did not record the disabled stop reason: {fields}.")
+    require(fields.get("actual_probe_calls") == 0 and fields.get("reliable_success") == 0,
+            f"The disabled batch reported probe work or success: {fields}.")
+    require_no_new_activity(before_activity, after_activity, "A disabled plugin")
+    require(before_fingerprint is not None and after_fingerprint == before_fingerprint,
+            "The disabled batch changed or lost its trusted source fingerprint.")
+
+
 # ---------------------------------------------------------------------------------------------------------------------
 # Summary binding
 # ---------------------------------------------------------------------------------------------------------------------
@@ -3290,11 +3308,27 @@ def scenario_recovery(package: Path, evidence_dir: Path | None, nonce: str, reco
     require(config_status == 200 and disabled_config.get("Enabled") is False,
             "The disabled configuration was not read back as the effective persisted state.")
     disabled_url = unique_url(plain_url, "disabled-" + uuid.uuid4().hex[:8])
+    before_disabled_state = current_source_state(auth, healthy_item["Id"], healthy_source_id, fixture, recorder,
+                                                 "healthy source before disabled round")
+    before_disabled_fingerprint = before_disabled_state["fingerprint"]
+    require(before_disabled_fingerprint is not None,
+            "The disabled no-probe control has no trusted pre-change fingerprint.")
     rewrite_strm(healthy_path, disabled_url, media_sha, media_size)
     before_activity = backend_activity()
-    run_plugin_task_completed(auth, "disabled no-probe round")
+    disabled_round_started = now_utc()
+    disabled_task = run_plugin_task(auth)
+    disabled_summary = summary_fields_complete(latest_summary_after(disabled_round_started))
     after_activity = backend_activity()
-    require_no_new_activity(before_activity, after_activity, "A disabled plugin")
+    after_disabled_state = current_source_state(auth, healthy_item["Id"], healthy_source_id, fixture, recorder,
+                                                "healthy source after disabled round")
+    disabled_probe_starts = probe_start_events(container(), since=disabled_round_started)
+    require(not disabled_probe_starts,
+            f"The disabled batch started a native probe: {disabled_probe_starts}.")
+    require_disabled_no_probe(disabled_task, disabled_summary, before_activity, after_activity,
+                              before_disabled_fingerprint, after_disabled_state["fingerprint"])
+    require(after_disabled_state["native_url_hash"] == before_disabled_state["native_url_hash"]
+            and after_disabled_state["has_main_stream"],
+            "The disabled no-probe round changed the native source address or removed its saved main stream.")
     scope_all_libraries(auth)
     enabled_status, enabled_config = pe.request_json("GET", f"/Plugins/{PLUGIN_ID}/Configuration",
                                                        headers={"Authorization": auth})
@@ -3302,8 +3336,13 @@ def scenario_recovery(package: Path, evidence_dir: Path | None, nonce: str, reco
             "The enabled configuration was not persisted before the SQLite recovery control.")
     recorder.record("disabled_configuration_control", disable_status=disable_status,
                     persisted_disabled=disabled_config, persisted_enabled=enabled_config,
+                    task_result=task_result(disabled_task), summary=disabled_summary,
+                    before_disabled_state=before_disabled_state, after_disabled_state=after_disabled_state,
+                    probe_starts=disabled_probe_starts,
                     before_activity=before_activity, after_activity=after_activity)
-    summary["disabled_no_probe"] = {"persisted_readback": True, "no_probe": True}
+    summary["disabled_no_probe"] = {"persisted_readback": True, "no_probe": True,
+                                    "task_status": task_status(disabled_task),
+                                    "trusted_fingerprint_preserved": True}
 
     # A SQLite global fault must fail the task without starting a probe on any route, and recover.
     database = pkg.fingerprint_database()

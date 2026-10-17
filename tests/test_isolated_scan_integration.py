@@ -111,6 +111,29 @@ class ScanExecutionControlTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             scan.require_completed_execution(self._task("Cancelled"), None, "scan")
 
+    def test_a_disabled_no_probe_round_accepts_only_evidenced_cancellation(self):
+        task = self._task("Cancelled")
+        summary = {"disabled": True, "actual_probe_calls": 0, "reliable_success": 0}
+        activity = {"delay_started": 1, "probe_finished": 1, "media_requests": 1,
+                    "plugin_encoder_starts": 1}
+        baseline = {"item_id": "a" * 32, "source_key": "b" * 32, "url_hash": "old",
+                    "sha1": "c" * 40, "file_size": 7}
+
+        scan.require_disabled_no_probe(task, summary, activity, dict(activity), baseline, dict(baseline))
+
+        with self.assertRaises(RuntimeError):
+            scan.require_disabled_no_probe(self._task("Completed"), summary, activity,
+                                            dict(activity), baseline, dict(baseline))
+        with self.assertRaises(RuntimeError):
+            scan.require_disabled_no_probe(task, dict(summary, disabled=False), activity,
+                                            dict(activity), baseline, dict(baseline))
+        with self.assertRaises(RuntimeError):
+            scan.require_disabled_no_probe(task, summary, activity,
+                                            dict(activity, media_requests=2), baseline, dict(baseline))
+        with self.assertRaises(RuntimeError):
+            scan.require_disabled_no_probe(task, summary, activity, dict(activity), baseline,
+                                            dict(baseline, url_hash="new"))
+
     def test_a_completed_execution_without_an_interval_cannot_pass(self):
         with self.assertRaises(RuntimeError):
             scan.require_completed_execution(
