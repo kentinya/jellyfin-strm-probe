@@ -5,7 +5,7 @@
 ```text
 Task ID: 4.1
 Parent Slice: 4
-Status: READY FOR B REVIEW
+Status: FIX REQUIRED
 Task Base: ae265d0dba02aa1c5599871602d4350072b7155f
 Contract Checkpoint: ae265d0dba02aa1c5599871602d4350072b7155f
 Difficulty: High
@@ -173,6 +173,40 @@ B 审查完整 `ae265d0dba02aa1c5599871602d4350072b7155f..Implementation Head`�
 
 ## B Review Result
 
+### 当前复审决定（2026-10-17，修正候选）
+
+```text
+Reviewed: ae265d0dba02aa1c5599871602d4350072b7155f..c1fb5ee57272f158c2ea7abd7545980d1f11337d
+Correction Delta: 4bad6eb43e3b8bb87ce9df9bc0aa1adb952044f2..c1fb5ee57272f158c2ea7abd7545980d1f11337d
+Review Start HEAD: cd45ea91663af315999cdc77bfab65dcde4ee7ed
+Reviewer: B
+Decision: FIX REQUIRED
+Slice Required Outcomes all satisfied: NO — RO-1 has the remaining blockers below; RO-2/3/4 remain NOT RUN
+Next: Developer corrects the same Task 4.1; no Task 4.2 is activated
+```
+
+起始 `main` 工作区干净；完成必读、已提交合同／固定方案核对和治理 PASS。核对 Base..Head 的 25 文件范围、修正差异和后继报告；61 项源码／工具／测试／依赖／环境输入均与 `c1fb5ee5…` 字节一致，后继 `cd45ea91…` 仅修改 TASK。未修改产品实现、Slice、Roadmap 或稳定需求，未操作运行中的 Jellyfin／Docker。
+
+读取 Developer 修正索引、包验收原始 JSON、既有实机与构建／测试日志、批量首败及重跑。实际 ZIP SHA-256 为 `1a8b32c58b4dfabac3fba4671fd5751b8ce3e6673d7b9922e7d5c1951e6ac1d5`；旁置清单及 DLL 嵌入的构建 revision 均为修正提交。旧坏包四反例、外部 plugins 目录链接及虚构来源 SHA 的回归在 B 本机执行均拒绝，原有效安装保留；43/43 打包工具测试 PASS、0 失败／0 跳过，正确包 CLI 校验 PASS。BR-41-4 的来源传递／真实提交约束和本候选产物身份已有修正；BR-41-2 已增加未变复用及实际配置备份／恢复／重启步骤，保留 Developer 观察，不把它们冒充 B 独立实机通过。
+
+B 在临时目录独立增加三项反例，确认以下原有义务仍未完成。原 ZIP 未改动；备份反例只覆盖临时外部 sentinel，清理反例的 Docker 调用被 mock；它们是工具边界证据，不能推导普通观影或标准安装已经损坏。反例脚本退出 0 表示缺陷复现，三项保护结果均为 FAIL。
+
+| 当前 P1 阻塞 | 证据与必要修正 |
+|---|---|
+| **BR-41-1（剩余）— 主插件版本一致性仍未验证，AC-1／AC-8** | `scripts/package_plugin.py:442` 只比较目录与 meta；第 482 行在 deps 无 `assemblyVersion` 时跳过检查，而主插件 runtime 条目实际为 `{}`。把真实候选的目录和 meta 同时改为 `9.9.9.9`，保留 DLL 的 `0.1.0.0` 和 deps 的项目 `0.1.0`，结构校验及匹配重算清单的校验均接受。原发布清单仍会拒绝被改包，这不否定摘要修正；缺口在构建器本身同样消费的结构校验。应独立读取主插件实际 AssemblyVersion，核对 meta／目录／deps 项目版本（按 .NET 三段与四段版本明确归一化），不依赖可选字段；构建与消费共用检查，补“目录＋meta 同改”和“deps 项目版本冲突”负例。坏包在写出／替换有效安装前拒绝。 |
+| **BR-41-3a（剩余）— 备份文件写入可越出隔离区，AC-8／不变量 11** | `scripts/package_environment.py:497` 只校验备份目录，随后第 507 行 `copy2` 跟随已有目标文件链接。临时 `WORK/backup/Jellyfin.Plugin.StrmProbeOptimizer.xml` 链接到 WORK 外 sentinel 时，`backup_state` 不拒绝，并把 sentinel 覆盖为配置内容。此外 `require_owned_path` 先 resolve 再检查父链，会漏掉指向 WORK 内其他目录的链接。应在任何写入前校验完整原始路径链及最终文件，不能只校验目录；核对已有部署／基线／备份／恢复／媒体与 STRM 写入口使用情况，补最终文件和父目录链接的拒绝／外部文件不变测试。只修现有小型归属检查，不建立通用环境框架。 |
+| **BR-41-3b（剩余）— 收尾记录没有落实恢复／清理，AC-8** | `capture_instance_state` 未获取全部任务触发器／原生库条目；`reconcile_instance_state` 第 571 行无条件返回 RECORDED，`main` 不判断差异。Developer 原始结果顶层 PASS，但只记录新增 `Upgrade Unchanged.strm`、变化的指纹 DB，未给 cleanup／恢复结果。B 临时修改预存 STRM 后同样仅 RECORDED、不恢复；调用 `cleanup_instance`（mock stop）又删除了预存 STRM／配置等整个目录。目录在 WORK 内不足以证明内容属于本轮。应使用明确本轮归属的干净实例输入，或保存并恢复已有隔离输入；对全部触发器／库条目／配置／媒体／STRM 进行前后核对，成功与异常路径均核验收尾，仅清理本轮创建项，收尾失败必须总体 FAIL。可采用拒绝非本轮输入的简单前置约束，不能以可选 `--cleanup` 或一份差异列表代替必要结果。 |
+
+本机证据：[B 复审索引](.git/validation-evidence/c1fb5ee57272f158c2ea7abd7545980d1f11337d/b-rereview-20261017/INDEX.md)，含输入摘要、审查起点快照、原始命令／输出、反例脚本及结果；仅本工作区可读。已发现明确 P1，按开发流程提前拒绝：B 独立包实机／Web／升级恢复、可复建发布及其余完整 T4 重跑本轮均 NOT RUN，未签发任何整体产品 PASS。下一候选仍须完整原计划及 B 独立实机门槛；原始运行可否复用需按输入及证据完整性再次判断。
+
+批量首败 `found 42` 与后续 PASS 均保留；跨日日志过滤为既有工具限制，未据本轮结果另造产品阻塞，也不把首败改写为 PASS。下一轮长验收须按合同保留完整日期／会话关联，不能仅凭一段 PASS 标签或清空日志省略来源证据。
+
+**合法性：同一 Task 4.1 继续修正。** 三项均为既定包版本／隔离／收尾义务，Contract 可满足，无需 A 改合同。保留 ID、Task Base、Goal、Scope、验收和 High／T4 全部门槛；追加修正提交，先复现／修正上述工具反例，再对最终候选重建 ZIP、运行原完整门槛并提交准确报告。不得借此修改播放规则、取消、Coordinator、SQLite schema 或推进 4.2～4.4。
+
+重新核对四个 RO／全部 Surfaces：RO-1 的包版本及恢复清理 Surface 仍阻塞；RO-2 真实十万库／成本、RO-3 完整扫描重叠与 RO-4 实际代理均未完成。本轮不创建下一 Task、不运行 Slice Final、不提交 Closure Packet、不宣布 Slice 关闭。经验候选：文件写入的归属检查须覆盖最终目标及原始父链；收尾差异应与恢复／本轮归属断言联动。留待 A 收尾择要合并，不改角色经验文件或增加合同义务。
+
+### 上轮审查及修正指导（历史，当前决定以上方复审为准）
+
 ```text
 Reviewed: ae265d0dba02aa1c5599871602d4350072b7155f..4bad6eb43e3b8bb87ce9df9bc0aa1adb952044f2
 Review Start HEAD: b48afd1dec64d958d354c496995e3d0d3a46306e
@@ -192,7 +226,7 @@ B 独立运行 `python3 -m unittest discover -s tests -p 'test_*package*.py' -v`
 
 本机完整索引：[B Review INDEX](.git/validation-evidence/4bad6eb43e3b8bb87ce9df9bc0aa1adb952044f2/b-review-20261017/INDEX.md)，含复现脚本、原始结果、61 项输入摘要和审查起点合同／Task 快照；仅本工作区可读。已发现明确阻塞，本轮干净实机／升级／恢复的 B 独立运行及其余完整 T4 重跑均 NOT RUN，不据 Developer 标签签发 PASS。修正候选仍须原完整门槛和 B 独立实机验证。
 
-### 当前 Task 阻塞项（P1）
+### 上轮 Task 阻塞项（P1，修正进展见当前复审）
 
 1. **BR-41-1 — 部署前校验没有落实包完整性合同（AC-1／AC-8）。** `scripts/package_plugin.py:verify_archive()` 重新计算摘要后直接返回，没有与已发布清单／预期摘要比对；托管依赖仅按可被修改的 `meta.json.assemblies` 查存在性，也不核对版本目录／程序集／元数据的一致性。B 保留原旁置清单，分别重写 native 为无效内容、删除 `Microsoft.Data.Sqlite.dll` 并从 assemblies 删除但保留 deps 声明、将 meta 版本改为 `9.9.9.9`、添加 `Jellyfin.Controller.dll`：四包均通过 `verify_archive`，随后 `unpack_archive` 覆盖临时有效安装。修正须在任何有效安装替换前核验可信预期摘要、完整依赖与允许的负载／元数据；补对应真实拒绝与旧文件保留测试，不能只测 ZIP 截断／CRC 或缺 native。若准确 CLI 需要显式 manifest／expected digest，由 B 先在本 Task 记录等价接口；不得删减验收。
 
@@ -233,4 +267,4 @@ RO-1／安装、升级恢复及包身份 Surfaces 未通过本次 B 审查；RO-
 
 供 A 收尾时择要合并的经验：校验工具能列出新摘要不等于核验已发布输入 → 对重写 ZIP、依赖／元数据不一致构造反例并检查有效安装保留 → 用于包交接；恢复报告容易只证明备份文件存在 → 实际执行恢复／重启和业务读回，并记录失败收尾 → 用于升级与恢复审查。此处不改角色经验文件或增加验收义务。
 
-NEXT ACTION: B REVIEWS TASK 4.1 CORRECTION (ae265d0d..c1fb5ee5)
+NEXT ACTION: DEVELOPER CORRECTS TASK 4.1 (BR-41-1 REMAINDER / BR-41-3a / BR-41-3b)
