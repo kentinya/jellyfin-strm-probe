@@ -4,7 +4,7 @@
 
 项目：`Jellyfin.Plugin.StrmProbeOptimizer`，C# 插件。SQLite 仅保存最小历史指纹，媒体流继续保存在 Jellyfin 原生库，不维护独立探测状态机。
 
-**Slice 1／2／3 已由 A 最终审查 PASS / CLOSED，完整产品尚未交付。** [Slice 3 最终审查快照](docs/progress.md#slice-3-closed) 接受完整配置页、所选库按需批量检查、原生运行／停止／定时、播放混合共享及准确故障反馈；[关闭账本](docs/progress.md#slice-3-closed) 保留范围与分层证据。固定 SDK `10.0.401`、Jellyfin `12.2.0`、源码／依赖与镜像 digest 见 [开发环境](docs/development-environment.md)。操作与恢复见 [配置说明](docs/core-configuration.md)。[Slice 4](SLICE.md) 已 ACTIVE，承接真实十万库／完整扫描、实际代理播放链及固定 Jellyfin／Linux x64 安装包与恢复；RO-1 安装包与 RO-3 完整扫描重叠已实现并待 B 独立审查，RO-2／RO-4 仍 NOT RUN。
+**Slice 1／2／3 已由 A 最终审查 PASS / CLOSED，完整产品尚未交付。** [Slice 3 最终审查快照](docs/progress.md#slice-3-closed) 接受完整配置页、所选库按需批量检查、原生运行／停止／定时、播放混合共享及准确故障反馈；[关闭账本](docs/progress.md#slice-3-closed) 保留范围与分层证据。固定 SDK `10.0.401`、Jellyfin `12.2.0`、源码／依赖与镜像 digest 见 [开发环境](docs/development-environment.md)。操作与恢复见 [配置说明](docs/core-configuration.md)。[Slice 4](SLICE.md) 已 ACTIVE，承接真实十万库／完整扫描、实际代理播放链及固定 Jellyfin／Linux x64 安装包与恢复；RO-1 安装包已由 B 独立 PASS，RO-3 完整扫描重叠的修正候选已交为 READY FOR B REVIEW，RO-2／RO-4 仍 NOT RUN。
 
 ## 开发基准与范围
 
@@ -19,7 +19,7 @@
 3. 查看 [当前 Slice](SLICE.md)、[当前 Task](TASK.md)、[四个 Slice 路线图](docs/roadmap.md) 和 [进度](docs/progress.md)。
 4. 开发环境执行 `python3 scripts/development_environment.py doctor`；安装与隔离运行见 [环境交接](docs/development-environment.md)；单版本安装包、配置与恢复见 [安装包说明](docs/package-installation.md)。
 
-Slice 4 Base 固定为 Slice 3 关闭提交 `03169b07d110964562f7da31d2c3d7add82e5ff5`，Implementation Head 为 NOT SET；最新接受产品实现仍是 `7c64eb5dcad6e5f20fb7eb41819be2521f65484d`。Task 4.1 的单版本安装包与安装恢复已由 B 独立 PASS（审查快照 `0e7b26b381ed5f71781e75d317275afa51d791e9:TASK.md`）；[Task 4.2](TASK.md) 的扫描／播放／批量验收被 B 判为 FIX REQUIRED，需在原 Task 修正并发变化、逐源断言、停止恢复控制与原始证据。后续 B 必须按 [固定交付方案](docs/slice-4-delivery-plan.md) 继续规划。安装、配置与恢复说明见 [安装包说明](docs/package-installation.md)。详细历史与本机证据见 [进度](docs/progress.md#当前开发指针)。
+Slice 4 Base 固定为 Slice 3 关闭提交 `03169b07d110964562f7da31d2c3d7add82e5ff5`，Implementation Head 为 NOT SET；最新接受产品实现仍是 `7c64eb5dcad6e5f20fb7eb41819be2521f65484d`。Task 4.1 的单版本安装包与安装恢复已由 B 独立 PASS（审查快照 `0e7b26b381ed5f71781e75d317275afa51d791e9:TASK.md`）；[Task 4.2](TASK.md) 的扫描／播放／批量验收经 B 判 FIX REQUIRED 后已在原 Task 修正（真实窗口内变化、逐源／选源／成功判定、ZIP 停止与故障控制、外置原始证据），修正候选 `eac764d9…` 已交为 READY FOR B REVIEW，尚未签发 RO-3 PASS。后续 B 必须按 [固定交付方案](docs/slice-4-delivery-plan.md) 继续规划。安装、配置与恢复说明见 [安装包说明](docs/package-installation.md)。详细历史与本机证据见 [进度](docs/progress.md#当前开发指针)。
 
 ## 产品目标
 
@@ -29,7 +29,7 @@ Slice 4 Base 固定为 Slice 3 关闭提交 `03169b07d110964562f7da31d2c3d7add82
 - 「控制台 → 计划任务 → STRM 媒体信息检查」支持原生运行／停止／定时，默认无自动触发；固定所选库候选 ID 后分批读取当前对象，只处理需要探测的项目。停止只撤销未开始工作，已开始探测继续完成并按条件提交，收尾报告实际结果，结束后才允许下一轮批量实际运行。候选 ID 内存随数量增长，完整媒体对象和活动工作按批次限制。
 - 播放与批量共用 ProbeCoordinator，只共享已实际开始且仍在执行的探测，排队不共享；插件主动探测并发默认 2、允许 1～8，不限制其他原生任务或插件。
 
-当前已接受播放／指纹／共享、完整配置页和原生批量；单版本安装包与安装恢复（RO-1）已实现并待 B 独立审查，后续压力、外部联调与其余发布结果仍未完成。兼容性及接口定位见 [compatibility.md](docs/compatibility.md) 和 [references.md](docs/references.md)。
+当前已接受播放／指纹／共享、完整配置页和原生批量；单版本安装包与安装恢复（RO-1）已由 B 独立 PASS，完整扫描重叠（RO-3）修正候选待 B 审查，后续压力、外部联调与其余发布结果仍未完成。兼容性及接口定位见 [compatibility.md](docs/compatibility.md) 和 [references.md](docs/references.md)。
 
 ## 本地安装包
 

@@ -5,13 +5,13 @@
 ```text
 Task ID: 4.2
 Parent Slice: 4
-Status: FIX REQUIRED
+Status: READY FOR B REVIEW
 Task Base: 0e7b26b381ed5f71781e75d317275afa51d791e9
 Contract Checkpoint: ae265d0dba02aa1c5599871602d4350072b7155f
 Difficulty: High
 Test Level: T4
 Planner / Reviewer: B
-Implementation Head: 4837cb6d98ebbc60281ab3a66c888588a1120110
+Implementation Head: eac764d9b32a1b13f8ac963f8c14888fd50db4a3
 ```
 
 ## Goal
@@ -175,6 +175,27 @@ RO-2 的十万原生候选／成本验收（后续 4.3）、RO-4 的真实代理
 - Remaining In-Slice Work：RO-2 真实十万原生库与分层成本（后续 4.3）、RO-4 实际 JellyfinProxy 联调（后续 4.4）、单独 Slice Final／Closure Packet 尚未完成。
 - Risks / Deviations：RO-3 已在固定 ZIP 安装候选的代表性多库／多版本夹具上取得；未覆盖真实十万库或完整生产扫描压力，也未使用实际代理。audio-only 实机、物理 Jellyfin 数据库保存故障注入与通用 FullRefresh 性能证明沿用已接受限制，未新增。首败配置回归为既有 flake，未自行豁免，交 B 判定。
 - Head SHA：`4837cb6d98ebbc60281ab3a66c888588a1120110`。
+
+### Developer 修正报告（2026-10-17，BR-42-1～4）
+
+- 修正提交：`d534be0`（强化扫描验收控制与证据）后续 `2d850a8`、`e4eb780`、`85cf051`、`97981cd`、`a33bad8`、`5247632`、`c798e02`、`8377d37`、`eac764d` 逐项修复；均在 Task Base 之后追加，未改写已审查历史，未改产品源码／schema／规则／取消语义。
+- BR-42-1（真实窗口内变化）：新增 `require_change_in_window`／`require_captured`；`overlap_round` 先让批量与播放探测实际开始并保持执行，再触发原生 `RefreshLibrary` 并轮询到 Running 后才发出有限变化（B→C、内容 SHA-1、Size），并要求每个变化操作时间落在原生扫描 Running 区间内；`scope_change_round` 在已固定的 130 候选集合上删除／移出已捕获候选、集合固定后新增／移入，并要求全部落在 Running 区间内。删除／移出目标必须实际属于捕获集合，否则工具 FAIL。
+- BR-42-2（逐源／选源／成功）：`require_completed_execution` 统一要求本轮自身身份、完整起止与 Completed，拒绝 Failed／Cancelled／超时／缺结果；`summary_fields_complete` 要求全部计数器存在（缺失即硬失败，不再经 `or 0` 变零）；重叠用实际后端开始与新增 `PROBE_MEDIA_REQUEST_FINISHED` 观测结束，不用配置延时推算；B→C 要求 A 原样保留而非仅“≠B”；`_require_selected_source` 校验请求的 MediaSourceId 与返回源 Id、Path 一致，拒绝未筛选多源／错版本；两个合并版本改为不同 URL 并保留同内容哈希／Size 对照；独立 FullRefresh 观察原生实际处理后再读两源；停止后从当前原生库生成稳定预期集合并逐源核对范围、指纹、地址、主流，重启覆盖 URL 变化源与显式选源。
+- BR-42-3（停止与恢复）：`scenario_stop` 改用跨 128 批次夹具（130 候选、小改动子集），记录 Running→Cancelling→终态、Cancelling 期间进度必须 <100%、已开始工作提交／未开始工作撤销、停止后不再读取后续批次或启动新探测；旧轮收尾期间经原生入口再次运行不得实际进入新轮。`scenario_recovery` 增加 ZIP 上单项媒体失败隔离（失败保留完整旧基线、健康变化源仍成功）；禁用／故障前先制造应探测的变化，按插件编码器开始与所有后端路由（普通／delay 开始／完成／媒体请求）归因，不能只看 delay 计数。
+- BR-42-4（证据）：新增 `EvidenceRecorder`，在外置 `--evidence-dir` 增量记录每轮完整 UTC／单调时间、容器启动身份、任务运行身份、源／文件／URL 摘要、变更操作与结果，保留脱敏原始任务轮询、后端与插件日志、保存／指纹快照；`events.jsonl` 追加式、`rounds/` 逐轮快照、`INDEX.md` 与 `result.json`；finally 在删除实例前采集失败片段与恢复／清理结果，收尾／清理失败使总体 FAIL，`--evidence-dir` 缺省落到工作区外。所有 URL／token／path 仅存 SHA-256 摘要。
+- 反例控制（`tests/test_isolated_scan_integration.py`，37 项）：缺失交集、窗口外变化、删除目标不在固定集合、Failed／Cancelled／缺区间执行、缺失摘要计数器、错 MediaSourceId／错地址、Cancelling 期间 100%、收尾期间新轮／新探测、禁用或故障仍活动、证据在外置目录留存且收尾失败总体 FAIL 均被拒绝。原 B 四项控制（串行扰动、失败扫描被接受、失败任务且缺摘要宣称收敛、错误选源被接受）在当前候选已不再成立（对应 API 已改或断言已加）。
+- Tests and Results（候选 Implementation Head `eac764d9b32a1b13f8ac963f8c14888fd50db4a3`，证据索引 `.git/validation-evidence/eac764d9b32a1b13f8ac963f8c14888fd50db4a3/run-20261017T143741Z-92b89989/`，本机可读）：
+  - `bash scripts/dotnet-local restore … --locked-mode` PASS；`build --configuration Release --no-restore` 0 警告／0 错误；`test` 202/202 PASS；`format --verify-no-changes` PASS。
+  - `python3 -m unittest discover -s tests -v` 158/158 PASS，其中本 Task 新增／重写 `tests/test_isolated_scan_integration.py` 37 项。
+  - `python3 scripts/package_plugin.py --configuration Release --runtime linux-x64 --output-dir artifacts/releases` PASS；归档 SHA-256 `62ae0669f4aadecaaaf7efc1d007fd4310765c70f47c99de17418ab97e946f0d`，来源 SHA `eac764d9…`，与当前 HEAD 一致。
+  - `python3 scripts/run_isolated_package_integration.py --package … --baseline-revision 7c64eb5dcad6e5f20fb7eb41819be2521f65484d --scenario all` PASS；消费同一归档 SHA-256；clean／upgrade／recovery／invalid 全过。
+  - `python3 scripts/run_isolated_scan_integration.py --package … --scenario all` PASS；消费同一归档 SHA-256；overlap／controls／stop／recovery 全过，`trigger_restoration` = restored and verified，实例对账 CLEAN、清理 CLEANED。三方交集实测：扫描 `14:41:43.558950Z`–`14:41:46.033613Z`，批量后端 `14:41:43.260801Z`–`14:42:03.262608Z`，播放后端 `14:41:43.261928Z`–`14:42:03.263115Z`；B→C／内容／Size 三个变化均在 Running 窗口内。有限变化：A 保留／B 拒绝／C 提交、内容与 Size 探测、移入发现／移出不批量探测、新增下轮发现／删除结算、多版本不同 URL 且显式选源正确、FullRefresh 不改指纹、稳定集合 136 源逐一对账且未变复查 `actual probe calls 0`、重启后 URL 变化源与多版本显式选源地址稳定。停止轮：130 候选跨批、`Cancelled`、已开始 2 提交／未开始 4 撤销、Cancelling 期间进度 96.9% < 100%、收尾期无新轮／新探测、再运行被拒、下一轮收敛。恢复：单项失败保留基线且健康源成功、禁用零探测、SQLite 故障 Failed 且零探测、恢复重启后正常。共同控制：定时触发持久化且触发、双向共享各 1 次真实后端探测、混合峰值 `peak_running_probes 2` 且播放开始 `running 2`。
+  - 既有开发部署回归（另列，不是归档安装证据）：`run_isolated_plugin_integration.py` PASS；`run_isolated_batch_integration.py --scenario suite` PASS（fixture／state restoration 均验证）；`run_isolated_configuration_integration.py --scenario all` PASS（19 场景，`STRM_CONFIG_EVIDENCE_DIR` 指向外置目录）。
+  - `python3 scripts/check_governance.py` PASS；`git diff --check` 无输出；本地 Markdown 链接／锚点检查 25 文件 162 链接 0 断链。
+- Decisions：只改扫描验收入口／工具测试与合成媒体服务的观测标记，未改产品源码。重叠以原生任务 `LastExecutionResult` 的 Completed 起止与后端实际开始／结束判定，不以排队或 POST 返回冒充，也不再用配置延时推算结束。停止提交／撤销按停止轮自身摘要（`reliable_success`／`revoked`）分类，避免把收尾后重跑提交误当作停止轮结果。合成媒体服务仅新增 `PROBE_MEDIA_REQUEST_FINISHED` 观测标记，现有路由／计数不变。
+- Remaining In-Slice Work：RO-2 真实十万原生库与分层成本（后续 4.3）、RO-4 实际 JellyfinProxy 联调（后续 4.4）、单独 Slice Final／Closure Packet 尚未完成。
+- Risks / Deviations：RO-3 已在固定 ZIP 安装候选的代表性多库／多版本夹具上取得；未覆盖真实十万库或完整生产扫描压力，也未使用实际代理。audio-only 实机、物理 Jellyfin 数据库保存故障注入与通用 FullRefresh 性能证明沿用已接受限制，未新增。扫描验收要求提供外置 `--evidence-dir`（缺省落到工作区外），不再把证据留在会被清理的实例工作区内。
+- Head SHA：`eac764d9b32a1b13f8ac963f8c14888fd50db4a3`。
 
 ## B Review Result
 

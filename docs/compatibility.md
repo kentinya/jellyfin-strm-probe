@@ -4,7 +4,7 @@
 
 当前固定组合上的 Slice 1／2／3 均已 PASS / CLOSED；Slice 4 RO-1 单版本安装包已在 Task 4.1 经 B 独立 PASS（审查快照 `0e7b26b381ed5f71781e75d317275afa51d791e9:TASK.md`），没有跨版本兼容声明。真实插件使用 Jellyfin Controller／Model `12.2.0`、`net10.0` 和 SDK `10.0.401`，隔离服务器为 Jellyfin `12.2.0`；镜像及媒体身份见 [环境交接](development-environment.md)。已接受的分层证据覆盖核心播放／SQLite／多源／共享协调、配置页、原生批量，以及固定 Linux x64 包的干净安装、升级替换、禁用／移除／重装与 MP4／MKV 原生 Web 播放。
 
-[Task 4.2](../TASK.md) 的扫描验收候选 `4837cb6d98ebbc60281ab3a66c888588a1120110` 已由 B 判为 FIX REQUIRED：有限变化发生在三方结束之后，逐源／选源和成功断言不足，停止／故障控制及原始证据未齐。候选输出的 PASS 不构成 RO-3 兼容验收，需在同 Task 修正；分项见 [测试矩阵](test-matrix.md)。真实十万库、实际 JellyfinProxy、Slice Final 和完整发布支持仍 NOT RUN；只用 HTTP 后端不宣称 OpenList 专有行为通过。
+[Task 4.2](../TASK.md) 的扫描验收候选 `4837cb6d98ebbc60281ab3a66c888588a1120110` 经 B 判 FIX REQUIRED（有限变化在三方结束之后、逐源／选源和成功断言不足、停止／故障控制及原始证据未齐）；Developer 已在原 Task 修正为候选 `eac764d9b32a1b13f8ac963f8c14888fd50db4a3`，在真实 Running 窗口内发出有限变化、要求 Completed 与完整摘要、逐源／显式选源对账、跨批停止与单项失败隔离，并把证据外置保存。该修正候选已交为 READY FOR B REVIEW，尚未签发 RO-3 兼容验收；分项见 [测试矩阵](test-matrix.md)。真实十万库、实际 JellyfinProxy、Slice Final 和完整发布支持仍 NOT RUN；只用 HTTP 后端不宣称 OpenList 专有行为通过。
 
 历史失败及已关闭 Slice 的决定保留，Slice 3 AF-1 关闭事实见 [关闭记录](progress.md#slice-3-closed)。播放沿用原生取消异常处理，不增加客户端取消关联或成功后的额外否决；只共享已实际开始的探测。Slice 3 已接受批量停止及收尾证据，不替代 Slice 4 最终 ZIP 的共同控制。
 
@@ -76,7 +76,7 @@ A 环境准备及 Task 1.1 原型后续：SDK、固定源码、镜像 digest、�
 | 地址／流持久化 | URL 改变后原生探测并保存，当次 PlaybackInfo 新地址，重启仍有效且有必要主流；保存失败明确 | PASS；当次／重启保存与失败保流重试已独立复验；内部数据库故障未注入 |
 | 探测权限／禁用 | allowMediaProbe=false 各分支不执行；禁用／旧 STRM／手动刷新原生对照 | PASS；真实 false 流入口、禁用、旧 STRM、手动 FullRefresh 已独立复验；公共 PlaybackInfo 不提供 false 参数 |
 
-Task 1.1 PASS；该原型的全部 Outcomes／Surfaces 与单独 Final 经 A 接受，Slice 1 PASS / CLOSED。后续 Slice 2 也已完成并关闭，历史失败按原事实保留；后续 Slice 3 也已关闭，当前 [Task 4.1](../TASK.md) 已实现并交为 READY FOR B REVIEW。T01～T28 及 B01～B12 分层结果见测试矩阵，外部 JellyfinProxy／OpenList、真实大库与完整扫描压力仍 NOT RUN；使用 Jellyfin 已有 FFmpeg／ffprobe。
+Task 1.1 PASS；该原型的全部 Outcomes／Surfaces 与单独 Final 经 A 接受，Slice 1 PASS / CLOSED。后续 Slice 2 也已完成并关闭，历史失败按原事实保留；后续 Slice 3 也已关闭，当前 [Task 4.1](../TASK.md) 的 RO-1 安装包已由 B 独立 PASS，[Task 4.2](../TASK.md) 的 RO-3 修正候选已交为 READY FOR B REVIEW。T01～T28 及 B01～B12 分层结果见测试矩阵，外部 JellyfinProxy／OpenList、真实大库与完整扫描压力仍 NOT RUN；使用 Jellyfin 已有 FFmpeg／ffprobe。
 
 ## 后续真实运行门槛
 
@@ -86,7 +86,7 @@ Slice 2 已验证 SQLite 指纹的真实重启／失败恢复、多源身份、�
 
 仓库内 `scripts/package_plugin.py` 从固定 Release 输出与已锁依赖生成 Linux x64 ZIP、清单与 SHA-256；`scripts/run_isolated_package_integration.py` 在专用隔离实例（独立 Compose project、端口与工作区）仅用归档完成安装验收。负载包含插件程序集、依赖清单、托管与 Linux x64 native SQLite 依赖、`meta.json` 与第三方许可，不含 Jellyfin 核心库、FFmpeg、其他平台 runtime、SDK、源码或凭据。
 
-已验证事实（Developer 候选，待 B 独立审查）：干净实例仅解包安装后插件 Active，进程加载负载摘要与归档一致；原生 SQLite 创建／读写／重启恢复；真实配置页五项保存与重启读回；原生任务唯一且默认无触发；MP4（H.264／AAC）与 MKV（H.264／AAC）在原生 Web 客户端实际播放（视频时间与解码画面推进）；首次已有主流信任零插件探测、未变复查零探测、同 SHA-1／Size 换 URL 后实际探测并持久化、重启后复用；从 Slice 3 接受构建 `7c64eb5dcad6e5f20fb7eb41819be2521f65484d` 替换保留配置与可信指纹并重检未完成变化；禁用／移除后原生播放、重装后重新检查；损坏／缺 native／GUID／ABI 不符／越界路径／符号链接归档在部署前被拒绝且不损伤有效安装。
+已验证事实（Task 4.1 已由 B 独立 PASS，审查快照 `0e7b26b381ed5f71781e75d317275afa51d791e9:TASK.md`）：干净实例仅解包安装后插件 Active，进程加载负载摘要与归档一致；原生 SQLite 创建／读写／重启恢复；真实配置页五项保存与重启读回；原生任务唯一且默认无触发；MP4（H.264／AAC）与 MKV（H.264／AAC）在原生 Web 客户端实际播放（视频时间与解码画面推进）；首次已有主流信任零插件探测、未变复查零探测、同 SHA-1／Size 换 URL 后实际探测并持久化、重启后复用；从 Slice 3 接受构建 `7c64eb5dcad6e5f20fb7eb41819be2521f65484d` 替换保留配置与可信指纹并重检未完成变化；禁用／移除后原生播放、重装后重新检查；损坏／缺 native／GUID／ABI 不符／越界路径／符号链接归档在部署前被拒绝且不损伤有效安装。
 
 本项是固定 Jellyfin `12.2.0`／Linux x64 的安装包验证，不是跨版本、跨平台或全格式兼容声明。实际 JellyfinProxy（RO-4）、真实十万库（RO-2）与完整扫描压力（RO-3）仍 NOT RUN。
 

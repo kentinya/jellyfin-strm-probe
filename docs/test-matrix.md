@@ -1,6 +1,6 @@
 # 测试矩阵
 
-下表保留完整产品矩阵；Slice 1／2／3 均已 A 最终审查 PASS / CLOSED。播放、原生批量和完整配置页已有分层证据；真实十万库／完整扫描压力、外部代理及发布仍 NOT RUN。当前接受实现 `7c64eb5dcad6e5f20fb7eb41819be2521f65484d`，范围与最终决定见 [Slice 3 关闭快照](progress.md#slice-3-closed)；[Slice 4](../SLICE.md) 已 ACTIVE，Task 4.1 的 RO-1 安装包已由 B 独立 PASS（快照 `0e7b26b381ed5f71781e75d317275afa51d791e9:TASK.md`），[Task 4.2](../TASK.md) 的 RO-3 扫描验收为 FIX REQUIRED，后续 B 依 [固定交付方案](slice-4-delivery-plan.md) 独立审查与继续规划；RO-2／RO-4 未实施或运行。下方历史状态不因新合同激活而升级。表格保留完整产品目标，不把模拟大库或代表性实机扩大为所有格式／分支／客户端通过。通常前提为受支持版本化 STRM、已有主流、历史指纹与允许探测；例外显式说明。
+下表保留完整产品矩阵；Slice 1／2／3 均已 A 最终审查 PASS / CLOSED。播放、原生批量和完整配置页已有分层证据；真实十万库／完整扫描压力、外部代理及发布仍 NOT RUN。当前接受实现 `7c64eb5dcad6e5f20fb7eb41819be2521f65484d`，范围与最终决定见 [Slice 3 关闭快照](progress.md#slice-3-closed)；[Slice 4](../SLICE.md) 已 ACTIVE，Task 4.1 的 RO-1 安装包已由 B 独立 PASS（快照 `0e7b26b381ed5f71781e75d317275afa51d791e9:TASK.md`），[Task 4.2](../TASK.md) 的 RO-3 扫描验收候选经 B 判 FIX REQUIRED 后已修正为 `eac764d9…` 并交为 READY FOR B REVIEW，后续 B 依 [固定交付方案](slice-4-delivery-plan.md) 独立审查与继续规划；RO-2／RO-4 未实施或运行。下方历史状态不因新合同激活而升级。表格保留完整产品目标，不把模拟大库或代表性实机扩大为所有格式／分支／客户端通过。通常前提为受支持版本化 STRM、已有主流、历史指纹与允许探测；例外显式说明。
 
 保留 T01～T28 身份以便追溯，但 T08／T22 按 V4.2 改为原生探测后新地址持久化，T02／T17～T19／T27 改为最小指纹合同。旧结果不自动继承。B01～B12 为新增批量／共享并发验收。
 
@@ -190,15 +190,15 @@ B 独立证据索引：`.git/validation-evidence/198f4ff2accd5bc9fcd87518a9684b9
 
 原生成功必须有失败对照，定时／停止／重启／并发要求真实证据。外部代理联调不可用时 BLOCKED／NOT RUN，不算 PASS。
 
-## Slice 4 验收分配（RO-1 B PASS，RO-3 FIX REQUIRED，RO-2／RO-4 NOT RUN）
+## Slice 4 验收分配（RO-1 B PASS，RO-3 修正候选待 B 审查，RO-2／RO-4 NOT RUN）
 
-本表分配已存在的产品缺口，不修改上方矩阵身份或历史状态。Slice 4 Base 为 `03169b07d110964562f7da31d2c3d7add82e5ff5`，Implementation Head 为 NOT SET；完整结果／边界见 [当前合同](../SLICE.md#slice-验收)。RO-1 已由 Task 4.1 经 B 独立 PASS；RO-3 的 Task 4.2 候选经 B 判 FIX REQUIRED，下方分别记录已接受事实与尚未接受的候选输出。
+本表分配已存在的产品缺口，不修改上方矩阵身份或历史状态。Slice 4 Base 为 `03169b07d110964562f7da31d2c3d7add82e5ff5`，Implementation Head 为 NOT SET；完整结果／边界见 [当前合同](../SLICE.md#slice-验收)。RO-1 已由 Task 4.1 经 B 独立 PASS；RO-3 的 Task 4.2 候选经 B 判 FIX REQUIRED，Developer 已在原 Task 修正为候选 `eac764d9…` 并交为 READY FOR B REVIEW；下方分别记录已接受事实、已修正项与尚未签发的 RO-3 验收。
 
 | Required Outcome | 必要证据与矩阵 | 当前状态 |
 |---|---|---|
 | RO-1 单版本安装与恢复 | 固定 Jellyfin／Linux x64 ZIP 及 SQLite 依赖／摘要，干净实例只从归档安装，Slice 3 安装替换保留配置／指纹，页面／原生任务／播放／重启、禁用／移除／重装；MP4／MKV、原生 Web 实际播放。X02／X06／X09、T19／T22／T24 的包安装证据另列。 | Task 4.1 B PASS；Slice Final 未运行（见下方分项） |
 | RO-2 真实十万原生库 | 至少 100000 受支持 STRM 的原生索引／查询，首次信任／未变零探测与小集合增量、范围／计数，ID O(N)／查询临时成本和对象／消费者上限、时间／内存／停止延迟／重跑；B03／B04／B12。模拟或代表性实机不替代。 | NOT RUN |
-| RO-3 完整扫描重叠 | 有限增删／移库／更新、独立刷新与批量／播放重叠，当前范围与稳定基线保护、下一轮收敛；最终候选的定时／双向共享／停止收尾／失败恢复及重启。B02／B05～B11、T18／T19／T21／T22／T28、X04／X08／X10。 | FIX REQUIRED（Task 4.2，BR-42-1..4）；有限变化与三方运行串行、断言／停止恢复及原始证据不完整；完整十万库扫描压力仍 NOT RUN |
+| RO-3 完整扫描重叠 | 有限增删／移库／更新、独立刷新与批量／播放重叠，当前范围与稳定基线保护、下一轮收敛；最终候选的定时／双向共享／停止收尾／失败恢复及重启。B02／B05～B11、T18／T19／T21／T22／T28、X04／X08／X10。 | 修正候选待 B 审查（Task 4.2，BR-42-1..4 已修正，尚未签发 RO-3 PASS）；完整十万库扫描压力仍 NOT RUN |
 | RO-4 实际代理播放链 | 固定 JellyfinProxy 及受控后端，原生直连对照、PlaybackInfo／MediaSourceId／302／实际内容读取；未变／同 SHA-1 换 URL／失败修复／多版本／重启，REQ-EXTERNAL-001、T08／T16／T22／T25。只用 HTTP 后端不证明 OpenList 专有行为。 | NOT RUN |
 
 RO-1 分项（Task 4.1 已由 B 独立 PASS，审查快照见上；不能代替本 Slice Final）：
@@ -214,18 +214,18 @@ RO-1 分项（Task 4.1 已由 B 独立 PASS，审查快照见上；不能代替�
 | 升级替换保留 | 从 `7c64eb5dcad6e5f20fb7eb41819be2521f65484d` 构建替换，配置与可信指纹保留、未完成变化重检 | PASS（实机） |
 | 禁用／移除／重装 | 禁用与移除后原生播放；重装后 Active 并重新检查 | PASS（实机） |
 
-RO-3 分项（Task 4.2 候选 `4837cb6d…`、归档 `58a0e22c…`；B 决定 FIX REQUIRED，完整修正要求见 TASK）：
+RO-3 分项（Task 4.2 修正候选 `eac764d9…`、归档 `62ae0669…`；BR-42-1..4 已修正，待 B 审查；原候选 `4837cb6d…`／`58a0e22c…` 的 B 决定保留在 TASK）：
 
-| 项 | 已审查事实与缺口 | 状态 |
+| 项 | 修正事实（待 B 审查） | 状态 |
 |---|---|---|
-| 三方窗口与有限变化 | 候选报告扫描／批量／播放交集；变化实际在三方结束后执行，新增／删除／移库在新轮候选获取前完成。探测结束为延时推算，缺原始时序 | FIX REQUIRED（BR-42-1／4） |
-| 逐源／成功／版本保护 | Failed 扫描可被接受；失败任务／缺失摘要仍能宣称收敛；B→C 未严格核对 A 保留；缺稳定预期集合、当前范围与必要主流逐源对账 | FIX REQUIRED（BR-42-2） |
-| 独立刷新／多版本 | 原生合并存在，但两个版本同 URL，任意地址匹配不足以证明正确选源；FullRefresh 204 未证明实际处理完成 | FIX REQUIRED（BR-42-2） |
-| 共同控制（ZIP 候选） | Developer 报告定时触发、双向共享各一次、混合峰值 2；需完整原始结果支撑验收 | 候选输出保留，未签发 RO-3 PASS |
-| 停止收尾／再运行 | 候选报告 2 提交／1 撤销；仅单批次，缺 Cancelling 期间进度／再次运行／后续批次准入及已加入工作验证 | FIX REQUIRED（BR-42-3） |
-| 恢复控制 | 候选报告原生委托与 SQLite 故障恢复；缺 ZIP 上单项失败隔离，禁用／故障未制造变化且仅计 delay 请求，不能排除误探测 | FIX REQUIRED（BR-42-3） |
-| 证据与恢复 | scan-all 仅最终摘要，无完整原始状态／时序／逐源清单，失败片段须在清理前外置保存 | FIX REQUIRED（BR-42-4） |
+| 三方窗口与有限变化 | 批量／播放探测实际开始并保持执行，原生扫描轮询到 Running 后才发出 B→C／内容／Size 变化，并要求操作时间落在原生扫描 Running 区间内；删除／移出目标必须属于捕获集合；变更后仍需 Completed 扫描 | 已修正（BR-42-1） |
+| 逐源／成功／版本保护 | 统一要求本轮 Completed 与完整起止，拒绝 Failed／Cancelled／超时／缺结果；摘要计数器缺失即硬失败；A 原样保留、B 拒绝、C 后续提交；从当前原生库生成 136 源稳定预期集合并逐源对账地址／主流／指纹 | 已修正（BR-42-2） |
+| 独立刷新／多版本 | 两个版本改为不同 URL 并保留同内容哈希／Size；显式 MediaSourceId 必须匹配请求源 Id 与地址；FullRefresh 观察原生实际处理后再读两源 | 已修正（BR-42-2） |
+| 共同控制（ZIP 候选） | 定时触发持久化且触发、双向共享各 1 次真实后端探测、混合峰值 `peak_running_probes 2` 且播放开始 `running 2` | 已修正，待 B 审查 |
+| 停止收尾／再运行 | 跨 128 批次夹具：Cancelling 期间进度 <100%、已开始 2 提交／未开始 4 撤销、收尾期无新轮／新探测、再运行被拒、下一轮收敛 | 已修正（BR-42-3） |
+| 恢复控制 | ZIP 上单项媒体失败保留旧基线且健康源仍成功；禁用／故障前先制造应探测变化，按插件编码器与所有后端路由归因 | 已修正（BR-42-3） |
+| 证据与恢复 | 外置 `--evidence-dir` 增量记录 UTC／单调时序、容器／任务身份、变化操作、后端与插件日志、保存／指纹快照、逐源清单与 INDEX；收尾失败总体 FAIL | 已修正（BR-42-4） |
 
-B 独立 Python 全套 141/141 通过；4 项控制复现验收误判，不代表产品失败或真实 Jellyfin PASS。因已有阻塞，本轮 B 实机重跑 NOT RUN。索引 `.git/validation-evidence/4837cb6d98ebbc60281ab3a66c888588a1120110/b-review-20261017-04/INDEX.md` 仅本机可读。
+Developer 修正工具回归 37 项与全部 T4 门槛在候选 `eac764d9…` 上 PASS，但这是 Developer 自报结果；B 尚未审查该修正候选，RO-3 未签发 PASS。原候选 B 独立 Python 141/141 与 4 项控制复现记录保留在 `.git/validation-evidence/4837cb6d98ebbc60281ab3a66c888588a1120110/b-review-20261017-04/INDEX.md`（仅本机可读）。修正候选索引：`.git/validation-evidence/eac764d9b32a1b13f8ac963f8c14888fd50db4a3/run-20261017T143741Z-92b89989/INDEX.md`。
 
 全部必要门槛在新候选的独立 Slice Final 执行；外部依赖不足如实 BLOCKED，不以扩大已有 PASS 或删门槛收尾。T05／T09～T11 逐输入独立实机、audio-only 实机、物理数据库保存故障、完整镜像构建溯源和通用性能证明沿用已接受限制；其他格式／客户端／平台不作普遍支持声明。
