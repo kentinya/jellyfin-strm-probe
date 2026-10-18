@@ -389,7 +389,11 @@ def reconcile_rows(expected: dict[tuple[str, str], dict], actual: dict[tuple[str
 
 def paged_native_items(auth: str, extra: dict[str, str],
                        fields: str = "MediaSources,Path,MediaStreams,DateModified", page: int = 500) -> list[dict]:
-    """Read every native item through the real paged query; a fixed 5000 limit cannot hold 3000 candidates."""
+    """Read every native item through the real paged query; a fixed 5000 limit cannot hold 3000 candidates.
+
+    A concurrent login with the same device identity can invalidate an earlier token, so a 401 refreshes the
+    session once instead of failing a long run on a stale token.
+    """
     from urllib.parse import urlencode
 
     items: list[dict] = []
@@ -399,6 +403,10 @@ def paged_native_items(auth: str, extra: dict[str, str],
         params.update(extra)
         status, payload = pe.request_json("GET", "/Items?" + urlencode(params),
                                           headers={"Authorization": auth}, timeout=120)
+        if status == 401:
+            auth = pkg.api_auth()
+            status, payload = pe.request_json("GET", "/Items?" + urlencode(params),
+                                              headers={"Authorization": auth}, timeout=120)
         require(status == 200, "The paged native item query failed.")
         batch = payload.get("Items", [])
         items.extend(batch)
@@ -980,7 +988,7 @@ def run_scenario(package: Path, count: int, evidence_dir: Path, timeout: int, ke
         post_stop_reconciliation = reconcile_rows(post_stop_expected, post_stop_rows)
         unchanged_a = run_round(auth, container, recorder, "post-stop-unchanged-a", selected["count"], 0, 0,
                                 run_timeout, selected["ids"])
-        unchanged_b = run_round(scan.api_auth(), container, recorder, "post-stop-unchanged-b", selected["count"], 0, 0,
+        unchanged_b = run_round(auth, container, recorder, "post-stop-unchanged-b", selected["count"], 0, 0,
                                 run_timeout, selected["ids"])
 
         # Restart state is checked before any PlaybackInfo call can construct a missing first-trust baseline.
