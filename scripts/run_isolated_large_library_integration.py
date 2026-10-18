@@ -36,6 +36,12 @@ ROOT = pe.ROOT
 TASK_KEY = "StrmProbeOptimizerBatchCheck"
 MAX_TASK_TIMEOUT = 6 * 60 * 60
 POLL_SECONDS = 0.5
+# A second, genuinely distinct MP4 (longer duration) generated with the pinned Jellyfin FFmpeg. It is the
+# "synthetic media B" the controlled same-URL routes actually start serving after a change. It deliberately
+# keeps the MP4 container of media A: a same-URL change that also switches container makes Jellyfin persist a
+# primary stream whose identity does not match the encoder result, which is outside this Task's controlled
+# content/Size change contract.
+MEDIA_B_NAME = "large-media-b.mp4"
 REQUIRED_SUMMARY_FIELDS = (
     "candidates", "raw_candidates", "duplicates", "checked", "skipped", "first_trust",
     "need_probe", "reliable_success", "probe_incomplete", "check_stage_incomplete",
@@ -417,6 +423,26 @@ def wait_items_by_name(auth: str, names: list[str], timeout: int = 900) -> dict[
     raise RuntimeError("The package instance did not index every fixture item before the timeout.")
 
 
+def ensure_distinct_media_b() -> tuple[str, int]:
+    """Generate the distinct same-container media B with the pinned Jellyfin FFmpeg if it is absent."""
+    pe.workspace()
+    target = pe.WORK / "media" / MEDIA_B_NAME
+    if not target.is_file():
+        images = pe.load_image_lock()
+        command = [
+            *pe.DOCKER, "run", "--rm", "--entrypoint", "/usr/lib/jellyfin-ffmpeg/ffmpeg",
+            "-v", f"{pe.WORK / 'media'}:/out", images["server"],
+            "-y", "-f", "lavfi", "-i", "testsrc=duration=5:size=160x90:rate=10",
+            "-f", "lavfi", "-i", "sine=frequency=660:duration=5",
+            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", f"/out/{MEDIA_B_NAME}",
+        ]
+        result = pe.run(*command, timeout=180)
+        require(result.returncode == 0,
+                f"Could not generate the distinct media B fixture: {result.stderr.strip()[-300:]}")
+    data = target.read_bytes()
+    return hashlib.sha1(data).hexdigest(), len(data)
+
+
 def build_fixture(count: int, run_id: str) -> dict[str, object]:
     sha1, size = pe.media_sha1(pe.MEDIA_MP4)
     url = "http://media:8080/" + pe.MEDIA_MP4
@@ -710,8 +736,8 @@ def seed_controlled_contents(fixture: dict[str, object], items: dict[str, dict],
     url_group = list(fixture["url_group"])
     content_group = list(fixture["content_group"])
     size_group = list(fixture["size_group"])
-    media_b = pe.MEDIA_MKV
-    sha_b, size_b = pe.media_sha1(media_b)
+    media_b = MEDIA_B_NAME
+    sha_b, size_b = ensure_distinct_media_b()
     for name in url_group:
         url = create_source_route("u-change-" + uuid.uuid4().hex[:8], pe.MEDIA_MP4)
         fixture["urls"][name] = url

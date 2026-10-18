@@ -129,7 +129,7 @@ class LargeLibraryControlTests(unittest.TestCase):
             (workspace / "media").mkdir()
             (workspace / "strm").mkdir()
             (workspace / "media" / large.pe.MEDIA_MP4).write_bytes(b"media-a")
-            (workspace / "media" / large.pe.MEDIA_MKV).write_bytes(b"media-bb")
+            (workspace / "media" / large.MEDIA_B_NAME).write_bytes(b"media-bb")
             with patch.object(large.pe, "WORK", workspace):
                 fixture = large.build_fixture(40, "run")
 
