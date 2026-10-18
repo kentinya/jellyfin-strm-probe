@@ -26,7 +26,7 @@ Implementation Head: NOT SET
 - 复用 `scripts/package_environment.py` 的新工作区、当前进程 token 归属、镜像锁、Compose、解包安装／摘要和清理；复用 `run_isolated_scan_integration.py` 的完整日期／运行关联、原生任务 API、只读源／五字段快照和增量 EvidenceRecorder，以及 `run_isolated_batch_integration.py` 的成本字段解析。只复用无开发部署副作用的函数，不调用旧入口 main 来准备包实例。
 - 重要准备事实：现有 `native_probe_and_save` 明确指出原生扫描不为 STRM 探测主流，须在插件禁用时通过原生 PlaybackInfo 等既有原生入口准备。不得对十万文件逐项调用会再次全库扫描的 `scan_and_wait`／`native_probe_and_save`；先扫描完成，再有界逐源准备并核验保存。
 - 已阅读 4.2 B 重启补证索引及原始审计：三个源完整行／地址／主流在重启前、重启后播放前和播放后三阶段相等且零额外探测。正式扫描工具的重启漏检为已知 P2，不在本 Task 扩建该工具；新的大库重启检查使用独立重启前预期，Slice Final 仍须补齐最终候选的同等证明。
-- B 规划只读证据：`.git/validation-evidence/a06a80fac90a86085f25116568aa24b54847c562/b-plan-43-20261018T023401Z/`，仅本机可读。资源为 4 核、5924 MiB 总内存、1325 MiB MemAvailable、无 swap、约 58 GiB 空闲盘。它是一次观测，不是可用性承诺；新真实大库结果全部 NOT RUN。
+- 2026-10-18 用户授权迁移开发服务器并取消旧主机依赖。B 在同一 Task 内修订执行环境计划：保留 ID、Base、Goal、Scope、AC 和 High／T4；旧规划／资源观测保留在 `b92bea58a2552997bd750f059fc7d6c6cca23b93:TASK.md`。新主机重新准备环境和记录预算，不继承旧资源 BLOCKED，不要求读取旧本机证据才能开工；新真实大库结果仍全部 NOT RUN。
 
 ## 实施范围与顺序
 
@@ -40,33 +40,20 @@ Implementation Head: NOT SET
 python3 scripts/run_isolated_large_library_integration.py --package artifacts/releases/Jellyfin.Plugin.StrmProbeOptimizer_linux-x64.zip --count 1000 --scenario all --evidence-dir .git/validation-evidence/<source-sha>/<run-id>/large-1000
 ```
 
-`--count` 仅接受 1000、10000、100000；`--scenario all` 完成本节全部轮次，不用小规模默认值冒充最终验收。三个规模按顺序串行，各自使用新的本轮所有工作区和干净实例，避免前一级指纹污染首次信任；外置证据始终保留。允许开发反馈重复 1000 级，不为每个规模建立新环境框架。端口复用现有本机 18097，project 复用包实例；已有非空工作区／占用端口／活跃非本轮容器拒绝，不接管、不停止它们。
+`--count` 仅接受 1000、10000、100000；`--scenario all` 完成本节全部轮次，不用小规模默认值冒充最终验收。三个规模按顺序串行，各自使用新的本轮所有工作区和干净实例，避免前一级指纹污染首次信任；外置证据始终保留。允许开发反馈重复 1000 级，不为每个规模建立新环境框架。端口采用包验收默认的本机 18097（可用现有 `JF_PROBE_PACKAGE_PORT` 在进程启动前选择空闲端口），project 由当前检出路径派生；已有非空工作区／占用端口／活跃非本轮容器拒绝，不接管、不停止它们。
 
 只消费指定 ZIP 并验证加载负载摘要；服务器不挂源码／SDK／NuGet，不构建或补 DLL。环境写入和清理继续核验当前进程确实取得的 token、目录及容器挂载归属。场景串行，记录并暂时清除会干扰运行的原生触发器，结束恢复核验。
 
 ### 2．先落实资源、超时和观测，再建库
 
-以下是本轮测试预算，不是最低支持配置或性能 SLA。仅对本轮容器添加可选资源限制，既有包／扫描入口默认行为保持；复用 Compose writer，不能改宿主资源或其他服务。
+按新服务器实际资源制定运行预算，不再使用旧服务器的 CPU／内存限额、2432 MiB 准入值、磁盘／inode 数值或整轮超时表，也不继承旧主机内存不足的 BLOCKED。保留以下可执行的准备顺序：
 
-| 项目 | 固定计划 |
-|---|---|
-| Jellyfin 容器 | 最多 2 CPU、1536 MiB 内存、memory+swap 同为 1536 MiB，不使用 swap |
-| 合成媒体容器 | 最多 0.5 CPU、128 MiB，memory+swap 同为 128 MiB |
-| 编排／证据进程 | 最多 256 MiB 的工作预算；流式写清单与日志，不积累十万份完整 API 响应／Future；实际超预算停止放大并报告 |
-| 准入 | 每级启动前 MemAvailable 至少 2432 MiB（前述 1920 MiB 加 512 MiB 余量）、空闲盘至少 20 GiB、空闲 inode 至少 500000，镜像／端口／归属可核验；本次资源观测未达内存预算，真实实机阶段当前 BLOCKED，工具实现与本地工具测试可先做 |
-| 运行监测 | 每 1 秒采样本轮服务 cgroup 内存／可用 peak／CPU／进程数、Jellyfin RSS、宿主 MemAvailable／磁盘；每 0.5 秒轮询任务状态／进度。准备原生调用最多 2 个同时执行；API 单次超时 120 秒 |
-| 资源中止 | 宿主 MemAvailable 连续 5 个样本低于 512 MiB、盘不足 10 GiB、驱动超预算、容器 OOM／重启／服务失联时停止新增准备或批量准入，立即留证并请求原生停止，按下述收尾；OOM 或结果不完整不能 PASS |
-| 查询与停止 | 单次候选获取或对象同步查询观察上限 300 秒；停止请求至原生终态最多 600 秒。无 token 查询等待真实返回并测延迟；不以杀进程冒充取消 |
-| 收尾 | 失败时保留已发生事件和清理前日志；总收尾预算 600 秒。逾期可终止本轮确认归属的隔离容器以保护宿主，但记录 FAIL／中断，不算正常停止；保留本轮工作区及失败身份，不删除唯一诊断资料 |
-
-| 每级阶段超时（秒） | 1000 | 10000 | 100000 |
-|---|---:|---:|---:|
-| 创建夹具＋一次原生完整扫描／身份对账 | 1800 | 7200 | 21600 |
-| 禁用插件时原生主流准备＋全源核验 | 3600 | 14400 | 86400 |
-| 每轮完整批量（首次／未变／增量／重跑） | 1800 | 7200 | 28800 |
-| 每次全源只读对账 | 1800 | 7200 | 28800 |
-
-启动健康检查最多 300 秒；每级总时长上限分别 4／16／72 小时（含所有轮次），到限留证并结束，不后台遗留运行。上述预算含准备和验证的真实成本，不能沿用旧脚本 MAX_WAIT=300 给整轮大库误判，也不能失败后静默增时。资源未满足时只记录 BLOCKED 并保留已完成工作，不自动清缓存、加 swap、停止服务或缩小十万门槛。预算调整交 B 显式记录原因与旧失败，不能由 Developer 自行提高；数量或安全义务改变交 A。
+1. 在当前检出根目录记录 OS／架构、SDK、Docker／Compose、Node／浏览器、固定镜像 digest、CPU／内存／swap／空闲磁盘／inode及空闲端口；以 doctor 和实际依赖检查判断就绪，不依赖旧主机的已有缓存／账户／容器。
+2. 在任何实机运行前，于已有证据索引记录本轮 Jellyfin／媒体服务的 CPU 与内存限制、编排进程预算、宿主余量、磁盘／inode 余量、资源中止条件，以及启动、单次 API／同步查询、建库、原生主流准备、每轮批量、全源对账、停止收尾、每级总时长上限。所有数值与依据使用新主机资源，不得缺省为无限等待；不新增环境审批或治理对象。
+3. 先运行 1000 级，依据其实际准备／执行成本，在 10000 和十万级启动前分别确认并固定预算。首次设定和换机调整可在已有授权内进行，无须再次申请 B 批准；改变参数时保留前一预算和原因。失败后的调整保留原始失败和重跑身份，交 B 审查，不改变样本数量、业务规则或验收含义。
+4. 使用本轮容器资源限制时只调整本轮 Compose，复用 writer 的最小可选参数，既有入口默认行为保持；不改宿主配置或其他服务。准备原生调用仍最多 2 个同时执行；每 1 秒采样本轮服务 cgroup 内存／可用 peak／CPU／进程数、Jellyfin RSS、宿主 MemAvailable／磁盘，每 0.5 秒轮询任务状态／进度。
+5. 按运行前固定的资源中止条件和超时工作：停止新增准备／批量准入，立即留证，请求原生停止，等待同步查询真实返回及已开始探测正常收尾。不以杀进程冒充取消。确需终止本轮确认归属的隔离容器时记录 FAIL／中断，保留清理前资料和工作区；不后台遗留运行，不删除唯一诊断证据。
+6. 新环境实际缺依赖、超预算、超时、OOM 或结算不完整时如实 BLOCKED／FAIL，不能通过缩小十万数量、跳过主流准备、隐藏首败或放松断言制造 PASS。环境适配不移动 Task／Slice Base；合同数量或安全义务改变仍交 A。
 
 ### 3．原生准备与逐项独立清单
 
@@ -140,7 +127,7 @@ Python 文件待本 Task 新增，必须发现非零用例。控制要驱动实�
 
 ### 最终检查点门槛
 
-从 `/opt/jf-strm-probe`、SDK 10.0.401、干净已提交实现候选执行；下方 `<source-sha>`／`<run-id>` 须先替换为完整实际 SHA／唯一 ID，不能照抄成 shell 重定向。新增大库命令当前待实现／NOT RUN，其他入口已存在。所有修改同一实例／配置／鉴权的实机串行；大库运行期间不同时构建或运行其他实机套件。
+从当前检出的仓库根目录、使用 SDK 10.0.401、在干净已提交实现候选上执行；下方 `<source-sha>`／`<run-id>` 须先替换为完整实际 SHA／唯一 ID，不能照抄成 shell 重定向。新增大库命令当前待实现／NOT RUN，其他入口已存在。所有修改同一实例／配置／鉴权的实机串行；大库运行期间不同时构建或运行其他实机套件。
 
 ```bash
 bash scripts/dotnet-local restore Jellyfin.Plugin.StrmProbeOptimizer.sln --locked-mode
@@ -173,9 +160,9 @@ B PASS 后重新核对全部 RO／Surfaces：RO-1／安装恢复和 RO-3／扫�
 
 ### 证据与重跑规则
 
-每个候选／运行索引保留在 `.git/validation-evidence/<完整源码SHA>/<唯一run-id>/` 或稳定 CI，写明仅本机可读。包含完整源码／审查 SHA、准确工作区身份、SDK／锁／镜像／配置／夹具／包／部署摘要、资源限制与宿主样本、准确命令／cwd／退出码／计数／耗时、查询／批次／实际开始保存／五字段／地址主流／进度／终态／延迟原始记录。清单和响应流式、脱敏保存，不留完整 URL、token、Cookie、凭据或私有路径；证据目录在实例之外，归档不得混入状态库或测试资料。
+每个候选／运行索引保留在 `.git/validation-evidence/<完整源码SHA>/<唯一run-id>/` 或稳定 CI，写明仅本机可读。包含完整源码／审查 SHA、准确工作区身份、SDK／锁／镜像／配置／夹具／包／部署摘要、新主机资源限制／运行前预算与宿主样本、准确命令／cwd／退出码／计数／耗时、查询／批次／实际开始保存／五字段／地址主流／进度／终态／延迟原始记录。清单和响应流式、脱敏保存，不留完整 URL、token、Cookie、凭据或私有路径；证据目录在实例之外，归档不得混入状态库或测试资料。
 
-保留首次失败、每次重跑、缺失与不可用；资源／超时／阶段未命中必须如实记录。准备、执行、对账和清理各自结论独立，任何必要阶段未完成不能总 PASS。测试／工具／配置／夹具／依赖或可执行输入改变时相关证据失效，最终候选重走完整 T4；纯报告后继显式比较输入后才复用并重跑文档消费检查。预算改变由 B 记录，不移动 ID／Base／Goal 或弱化 AC。
+保留首次失败、每次重跑、缺失与不可用；资源／超时／阶段未命中必须如实记录。准备、执行、对账和清理各自结论独立，任何必要阶段未完成不能总 PASS。测试／工具／配置／夹具／依赖或可执行输入改变时相关证据失效，最终候选重走完整 T4；纯报告后继显式比较输入后才复用并重跑文档消费检查。环境预算及调整由实施者留证、B 审查，不移动 ID／Base／Goal 或弱化 AC。旧服务器的忽略目录不随 Git clone 迁移；无法访问历史原始运行时按开发流程重跑拟复用门槛，不将历史目录存在作为启动本 Task 的条件。
 
 ## 非目标
 
@@ -185,10 +172,10 @@ RO-4 的实际 JellyfinProxy 联调（后续 4.4）、单独 Slice Final／Closu
 
 - Changed Files：NOT SET。
 - Implemented：NOT SET。
-- Tests and Results：NOT RUN；本 Task 新入口尚未实施，真实实机按规划资源观测当前 BLOCKED，开工重新核对。
+- Tests and Results：NOT RUN；本 Task 新入口尚未实施。新服务器环境待实测，不沿用旧主机资源阻塞结论。
 - Decisions：NOT SET。
 - Remaining In-Slice Work：RO-2 本 Task；RO-4 后续 4.4；单独 Slice Final、事实协调和 Closure Packet。
-- Risks / Deviations：NOT SET；预算或接口变更须 B 显式登记。
+- Risks / Deviations：服务器迁移已按用户授权修订；新主机预算由实施者在运行前登记。接口或验收边界变化返回 B。
 - Head SHA：NOT SET。
 
 可复用经验只提供少量候选供 Slice 收尾，不记录开发流水账，不作为 Task PASS 门槛。
@@ -199,7 +186,7 @@ RO-4 的实际 JellyfinProxy 联调（后续 4.4）、单独 Slice Final／Closu
 Reviewed: NOT SET
 Decision: PENDING
 Slice Required Outcomes all satisfied: NO — RO-1/RO-3 B PASS; RO-2/RO-4 NOT RUN
-Next: Developer implements Task 4.3 within scope; real-instance runs require the recorded resource preconditions
+Next: Developer prepares the new host and implements Task 4.3; record host-specific budgets before real-instance runs
 ```
 
-本轮 B 仅规划并提交文档，不实施插件或新工具、不启动真实建库。Task 4.2 已 PASS，无需在新 Task 重开其修正；当前未获 4.3 产品证据，不签发 PASS。
+本轮按用户授权取消旧服务器执行前提并交接 GitHub；不实施插件或新工具、不启动真实建库。Task 4.2 已 PASS，无需在新 Task 重开其修正；当前未获 4.3 产品证据，不签发 PASS。
