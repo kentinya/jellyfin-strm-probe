@@ -5,7 +5,7 @@
 ```text
 Task ID: 4.2
 Parent Slice: 4
-Status: READY FOR B REVIEW
+Status: FIX REQUIRED
 Task Base: 0e7b26b381ed5f71781e75d317275afa51d791e9
 Contract Checkpoint: ae265d0dba02aa1c5599871602d4350072b7155f
 Difficulty: High
@@ -200,11 +200,11 @@ RO-2 的十万原生候选／成本验收（后续 4.3）、RO-4 的真实代理
 ## B Review Result
 
 ```text
-Reviewed: 0e7b26b381ed5f71781e75d317275afa51d791e9..eac764d9b32a1b13f8ac963f8c14888fd50db4a3
-Report Checkpoint: 9908771ec572a32b6c21820773e6d19bcff4d64a
+Reviewed: 0e7b26b381ed5f71781e75d317275afa51d791e9..86946cc4ef5c0648b71aafc00aa666f2a2bb20c5
+Report Checkpoint: 03f62bc8fafcd3e3b50bf4a21e35c12135f7eaa1
 Decision: FIX REQUIRED
 Slice Required Outcomes all satisfied: NO — RO-1 B PASS; RO-3 FIX REQUIRED; RO-2/RO-4 NOT RUN
-Next: Developer completes the remaining BR-42-1..BR-42-4 corrections in Task 4.2
+Next: Developer completes BR-42-2 restart verification in Task 4.2; see the 2026-10-18 B review below
 ```
 
 ### 本轮独立复审与证据（2026-10-17）
@@ -272,7 +272,7 @@ Required Outcomes／Surfaces 重核：RO-1 为 Task 4.1 B PASS，安装包 Surfa
 
 可复用经验候选供 Slice 收尾：原生地址与历史地址相互一致仍可能同时陈旧 → 以当前 Manifest 和当前项目／源键作为独立预期，并用陈旧双方一致的反例验证拒绝能力 → 适用于指纹／多源持久化验收。本轮不改角色经验文件。
 
-NEXT ACTION: DEVELOPER COMPLETES TASK 4.2 CORRECTIONS (BR-42-1..BR-42-4)
+上一轮后续动作已由下方 2026-10-18 B 复审替代；以下 Developer 修正报告保留其交接时的事实与状态。
 
 ### Developer 修正报告（2026-10-18，BR-42-1～4）
 
@@ -289,3 +289,44 @@ NEXT ACTION: DEVELOPER COMPLETES TASK 4.2 CORRECTIONS (BR-42-1..BR-42-4)
 - Developer 决定：`READY FOR B REVIEW`。这是交接状态，不是 Developer 对 BR、RO 或 Slice 的 PASS 裁决；请 B 独立审查 Base..Implementation Head 和上述本机原始证据。
 
 Implementation Head: `86946cc4ef5c0648b71aafc00aa666f2a2bb20c5`
+
+### B 复审（2026-10-18）— BR-42-2 重启验收仍 FIX REQUIRED
+
+本节是当前修正依据，替代上方旧轮次的剩余工作清单。Task ID、Base、Goal、Scope、Contract Checkpoint、High／T4 和最终门槛保持不变；不需要修改合同或交 A 重定范围。未签发本 Task PASS，不规划 4.3。
+
+B 已审查完整 Base..Implementation Head、上次拒绝后的追加差异与报告检查点。起始工作区干净，治理 PASS；`86946cc..03f62bc` 仅有 `TASK.md` 报告变化。本 Task 全部可执行变化包括扫描入口／工具测试、合成媒体服务观测标记，以及 `StrmPlaybackOptimizer` 中批量加入已开始探测的诊断日志；该日志不改变执行／提交边界。未发现已实证的产品行为缺陷。
+
+B 证据索引：`.git/validation-evidence/86946cc4ef5c0648b71aafc00aa666f2a2bb20c5/b-review-20261018T020330Z/INDEX.md`（仅本机可读）。独立 Python 全套 **196/196 PASS**；`restart_controls.py` 的两项独立反例均复现当前验收误放行，见 `restart-controls.log`：清空重启后 SHA-1／Size 仍被接受；驱动实际 `convergence` 时，缺少版本 B 且没有核对批量源重启后基线仍返回成功。反例复现成功不表示产品故障已实证，也不算重启验收 PASS。
+
+完整实机复跑结果和证据复用清单见本节末尾。B 运行使用当前最终 ZIP，SHA-256 为 `434f930d6ad8282c1d68d47c7fc4456d52a025ae05e273db7b2f21551071ccaf`；消费包与 Developer 最终候选相同，没有重建包或开发部署覆盖。审查期间仅修改本文件，未改变可执行输入。
+
+#### 已补齐的部分
+
+- BR-42-1：当前候选 item ID／源映射、Guid 排序和 128 边界明确；首批持有探测，删除／移出目标来自未读取后批。B 独立复跑观察到 136 候选、两个目标安全结算、仅一个持有源成功探测，新增／移入下一轮发现。
+- BR-42-2 的重启前部分：当前 Manifest 与当前项目／源键逐项五字段对账、完整 A 行保留、C／内容／Size 的本轮成功关联、严格唯一选源和必要主流、FullRefresh 本次实际处理起止均已补齐。B 独立复跑通过这些控制；不要求重做已完成部分。
+- BR-42-3／BR-42-4：独立实机已通过停止轮重跑前完整快照、已加入源跨停止收尾、真实修复失败媒体、禁用持久化读回与 SQLite 恢复后待处理源提交；增量任务轮询／源快照／重建及清理前原始日志可读，异常留证／收尾失败控制通过。停止轮 130 候选，仅一批对象读取，2 个已开始／已加入成功源在重跑前提交，另 2 个受控变化源保留完整旧行；原始日志对账确认已提交源未在收敛轮重复探测。上述部分不再列为剩余阻塞。
+
+#### 唯一剩余 P1：完成重启前后独立预期的逐源比对
+
+定位：`scripts/run_isolated_scan_integration.py:173`、`:196`、`:2652`。`assert_committed_address_survives` 用刚读到的重启后行自身的 `sha1`／`file_size` 构造预期；`convergence` 重启后先调用批量源 PlaybackInfo，只比较 URL，随后只检查多版本 A。没有重启后的批量源完整行和多版本 B 核对。Developer 最终原始事件中，重启到 `convergence` 成功之间只有容器身份及结论，没有重启后逐源状态快照，无法从原始证据补证该义务。上轮 BR-42-2 第 4 项、Task AC-5 和 Slice AC-5 的重启一致性尚未闭合。
+
+按以下简单顺序在同一 Task 修正：
+
+1. **保存独立预期。** 在稳定扫描、稳定批量与未变复查结束、所有工作空闲后，复用 `reconcile_expected_sources`／`current_source_state` 的当前身份和 Manifest 映射。至少为 URL B→C 的批量源及合并项目的 A、B 两个源保存当前 `(item_id, source_key)`、完整五字段行、Manifest 身份、原生地址摘要和必要主流。预期只从这些重启前状态及当前夹具生成，不从重启后实际行取 SHA-1／Size 作为预期。可复用已返回的对账清单，不增加持久化运行状态或新的产品服务。
+2. **先只读检查，再请求播放。** 重启并重新鉴权后，在任何 PlaybackInfo／批量／手动刷新可能补建指纹之前，读取上述三个目标的当前原生源与确切指纹。逐源核对完整五字段、地址和必要主流，并保存原始脱敏快照。没有扫描／文件变化时身份和完整行应保持；如实际观察到原生身份变化，保留前后映射的独立原生依据并明确验证新当前键，不能按相同 URL 任选历史行或默认容许重建。
+3. **覆盖两个版本及返回结果。** 只读验证通过后，为批量源和 A、B 分别请求 PlaybackInfo；多版本显式传各自 MediaSourceId，复用严格唯一选源／地址／主流断言。请求后再次核对指纹与原生保存状态，记录本次容器启动后的实际插件探测事件；已接受且未变化的三个源不能靠额外探测、首次信任补建或丢失另一个版本掩盖重启问题。不能只检查 A，也不能用一个响应中存在任意匹配 URL 代替选源验证。
+4. **把反例接入实际流程回归。** 在 `tests/test_isolated_scan_integration.py` 驱动实际 `convergence`／其共同编排，分别模拟重启后 SHA-1 丢失、Size 回退、完整行缺失、B 缺失／旧地址／缺主流，以及首次播放会修复丢失基线。每项必须在放行前 FAIL；另保留三个源完整一致的成功控制。避免只给纯校验函数传自建正确预期，或 mock 掉要验证的重启比对步骤。
+5. **保留可复核原始证据。** 重启前、重启后播放前、播放后均记录 UTC、容器启动身份、当前 item／source、Manifest 摘要、原生源／主流和确切五字段行；把三个源的期望与实际逐项关联。异常时仍立即保留已发生的观测及清理前日志。修复现有入口和 recorder 即可，不建立新环境框架。
+6. **按现有 T4 门槛重新交接。** 先运行上述反例与扫描工具测试，再跑小型 `--scenario overlap` 确认重启路径；随后对新的干净实现检查点执行上方完整最终门槛，重新打包并用同一 ZIP 运行 package `all`、scan `all`，三个既有开发部署回归另列。新报告逐项回应本节，提供完整实现 SHA 和原始索引；工具／测试改变后不得沿用旧最终运行作为新候选门槛。
+
+#### 本轮结果与 Slice 重核
+
+独立实机 `python3 scripts/run_isolated_scan_integration.py --package artifacts/releases/Jellyfin.Plugin.StrmProbeOptimizer_linux-x64.zip --scenario all --evidence-dir .git/validation-evidence/86946cc4ef5c0648b71aafc00aa666f2a2bb20c5/b-review-20261018T020330Z/scan-all` 脚本结果 **PASS**，退出 0，873.194 秒，overlap／controls／stop／recovery 均完成。扫描 `2026-10-18T02:07:06.716525Z–02:07:09.097310Z` 与批量／播放实际探测相交，窗口内变化、完整 A 行保护、当前键收敛和本次 FullRefresh 均通过；定时、双向共享、并发峰值 2、停止提交／再运行、真实媒体修复、SQLite 故障失败且零探测／恢复提交均复现。触发器恢复 verified，实例对账 CLEAN，清理 CLEANED，1294 条增量事件、52 个原始文件留存。**此为脚本实际输出，不消除独立反例证明的重启漏检，不能据此签发 Task／RO-3 PASS。** 精确 cwd／PATH／参数／源码身份见 `scan-command.json` 和索引。
+
+明确复用 Developer `final-20261018-08` 中匹配源码及同一 ZIP 的 locked restore／Release build（0 warning／error）、C# 202/202、format、重新打包、package `all`（clean／upgrade／recovery／invalid）及三个开发部署回归的原始日志；这些门槛本轮没有独立重跑。B 已核对归档摘要、部署记录、原始退出／计数、报告后继输入差异与本轮实际负载；当前可执行输入仍与实现检查点一致，只有 `TASK.md` 审查文档变化。独立 Python 196/196 覆盖 74 项扫描工具控制；治理 PASS、差异检查 PASS、本地 Markdown 25 文件／163 链接／0 断链。旧首败及重跑继续保留，不将它们改记 PASS。
+
+RO-1 保持 Task 4.1 B PASS；RO-3 因上述重启验收缺口仍 FIX REQUIRED；RO-2 十万原生库／分层成本、RO-4 实际代理及对应 Surfaces 仍 NOT RUN。安装包、原生查询／扫描、当前范围、多源持久化、停止／恢复和证据 Surfaces 已逐项重核；重启 Surface 尚未满足完整证明，其他两个 RO 仍有必要工作，因此不进入 Slice Final／Closure Packet，不代替 A 作最终审查或关闭。
+
+供 Slice 收尾的可复用经验候选：播放入口可能补建或修复状态 → 重启后先做只读快照并对比重启前独立预期，再验证播放和探测计数 → 适用于持久化／多源恢复验收。本轮不改角色经验文件。
+
+NEXT ACTION: DEVELOPER COMPLETES BR-42-2 RESTART VERIFICATION IN TASK 4.2
