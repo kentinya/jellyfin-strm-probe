@@ -1013,7 +1013,7 @@ def run_scenario(package: Path, count: int, evidence_dir: Path, timeout: int, ke
             require(item is not None, f"Changed source {name!r} disappeared after restart.")
             source_key = file_source_id(item, name)
             expected = pre_restart_expected[(canonical_guid(item["Id"], name), source_key)]
-            status, response = scan.playback_info_selected(auth, item["Id"], scan.dashed(source_key))
+            status, response = scan.playback_info_selected(auth, item["Id"], source_key)
             require(status == 200, f"Explicit post-restart PlaybackInfo failed for {name!r} ({status}).")
             candidates = [source for source in response.get("MediaSources", [])
                           if source.get("Id") and canonical_guid(source["Id"], name) == source_key]
