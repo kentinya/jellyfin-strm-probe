@@ -1,4 +1,4 @@
-# Task 4.3 — 真实十万原生库的增量检查与成本
+# Task 4.3 — 真实 3000 项原生库的增量检查与成本
 
 必读：[已提交 Slice 4 合同](SLICE.md)、[固定交付方案](docs/slice-4-delivery-plan.md)、[开发流程](docs/development-workflow.md)、[B 经验](docs/agent-experience/task-planner-reviewer.md)、[Developer 经验](docs/agent-experience/developer-implementation-role.md)。本 Task 仅细化 RO-2，不改变合同、Roadmap 或稳定需求。
 
@@ -7,7 +7,7 @@ Task ID: 4.3
 Parent Slice: 4
 Status: PLANNED
 Task Base: a06a80fac90a86085f25116568aa24b54847c562
-Contract Checkpoint: 6ef0a0f70a80688b586b79e172fdeede2a09b9af
+Contract Checkpoint: b1bd76c4380fc8c7cfff8e6ab1b4dcb55fc9d1a7
 Difficulty: High
 Test Level: T4
 Planner / Reviewer: B
@@ -16,21 +16,21 @@ Implementation Head: NOT SET
 
 ## Goal
 
-交付 Slice 4 RO-2、AC-3／AC-4 及 AC-8 的大库、成本与恢复证据部分：在固定 Jellyfin 12.2.0／Linux x64 的 ZIP 安装隔离实例上，完成至少 100000 个真实已索引的受支持 STRM 物理候选的首次信任、未变检查、少量增量和准备／分批停止后重跑。证明静态范围不漏不重、仅所需源实际探测，完整对象和活动工作有界；分别披露 O(N) 身份集合、原生查询临时分配、对象读取、进程内存、耗时、进度和停止延迟。
+交付 Slice 4 RO-2、AC-3／AC-4 及 AC-8 的大库、成本与恢复证据部分：在固定 Jellyfin 12.2.0／Linux x64 的 ZIP 安装隔离实例上，完成至少 3000 个真实已索引的受支持 STRM 物理候选的首次信任、未变检查、少量增量和准备／分批停止后重跑。证明静态范围不漏不重、仅所需源实际探测，完整对象和活动工作有界；分别披露 O(N) 身份集合、原生查询临时分配、对象读取、进程内存、耗时、进度和停止延迟。
 
 ## 实际基线、已接受结果与缺口
 
-- 规划开始 `main` 干净，治理 PASS。Task Base 是 4.2 最终 B PASS 提交；Slice Base 固定为 `03169b07d110964562f7da31d2c3d7add82e5ff5`。Contract Checkpoint 是最近包含当前 Slice 文件的真实提交，固定交付方案在 `ae265d0dba02aa1c5599871602d4350072b7155f`；二者合同义务一致，差异仅为当时下一步指针。
+- 规划开始 `main` 干净，治理 PASS。Task Base 是 4.2 最终 B PASS 提交；Slice Base 固定为 `03169b07d110964562f7da31d2c3d7add82e5ff5`。当前 Contract Checkpoint 为 `b1bd76c4380fc8c7cfff8e6ab1b4dcb55fc9d1a7`；固定交付方案在 `ae265d0dba02aa1c5599871602d4350072b7155f`，二者合同义务一致，差异仅为当前大库门槛和下一步指针。
 - RO-1／4.1 B PASS 保留在 `0e7b26b381ed5f71781e75d317275afa51d791e9:TASK.md`；RO-3／4.2 完整计划、历史拒绝和补证 B PASS 保留在 `a06a80fac90a86085f25116568aa24b54847c562:TASK.md`，不用永久 Task 归档。最新已审查实现为 `86946cc4ef5c0648b71aafc00aa666f2a2bb20c5`，原 ZIP SHA-256 为 `434f930d6ad8282c1d68d47c7fc4456d52a025ae05e273db7b2f21551071ccaf`；它们不是未来 4.3 候选的验收证明。
-- 已核对 `BatchLibraryScope.cs`、`BatchCheckRunner.cs`、`StrmProbeScheduledTask.cs`、`BatchCheckTests.cs` 与包／扫描／批量工具。已有原生 GetItemIds、Guid 去重排序、每批最多 128 个对象、每批最多 8 个消费者，共同 optimizer／Coordinator／条件提交，以及候选／对象读取成本摘要。十万单元测试使用合成 ID 和普通对象，不是十万真实 STRM／已有主流的证据。
+- 已核对 `BatchLibraryScope.cs`、`BatchCheckRunner.cs`、`StrmProbeScheduledTask.cs`、`BatchCheckTests.cs` 与包／扫描／批量工具。已有原生 GetItemIds、Guid 去重排序、每批最多 128 个对象、每批最多 8 个消费者，共同 optimizer／Coordinator／条件提交，以及候选／对象读取成本摘要。历史十万规模单元测试使用合成 ID 和普通对象，不是 3000 个真实 STRM／已有主流的证据。
 - 复用 `scripts/package_environment.py` 的新工作区、当前进程 token 归属、镜像锁、Compose、解包安装／摘要和清理；复用 `run_isolated_scan_integration.py` 的完整日期／运行关联、原生任务 API、只读源／五字段快照和增量 EvidenceRecorder，以及 `run_isolated_batch_integration.py` 的成本字段解析。只复用无开发部署副作用的函数，不调用旧入口 main 来准备包实例。
-- 重要准备事实：现有 `native_probe_and_save` 明确指出原生扫描不为 STRM 探测主流，须在插件禁用时通过原生 PlaybackInfo 等既有原生入口准备。不得对十万文件逐项调用会再次全库扫描的 `scan_and_wait`／`native_probe_and_save`；先扫描完成，再有界逐源准备并核验保存。
+- 重要准备事实：现有 `native_probe_and_save` 明确指出原生扫描不为 STRM 探测主流，须在插件禁用时通过原生 PlaybackInfo 等既有原生入口准备。不得对 3000 个文件逐项调用会再次全库扫描的 `scan_and_wait`／`native_probe_and_save`；先扫描完成，再有界逐源准备并核验保存。
 - 已阅读 4.2 B 重启补证索引及原始审计：三个源完整行／地址／主流在重启前、重启后播放前和播放后三阶段相等且零额外探测。正式扫描工具的重启漏检为已知 P2，不在本 Task 扩建该工具；新的大库重启检查使用独立重启前预期，Slice Final 仍须补齐最终候选的同等证明。
 - 2026-10-18 用户授权迁移开发服务器并取消旧主机依赖。B 在同一 Task 内修订执行环境计划：保留 ID、Base、Goal、Scope、AC 和 High／T4；旧规划／资源观测保留在 `b92bea58a2552997bd750f059fc7d6c6cca23b93:TASK.md`。新主机重新准备环境和记录预算，不继承旧资源 BLOCKED，不要求读取旧本机证据才能开工；新真实大库结果仍全部 NOT RUN。
 
 ## 实施范围与顺序
 
-按以下顺序完成同一个行为。先工具和 1000 级反馈，再 10000 和十万级，最后完整候选验证。已有能力不重写；遇到本行为的真实产品缺陷才在同 Task 最小修复。需要改变合同、核心接入／成功／保存边界时交 A，B 重判后才继续。
+按以下顺序完成同一个行为。先工具和 1000 级反馈，再 3000 级，最后完成 3000 候选验证。已有能力不重写；遇到本行为的真实产品缺陷才在同 Task 最小修复。需要改变合同、核心接入／成功／保存边界时交 A，B 重判后才继续。
 
 ### 1．增加一个薄验收入口，复用现有隔离环境
 
@@ -40,7 +40,7 @@ Implementation Head: NOT SET
 python3 scripts/run_isolated_large_library_integration.py --package artifacts/releases/Jellyfin.Plugin.StrmProbeOptimizer_linux-x64.zip --count 1000 --scenario all --evidence-dir .git/validation-evidence/<source-sha>/<run-id>/large-1000
 ```
 
-`--count` 仅接受 1000、10000、100000；`--scenario all` 完成本节全部轮次，不用小规模默认值冒充最终验收。三个规模按顺序串行，各自使用新的本轮所有工作区和干净实例，避免前一级指纹污染首次信任；外置证据始终保留。允许开发反馈重复 1000 级，不为每个规模建立新环境框架。端口采用包验收默认的本机 18097（可用现有 `JF_PROBE_PACKAGE_PORT` 在进程启动前选择空闲端口），project 由当前检出路径派生；已有非空工作区／占用端口／活跃非本轮容器拒绝，不接管、不停止它们。
+`--count` 仅接受 1000、3000；`--scenario all` 完成本节全部轮次，不用小规模默认值冒充最终验收。两个规模按顺序串行，各自使用新的本轮所有工作区和干净实例，避免前一级指纹污染首次信任；外置证据始终保留。允许开发反馈重复 1000 级，不为每个规模建立新环境框架。端口采用包验收默认的本机 18097（可用现有 `JF_PROBE_PACKAGE_PORT` 在进程启动前选择空闲端口），project 由当前检出路径派生；已有非空工作区／占用端口／活跃非本轮容器拒绝，不接管、不停止它们。
 
 只消费指定 ZIP 并验证加载负载摘要；服务器不挂源码／SDK／NuGet，不构建或补 DLL。环境写入和清理继续核验当前进程确实取得的 token、目录及容器挂载归属。场景串行，记录并暂时清除会干扰运行的原生触发器，结束恢复核验。
 
@@ -50,10 +50,10 @@ python3 scripts/run_isolated_large_library_integration.py --package artifacts/re
 
 1. 在当前检出根目录记录 OS／架构、SDK、Docker／Compose、Node／浏览器、固定镜像 digest、CPU／内存／swap／空闲磁盘／inode及空闲端口；以 doctor 和实际依赖检查判断就绪，不依赖旧主机的已有缓存／账户／容器。
 2. 在任何实机运行前，于已有证据索引记录本轮 Jellyfin／媒体服务的 CPU 与内存限制、编排进程预算、宿主余量、磁盘／inode 余量、资源中止条件，以及启动、单次 API／同步查询、建库、原生主流准备、每轮批量、全源对账、停止收尾、每级总时长上限。所有数值与依据使用新主机资源，不得缺省为无限等待；不新增环境审批或治理对象。
-3. 先运行 1000 级，依据其实际准备／执行成本，在 10000 和十万级启动前分别确认并固定预算。首次设定和换机调整可在已有授权内进行，无须再次申请 B 批准；改变参数时保留前一预算和原因。失败后的调整保留原始失败和重跑身份，交 B 审查，不改变样本数量、业务规则或验收含义。
+3. 先运行 1000 级，依据其实际准备／执行成本，在 3000 级启动前确认并固定预算。首次设定和换机调整可在已有授权内进行，无须再次申请 B 批准；改变参数时保留前一预算和原因。失败后的调整保留原始失败和重跑身份，交 B 审查，不改变样本数量、业务规则或验收含义。
 4. 使用本轮容器资源限制时只调整本轮 Compose，复用 writer 的最小可选参数，既有入口默认行为保持；不改宿主配置或其他服务。准备原生调用仍最多 2 个同时执行；每 1 秒采样本轮服务 cgroup 内存／可用 peak／CPU／进程数、Jellyfin RSS、宿主 MemAvailable／磁盘，每 0.5 秒轮询任务状态／进度。
 5. 按运行前固定的资源中止条件和超时工作：停止新增准备／批量准入，立即留证，请求原生停止，等待同步查询真实返回及已开始探测正常收尾。不以杀进程冒充取消。确需终止本轮确认归属的隔离容器时记录 FAIL／中断，保留清理前资料和工作区；不后台遗留运行，不删除唯一诊断证据。
-6. 新环境实际缺依赖、超预算、超时、OOM 或结算不完整时如实 BLOCKED／FAIL，不能通过缩小十万数量、跳过主流准备、隐藏首败或放松断言制造 PASS。环境适配不移动 Task／Slice Base；合同数量或安全义务改变仍交 A。
+6. 新环境实际缺依赖、超预算、超时、OOM 或结算不完整时如实 BLOCKED／FAIL，不能通过降低 3000 验收数量、跳过主流准备、隐藏首败或放松断言制造 PASS。环境适配不移动 Task／Slice Base；合同数量或安全义务改变仍交 A。
 
 ### 3．原生准备与逐项独立清单
 
@@ -65,7 +65,7 @@ python3 scripts/run_isolated_large_library_integration.py --package artifacts/re
 
 ### 4．真实完整轮次与少量增量
 
-各级 `all` 均完成下列轮次，最终十万级不得省略。每轮以原生任务 Key `StrmProbeOptimizerBatchCheck`、本轮 UTC 起止／容器启动身份关联日志，不使用旧完成结果或固定 tail 丢掉十万日志。静态轮次把独立身份清单与本轮候选／结算身份对账，不能仅比较总数。
+各级 `all` 均完成下列轮次，最终 3000 级不得省略。每轮以原生任务 Key `StrmProbeOptimizerBatchCheck`、本轮 UTC 起止／容器启动身份关联日志，不使用旧完成结果或固定 tail 丢掉完整日志。静态轮次把独立身份清单与本轮候选／结算身份对账，不能仅比较总数。
 
 | 轮次 | 操作和预期 |
 |---|---|
@@ -85,7 +85,7 @@ Size 对照从最初就不提供 SHA-1，旧 Size 是真实合成媒体 A 大小
 3. 再从固定排序的首批选择两个需探测源，使用受控 20 秒延迟使实际探测开始；后批另放两个需探测源。确认首批实际执行、后批未读取后，原生停止。停止后无后续批次／新实际探测；已开始的两个继续保存并满足全部条件后提交，后批两个完整旧行保持。记录 Cancelling 期间进度 <100、统计与终态 Cancelled，不将任务停止视为探测取消。
 4. 已开始工作收尾时，从原生入口尝试再次运行，核对新一轮未实际进入；待旧轮全部结算／汇总／资源释放、原生 Idle 后再跑，必须重新取候选并只处理剩余变化。重跑前保存完整已提交／保留行快照，避免把重跑修复误记为停止轮成功。
 5. 再运行两轮未变检查，各零插件探测。每轮前／后固定 30 秒空闲观察，保存相同采样方法下内存、线程／句柄／任务／子进程、状态库行数、实际工作计数；结束无活动探测或消费者／待处理许可残留。与确定性边界一起判断资源收尾，GC／原生缓存增长单列解释，不把 RSS 必须完全回到起点当验收，也不把增长未经解释直接称无泄漏。
-6. 十万级稳定后重启，重启前保存全部当前源的独立完整预期；重启后在任何播放或批量之前只读核对完整指纹集合、地址和主流。再对 16 个增量源显式选 MediaSourceId 取得 PlaybackInfo 并核对返回地址／主流与零额外探测，随后全量只读复核。不可从重启后行自身构造预期，也不靠首次播放补建基线。小规模也执行同一流程以尽早发现编排错误。
+6. 3000 级稳定后重启，重启前保存全部当前源的独立完整预期；重启后在任何播放或批量之前只读核对完整指纹集合、地址和主流。再对 16 个增量源显式选 MediaSourceId 取得 PlaybackInfo 并核对返回地址／主流与零额外探测，随后全量只读复核。不可从重启后行自身构造预期，也不靠首次播放补建基线。1000 级也执行同一流程以尽早发现编排错误。
 
 ### 6．分层成本与可审查输出
 
@@ -103,11 +103,11 @@ Size 对照从最初就不提供 SHA-1，旧 Size 是真实合成媒体 A 大小
 
 ## 验收条件
 
-- [ ] AC-3：三级按顺序有真实原生库证据，十万级 N≥100000 受支持物理源的文件／项目／源／库／主流来源全部可核对；没有直接写原生 DB、伪造媒体流或以模拟 ID 冒充。
+- [ ] AC-3：两级按顺序有真实原生库证据，3000 级 N≥3000 受支持物理源的文件／项目／源／库／主流来源全部可核对；没有直接写原生 DB、伪造媒体流或以模拟 ID 冒充。
 - [ ] AC-3：首次信任和未变轮次零插件实际探测、静态集合逐身份无漏重、完整五字段／地址／必要主流正确；受控 URL／内容／Size／缺流仅所需源探测且后续复查零探测，范围外及不支持对照不优化。
 - [ ] AC-4：原生 ID／去重排序 O(N) 成本、原生临时分配、对象读取与活动工作分别记录；128／8／默认 2 上限有实际观测及代码／确定性证据，非全库对象物化或每候选 Task。
 - [ ] AC-4：真实大库准备和分批阶段停止命中可核验，停止后零新准入；已开始工作有效提交、未开始旧基线保持，旧轮收尾前不能实际再运行；停止终态／进度／统计／延迟真实，重跑收敛并完成资源结算和只读重启核对。
-- [ ] AC-8 对应部分：最终完整 T4、同 ZIP 安装／扫描／三级大库验收均取得真实证据，原始材料、资源与输入身份、失败与恢复／清理完整；无秘密泄露，NOT RUN／BLOCKED 不算 PASS。
+- [ ] AC-8 对应部分：最终完整 T4、同 ZIP 安装／扫描／两级大库验收均取得真实证据，原始材料、资源与输入身份、失败与恢复／清理完整；无秘密泄露，NOT RUN／BLOCKED 不算 PASS。
 - [ ] 只含本 Task 的工具／测试、必要诊断、实际阻碍 RO-2 的最小产品修复与事实文档；没有合同、schema、业务规则、取消语义或额外调度／状态架构变更。
 
 ## 必要测试
@@ -116,14 +116,14 @@ High／T4：真实大库、原生查询／持久化、停止并发及安装候�
 
 ### 开发／修正反馈
 
-先运行新增工具用例、已知失败和直接相关回归，再跑 1000 级；它 PASS 且资源／时间预算可行才升到 10000，再到十万。不通过不得通过缩量／隐藏超时／跳过主流准备继续标绿。
+Developer 先运行新增工具用例、已知失败和由改动文件直接影响的回归，并列出未运行的其他测试；再跑 1000 级，资源／时间预算可行才升到 3000。B 负责完整全量回归和独立验收，不通过不得通过降低 3000 数量／隐藏超时／跳过主流准备继续标绿。
 
 ```bash
 python3 -m unittest discover -s tests -p 'test_isolated_large_library_integration.py' -v
 bash scripts/dotnet-local test tests/Jellyfin.Plugin.StrmProbeOptimizer.Tests/Jellyfin.Plugin.StrmProbeOptimizer.Tests.csproj --configuration Release --no-restore --filter 'FullyQualifiedName~BatchCheckTests|FullyQualifiedName~ProbeCoordinatorTests|FullyQualifiedName~PlaybackOptimizerTests'
 ```
 
-Python 文件待本 Task 新增，必须发现非零用例。控制要驱动实际大库编排和证据输出：只有磁盘文件／不足十万索引／主流未准备、身份重复加缺失但数量相等、误用当前实际行为预期、缺成本字段、探测数错误、停止阶段未命中／停止后新准入、收尾期间新轮、丢旧日志、超时／OOM／资源不足及清理失败均不能 PASS。成功控制覆盖完整流程。保持已接受确定性同步查询中停止、开始竞争、8 消费者／全局许可／末项故障与不提高权限测试；不要用十万份测试假对象替代实机。
+Python 文件待本 Task 新增，必须发现非零用例。控制要驱动实际大库编排和证据输出：只有磁盘文件／不足 3000 索引／主流未准备、身份重复加缺失但数量相等、误用当前实际行为预期、缺成本字段、探测数错误、停止阶段未命中／停止后新准入、收尾期间新轮、丢旧日志、超时／OOM／资源不足及清理失败均不能 PASS。成功控制覆盖完整流程。保持已接受确定性同步查询中停止、开始竞争、8 消费者／全局许可／末项故障与不提高权限测试；不要用 3000 份测试假对象替代实机。
 
 ### 最终检查点门槛
 
@@ -139,8 +139,7 @@ python3 scripts/package_plugin.py --configuration Release --runtime linux-x64 --
 python3 scripts/run_isolated_package_integration.py --package artifacts/releases/Jellyfin.Plugin.StrmProbeOptimizer_linux-x64.zip --baseline-revision 7c64eb5dcad6e5f20fb7eb41819be2521f65484d --scenario all --evidence-dir .git/validation-evidence/<source-sha>/<run-id>/package-all
 python3 scripts/run_isolated_scan_integration.py --package artifacts/releases/Jellyfin.Plugin.StrmProbeOptimizer_linux-x64.zip --scenario all --evidence-dir .git/validation-evidence/<source-sha>/<run-id>/scan-all
 python3 scripts/run_isolated_large_library_integration.py --package artifacts/releases/Jellyfin.Plugin.StrmProbeOptimizer_linux-x64.zip --count 1000 --scenario all --evidence-dir .git/validation-evidence/<source-sha>/<run-id>/large-1000
-python3 scripts/run_isolated_large_library_integration.py --package artifacts/releases/Jellyfin.Plugin.StrmProbeOptimizer_linux-x64.zip --count 10000 --scenario all --evidence-dir .git/validation-evidence/<source-sha>/<run-id>/large-10000
-python3 scripts/run_isolated_large_library_integration.py --package artifacts/releases/Jellyfin.Plugin.StrmProbeOptimizer_linux-x64.zip --count 100000 --scenario all --evidence-dir .git/validation-evidence/<source-sha>/<run-id>/large-100000
+python3 scripts/run_isolated_large_library_integration.py --package artifacts/releases/Jellyfin.Plugin.StrmProbeOptimizer_linux-x64.zip --count 3000 --scenario all --evidence-dir .git/validation-evidence/<source-sha>/<run-id>/large-3000
 python3 scripts/run_isolated_plugin_integration.py
 python3 scripts/run_isolated_batch_integration.py --scenario suite
 python3 scripts/run_isolated_configuration_integration.py --scenario all
@@ -154,7 +153,7 @@ git diff --check
 
 ### B 独立验证
 
-审查真实 Task Base..Implementation Head、所有必要变化和原始证据。独立复现工具错误放行控制及 1000 级全流程；十万级独立验证当前原生候选／全源清单、完整行对账、首次／未变零探测、小集合精确探测和真实准备／分批停止与重跑的关键行为。可复用匹配且可核验的完整建库／准备、昂贵全轮和其他最终门槛，不因换审查者机械重建十万库；若需保留十万实例供 B 观测，Developer 先按现有归属模式设计明确保留／人工交接及随后清理证据，不能让新进程仅凭旧 token 接管。默认完整证据在清理前外置落盘。缺失或不匹配时重跑对应门槛，不能凭报告标签复用。
+审查真实 Task Base..Implementation Head、所有必要变化和原始证据。独立复现工具错误放行控制及 1000 级全流程；3000 级独立验证当前原生候选／全源清单、完整行对账、首次／未变零探测、小集合精确探测和真实准备／分批停止与重跑的关键行为。B 负责完整 C#／Python 全量回归、Task 指定全量门槛和独立验收；可复用匹配且可核验的完整建库／准备、昂贵全轮和其他最终门槛，但不能以 Developer 的聚焦结果替代全量门槛。若需保留 3000 实例供 B 观测，Developer 先按现有归属模式设计明确保留／人工交接及随后清理证据，不能让新进程仅凭旧 token 接管。默认完整证据在清理前外置落盘。缺失或不匹配时重跑对应门槛，不能凭报告标签复用。
 
 B PASS 后重新核对全部 RO／Surfaces：RO-1／安装恢复和 RO-3／扫描仍检查回归及证据有效性；RO-2 达标才 PASS。RO-4 实际代理仍必要，依固定方案规划 4.4；若事实未满足不得进入 Closure Packet 或宣布 Slice 关闭。
 
@@ -186,7 +185,7 @@ RO-4 的实际 JellyfinProxy 联调（后续 4.4）、单独 Slice Final／Closu
 Reviewed: NOT SET
 Decision: PENDING
 Slice Required Outcomes all satisfied: NO — RO-1/RO-3 B PASS; RO-2/RO-4 NOT RUN
-Next: Developer prepares the new host and implements Task 4.3; record host-specific budgets before real-instance runs
+Next: B rechecks Task 4.3 after the 3000-item Contract Checkpoint; then Developer prepares the new host and records host-specific budgets before real-instance runs
 ```
 
 本轮按用户授权取消旧服务器执行前提并交接 GitHub；不实施插件或新工具、不启动真实建库。Task 4.2 已 PASS，无需在新 Task 重开其修正；当前未获 4.3 产品证据，不签发 PASS。

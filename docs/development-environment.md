@@ -4,7 +4,7 @@
 
 ## 当前交接与固定输入
 
-Slice 1／2／3 已 PASS / CLOSED；Slice 4 ACTIVE。Task 4.1、4.2 已经 B PASS；4.2 的最终决定与独立重启补证见 `a06a80fac90a86085f25116568aa24b54847c562:TASK.md`。当前 [Task 4.3](../TASK.md) 为 PLANNED，承接真实十万库验收；RO-2／RO-4 与单独 Slice Final 尚未完成。换机不重设 Base，不重新打开已通过的历史 Task，也不继承旧服务器资源 BLOCKED。
+Slice 1／2／3 已 PASS / CLOSED；Slice 4 ACTIVE。Task 4.1、4.2 已经 B PASS；4.2 的最终决定与独立重启补证见 `a06a80fac90a86085f25116568aa24b54847c562:TASK.md`。当前 [Task 4.3](../TASK.md) 为 PLANNED，承接真实 3000 项媒体库验收；RO-2／RO-4 与单独 Slice Final 尚未完成。换机不重设 Base，不重新打开已通过的历史 Task，也不继承旧服务器资源 BLOCKED。
 
 | 输入 | 固定身份／新主机要求 |
 |---|---|
@@ -75,7 +75,7 @@ bash scripts/dotnet-local format Jellyfin.Plugin.StrmProbeOptimizer.sln --verify
 python3 -m unittest discover -s tests -v
 ```
 
-包／扫描验收复用 `package_environment.py`，自动建立本轮新工作区、向导／测试账户、合成媒体和库，仅消费传入 ZIP；默认本机端口 18097，可在启动进程前设置现有 `JF_PROBE_PACKAGE_PORT`。打包和安装命令见 [安装说明](package-installation.md)，三级大库入口尚待 Task 4.3 实施。project 名由当前仓库路径派生；旧主机容器名、运行 token 和鉴权身份均不必沿用。
+包／扫描验收复用 `package_environment.py`，自动建立本轮新工作区、向导／测试账户、合成媒体和库，仅消费传入 ZIP；默认本机端口 18097，可在启动进程前设置现有 `JF_PROBE_PACKAGE_PORT`。打包和安装命令见 [安装说明](package-installation.md)，两级大库入口尚待 Task 4.3 实施。project 名由当前仓库路径派生；旧主机容器名、运行 token 和鉴权身份均不必沿用。
 
 三个既有开发部署回归另用 `artifacts/dev-env`，不是包安装验收。新环境要运行它们时，先 `python3 scripts/development_environment.py up`，在本机默认 18096 完成新实例向导：建立仅指向 `/media/strm` 和 `/media/local` 的两个临时库，禁用实时监控、远程提供器、写回和无关自动任务，清空测试实例的插件仓库列表。端口可在启动前用现有 `JF_PROBE_PORT` 调整，测试账户文件的 base_url 必须匹配。
 

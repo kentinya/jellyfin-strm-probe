@@ -39,15 +39,15 @@ Slice 3 交付完整配置页／所选媒体库、Jellyfin 原生「STRM 媒体�
 - Task 3.1 Base `b86d9c17d7f915108072f54ee098f0f5543fe093`、接受实现为当前 Slice Head，完整计划／报告／B PASS 在 `aa78c06216ec30fbefd288ac4c73e9a7d44afa95:TASK.md` 及可达历史。Task 3.2 Base `2f74aa83f15707df56c4b15409ba1538a488f83a`、实现 `5580492a5cacbdc0772dd2f14f9b527ab3851746`，历史 B PASS 在 `678bcf5c3a6ba5c6743402ec27367dd76d0f101d:TASK.md`。旧 A 拒绝及历次修正／FAIL 保留，不重写为 PASS。
 - 新单独 Slice Final：locked restore／Release build／format、202 C#／63 Python、默认真实播放、七场景 batch 与配置页 19 个浏览器场景全部 PASS，无 Final 门槛失败／重试。配置／全部触发器／夹具恢复、临时条目清理。A 核验 82 项输入、232 项构建产物及 405 个证据摘要后明确复用真实 Final；另独立复跑全部 C#／Python 与 16 项准入／末项故障控制，全部 PASS，未声称 A 再次实机运行。
 - 本机索引：`.git/validation-evidence/7c64eb5dcad6e5f20fb7eb41819be2521f65484d/` 下的 `slice-final-20261016/INDEX.md`、`b-review-20261016/INDEX.md` 与 `a-final-review-20261016/INDEX.md`。仅本工作区可读；原始命令、身份、日志、计数、交互／截图、恢复和复用范围均可核验。
-- 十万模拟候选验证有界对象／消费者及 O(N) ID 成本，代表实机验证多库多批／多版本；不构成真实十万库或恒定总内存证明。日志跨日关联与指数措辞保留 P2。真实十万库／完整扫描压力、外部代理／OpenList、广泛格式／客户端和发布仍 NOT RUN；逐分支／audio-only 实机、物理数据库保存故障注入、完整镜像构建溯源与通用性能证明沿用既有边界。
+- 历史十万模拟候选验证有界对象／消费者及 O(N) ID 成本，代表实机验证多库多批／多版本；不构成历史真实十万库或恒定总内存证明。日志跨日关联与指数措辞保留 P2。当前真实 3000 项媒体库／完整扫描压力、外部代理／OpenList、广泛格式／客户端和发布仍 NOT RUN；逐分支／audio-only 实机、物理数据库保存故障注入、完整镜像构建溯源与通用性能证明沿用既有边界。
 
 ## 当前开发指针
 
 - 开发基准 V4.3；Slice 1／2／3 均 PASS / CLOSED，历史失败与合同变更保留在 Git／原始证据；上方账本只记录已关闭能力。
 - 最新接受实现仍是 `7c64eb5dcad6e5f20fb7eb41819be2521f65484d`。Slice 3 的真实关闭提交为 `03169b07d110964562f7da31d2c3d7add82e5ff5`，完整合同／最终包和 Task／B 身份从该快照读取。
-- 2026-10-16，A 在关闭后的独立一轮选择并激活 [Slice 4](../SLICE.md)，Base 固定为上述关闭提交，Implementation Head 为 NOT SET。必要结果为单版本安装与恢复、真实十万原生库／成本、完整扫描重叠和实际代理播放链；用户随后授权本次直接规划首个 Task，并固定 [后续 B 的交付方案](slice-4-delivery-plan.md)；方案已先行提交为 `ae265d0dba02aa1c5599871602d4350072b7155f`，随后 [Task 4.1](../TASK.md) 计划为 PLANNED，Task Base／Contract Checkpoint 均为该 SHA。后续 4.2／4.3／4.4 待 B 逐个规划，不能直接实施。
+- 2026-10-16，A 在关闭后的独立一轮选择并激活 [Slice 4](../SLICE.md)，Base 固定为上述关闭提交，Implementation Head 为 NOT SET。必要结果为单版本安装与恢复、真实 3000 项原生库／成本、完整扫描重叠和实际代理播放链；用户随后授权本次直接规划首个 Task，并固定 [后续 B 的交付方案](slice-4-delivery-plan.md)；方案已先行提交为 `ae265d0dba02aa1c5599871602d4350072b7155f`，随后 [Task 4.1](../TASK.md) 计划为 PLANNED，Task Base／Contract Checkpoint 均为该 SHA。后续 4.2／4.3／4.4 待 B 逐个规划，不能直接实施。2026-10-18 的 3000 门槛调整及新 Contract Checkpoint 见当前 `SLICE.md`、`TASK.md` 和开发流程记录。
 - Task 4.1 已由 B 独立复审 PASS，接受实现 `b5d4f2836229d16ac8add7034294c4306ddf5be1`，完整报告／审查见 `0e7b26b381ed5f71781e75d317275afa51d791e9:TASK.md`。RO-1 包安装、升级恢复及 MP4／MKV 原生 Web 播放的分层证据已接受；仍不代表 Slice 4 Final 或完整产品通过。
 - 当前 [Task 4.2](../TASK.md) 的 Base 为上述 B PASS 检查点。Developer 提交扫描验收工具／测试，候选实现 `4837cb6d98ebbc60281ab3a66c888588a1120110`，报告检查点 `9e3a5b6cff504d8e339e7b0839ad6d9f5b5ef051`；B 审查为 FIX REQUIRED（RO-3 缺口：真实窗口内的有限变化／固定候选边界、逐源／选源／成功判定、ZIP 上停止及故障控制、可核验的原始证据，BR-42-1..4）。B 独立 Python 141/141 通过，4 项控制复现验收误判；未宣称产品缺陷或重跑实机。B 本机证据索引：`.git/validation-evidence/4837cb6d98ebbc60281ab3a66c888588a1120110/b-review-20261017-04/INDEX.md`。
-- Developer 已在同一 Task 修正为候选 `eac764d9b32a1b13f8ac963f8c14888fd50db4a3`（归档 `62ae0669…`）：有限变化移到原生扫描 Running 窗口内、要求 Completed 与完整摘要、逐源与显式选源对账、跨批停止与单项失败隔离、外置 `--evidence-dir` 原始证据。修正候选已交为 READY FOR B REVIEW；RO-3 仍未签发 PASS，RO-2／RO-4 仍 NOT RUN，4.3 未激活。修正证据索引：`.git/validation-evidence/eac764d9b32a1b13f8ac963f8c14888fd50db4a3/run-20261017T143741Z-92b89989/INDEX.md`。
+- Developer 已在同一 Task 修正为候选 `eac764d9b32a1b13f8ac963f8c14888fd50db4a3`（归档 `62ae0669…`）：有限变化移到原生扫描 Running 窗口内、要求 Completed 与完整摘要、逐源与显式选源对账、跨批停止与单项失败隔离、外置 `--evidence-dir` 原始证据。修正候选已交为 READY FOR B REVIEW；RO-3 仍未签发 PASS，RO-2／RO-4 仍 NOT RUN。当前 Task 4.3 已按 3000 门槛列为 PLANNED，须由 B 在新 Contract Checkpoint 后重核合法性；修正证据索引：`.git/validation-evidence/eac764d9b32a1b13f8ac963f8c14888fd50db4a3/run-20261017T143741Z-92b89989/INDEX.md`。
 
-NEXT ACTION: B REVIEWS TASK 4.2 CORRECTION CANDIDATE
+NEXT ACTION: B RECHECKS TASK 4.3 AFTER THE 3000-ITEM MATERIAL CONTRACT CHANGE

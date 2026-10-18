@@ -4,7 +4,7 @@
 
 项目：`Jellyfin.Plugin.StrmProbeOptimizer`，C# 插件。SQLite 仅保存最小历史指纹，媒体流继续保存在 Jellyfin 原生库，不维护独立探测状态机。
 
-**Slice 1／2／3 已由 A 最终审查 PASS / CLOSED，完整产品尚未交付。** [Slice 3 最终审查快照](docs/progress.md#slice-3-closed) 接受完整配置页、所选库按需批量检查、原生运行／停止／定时、播放混合共享及准确故障反馈；[关闭账本](docs/progress.md#slice-3-closed) 保留范围与分层证据。固定 SDK `10.0.401`、Jellyfin `12.2.0`、源码／依赖与镜像 digest 见 [开发环境](docs/development-environment.md)。操作与恢复见 [配置说明](docs/core-configuration.md)。[Slice 4](SLICE.md) 已 ACTIVE，承接真实十万库／完整扫描、实际代理播放链及固定 Jellyfin／Linux x64 安装包与恢复；RO-1 安装包已由 B 独立 PASS，RO-3 完整扫描重叠已由 B 独立 PASS，RO-2／RO-4 仍 NOT RUN，当前为 Task 4.3 真实十万库计划。
+**Slice 1／2／3 已由 A 最终审查 PASS / CLOSED，完整产品尚未交付。** [Slice 3 最终审查快照](docs/progress.md#slice-3-closed) 接受完整配置页、所选库按需批量检查、原生运行／停止／定时、播放混合共享及准确故障反馈；[关闭账本](docs/progress.md#slice-3-closed) 保留范围与分层证据。固定 SDK `10.0.401`、Jellyfin `12.2.0`、源码／依赖与镜像 digest 见 [开发环境](docs/development-environment.md)。操作与恢复见 [配置说明](docs/core-configuration.md)。[Slice 4](SLICE.md) 已 ACTIVE，承接真实 3000 项媒体库／完整扫描、实际代理播放链及固定 Jellyfin／Linux x64 安装包与恢复；RO-1 安装包已由 B 独立 PASS，RO-3 完整扫描重叠已由 B 独立 PASS，RO-2／RO-4 仍 NOT RUN，当前为 Task 4.3 真实 3000 项媒体库计划。
 
 ## 开发基准与范围
 
@@ -29,7 +29,7 @@ Slice 4 Base 固定为 Slice 3 关闭提交 `03169b07d110964562f7da31d2c3d7add82
 - 「控制台 → 计划任务 → STRM 媒体信息检查」支持原生运行／停止／定时，默认无自动触发；固定所选库候选 ID 后分批读取当前对象，只处理需要探测的项目。停止只撤销未开始工作，已开始探测继续完成并按条件提交，收尾报告实际结果，结束后才允许下一轮批量实际运行。候选 ID 内存随数量增长，完整媒体对象和活动工作按批次限制。
 - 播放与批量共用 ProbeCoordinator，只共享已实际开始且仍在执行的探测，排队不共享；插件主动探测并发默认 2、允许 1～8，不限制其他原生任务或插件。
 
-当前已接受播放／指纹／共享、完整配置页和原生批量；单版本安装包与安装恢复（RO-1）已由 B 独立 PASS，完整扫描重叠（RO-3）已由 B 独立 PASS，真实十万库、外部联调与 Slice Final 仍未完成。兼容性及接口定位见 [compatibility.md](docs/compatibility.md) 和 [references.md](docs/references.md)。
+当前已接受播放／指纹／共享、完整配置页和原生批量；单版本安装包与安装恢复（RO-1）已由 B 独立 PASS，完整扫描重叠（RO-3）已由 B 独立 PASS，真实 3000 项媒体库、外部联调与 Slice Final 仍未完成。兼容性及接口定位见 [compatibility.md](docs/compatibility.md) 和 [references.md](docs/references.md)。
 
 ## 本地安装包
 
