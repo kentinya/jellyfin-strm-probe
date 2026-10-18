@@ -40,7 +40,7 @@ Slice 3 已由 A 审查完整 `6da90ab6bd8995d8204ae0b7faf786c823699fe6..7c64eb5
 
 ## 已实现的批量与播放结构
 
-[Slice 3](progress.md#slice-3-closed) 已关闭，接受实现 `7c64eb5dcad6e5f20fb7eb41819be2521f65484d`。以下为当前结构；外部代理联调与大规模／完整扫描压力仍为 TARGET，已由 ACTIVE 的 [Slice 4 合同](../SLICE.md) 承接，尚未实施。单版本安装包（RO-1）已由 Task 4.1 实现：`scripts/package_plugin.py` 从 Release 输出与锁文件生成 Linux x64 ZIP／清单／SHA-256，`scripts/run_isolated_package_integration.py` 在专用隔离实例仅用归档完成安装验收；实现事实与证据待 B 独立审查。固定组合上的真实任务、定时、停止和页面交互结果见 [测试矩阵](test-matrix.md)。
+[Slice 3](progress.md#slice-3-closed) 已关闭，接受实现 `7c64eb5dcad6e5f20fb7eb41819be2521f65484d`。以下为当前结构；外部代理联调与大规模／完整扫描压力仍为 TARGET，已由 ACTIVE 的 [Slice 4 合同](../SLICE.md) 承接，尚未实施。单版本安装包（RO-1）已由 Task 4.1 实现并经 B 独立 PASS：`scripts/package_plugin.py` 从 Release 输出与锁文件生成 Linux x64 ZIP／清单／SHA-256，`scripts/run_isolated_package_integration.py` 在专用隔离实例仅用归档完成安装验收。Task 4.2 修正候选已交 B 复审，Task 4.3 按 3000 项媒体库门槛 PLANNED；固定组合上的真实任务、定时、停止和页面交互结果见 [测试矩阵](test-matrix.md)。
 
 ```mermaid
 flowchart TD

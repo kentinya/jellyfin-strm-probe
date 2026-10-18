@@ -76,7 +76,7 @@ A 环境准备及 Task 1.1 原型后续：SDK、固定源码、镜像 digest、�
 | 地址／流持久化 | URL 改变后原生探测并保存，当次 PlaybackInfo 新地址，重启仍有效且有必要主流；保存失败明确 | PASS；当次／重启保存与失败保流重试已独立复验；内部数据库故障未注入 |
 | 探测权限／禁用 | allowMediaProbe=false 各分支不执行；禁用／旧 STRM／手动刷新原生对照 | PASS；真实 false 流入口、禁用、旧 STRM、手动 FullRefresh 已独立复验；公共 PlaybackInfo 不提供 false 参数 |
 
-Task 1.1 PASS；该原型的全部 Outcomes／Surfaces 与单独 Final 经 A 接受，Slice 1 PASS / CLOSED。后续 Slice 2 也已完成并关闭，历史失败按原事实保留；后续 Slice 3 也已关闭，当前 [Task 4.1](../TASK.md) 的 RO-1 安装包已由 B 独立 PASS，[Task 4.2](../TASK.md) 的 RO-3 修正候选已交为 READY FOR B REVIEW。T01～T28 及 B01～B12 分层结果见测试矩阵，外部 JellyfinProxy／OpenList、真实大库与完整扫描压力仍 NOT RUN；使用 Jellyfin 已有 FFmpeg／ffprobe。
+Task 1.1 PASS；该原型的全部 Outcomes／Surfaces 与单独 Final 经 A 接受，Slice 1 PASS / CLOSED。后续 Slice 2 也已完成并关闭，历史失败按原事实保留；后续 Slice 3 也已关闭，当前 [Task 4.1](../TASK.md) 的 RO-1 安装包已由 B 独立 PASS，[Task 4.2](../TASK.md) 的 RO-3 修正候选已交为 READY FOR B REVIEW，Task 4.3 按 3000 项媒体库门槛 PLANNED。T01～T28 及 B01～B12 分层结果见测试矩阵，外部 JellyfinProxy／OpenList、真实 3000 项媒体库与完整扫描压力仍 NOT RUN；使用 Jellyfin 已有 FFmpeg／ffprobe。
 
 ## 后续真实运行门槛
 
