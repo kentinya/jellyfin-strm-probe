@@ -1,6 +1,6 @@
 # 用户旅程
 
-以下定义 V4.3 及用户后续授权的完整产品旅程。CURRENT：Slice 1／2／3 已 PASS / CLOSED，播放检查、SQLite 历史指纹、稳定多源、运行中共享／全局并发、完整配置页、原生批量管理和恢复已交付；单版本安装包与安装恢复（Slice 4 RO-1）已由 B 独立审查 PASS，安装、配置与恢复步骤见 [安装包说明](package-installation.md)。分项事实、最终包与 A 决定见 [Slice 3 关闭快照](progress.md#slice-3-closed)。[Slice 4](../SLICE.md) 已 ACTIVE，承接真实 3000 项媒体库／完整扫描、实际代理播放链及固定 Jellyfin／Linux x64 安装与恢复旅程；RO-2～RO-4 仍为 TARGET／NOT RUN，当前 [Task 4.3](../TASK.md) 为 PLANNED，B 须先重核新 Contract Checkpoint 后再实施。核心能力关闭不表示完整产品交付。
+以下只定义用户可见的安装、播放、批量和恢复旅程。当前 Slice／Task 状态、验收结果和延期统一见 [Slice 合同](../SLICE.md)、[Task](../TASK.md) 与 [进度账本](progress.md)；安装操作见 [安装包说明](package-installation.md)，配置操作见 [配置说明](core-configuration.md)。
 
 ## 安装与首次接管
 

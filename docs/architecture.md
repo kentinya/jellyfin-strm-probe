@@ -2,19 +2,13 @@
 
 ## CURRENT
 
-V4.3 是当前开发基准，仅修订批量扫描方式；V4.2／V3.0 原文与历史合同留在 Git。Slice 1 原型已经 A 最终审查 PASS / CLOSED；[关闭证据](progress.md#slice-1-closed) 保留原始边界。固定 Jellyfin `12.2.0`／源码 `ca0f16eb7c195f720a1493ed469a27c4657db0c6`、Controller／Model `12.2.0`、`net10.0`／SDK `10.0.401`；单版本事实不构成跨版本兼容承诺。
-
-Slice 2 已由 A 审查完整 Base..Implementation Head 并裁定 PASS / CLOSED；接受实现 `59fd3f7e4b6623449a691574fb69b817db72c2ae`，Slice Base 固定为 `924816a84c74f5d79c107478f2d40e621cb8be8d`。Task 2.1／2.2 均 B PASS，单独 Slice Final 经 A 核验输入和原始产物后接受；Slice 3 已另行完成 A 最终审查；当前 Slice 4 的 Task 4.1、4.2 已由 B 完成审查，Task 4.3 为 3000 项媒体库规划。完整合同、Closure Packet 和 [A Final Review](progress.md#slice-2-closed) 保留必要结果及证据边界。
+本页描述已接受实现的模块边界和目标架构，不重复当前状态、Task 审查或测试计数；这些内容统一见 [Slice](../SLICE.md)、[Task](../TASK.md)、[进度账本](progress.md) 和 [测试矩阵](test-matrix.md)。固定验证组合为 Jellyfin `12.2.0`、源码 `ca0f16eb7c195f720a1493ed469a27c4657db0c6`、`net10.0`／SDK `10.0.401`，不构成跨版本兼容承诺。
 
 - 只读版本 1 解析及完整决策矩阵、原生所属项目／MediaSourceInfo.Id 的稳定多版本身份、五字段 SQLite 和 expectedPrevious 原子条件提交已接受。失败、原生自身取消异常、文件变化及过期结果保护可信基线；SQLite 异常停止优化，保留原权限与旧库，修复后重启重新检查。
 - 共用 `CheckSourceAsync` 使用已有原生探测／事务保存关联；每个取得许可的 owner 先读本调用者当前源，再核对 Manifest／指纹／启停后行动，立即获许可也重判。首次信任核对当前 Manifest 与原生地址，不称为本次探测成功。
 - `ProbeCoordinator` 用同一短时锁协调同键查询、准备登记、实际开始转换和结束移除。准备工作只供其他请求等待后重查；匹配 `IMediaEncoder.GetMediaInfo` 调用处才登记 running。同源共享探测，调用者仍按各自 user／选源／路径替换获取响应。完成项不作为运行中缓存；`Complete`／`Fail`／`Abandon` 幂等结算。等待者全部退出不取消已开始工作，成功时仍按全部条件提交。
 - 全局池惰性创建并消费启动时捕获的并发值，默认 2、合法 1～8；保存并发只在下次启动生效。Enabled／PlaybackAutoCheck／DetailedLog 保存成功后下一请求生效；关闭播放检查仅影响播放入口。配置先完整写入临时文件再原子替换，失败保留旧有效文件与内存，必要错误诊断脱敏。
-- B 独立聚焦 81/81、六项边界控制、默认实机及未安装插件／PlaybackAutoCheck 下一请求补充对照通过。实机核对同源一次开始／提交、默认 2／重启前保存 1 仍为 2／重启后为 1、池饱和时独立 FullRefresh、多版本及 SQLite／原生地址主流重启恢复。证据索引 `.git/validation-evidence/59fd3f7e4b6623449a691574fb69b817db72c2ae/b-rereview-20261014-08/INDEX.md`，完整 Task 2.2 计划／报告／B PASS 在 `76cd9e997548c4ffef04a8dd8f9b0d4ef4376347:TASK.md`；Task 2.1 在 `13cb8bdac319fcf0b3e7500661bae1c7455077b0:TASK.md`。历史失败保留在 Git 和原始证据，不堆叠在 CURRENT。
-
-单独 Slice Final 112 项 C#、30 项 Python 及全部构建／质量／默认隔离实机／补充对照通过；A 核验 40 个可执行输入、27 个产物和八个规范章节，另独立重跑 C# 112/112。真实 Final 明确复用，未声称 A 再次实机运行。本机索引位于 `.git/validation-evidence/59fd3f7e4b6623449a691574fb69b817db72c2ae/` 下的 `slice-final-20261014-09/INDEX.md` 与 `a-final-review-20261014/INDEX.md`，完整结果见 [Closure Packet](progress.md#slice-2-closed)。
-
-Slice 3 已由 A 审查完整 `6da90ab6bd8995d8204ae0b7faf786c823699fe6..7c64eb5dcad6e5f20fb7eb41819be2521f65484d` 并裁定 PASS / CLOSED。当前实现包含：
+Slice 3 的批量实现包含：
 
 - `StrmProbeScheduledTask` 由原生任务机制发现，默认触发器为空；原生负责运行、停止、定时、进度和终态。范围快照使用稳定库 ID，全部为默认，失效／空显式选择拒绝保存和执行。
 - `LibraryBatchCandidateSource` 用 `GetItemIds` 获取所选库候选，去重排序后固定本轮集合，再用 `GetItemList(ItemIds=...)` 每批最多读取 128 个完整对象、最多 8 个消费者。执行前重读当前对象、所属库和项目／媒体源身份；新增下轮发现，消失／移出安全结算。ID 及原生临时分配随数量增长，不能宣称总内存恒定。
@@ -22,7 +16,7 @@ Slice 3 已由 A 审查完整 `6da90ab6bd8995d8204ae0b7faf786c823699fe6..7c64eb5
 - 未开始阶段观测禁用即关闭本轮准入并保留原因，重新启用也不恢复已撤销的旧轮。状态库故障锁定优化不可用，最终结算合入共享 optimizer 的故障标记；末项跳过也不掩盖其他源触发的故障。必要故障反馈不依赖详细日志，停止／全局失败不补成 100%。
 - `IHasWebPages` 嵌入完整 HTML 配置页，使用已有配置通道，提供五项编辑、真实媒体库选择、加载／拒绝／未确认保存／重读反馈和任务／恢复说明；没有独立运行或定时入口。并发仍在下次启动生效，范围对下一轮生效。
 
-新单独 Final 的 locked restore／Release build／format、202 C#／63 Python、默认真实播放、批量七场景和配置页 19 场景均通过。A 核验 82 项输入、232 项构建产物和原始证据，独立复跑全套 C#／Python 及 16 项关键控制，明确复用匹配 Final 的真实运行。七个 Outcomes／六类 Surfaces、原始索引和延期见 [Slice 3 关闭记录](progress.md#slice-3-closed)。控制验证使用假原生／保存代理和临时 STRM，物理数据库保存故障实机注入、audio-only／逐分支实机、真实大库／完整扫描压力、外部代理、发布及完整镜像构建溯源继续按原限制 NOT RUN。
+具体 PASS／NOT RUN 结论和原始证据索引见 [关闭账本](progress.md#slice-3-closed) 与 [测试矩阵](test-matrix.md)，不在架构文档重复维护。
 
 ### Slice 1 关闭时的 Task 1.1 原型边界
 
@@ -40,7 +34,7 @@ Slice 3 已由 A 审查完整 `6da90ab6bd8995d8204ae0b7faf786c823699fe6..7c64eb5
 
 ## 已实现的批量与播放结构
 
-[Slice 3](progress.md#slice-3-closed) 已关闭，接受实现 `7c64eb5dcad6e5f20fb7eb41819be2521f65484d`。以下为当前结构；外部代理联调与大规模／完整扫描压力仍为 TARGET，已由 ACTIVE 的 [Slice 4 合同](../SLICE.md) 承接，尚未实施。单版本安装包（RO-1）已由 Task 4.1 实现并经 B 独立 PASS：`scripts/package_plugin.py` 从 Release 输出与锁文件生成 Linux x64 ZIP／清单／SHA-256，`scripts/run_isolated_package_integration.py` 在专用隔离实例仅用归档完成安装验收。Task 4.2 修正候选已交 B 复审，Task 4.3 按 3000 项媒体库门槛 PLANNED；固定组合上的真实任务、定时、停止和页面交互结果见 [测试矩阵](test-matrix.md)。
+以下为当前结构；Slice／Task 状态与安装包验收结果见 [当前合同](../SLICE.md)、[当前 Task](../TASK.md) 和 [测试矩阵](test-matrix.md)。
 
 ```mermaid
 flowchart TD
@@ -148,6 +142,6 @@ SQLite 运行时异常停止优化并尽可能原生委托，批量报告不可�
 
 ## TARGET — Slice 4 集成与单版本交付
 
-A 已激活 [Slice 4](../SLICE.md)，Base 为 Slice 3 关闭提交 `03169b07d110964562f7da31d2c3d7add82e5ff5`。Task 4.1 的仓库内打包入口与专用隔离包验收已由 B 独立 PASS；Task 4.2 的扫描修正候选已交 B 复审，当前 Task 4.3 按 3000 项媒体库门槛规划。以既有原生任务、ID 集合／分批、Coordinator、原生保存及 SQLite 条件提交为起点，补齐真实 3000 项原生库成本、完整扫描重叠、实际 JellyfinProxy 播放链和固定 Jellyfin 12.2.0／Linux x64 包安装／恢复证据；不新建调度／运行状态系统。
+Slice 4 的目标架构以 [当前合同](../SLICE.md) 为准：在既有原生任务、ID 集合／分批、Coordinator、原生保存及 SQLite 条件提交上，补齐真实 3000 项原生库成本、完整扫描重叠、实际 JellyfinProxy 播放链和固定 Jellyfin 12.2.0／Linux x64 包安装／恢复证据；不新建调度／运行状态系统。
 
-现有隔离工具会部署开发构建；`Packaging/meta.json` 已按实测支持范围更新描述。打包入口、归档消费的包验收入口已交付（Task 4.1）；代理／真实大库入口尚未交付。目标包包含插件及所需 SQLite 托管和 native 依赖，以归档摘要关联源码／构建，干净实例只消费归档验收；不会把开发工具复制产物冒充包安装。代理是固定版本的外部组件，插件保留原生 PlaybackInfo／MediaSourceId／302 契约，受控后端不改变插件只读及无 OpenList 元数据 API 的边界。代表性格式／客户端、未用 OpenList 时的专有行为和其他未测范围均按合同准确报告；这些 TARGET 不构成 CURRENT 或跨版本支持。
+目标包包含插件及所需 SQLite 托管和 native 依赖，以归档摘要关联源码／构建，干净实例只消费归档验收；不会把开发工具复制产物冒充包安装。代理是固定版本的外部组件，插件保留原生 PlaybackInfo／MediaSourceId／302 契约，受控后端不改变插件只读及无 OpenList 元数据 API 的边界。代表性格式／客户端、未用 OpenList 时的专有行为和其他未测范围均按合同准确报告；这些 TARGET 不构成 CURRENT 或跨版本支持。

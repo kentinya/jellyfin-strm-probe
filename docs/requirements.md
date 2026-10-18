@@ -1,6 +1,6 @@
 # 插件需求
 
-状态：以下为完整产品的稳定需求；Slice 1／2／3 已 PASS / CLOSED，播放／历史指纹／运行中共享、完整配置页及原生批量已交付；单版本安装包（Slice 4 RO-1）已由 B 独立审查 PASS，真实 3000 项媒体库／完整扫描压力、外部联调与其余发布结果仍为 TARGET。已接受合同、最终包和 A 决定见 [Slice 3 关闭快照](progress.md#slice-3-closed)。当前来源为 [V4.3 方案](<../Jellyfin STRM Probe Optimizer V4.3 开发方案.md>)、用户后续授权与 [范围说明](scope.md)。保留原需求及矩阵 ID；2026-10-14 按用户授权将批量滑动分页要求替代为候选 ID 集合＋分批对象读取，2026-10-18 将当前大库门槛调整为至少 3000，具体合同记录见 [开发流程](development-workflow.md#合同澄清实质变更与-partial--rescope)。[Slice 4](../SLICE.md) 已 ACTIVE，接续真实 3000 项媒体库／扫描／代理及单版本安装旅程；当前 [Task 4.3](../TASK.md) 为 PLANNED，B 须先重核新 Contract Checkpoint 后再实施。Slice 3 的实际验收与延期见关闭账本，本次只调整当前合同及事实指针，不改下方稳定需求。
+本文只保存稳定需求和业务不变量，不保存当前 Task 状态或审查日志。当前合同、验收结果和变更记录见 [Slice](../SLICE.md)、[Task](../TASK.md)、[进度账本](progress.md) 与 [开发流程](development-workflow.md)。
 
 V4.2 的 URL 改变规则替代 V3.0 路径单独更新规则；STATE 编号现指历史指纹合同，不要求独立状态机。首次信任接管是唯一无需本次探测即可初建指纹的例外，不能计为成功探测。
 

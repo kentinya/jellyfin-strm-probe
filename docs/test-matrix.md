@@ -190,42 +190,15 @@ B 独立证据索引：`.git/validation-evidence/198f4ff2accd5bc9fcd87518a9684b9
 
 原生成功必须有失败对照，定时／停止／重启／并发要求真实证据。外部代理联调不可用时 BLOCKED／NOT RUN，不算 PASS。
 
-## Slice 4 验收分配（RO-1 B PASS，RO-3 修正候选待 B 审查，RO-2／RO-4 NOT RUN）
+## Slice 4 验收分配
 
-本表分配已存在的产品缺口，不修改上方矩阵身份或历史状态。Slice 4 Base 为 `03169b07d110964562f7da31d2c3d7add82e5ff5`，Implementation Head 为 NOT SET；完整结果／边界见 [当前合同](../SLICE.md#slice-验收)。RO-1 已由 Task 4.1 经 B 独立 PASS；RO-3 的 Task 4.2 候选经 B 判 FIX REQUIRED，Developer 已在原 Task 修正为候选 `eac764d9…` 并交为 READY FOR B REVIEW；下方分别记录已接受事实、已修正项与尚未签发的 RO-3 验收。
+本节只保留 Required Outcome 的当前状态；详细计划、修正项、命令和证据索引以 [当前 Task](../TASK.md) 为准，完整合同以 [Slice 4](../SLICE.md#slice-验收) 为准。
 
-| Required Outcome | 必要证据与矩阵 | 当前状态 |
+| Required Outcome | 当前状态 | 详情入口 |
 |---|---|---|
-| RO-1 单版本安装与恢复 | 固定 Jellyfin／Linux x64 ZIP 及 SQLite 依赖／摘要，干净实例只从归档安装，Slice 3 安装替换保留配置／指纹，页面／原生任务／播放／重启、禁用／移除／重装；MP4／MKV、原生 Web 实际播放。X02／X06／X09、T19／T22／T24 的包安装证据另列。 | Task 4.1 B PASS；Slice Final 未运行（见下方分项） |
-| RO-2 真实 3000 项原生库 | 至少 3000 个受支持 STRM 的原生索引／查询，首次信任／未变零探测与小集合增量、范围／计数，ID O(N)／查询临时成本和对象／消费者上限、时间／内存／停止延迟／重跑；B03／B04／B12。模拟或代表性实机不替代。 | NOT RUN |
-| RO-3 完整扫描重叠 | 有限增删／移库／更新、独立刷新与批量／播放重叠，当前范围与稳定基线保护、下一轮收敛；最终候选的定时／双向共享／停止收尾／失败恢复及重启。B02／B05～B11、T18／T19／T21／T22／T28、X04／X08／X10。 | 修正候选待 B 审查（Task 4.2，BR-42-1..4 已修正，尚未签发 RO-3 PASS）；完整 3000 项媒体库扫描压力仍 NOT RUN |
-| RO-4 实际代理播放链 | 固定 JellyfinProxy 及受控后端，原生直连对照、PlaybackInfo／MediaSourceId／302／实际内容读取；未变／同 SHA-1 换 URL／失败修复／多版本／重启，REQ-EXTERNAL-001、T08／T16／T22／T25。只用 HTTP 后端不证明 OpenList 专有行为。 | NOT RUN |
+| RO-1 单版本安装与恢复 | B PASS；Slice Final 未运行 | [安装包说明](package-installation.md)、[Task 4.1 历史](progress.md#当前开发指针) |
+| RO-2 真实 3000 项原生库 | NOT RUN；当前 Task 4.3 PLANNED | [TASK.md](../TASK.md) |
+| RO-3 完整扫描重叠 | Task 4.2 修正候选待 B 复审；Slice Final 未运行 | [TASK.md](../TASK.md)、[Slice 4 合同](../SLICE.md) |
+| RO-4 实际代理播放链 | NOT RUN | [Slice 4 合同](../SLICE.md) |
 
-RO-1 分项（Task 4.1 已由 B 独立 PASS，审查快照见上；不能代替本 Slice Final）：
-
-| 项 | 事实 | 状态 |
-|---|---|---|
-| 打包与归档身份 | `scripts/package_plugin.py` 从 Release 输出与锁文件生成 ZIP／清单／SHA-256；负载含插件程序集、deps、托管与 linux-x64 native SQLite、meta.json、第三方许可；不含核心库／FFmpeg／其他平台 runtime／SDK／源码／凭据 | PASS（工具 20 项＋真实归档） |
-| 仅归档安装 | 专用隔离实例（独立 project／端口／工作区，服务器容器无源码／SDK／NuGet 挂载）仅解包安装后 Active；进程加载负载与归档摘要一致 | PASS（实机） |
-| 负向包拒绝 | 损坏、缺 native、GUID／ABI 不符、越界路径、符号链接在部署前拒绝；拒绝不损伤有效安装 | PASS（实机＋工具） |
-| 配置页与原生任务 | 真实 HTML 页面五项保存／重启读回；原生任务唯一且默认无触发、手动运行完成 | PASS（实机） |
-| 首次信任／未变／换 URL | 已有主流信任零插件探测；未变复查零探测；同 SHA-1／Size 换 URL 实际探测并持久化，重启复用 | PASS（实机） |
-| MP4／MKV 原生 Web 播放 | 原生 Web 客户端实际播放，视频时间与解码画面推进 | PASS（实机，H.264／AAC） |
-| 升级替换保留 | 从 `7c64eb5dcad6e5f20fb7eb41819be2521f65484d` 构建替换，配置与可信指纹保留、未完成变化重检 | PASS（实机） |
-| 禁用／移除／重装 | 禁用与移除后原生播放；重装后 Active 并重新检查 | PASS（实机） |
-
-RO-3 分项（Task 4.2 修正候选 `eac764d9…`、归档 `62ae0669…`；BR-42-1..4 已修正，待 B 审查；原候选 `4837cb6d…`／`58a0e22c…` 的 B 决定保留在 TASK）：
-
-| 项 | 修正事实（待 B 审查） | 状态 |
-|---|---|---|
-| 三方窗口与有限变化 | 批量／播放探测实际开始并保持执行，原生扫描轮询到 Running 后才发出 B→C／内容／Size 变化，并要求操作时间落在原生扫描 Running 区间内；删除／移出目标必须属于捕获集合；变更后仍需 Completed 扫描 | 已修正（BR-42-1） |
-| 逐源／成功／版本保护 | 统一要求本轮 Completed 与完整起止，拒绝 Failed／Cancelled／超时／缺结果；摘要计数器缺失即硬失败；A 原样保留、B 拒绝、C 后续提交；从当前原生库生成 136 源稳定预期集合并逐源对账地址／主流／指纹 | 已修正（BR-42-2） |
-| 独立刷新／多版本 | 两个版本改为不同 URL 并保留同内容哈希／Size；显式 MediaSourceId 必须匹配请求源 Id 与地址；FullRefresh 观察原生实际处理后再读两源 | 已修正（BR-42-2） |
-| 共同控制（ZIP 候选） | 定时触发持久化且触发、双向共享各 1 次真实后端探测、混合峰值 `peak_running_probes 2` 且播放开始 `running 2` | 已修正，待 B 审查 |
-| 停止收尾／再运行 | 跨 128 批次夹具：Cancelling 期间进度 <100%、已开始 2 提交／未开始 4 撤销、收尾期无新轮／新探测、再运行被拒、下一轮收敛 | 已修正（BR-42-3） |
-| 恢复控制 | ZIP 上单项媒体失败保留旧基线且健康源仍成功；禁用／故障前先制造应探测变化，按插件编码器与所有后端路由归因 | 已修正（BR-42-3） |
-| 证据与恢复 | 外置 `--evidence-dir` 增量记录 UTC／单调时序、容器／任务身份、变化操作、后端与插件日志、保存／指纹快照、逐源清单与 INDEX；收尾失败总体 FAIL | 已修正（BR-42-4） |
-
-Developer 修正工具回归 37 项与全部 T4 门槛在候选 `eac764d9…` 上 PASS，但这是 Developer 自报结果；B 尚未审查该修正候选，RO-3 未签发 PASS。原候选 B 独立 Python 141/141 与 4 项控制复现记录保留在 `.git/validation-evidence/4837cb6d98ebbc60281ab3a66c888588a1120110/b-review-20261017-04/INDEX.md`（仅本机可读）。修正候选索引：`.git/validation-evidence/eac764d9b32a1b13f8ac963f8c14888fd50db4a3/run-20261017T143741Z-92b89989/INDEX.md`。
-
-全部必要门槛在新候选的独立 Slice Final 执行；外部依赖不足如实 BLOCKED，不以扩大已有 PASS 或删门槛收尾。T05／T09～T11 逐输入独立实机、audio-only 实机、物理数据库保存故障、完整镜像构建溯源和通用性能证明沿用已接受限制；其他格式／客户端／平台不作普遍支持声明。
+历史用例表仍记录已执行的测试身份；不要在本节复制安装步骤、修正明细或 Developer 自报结果。完整回归由 B 承担，Developer 只运行改动文件直接影响的测试，规则见 [开发流程](development-workflow.md#测试等级)。

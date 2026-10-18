@@ -167,16 +167,22 @@ P0 表示可信的播放整体不可用、状态损坏、秘密泄露等严重�
 
 ## 8. 文档维护
 
-| 文档 | 保存内容 |
+状态只写一次，其他文档通过链接引用。更新 Task 或验收事实时，先更新权威文件，再做必要的短入口同步；不复制 SHA、测试计数、审查过程或当前状态段落。
+
+| 文档 | 唯一职责 |
 |---|---|
-| `SLICE.md` | 当前能力合同与最终包 |
-| `TASK.md` | 当前实施任务或明确无活动任务 |
+| `SLICE.md` | 当前能力合同、Required Outcomes／Surfaces、验收和最终包 |
+| `TASK.md` | 当前实施任务、测试分工、完成报告和 B 决定 |
 | `Task/TEMPLATE.md` | 可复用 Task 模板 |
 | `docs/roadmap.md` | 大 Slice 目标、次序、依赖和状态 |
 | `docs/progress.md` | 已关闭 Slice 的简短账本与当前指针 |
-| `docs/requirements.md` | 稳定需求，不堆叠工作日志 |
-| `docs/product-experience.md` | 用户旅程与恢复 |
-| `docs/architecture.md` | CURRENT／TARGET，不记录每次 Task 审查 |
+| `docs/requirements.md` | 稳定需求和业务不变量，不记录当前进度 |
+| `docs/product-experience.md` | 用户旅程、恢复和可见行为 |
+| `docs/architecture.md` | CURRENT／TARGET 架构与模块责任，不记录审查日志 |
+| `docs/test-matrix.md` | 用例身份、分层证据和未运行边界 |
+| `docs/development-environment.md` | 可迁移环境、固定输入和运行前提 |
+| `docs/core-configuration.md` / `docs/package-installation.md` | 可执行的配置、安装和恢复步骤 |
+| `docs/compatibility.md` / `docs/references.md` | 兼容性结论、源码定位和外部来源 |
 | `docs/agent-experience/` | A／B／Developer 的短经验清单，不改变合同或验收 |
 
-详细 Task、修正和审查历史留在 Git。完成 Task 后可替换根 `TASK.md`，无需永久复制所有历史 Task 文件；保留它们的可达提交。
+详细 Task、修正和审查历史留在 Git。完成 Task 后可替换根 `TASK.md`，无需永久复制所有历史 Task 文件；保留它们的可达提交。文档治理本身属于 T0：只需相关 Markdown／链接检查和 `git diff --check`，不把文档整理写成产品验收。

@@ -2,7 +2,7 @@
 
 ## 开发基准与版本替代
 
-[V4.3 方案](<../Jellyfin STRM Probe Optimizer V4.3 开发方案.md>) 是当前开发基准；按用户明确授权，仅修订 V4.2 的扫描方式及版本标识，其他方案内容不改。V4.2 原文保留于 `fdcd3fc5576a1eba7835c9e9ff261ac6844a2e96:Jellyfin STRM Probe Optimizer V4.2 开发方案.md`。初始重规划阶段仅修改文档；其后已授权的 Slice 1／2／3 分别交付核心原型、完整播放／指纹闭环及原生批量／配置旅程，均经 A 最终审查 PASS / CLOSED。完整产品仍未交付。
+[V4.3 方案](<../Jellyfin STRM Probe Optimizer V4.3 开发方案.md>) 是当前开发基准；本文只记录产品边界和版本取舍。当前状态与证据统一见 [Slice](../SLICE.md)、[Task](../TASK.md) 和 [关闭账本](progress.md)。
 
 V3.0 文件的删除与 V4.2 文件的新增是本轮开始前已有的用户改动。V3.0 原文及旧 Slice／Task 可从重规划前检查点 `4b1d0468c1e43e6e9034ef98e99b6cc44ea59485` 读取，不恢复到工作区。未提供 V4.1 原文，因此以 V4.2 本身写出的规则为准，不补写中间版本历史。
 
@@ -45,4 +45,4 @@ V3.0 文件的删除与 V4.2 文件的新增是本轮开始前已有的用户改
 
 ## 当前规划
 
-Slice 1／2／3 保留各自真实 Base 并均已 PASS / CLOSED，合同与证据见 [关闭账本](progress.md)。Slice 3 Base 固定为 `6da90ab6bd8995d8204ae0b7faf786c823699fe6`，接受实现 `7c64eb5dcad6e5f20fb7eb41819be2521f65484d`；候选 ID 集合＋分批对象读取、原生批量与完整配置页已接受。Task 4.1 已由 B 独立 PASS，Task 4.2 修正候选已交 B 复审；当前 Task 4.3 按 3000 项媒体库门槛 PLANNED，B 依 [固定交付方案](slice-4-delivery-plan.md) 继续审查与规划。[Slice 4](../SLICE.md) 已在独立一轮激活为 ACTIVE，Base 为 Slice 3 关闭提交 `03169b07d110964562f7da31d2c3d7add82e5ff5`，Implementation Head 为 NOT SET。合同要求真实 3000 项原生库／成本、完整扫描并发、实际 JellyfinProxy 播放链和固定 Jellyfin／Linux x64 包安装与恢复；RO-1 已审查通过，其余新增验收仍 NOT RUN。首版以 MP4／MKV 和原生 Web／代理媒体读取作代表覆盖，其他格式／客户端不自动获得兼容声明；代理后端若只用受控 HTTP 服务，OpenList 专有行为仍 NOT RUN。稳定需求和已接受业务规则不变。
+当前 Slice、Task、门槛和证据只在 [SLICE.md](../SLICE.md)、[TASK.md](../TASK.md) 与 [进度账本](progress.md) 维护；本页不复制状态快照。

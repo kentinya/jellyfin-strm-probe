@@ -1,17 +1,17 @@
 # 可迁移开发环境
 
-2026-10-18 用户要求更换开发服务器，取消旧服务器依赖。本文件改为新主机准备说明；旧服务器的环境实测、原始路径和权限处理记录保留在 `b92bea58a2552997bd750f059fc7d6c6cca23b93:docs/development-environment.md`。历史“当前已满足／实例运行中”不再作为开工前提；本机工具链已实测通过，但现有隔离 Jellyfin 实例健康检查仍阻塞真实集成运行。
+本文件只描述可迁移开发环境、固定输入和运行前提。当前合同、Task 状态和产品验收统一见 [Slice](../SLICE.md)、[Task](../TASK.md) 与 [进度账本](progress.md)；旧服务器记录只作为 Git 历史，不是新主机开工前提。
 
 ## 当前新主机检查（2026-10-18）
 
 - `python3 scripts/development_environment.py sdk`：PASS，已存在并校验本地 SDK `10.0.401`；全局 `dotnet` 不在 PATH，统一使用 `bash scripts/dotnet-local`。
 - `python3 scripts/development_environment.py doctor`：PASS，Docker Engine `29.7.1`、Compose `v5.3.1`、本地端口、DNS、NuGet HTTPS 和不可变镜像锁均通过。
-- `python3 scripts/development_environment.py status`：现有隔离 Jellyfin／media 容器已运行；Jellyfin 为 `unhealthy`，健康端点持续返回 `503`，日志指向 `JellyfinDbContext` 健康检查失败。media 容器未报告健康检查错误。
+- `python3 scripts/development_environment.py status`：若现有隔离 Jellyfin 健康检查失败，真实集成保持 `BLOCKED／NOT RUN`；不要接管或清理非本轮容器。
 - 本轮只读检查未停止、重启、接管或清理现有容器；在授权环境维护者修复该隔离实例前，包安装、播放和大库实机门槛保持 `BLOCKED／NOT RUN`，不把工具链 PASS 当产品验收。
 
 ## 当前交接与固定输入
 
-Slice 1／2／3 已 PASS / CLOSED；Slice 4 ACTIVE。Task 4.1、4.2 已经 B PASS；4.2 的最终决定与独立重启补证见 `a06a80fac90a86085f25116568aa24b54847c562:TASK.md`。当前 [Task 4.3](../TASK.md) 为 PLANNED，承接真实 3000 项媒体库验收；RO-2／RO-4 与单独 Slice Final 尚未完成。换机不重设 Base，不重新打开已通过的历史 Task，也不继承旧服务器资源 BLOCKED。
+继续工作前读取当前 [Slice](../SLICE.md) 与 [Task](../TASK.md)；换机不重设 Base、不重新打开已通过的历史 Task，也不继承旧服务器资源结论。
 
 | 输入 | 固定身份／新主机要求 |
 |---|---|
