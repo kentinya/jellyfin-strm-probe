@@ -7,7 +7,7 @@ Task ID: 4.3
 Parent Slice: 4
 Status: PLANNED
 Task Base: a06a80fac90a86085f25116568aa24b54847c562
-Contract Checkpoint: b1bd76c4380fc8c7cfff8e6ab1b4dcb55fc9d1a7
+Contract Checkpoint: 611c31c31115b02c3fb60cef2826d9348e352b7b
 Difficulty: High
 Test Level: T4
 Planner / Reviewer: B
@@ -20,7 +20,7 @@ Implementation Head: NOT SET
 
 ## 实际基线、已接受结果与缺口
 
-- 规划开始 `main` 干净，治理 PASS。Task Base 是 4.2 最终 B PASS 提交；Slice Base 固定为 `03169b07d110964562f7da31d2c3d7add82e5ff5`。当前 Contract Checkpoint 为 `b1bd76c4380fc8c7cfff8e6ab1b4dcb55fc9d1a7`；固定交付方案在 `ae265d0dba02aa1c5599871602d4350072b7155f`，二者合同义务一致，差异仅为当前大库门槛和下一步指针。
+- 规划开始 `main` 干净，治理 PASS。Task Base 是 4.2 最终 B PASS 提交；Slice Base 固定为 `03169b07d110964562f7da31d2c3d7add82e5ff5`。当前 Contract Checkpoint 为 `611c31c31115b02c3fb60cef2826d9348e352b7b`；固定交付方案在 `ae265d0dba02aa1c5599871602d4350072b7155f`，二者合同义务一致，差异仅为当前大库门槛和下一步指针。
 - RO-1／4.1 B PASS 保留在 `0e7b26b381ed5f71781e75d317275afa51d791e9:TASK.md`；RO-3／4.2 完整计划、历史拒绝和补证 B PASS 保留在 `a06a80fac90a86085f25116568aa24b54847c562:TASK.md`，不用永久 Task 归档。最新已审查实现为 `86946cc4ef5c0648b71aafc00aa666f2a2bb20c5`，原 ZIP SHA-256 为 `434f930d6ad8282c1d68d47c7fc4456d52a025ae05e273db7b2f21551071ccaf`；它们不是未来 4.3 候选的验收证明。
 - 已核对 `BatchLibraryScope.cs`、`BatchCheckRunner.cs`、`StrmProbeScheduledTask.cs`、`BatchCheckTests.cs` 与包／扫描／批量工具。已有原生 GetItemIds、Guid 去重排序、每批最多 128 个对象、每批最多 8 个消费者，共同 optimizer／Coordinator／条件提交，以及候选／对象读取成本摘要。历史十万规模单元测试使用合成 ID 和普通对象，不是 3000 个真实 STRM／已有主流的证据。
 - 复用 `scripts/package_environment.py` 的新工作区、当前进程 token 归属、镜像锁、Compose、解包安装／摘要和清理；复用 `run_isolated_scan_integration.py` 的完整日期／运行关联、原生任务 API、只读源／五字段快照和增量 EvidenceRecorder，以及 `run_isolated_batch_integration.py` 的成本字段解析。只复用无开发部署副作用的函数，不调用旧入口 main 来准备包实例。
