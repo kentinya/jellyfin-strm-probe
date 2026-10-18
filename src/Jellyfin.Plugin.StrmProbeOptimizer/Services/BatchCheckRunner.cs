@@ -239,6 +239,7 @@ public sealed class BatchCheckRunner
         long fetchPeakSample = fetchRetainedBefore;
         try
         {
+            _logger.LogInformation("STRM_BATCH_CANDIDATE_QUERY_STARTED LibraryCount {LibraryCount}", scope.LibraryIds.Count);
             (ordered, candidatesComplete) = FetchCandidates(scope, counters, stopSignal, out candidateSetEstimatedBytes, out candidateSetMeasuredCapacityBytes, ref fetchPeakSample);
         }
         catch (Exception exception)
@@ -270,6 +271,11 @@ public sealed class BatchCheckRunner
         }
 
         CandidateSetFixed?.Invoke();
+        _logger.LogInformation("STRM_BATCH_CANDIDATE_QUERY_RETURNED CandidateCount {CandidateCount} RawCount {RawCount} DuplicateCount {DuplicateCount} Complete {Complete}",
+            ordered.Count,
+            counters.RawCandidateCount,
+            counters.DuplicateIdCount,
+            candidatesComplete);
 
         if (!candidatesComplete)
         {
@@ -311,9 +317,20 @@ public sealed class BatchCheckRunner
             IReadOnlyList<BaseItem> items;
             var readTimer = System.Diagnostics.Stopwatch.StartNew();
             var readAllocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+            _logger.LogInformation(
+                "STRM_BATCH_OBJECT_READ_STARTED BatchIndex {BatchIndex} CandidateOffset {CandidateOffset} RequestedCount {RequestedCount}",
+                counters.BatchReadCount,
+                batchStart,
+                batchIds.Length);
             try
             {
                 items = _candidateSource.GetBatchItems(batchIds, scope.LibraryIds);
+                _logger.LogInformation(
+                    "STRM_BATCH_OBJECT_READ_RETURNED BatchIndex {BatchIndex} CandidateOffset {CandidateOffset} RequestedCount {RequestedCount} ReturnedCount {ReturnedCount}",
+                    counters.BatchReadCount,
+                    batchStart,
+                    batchIds.Length,
+                    items.Count);
             }
             catch (Exception exception)
             {
@@ -383,8 +400,21 @@ public sealed class BatchCheckRunner
                 break;
             }
 
+            _logger.LogInformation("STRM_BATCH_CANDIDATE_QUERY_STARTED LibraryId {LibraryId}", libraryId);
+            var queryTimer = System.Diagnostics.Stopwatch.StartNew();
+            var queryAllocatedBefore = GC.GetAllocatedBytesForCurrentThread();
             var ids = _candidateSource.GetLibraryCandidateIds(libraryId);
+            queryTimer.Stop();
             counters.RawCandidateCount += ids.Count;
+            _logger.LogInformation(
+                "STRM_BATCH_CANDIDATE_QUERY_RETURNED LibraryId {LibraryId} RawCount {RawCount} ElapsedMilliseconds {ElapsedMilliseconds} CurrentThreadAllocatedBytes {CurrentThreadAllocatedBytes}",
+                libraryId,
+                ids.Count,
+                queryTimer.Elapsed.TotalMilliseconds,
+                GC.GetAllocatedBytesForCurrentThread() - queryAllocatedBefore);
+            var mergeTimer = System.Diagnostics.Stopwatch.StartNew();
+            var mergeAllocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+            var uniqueBefore = candidates.Count;
             // Sample the process managed heap after the native query returned (its temporary allocations are still
             // live) so the O(N) query cost is captured as a sampled process-heap peak.
             peakSample = Math.Max(peakSample, GC.GetTotalMemory(forceFullCollection: false));
@@ -394,6 +424,15 @@ public sealed class BatchCheckRunner
             // stop-to-return latency is measured so the unavoidable delay is disclosed instead of claimed immediate.
             if (stopSignal.IsStopped || ObserveDisabled(counters, stopSignal))
             {
+                mergeTimer.Stop();
+                _logger.LogInformation(
+                    "STRM_BATCH_CANDIDATE_SET_MERGED LibraryId {LibraryId} RawCount {RawCount} NewlyUniqueCount {NewlyUniqueCount} DuplicateCount {DuplicateCount} ElapsedMilliseconds {ElapsedMilliseconds} CurrentThreadAllocatedBytes {CurrentThreadAllocatedBytes}",
+                    libraryId,
+                    ids.Count,
+                    candidates.Count - uniqueBefore,
+                    counters.DuplicateIdCount,
+                    mergeTimer.Elapsed.TotalMilliseconds,
+                    GC.GetAllocatedBytesForCurrentThread() - mergeAllocatedBefore);
                 RecordStopQueryLatency(counters, stopSignal);
                 complete = false;
                 break;
@@ -411,11 +450,24 @@ public sealed class BatchCheckRunner
                     Interlocked.Increment(ref counters.DuplicateIdCount);
                 }
             }
+
+            mergeTimer.Stop();
+            _logger.LogInformation(
+                "STRM_BATCH_CANDIDATE_SET_MERGED LibraryId {LibraryId} RawCount {RawCount} NewlyUniqueCount {NewlyUniqueCount} DuplicateCount {DuplicateCount} ElapsedMilliseconds {ElapsedMilliseconds} CurrentThreadAllocatedBytes {CurrentThreadAllocatedBytes}",
+                libraryId,
+                ids.Count,
+                candidates.Count - uniqueBefore,
+                counters.DuplicateIdCount,
+                mergeTimer.Elapsed.TotalMilliseconds,
+                GC.GetAllocatedBytesForCurrentThread() - mergeAllocatedBefore);
         }
 
         // A stable, explicit Guid order fixes the identity sequence for this run without depending on media names
         // or the native paging order.
+        var sortTimer = System.Diagnostics.Stopwatch.StartNew();
+        var sortAllocatedBefore = GC.GetAllocatedBytesForCurrentThread();
         candidates.Sort();
+        sortTimer.Stop();
         peakSample = Math.Max(peakSample, GC.GetTotalMemory(forceFullCollection: false));
         // Documented size-model estimate from the element counts. It must not be called a measured peak; the
         // measured backing capacity and the retained-memory delta are the measured figures.
@@ -423,6 +475,21 @@ public sealed class BatchCheckRunner
         // Measured backing capacity: the real List/HashSet capacities (actual allocated slots, including growth
         // slack) at the end of the fetch, multiplied by the same documented per-slot size.
         measuredCapacityBytes = candidates.Capacity * 16L + seen.Capacity * 24L;
+        _logger.LogInformation(
+            "STRM_BATCH_CANDIDATE_SET_FIXED RawCount {RawCount} UniqueCount {UniqueCount} DuplicateCount {DuplicateCount} SortMilliseconds {ElapsedMilliseconds} CurrentThreadAllocatedBytes {CurrentThreadAllocatedBytes} ListCapacity {ListCapacity} HashSetCapacity {HashSetCapacity} EstimatedBytes {EstimatedBytes} MeasuredCapacityBytes {MeasuredCapacityBytes}",
+            counters.RawCandidateCount,
+            candidates.Count,
+            counters.DuplicateIdCount,
+            sortTimer.Elapsed.TotalMilliseconds,
+            GC.GetAllocatedBytesForCurrentThread() - sortAllocatedBefore,
+            candidates.Capacity,
+            seen.Capacity,
+            estimatedBytes,
+            measuredCapacityBytes);
+        foreach (var candidateId in candidates)
+        {
+            _logger.LogInformation("STRM_BATCH_CANDIDATE_ID {CandidateId}", candidateId);
+        }
         return (candidates, complete);
     }
 
