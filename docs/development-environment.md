@@ -17,7 +17,7 @@ Slice 1／2／3 已 PASS / CLOSED；Slice 4 ACTIVE。Task 4.1、4.2 已经 B PAS
 
 ## 克隆与准备
 
-克隆完整历史，才能读取固定 Base、已关闭合同和 B 决定。下列命令从新检出的仓库根目录执行；尚未在新主机运行，不能记为 PASS。
+用户已授权将完整开发历史与 V4.3 方案一并发布，替代旧的仅源码快照发布方式，并保留旧快照历史。新主机完整克隆即可读取固定 Base、已关闭合同和 B 决定，无须另行手动补入方案或私有 Git 迁移包。下列命令从新检出的仓库根目录执行；尚未在新主机运行，不能记为 PASS。
 
 ```bash
 git clone https://github.com/kentinya/jellyfin-strm-probe.git
