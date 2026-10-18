@@ -134,7 +134,7 @@ git diff --check
 
 2026-10-16 用户后续明确授权本次直接规划 Task，并固定方案指导后续 B；因此本轮 A 可兼任规划，保留 B 独立审查与 A Slice 最终审查责任。[交付方案](docs/slice-4-delivery-plan.md) 固定 4.1 安装与恢复 → 4.2 完整扫描并发 → 4.3 真实 3000 项媒体库 → 4.4 实际代理联调，根 TASK 每次只激活一个。2026-10-18 用户进一步授权 A 将当前大库验收从此前的十万候选调整为至少 3000 个真实原生候选；历史快照保留旧口径，当前合同、Task 和同步文档以 3000 为准。这是 Material Contract Change，B 需在本 Contract Checkpoint 后重新核查 Task 合法性；本轮仍不实施插件。
 
-Base 固定；本 Slice 尚无实现，Implementation Head 保持 NOT SET，不能填旧 Slice 实现或本次文档提交。本次授权的规划者先运行已提交治理检查、核对真实仓库、本合同和固定方案，再提交首个 Task；后续 B 按同样准入规划。Developer 仅在活动 Task 内实施。改变 Required Outcomes／Surfaces、当前 Task 边界或安全／正确性验收含义时，A 先提交明确的新合同，B 再决定继续／调整／重规划，不让 Developer 直接继续。
+Base 固定；本 Slice 尚无实现，Implementation Head 保持 NOT SET，不能填旧 Slice 实现或本次文档提交。当前 Task 4.3 已按本 Contract Checkpoint 列为 PLANNED，B 需先重核 3000 门槛后的 Task 合法性；通过后 Developer 仅在活动 Task 内实施。改变 Required Outcomes／Surfaces、当前 Task 边界或安全／正确性验收含义时，A 先提交明确的新合同，B 再决定继续／调整／重规划，不让 Developer 直接继续。
 
 全部必要结果满足后 B 停止新增 Task，单独执行 Slice Final，形成一份 Closure Packet 并交为 READY FOR A REVIEW。A 审查完整 Base..Implementation Head，判 PASS、FIX REQUIRED 或 PARTIAL / RESCOPE；P2／P3、可选证明和措辞不单独阻止 PASS。PASS 后一次性协调 CURRENT、SLICE／TASK、Roadmap／Progress／README 和简短角色经验，宣布 PASS / CLOSED 并停止；选择其他 Slice 另开一轮。
 
