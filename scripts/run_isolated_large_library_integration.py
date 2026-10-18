@@ -493,15 +493,71 @@ def replace_source_route(url: str, media_name: str) -> None:
     pe.copy_owned(pe.WORK / "media" / media_name, target, label="replace per-source media bytes")
 
 
+def wait_native_task_idle(auth: str, key: str, timeout: int = 300) -> None:
+    """Wait until the native library task is idle so a fresh manual run actually starts a new execution.
+
+    Creating the library itself kicks off an async scan; starting the task while it is still Running coalesces
+    into the same run, so the tool must wait for Idle before requesting its own scan.
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        task = scan.find_task_by_key(auth, key)
+        if scan.task_state_name(task) in {"idle", "0"}:
+            return
+        time.sleep(1)
+    raise RuntimeError(f"The native task {key!r} did not return to Idle before the timeout.")
+
+
+def indexed_strm_count(auth: str) -> int:
+    return len([item for item in paged_native_items(auth, {})
+                if str(item.get("Path") or "").lower().endswith(".strm")])
+
+
+def resolve_fixture_items(auth: str, names: list[str]) -> dict[str, dict] | None:
+    """Return the name->item map only when every fixture name currently resolves exactly once."""
+    by_name: dict[str, list[dict]] = {}
+    for item in paged_native_items(auth, {}):
+        by_name.setdefault(str(item.get("Name")), []).append(item)
+    if all(len(by_name.get(name, [])) == 1 for name in names):
+        return {name: by_name[name][0] for name in names}
+    return None
+
+
 def prepare_indexed_fixture(auth: str, fixture: dict[str, object], recorder: scan.EvidenceRecorder) -> dict[str, dict]:
-    _, interval = scan.run_native_scan_completed(auth, "large-library fixture scan", timeout=1800)
-    recorder.record("fixture_scan_completed", interval=interval)
+    """Index every fixture through one real native scan and poll until all items appear.
+
+    Jellyfin's library scan is asynchronous: the scheduled task can report Completed while items are still
+    being persisted, and a manual start during the library-creation scan coalesces into that earlier run. The
+    tool waits for Idle, starts a fresh scan, and then polls the paged native query until every fixture name
+    resolves exactly once (or the fixed deadline fails the run).
+    """
     wanted = list(fixture["names"]) + [name for name in fixture["controls"].values()
                                         if name != fixture["controls"]["out_of_scope"]]
-    items = wait_items_by_name(auth, wanted)
+    wait_native_task_idle(auth, scan.SCAN_TASK_KEY)
+    scan.refresh_library(auth)
+    items = poll_fixture_items(auth, wanted, recorder, deadline_seconds=3600)
     item_ids = [canonical_guid(item["Id"], "fixture item") for item in items.values()]
     require(len(set(item_ids)) == len(item_ids), "Jellyfin merged two physical fixture files into one item.")
     return items
+
+
+def poll_fixture_items(auth: str, names: list[str], recorder: scan.EvidenceRecorder,
+                       deadline_seconds: int) -> dict[str, dict]:
+    deadline = time.monotonic() + deadline_seconds
+    last = -1
+    while time.monotonic() < deadline:
+        try:
+            resolved = resolve_fixture_items(auth, names)
+        except RuntimeError:
+            resolved = None
+        if resolved is not None:
+            return resolved
+        count = indexed_strm_count(auth)
+        if count != last:
+            recorder.record("fixture_index_progress", indexed_strm=count, expected=len(names))
+            last = count
+        time.sleep(5)
+    raise RuntimeError(f"The package instance did not index all {len(names)} STRM fixtures before the timeout.")
 
 
 def prepare_native_streams(auth: str, items: list[dict], urls: dict[str, str], recorder: scan.EvidenceRecorder) -> None:
@@ -753,9 +809,10 @@ def run_scenario(package: Path, count: int, evidence_dir: Path, timeout: int, ke
 
         changes = seed_controlled_contents(fixture, items, recorder)
         auth = scan.api_auth()
-        _, add_interval = scan.run_native_scan_completed(auth, "index missing-stream controls", timeout=1800)
-        recorder.record("missing_stream_candidates_indexed", interval=add_interval)
-        new_items = wait_items_by_name(auth, list(fixture["new_names"]))
+        wait_native_task_idle(auth, scan.SCAN_TASK_KEY)
+        scan.refresh_library(auth)
+        new_items = poll_fixture_items(auth, list(fixture["new_names"]), recorder, deadline_seconds=1800)
+        recorder.record("missing_stream_candidates_indexed", new_names=len(new_items))
         for name in fixture["new_names"]:
             item = scan.current_native_item_by_id(auth, new_items[name]["Id"])
             require(item is not None and not any(stream.get("Type") in {"Video", "Audio"}
