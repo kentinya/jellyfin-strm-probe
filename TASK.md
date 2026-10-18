@@ -1,11 +1,15 @@
-# Task 4.2 — 完整扫描与播放／批量并发下的正确性
+# NO ACTIVE IMPLEMENTATION TASK
+
+## Task 4.2 — 完整扫描与播放／批量并发下的正确性
+
+本检查点保留 Task 4.2 的完整计划、历史审查和 B 补证 PASS；没有活动实施任务。下一步由 B 按已提交 Slice／固定方案规划 4.3，本轮不启动后续实施。
 
 必读：[Slice 4 合同](SLICE.md)、[固定交付方案](docs/slice-4-delivery-plan.md)、[开发流程](docs/development-workflow.md)、[B 经验](docs/agent-experience/task-planner-reviewer.md)、[Developer 经验](docs/agent-experience/developer-implementation-role.md)。本计划只细化已提交合同的 RO-3；4.1 已独立 PASS，审查原文保留于 `git show 0e7b26b381ed5f71781e75d317275afa51d791e9:TASK.md`，不修改 Slice／Roadmap／稳定需求。
 
 ```text
 Task ID: 4.2
 Parent Slice: 4
-Status: FIX REQUIRED
+Status: PASS
 Task Base: 0e7b26b381ed5f71781e75d317275afa51d791e9
 Contract Checkpoint: ae265d0dba02aa1c5599871602d4350072b7155f
 Difficulty: High
@@ -94,12 +98,12 @@ python3 scripts/run_isolated_scan_integration.py --package artifacts/releases/Je
 
 ## 验收条件
 
-- [ ] AC-5：完整原生扫描 Running 区间与已实际开始的批量、播放执行有可核验交集；有限增删／移库／URL／内容变化和独立强制刷新都有时序与结果证据，不以 API 排队或串行场景替代。
-- [ ] AC-5：候选集合与当前范围符合既有规则，消失项正确结算、新增下一轮发现；不越范围、不接受探测期间变化的过期指纹，不串多版本，最终最新地址／主流／指纹及重启一致。
-- [ ] AC-6：最终 ZIP 安装候选上手动／定时、双向共享、不同源与混合并发、停止收尾／再运行、单项失败、SQLite 故障／修复重启真实通过；false 权限及禁用／普通／旧输入、末项全局故障等既有控制通过。无新取消语义或产品状态机制。
-- [ ] AC-6：首次信任、可靠成功／跳过／未完成／撤销等统计准确，检查与需要等式成立，进度／终态不虚报；扫描自身与插件探测成本分别记录。
-- [ ] AC-8 对应部分：当前源码／包／部署／镜像／配置／夹具身份、精确命令和原始证据一致；完整 T4 门槛、归档安装与新增扫描验收通过。恢复／清理失败不能输出 PASS；签名 URL／凭据不泄露。
-- [ ] 改动仅限本行为的验收入口／必要共用帮助、相关测试／事实文档及实际阻碍 RO-3 的最小产品修复；没有改变 Slice／稳定需求或引入排除机制。RO-2／RO-4 和单独 Slice Final 明确未完成。
+- [x] AC-5：完整原生扫描 Running 区间与已实际开始的批量、播放执行有可核验交集；有限增删／移库／URL／内容变化和独立强制刷新都有时序与结果证据，不以 API 排队或串行场景替代。
+- [x] AC-5：候选集合与当前范围符合既有规则，消失项正确结算、新增下一轮发现；不越范围、不接受探测期间变化的过期指纹，不串多版本，最终最新地址／主流／指纹及重启一致。
+- [x] AC-6：最终 ZIP 安装候选上手动／定时、双向共享、不同源与混合并发、停止收尾／再运行、单项失败、SQLite 故障／修复重启真实通过；false 权限及禁用／普通／旧输入、末项全局故障等既有控制通过。无新取消语义或产品状态机制。
+- [x] AC-6：首次信任、可靠成功／跳过／未完成／撤销等统计准确，检查与需要等式成立，进度／终态不虚报；扫描自身与插件探测成本分别记录。
+- [x] AC-8 对应部分：当前源码／包／部署／镜像／配置／夹具身份、精确命令和原始证据一致；完整 T4 门槛、归档安装与新增扫描验收通过。恢复／清理失败不能输出 PASS；签名 URL／凭据不泄露。
+- [x] 改动仅限本行为的验收入口／必要共用帮助、相关测试／事实文档及实际阻碍 RO-3 的最小产品修复；没有改变 Slice／稳定需求或引入排除机制。RO-2／RO-4 和单独 Slice Final 明确未完成。
 
 ## 必要测试
 
@@ -202,9 +206,9 @@ RO-2 的十万原生候选／成本验收（后续 4.3）、RO-4 的真实代理
 ```text
 Reviewed: 0e7b26b381ed5f71781e75d317275afa51d791e9..86946cc4ef5c0648b71aafc00aa666f2a2bb20c5
 Report Checkpoint: 03f62bc8fafcd3e3b50bf4a21e35c12135f7eaa1
-Decision: FIX REQUIRED
-Slice Required Outcomes all satisfied: NO — RO-1 B PASS; RO-3 FIX REQUIRED; RO-2/RO-4 NOT RUN
-Next: Developer completes BR-42-2 restart verification in Task 4.2; see the 2026-10-18 B review below
+Decision: PASS
+Slice Required Outcomes all satisfied: NO — RO-1/RO-3 B PASS; RO-2/RO-4 NOT RUN
+Next: B plans Task 4.3 under the committed Slice; no further Task 4.2 Developer correction
 ```
 
 ### 本轮独立复审与证据（2026-10-17）
@@ -292,7 +296,7 @@ Implementation Head: `86946cc4ef5c0648b71aafc00aa666f2a2bb20c5`
 
 ### B 复审（2026-10-18）— BR-42-2 重启验收仍 FIX REQUIRED
 
-本节是当前修正依据，替代上方旧轮次的剩余工作清单。Task ID、Base、Goal、Scope、Contract Checkpoint、High／T4 和最终门槛保持不变；不需要修改合同或交 A 重定范围。未签发本 Task PASS，不规划 4.3。
+本节保留补证前的审查与修正要求；当前决定以下方「B 独立补证与最终 Task 裁决」为准。Task ID、Base、Goal、Scope、Contract Checkpoint、High／T4 和最终门槛保持不变；不需要修改合同或交 A 重定范围。
 
 B 已审查完整 Base..Implementation Head、上次拒绝后的追加差异与报告检查点。起始工作区干净，治理 PASS；`86946cc..03f62bc` 仅有 `TASK.md` 报告变化。本 Task 全部可执行变化包括扫描入口／工具测试、合成媒体服务观测标记，以及 `StrmPlaybackOptimizer` 中批量加入已开始探测的诊断日志；该日志不改变执行／提交边界。未发现已实证的产品行为缺陷。
 
@@ -329,4 +333,24 @@ RO-1 保持 Task 4.1 B PASS；RO-3 因上述重启验收缺口仍 FIX REQUIRED�
 
 供 Slice 收尾的可复用经验候选：播放入口可能补建或修复状态 → 重启后先做只读快照并对比重启前独立预期，再验证播放和探测计数 → 适用于持久化／多源恢复验收。本轮不改角色经验文件。
 
-NEXT ACTION: DEVELOPER COMPLETES BR-42-2 RESTART VERIFICATION IN TASK 4.2
+上述 Developer 修正路线已由下方用户授权的 B 独立补证替代，不再要求 Developer 为本项启动新一轮工具开发。
+
+### B 独立补证与最终 Task 裁决（2026-10-18）
+
+**Decision: PASS。** Reviewed Range 仍为 `0e7b26b381ed5f71781e75d317275afa51d791e9..86946cc4ef5c0648b71aafc00aa666f2a2bb20c5`；Developer 报告检查点仍为 `03f62bc8fafcd3e3b50bf4a21e35c12135f7eaa1`，补证起点为 B 审查文档提交 `baa635ec0770723075f43e080b427881eab55d2a`。没有新的产品实现或包。
+
+**测试计划调整及依据。** 用户明确同意由 B 直接补齐隔离实机事实、按结果重判，不再把验收工具漏检直接交回 Developer 循环开发。B 因此显式替代上节六步 Developer 修正路线：在同一已提交候选／同一 ZIP 上追加独立重启观测，原 Task／Slice 的重启一致性、完整指纹、正确选源和零不必要探测义务全部保留；原完整 T4 门槛仍需满足。产品、正式工具／测试、依赖和夹具定义未变，既有完整门槛与 B 独立 `scan all`／Python 证据按输入核对后继续复用，不要求为纯审查补证重新打包或再造实现候选。本次不是合同变更，也未把原反例改记通过。
+
+**实际验证。** B 复用正式 `--scenario overlap` 流程，以一次性观测脚本在 `convergence` 的实际重启处增加只读 API／SQLite 快照。原扫描、有限变化、FullRefresh、稳定集合检查及重启调用照常执行；不修改插件或已提交验收入口。候选仍为 `86946cc4ef5c0648b71aafc00aa666f2a2bb20c5`，消费原 ZIP `434f930d6ad8282c1d68d47c7fc4456d52a025ae05e273db7b2f21551071ccaf`。从当前原生集合解析项目／源映射，检查 URL B→C 的批量源及合并项目 A／B 两源，取得以下结果：
+
+- 重启前、重启后任何 PlaybackInfo 之前、播放后，三个当前项目／源的完整五字段行、Manifest、原生地址和主流签名逐项完全相等；两个版本仍共享当前项目且 source_key 独立，没有使用遗留行兜底。
+- 三个源显式 MediaSourceId 的 PlaybackInfo 均为 200，唯一返回源／地址／必要主流正确；重启后插件实际探测开始数为 0，没有靠首次播放重建丢失基线或重新探测修复结果。
+- 原始快照落盘后另行读取 JSON，独立比较三个阶段完全相等；没有只信观测脚本的 PASS 标签。整个实机运行 PASS、退出 0、286.411 秒；触发器恢复 verified、实例对账 CLEAN、清理 CLEANED。
+
+本机证据索引：`.git/validation-evidence/86946cc4ef5c0648b71aafc00aa666f2a2bb20c5/b-restart-proof-20261018T022343Z/INDEX.md`。`command.json` 记录准确命令／cwd／驱动摘要，`observe_restart.py` 保留可重复观察步骤，`overlap/rounds/b-restart-before.json`、`b-restart-after-restart-before-playback.json`、`b-restart-after-playback.json`、`b-restart-proof.json` 保存三个阶段及完整结果，`raw-snapshot-audit.json` 是独立逐项比对；增量原始响应和日志在 `overlap/events.jsonl`／`overlap/logs/`。仅本机可读，不声称远程可用。正式工具旧漏检及上一轮两项反例继续保留：其单独重启 PASS 不能替代此次独立证明；补证路线及原始数据可供 A 最终审查复核。
+
+**阻塞重判。** 上一轮唯一 P1 是必要重启事实未被证明，现由真实原生状态和播放结果闭合；没有发现需要修复的产品缺陷。正式扫描工具的重启覆盖不足保留为非阻塞 P2，不要求本 Task 继续扩建工具。后续 Slice Final 必须在最终候选补齐同等重启比对，不能只引用旧工具 PASS 或把本次旧 Task 运行当作 Slice Final。
+
+**全部 Outcomes／Surfaces 重核。** RO-1／安装包与安装恢复为 4.1 B PASS；RO-3／扫描、范围、多源持久化、共享／停止／恢复／重启与原始证据为 4.2 B PASS。RO-2 真实十万候选／成本、RO-4 实际代理及对应 Surfaces 仍 NOT RUN；README／矩阵等事实指针和上位合同中的旧实施指针保留为后续文档协调项，不能据此扩大兼容声明。单独 Slice Final、完整文档协调和 Closure Packet 尚未完成，不交 A 宣布 Slice 关闭。本轮按用户收窄后的授权完成 4.2 补证与裁决，下一项连贯工作仍为固定方案的 4.3，不夹带实施。
+
+NEXT ACTION: B PLANS TASK 4.3 — REAL 100000 NATIVE CANDIDATES AND COST
