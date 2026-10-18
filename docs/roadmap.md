@@ -7,7 +7,7 @@
 | 1 — Jellyfin 核心接入与指纹提交验证 | P0：固定目标版本，证明核心接入、跳过／主动探测、可靠成功信号及 URL 变化后的原生持久化 | PASS / CLOSED | 原始 Base 保留，V4.2 修订合同；隔离 Jellyfin 环境 |
 | 2 — 播放检查与历史指纹完整闭环 | P1：只读解析、决策、首次信任、最小 SQLite 指纹、稳定多源、播放按需探测、已开始探测共享／全局并发、正常收尾、核心配置及失败恢复，满足 T01～T28 的核心部分 | PASS / CLOSED | Slice 1 PASS / CLOSED；Base 为关闭提交 |
 | 3 — Jellyfin 原生批量检查任务 | P2：完整配置页／媒体库范围、原生运行／停止／定时、候选 ID 集合与分批对象／固定消费者、仅撤销未开始工作／已开始探测收尾后再开放新轮、播放混合共享、进度统计及恢复（并发默认 2、1～8） | PASS / CLOSED | Slice 2 PASS / CLOSED；Base 为关闭提交 |
-| 4 — 大规模集成、兼容联调与发布 | P3：真实十万 STRM／成本、完整扫描与播放／批量重叠、实际 JellyfinProxy 播放链，以及固定 Jellyfin／Linux x64 安装包和恢复旅程 | ACTIVE | Slice 3 PASS / CLOSED；Base 为关闭提交 |
+| 4 — 大规模集成、兼容联调与发布 | P3：真实 3000 项 STRM 媒体库／成本、完整扫描与播放／批量重叠、实际 JellyfinProxy 播放链，以及固定 Jellyfin／Linux x64 安装包和恢复旅程 | ACTIVE | Slice 3 PASS / CLOSED；Base 为关闭提交 |
 
 ## 当前边界
 
