@@ -191,7 +191,8 @@ def current_task(auth: str) -> dict:
 
 
 def run_task(auth: str, recorder: scan.EvidenceRecorder, timeout: int = MAX_TASK_TIMEOUT,
-             *, stop_after: Callable[[dict, dict], bool] | None = None) -> dict:
+             *, stop_after: Callable[[dict, dict], bool] | None = None,
+             poll_seconds: float = POLL_SECONDS) -> dict:
     task = current_task(auth)
     previous = scan.last_start(task)
     started = scan.now_utc()
@@ -224,7 +225,7 @@ def run_task(auth: str, recorder: scan.EvidenceRecorder, timeout: int = MAX_TASK
             recorder.record("batch_task_settled", state=state, result=result, stopped=stopped,
                             progress=progress, started_utc=started, ended_utc=final["ended_utc"])
             return final
-        time.sleep(POLL_SECONDS)
+        time.sleep(poll_seconds)
     raise RuntimeError("The native batch task exceeded the fixed run timeout.")
 
 
@@ -342,7 +343,11 @@ def file_source_id(item: dict, label: str) -> str:
     return canonical_guid(sources[0]["Id"], label)
 
 
-def fingerprint_map() -> dict[tuple[str, str], dict[str, object]]:
+def fingerprint_map(allow_missing: bool = False) -> dict[tuple[str, str], dict[str, object]]:
+    if allow_missing and not pkg.fingerprint_database().is_file():
+        # The SQLite store is created lazily on first write, so before the first trust round the database
+        # legitimately does not exist yet and the expected row set is empty.
+        return {}
     rows = scan.all_fingerprint_rows()
     result = {}
     for row in rows:
@@ -786,7 +791,7 @@ def run_scenario(package: Path, count: int, evidence_dir: Path, timeout: int, ke
         assert_native_sources(auth, fixture, items)
         selected = capture_candidates(auth, strm_library_id, fixture, items, recorder, "before-first-trust")
         require(selected["supported_count"] == count, "The native library does not contain the requested supported count.")
-        rows_before = fingerprint_map()
+        rows_before = fingerprint_map(allow_missing=True)
         require(not any(key[0] in set(selected["supported_ids"]) for key in rows_before),
                 "The fresh package instance already contains fingerprints before first trust.")
         container = pe.container_name("jellyfin")
@@ -846,20 +851,31 @@ def run_scenario(package: Path, count: int, evidence_dir: Path, timeout: int, ke
             attempt_started = scan.now_utc()
             seen = threading.Event()
             tail = LogTail(container, attempt_started)
+            state_at_stop: dict[str, object] = {}
 
             def stop_during_query(task: dict, result: dict, flag: threading.Event = seen,
-                                  log_tail: LogTail = tail) -> bool:
-                if any("STRM_BATCH_CANDIDATE_QUERY_STARTED" in line for line in log_tail.poll()):
+                                  log_tail: LogTail = tail, observed: dict = state_at_stop) -> bool:
+                state = scan.task_state_name(task)
+                if state not in {"running", "1"}:
+                    return False
+                lines = log_tail.poll()
+                if any("STRM_BATCH_OBJECT_READ_STARTED" in line for line in lines):
+                    return False
+                if any("STRM_BATCH_CANDIDATE_QUERY_STARTED" in line for line in lines):
+                    observed.update({"state": state, "at": scan.now_utc().isoformat()})
                     flag.set()
                     return True
                 return False
 
             attempt_stop = run_task(auth, recorder, timeout=run_timeout, stop_after=stop_during_query)
             attempt_events = batch_log_events(container, attempt_started)
+            read_started = any(event["kind"] == "OBJECT_READ_STARTED" for event in attempt_events)
+            observed = seen.is_set() and bool(state_at_stop) and not read_started
             query_attempts.append({"attempt": attempt + 1, "started_utc": attempt_started.isoformat(),
-                                   "observed": seen.is_set(), "execution": attempt_stop,
+                                   "observed": observed, "state_at_stop": state_at_stop or None,
+                                   "object_read_started": read_started, "execution": attempt_stop,
                                    "events": attempt_events})
-            if seen.is_set():
+            if observed:
                 candidate_start_seen.set()
                 stage_stop = attempt_stop
                 stage_events = attempt_events
