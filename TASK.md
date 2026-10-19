@@ -5,7 +5,7 @@
 ```text
 Task ID: 4.3
 Parent Slice: 4
-Status: READY FOR B REVIEW
+Status: IN PROGRESS
 Task Base: a06a80fac90a86085f25116568aa24b54847c562
 Contract Checkpoint: 611c31c31115b02c3fb60cef2826d9348e352b7b
 Difficulty: High
@@ -194,10 +194,17 @@ RO-4 的实际 JellyfinProxy 联调（后续 4.4）、单独 Slice Final／Closu
 ## B Review Result
 
 ```text
-Reviewed: NOT SET
-Decision: PENDING
-Slice Required Outcomes all satisfied: NO — RO-1/RO-3 B PASS; RO-2 implemented, awaiting B independent review; RO-4 NOT RUN
-Next: B independently reviews Task 4.3, runs the full regression and the two large-library gates on the committed candidate, then re-checks all Required Outcomes
+Reviewed: a06a80fac90a86085f25116568aa24b54847c562..850224a2e910e2131771699e9ae77e53d3b265c8 plus correction 70acae9 (static review; affected gates pending rerun)
+Decision: FIX REQUIRED
+Slice Required Outcomes all satisfied: NO — RO-2 is blocked by an evidence/tooling inconsistency; RO-4 remains NOT RUN
+Next: rerun the affected 1000/3000 gates on correction 70acae9, then B re-review
 ```
 
-本轮按用户授权取消旧服务器执行前提并交接 GitHub；不实施插件或新工具、不启动真实建库。Task 4.2 已 PASS，无需在新 Task 重开其修正；当前未获 4.3 产品证据，不签发 PASS。
+### B Findings
+
+1. **FIX REQUIRED — query-stage stop evidence can mix attempts.** `LogTail` intentionally reads a two-second overlap, but `run_query_stage_stop` treated every returned marker as belonging to the current attempt. The 3000 evidence therefore records `execution.read_started=true` while the filtered phase event list contains no object-read marker. `query_stop_observed` also ignored that execution flag. This is contradictory evidence for AC-4 and cannot be reused as a PASS gate.
+2. Correction `70acae9` filters watcher lines by the current attempt's timestamp, rejects any execution that reports an object read, and adds a deterministic regression for the overlap case. The prior large-library evidence remains retained as historical evidence, but is invalid for the corrected executable input and must be rerun.
+3. B independently verified the existing 3000 evidence identity (source head `850224a2e910e2131771699e9ae77e53d3b265c8`, ZIP SHA-256 `edf0aa9b...`, clean instance reconciliation) and reused it only for the unaffected candidate, cost, persistence, and restart observations. It is not sufficient to close the query-stage stop gate.
+4. C# build and full C# tests pass serially (202 tests); format, governance, and `git diff --check` pass. The complete Python discovery command was attempted but produced 2 failures and 6 errors in existing isolated-scan guard tests without a running package instance; this is recorded as NOT PASS and must be resolved or explicitly blocked before Task PASS.
+
+The working-tree correction is limited to the Task's acceptance tool and its tests; no product contract, persistence, cancellation, or scheduling rule changed. The Task remains active under the same Base and Goal. No Closure Packet or `SLICE READY FOR A REVIEW` decision is issued.
