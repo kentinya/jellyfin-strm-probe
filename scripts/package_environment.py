@@ -716,6 +716,38 @@ def cleanup_instance() -> dict[str, object]:
     workspace()
     root = require_owned_path(WORK, label="run workspace")
     compose("stop")
+    container_states = inspect_owned_container_states()
+    invalid = [state for state in container_states
+               if state["status"] == "running" or state["exit_code"] != 0 or state["oom_killed"]]
+    require(not invalid,
+            "Owned package containers did not terminate cleanly: "
+            + json.dumps(invalid, sort_keys=True))
     removed = sorted(path.name for path in root.iterdir())
     shutil.rmtree(root)
-    return {"status": "CLEANED", "removed": removed, "workspace": str(root)}
+    return {"status": "CLEANED", "removed": removed, "workspace": str(root),
+            "container_states": container_states}
+
+
+def inspect_owned_container_states() -> list[dict[str, object]]:
+    """Return final state for this Compose project without following foreign containers."""
+    listed = run(*DOCKER, "ps", "-aq", "--filter", "label=com.docker.compose.project=" + PROJECT)
+    require(listed.returncode == 0,
+            "Could not query package-environment containers after stopping the instance.")
+    ids = listed.stdout.split()
+    if not ids:
+        return []
+    inspected = run(*DOCKER, "inspect", *ids)
+    require(inspected.returncode == 0,
+            "Could not inspect package-environment containers after stopping the instance.")
+    states: list[dict[str, object]] = []
+    for item in json.loads(inspected.stdout):
+        state = item.get("State", {})
+        states.append({
+            "name": str(item.get("Name", "")).lstrip("/"),
+            "status": state.get("Status"),
+            "exit_code": state.get("ExitCode"),
+            "oom_killed": bool(state.get("OOMKilled")),
+            "error": state.get("Error", ""),
+            "finished_at": state.get("FinishedAt"),
+        })
+    return states

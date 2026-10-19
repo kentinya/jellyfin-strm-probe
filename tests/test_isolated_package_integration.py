@@ -6,6 +6,7 @@ import importlib.util
 import hashlib
 import json
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -49,6 +50,47 @@ class PackageEnvironmentTests(unittest.TestCase):
         for forbidden in ("/src", "/tests", "/scripts", "sdk", "nuget", "bin", "obj"):
             self.assertNotIn(forbidden, text, f"the package compose must not mount {forbidden!r}")
         self.assertIn("internal: true", text)
+
+    def test_inspect_owned_container_states_rejects_forced_exit(self):
+        listed = subprocess.CompletedProcess([], 0, stdout="container-id\n", stderr="")
+        inspected = subprocess.CompletedProcess([], 0, stdout=json.dumps([{
+            "Name": "/package-media",
+            "State": {"Status": "exited", "ExitCode": 137, "OOMKilled": False,
+                      "Error": "", "FinishedAt": "2026-10-19T00:00:00Z"},
+        }]), stderr="")
+        with patch.object(package_environment, "run", side_effect=[listed, inspected]):
+            states = package_environment.inspect_owned_container_states()
+        self.assertEqual(states[0]["exit_code"], 137)
+        self.assertFalse(states[0]["oom_killed"])
+
+    def test_inspect_owned_container_states_records_clean_exit(self):
+        listed = subprocess.CompletedProcess([], 0, stdout="container-id\n", stderr="")
+        inspected = subprocess.CompletedProcess([], 0, stdout=json.dumps([{
+            "Name": "/package-jellyfin",
+            "State": {"Status": "exited", "ExitCode": 0, "OOMKilled": False,
+                      "Error": "", "FinishedAt": "2026-10-19T00:00:00Z"},
+        }]), stderr="")
+        with patch.object(package_environment, "run", side_effect=[listed, inspected]):
+            states = package_environment.inspect_owned_container_states()
+        self.assertEqual(states, [{
+            "name": "package-jellyfin", "status": "exited", "exit_code": 0,
+            "oom_killed": False, "error": "", "finished_at": "2026-10-19T00:00:00Z",
+        }])
+
+    def test_cleanup_refuses_forced_container_exit_and_keeps_workspace(self):
+        base = Path(tempfile.mkdtemp())
+        with patch.object(package_environment, "BASE", base):
+            workspace = package_environment.select_workspace(base / "run")
+            with patch.object(package_environment, "WORK", workspace), \
+                    patch.object(package_environment, "compose"), \
+                    patch.object(package_environment, "inspect_owned_container_states", return_value=[{
+                        "name": "package-media", "status": "exited", "exit_code": 137,
+                        "oom_killed": False, "error": "", "finished_at": "now",
+                    }]):
+                with self.assertRaisesRegex(package_environment.PackageEnvironmentError,
+                                             "did not terminate cleanly"):
+                    package_environment.cleanup_instance()
+            self.assertTrue(workspace.exists())
 
     def test_media_fixture_names_are_distinct_and_versioned_strm_is_written(self):
         with tempfile.TemporaryDirectory() as tmp:

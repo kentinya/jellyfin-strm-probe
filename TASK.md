@@ -5,7 +5,7 @@
 ```text
 Task ID: 4.3
 Parent Slice: 4
-Status: READY FOR B REVIEW
+Status: FIX REQUIRED
 Task Base: a06a80fac90a86085f25116568aa24b54847c562
 Contract Checkpoint: 611c31c31115b02c3fb60cef2826d9348e352b7b
 Difficulty: High
@@ -191,6 +191,53 @@ RO-4 的实际 JellyfinProxy 联调（后续 4.4）、单独 Slice Final／Closu
 - Head SHA：original `850224a2e910e2131771699e9ae77e53d3b265c8`; correction `70acae9`; FIX-REQUIRED correction `7c5169e9f1b6e527b016360708b9155805afd7ee`。
 
 可复用经验只提供少量候选供 Slice 收尾，不记录开发流水账，不作为 Task PASS 门槛。
+
+### B Review Result — teardown exit-state correction candidate (working tree after `b2f19c2`)
+
+```text
+Decision: FIX REQUIRED resolved in the same Task; fresh 1000/3000 gates remain pending
+Finding: cleanup_instance reported CLEANED without inspecting owned container exit state; the fresh 1000 run had media exit=137
+Correction: package_environment now inspects every owned Compose container after stop, rejects running/nonzero/OOM states, preserves the workspace on failure, and records clean states in cleanup evidence
+```
+
+- The correction is limited to the Task acceptance environment and its tests. It does not change plugin behavior, cancellation semantics, product contracts, schema, or the 3000 threshold.
+- Focused verification: `test_isolated_package_integration.py` **28/28 PASS**; `test_isolated_large_library_integration.py` **22/22 PASS**; governance and `git diff --check` PASS.
+- The prior fresh 1000 result remains retained as a failed cleanup gate despite business-round PASS. It must be rerun with the corrected tool. The required 3000 gate is still NOT RUN; no Closure Packet or `SLICE READY FOR A REVIEW` decision is issued.
+
+### B Review Result — fresh 1000 gate on candidate `b2f19c24f05d806ab75f152f36a302582e60ad67`
+
+```text
+Reviewed: a06a80fac90a86085f25116568aa24b54847c562..b2f19c24f05d806ab75f152f36a302582e60ad67 (implementation; report-only Task successor)
+Decision: FIX REQUIRED
+Slice Required Outcomes all satisfied: NO — fresh 1000 business rounds pass, but cleanup evidence does not prove normal container termination; required 3000 gate not run
+Next: repair the same Task's isolation teardown evidence/control, then B re-runs the affected 1000 gate and the required 3000 gate on the fixed ZIP
+```
+
+#### B Findings
+
+1. The fresh 1000 run used ZIP SHA-256 `4066980f5d67768ad98d660cbd2f0ba250a9f70c149bad65a4a5f2a8e14a117d` and returned process exit 0 / `status=PASS`. Its recorded business rounds are internally consistent: first trust 1000 with zero probes, unchanged zero probes, controlled increment 16 reliable probes, query-stage stop observed before object read, post-stop recovery 2 reliable probes, and clean instance reconciliation.
+2. **FIX REQUIRED — teardown does not record or validate owned container exit state.** `scripts/package_environment.py::cleanup_instance()` calls `docker compose stop --timeout 20`, then removes the workspace and returns only `status=CLEANED`. For this run, Docker inspection after completion shows the owned Jellyfin container `Exited (0)` but the owned media container `Exited (137)`; the evidence still reports `CLEANED` and preserves no `ExitCode`/`OOMKilled`/signal state. Task 4.3 explicitly requires that forced termination cannot be reported as normal cleanup, so this run's cleanup gate fails.
+3. The raw evidence is retained at `.git/validation-evidence/b2f19c24f05d806ab75f152f36a302582e60ad67/b-review-20261019T083927Z/large-1000/`; the package-run workspace and its owned containers are gone, and the shared development containers were not taken over or stopped. No 3000 run was started after this finding.
+
+This is a same-Task acceptance-tool finding, not a contract or product-scope change. No Closure Packet or `SLICE READY FOR A REVIEW` decision is issued.
+
+### B Review Result — finalization correction candidate `1c3e0176a285774641da265513a9f76510be666a`
+
+```text
+Reviewed: a06a80fac90a86085f25116568aa24b54847c562..1c3e0176a285774641da265513a9f76510be666a (implementation); report-only successors 024feea and b2f19c2
+Decision: FIX REQUIRED
+Slice Required Outcomes all satisfied: NO — local gates pass, but required real package/scan/1000/3000 integration gates are BLOCKED by the shared Jellyfin health state; fresh large-library evidence is absent
+Next: have the authorized environment maintainer restore a healthy isolated Jellyfin environment; then B runs the blocked real gates on one fixed ZIP and re-reviews without changing Task scope
+```
+
+#### B Review Findings
+
+1. The fail-closed query-stage result handling and teardown exit handling were reviewed on `1c3e0176a285774641da265513a9f76510be666a`. The overall status is assigned from required stages, teardown runs before the process exit code is derived, and sampler/reconciliation/cleanup failures are covered by the new focused controls. B ran the focused large-library tool suite: 22/22 PASS (0.094 seconds). This resolves the two prior B code findings; no new code blocker was found in these corrected paths.
+2. B ran the fixed candidate's local gates: locked restore PASS; Release solution build PASS (0 warnings/errors); full C# tests 202/202 PASS; `dotnet format --verify-no-changes` PASS; complete Python discovery 218/218 PASS; Linux x64 package creation PASS with ZIP SHA-256 `4066980f5d67768ad98d660cbd2f0ba250a9f70c149bad65a4f2a8e14a117d`; governance and `git diff --check` PASS. The reviewer ZIP is in the unique `artifacts/releases/b-review-b2f19c2/` directory; the existing release archive and sidecars were not overwritten.
+3. **BLOCKED — real integration gates not run.** Read-only `python3 scripts/development_environment.py status` showed the shared Jellyfin container `jf-strm-probe-6d816bb878-jellyfin-1` as `Up 15 hours (unhealthy)`. Per `docs/development-environment.md`, package installation, playback and large-library real-instance gates remain BLOCKED/NOT RUN until the authorized environment maintainer repairs the isolation instance. B did not restart, take over, or clean any existing container. Consequently the required archive-install/package integration, scan-all, fresh 1000 and 3000 large-library runs, and the shared-instance plugin/batch/configuration integrations are NOT RUN. The 3000-item outcome remains unproven and Task 4.3 cannot PASS.
+4. No Slice Required Outcome has been removed or weakened. Keep the same Task Base and scope; once the environment blocker is cleared, B must run the missing real gates against the same final ZIP, preserve raw evidence, and independently inspect the 3000 candidate/settlement and stop/restart results. RO-4, Slice Final and Closure Packet remain outstanding.
+
+This is not a code-scope escalation to A. It is an external test-environment blocker; no `SLICE READY FOR A REVIEW` decision is issued.
 
 ## Developer Completion Report — FIX REQUIRED correction round 2
 
