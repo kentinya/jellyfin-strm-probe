@@ -5,13 +5,13 @@
 ```text
 Task ID: 4.3
 Parent Slice: 4
-Status: FIX REQUIRED
+Status: IN PROGRESS
 Task Base: a06a80fac90a86085f25116568aa24b54847c562
 Contract Checkpoint: 611c31c31115b02c3fb60cef2826d9348e352b7b
 Difficulty: High
 Test Level: T4
 Planner / Reviewer: B
-Implementation Head: dfe6dfc597e6a9fd0a6bc6cf7fdd3a9c5d242a7f
+Implementation Head: 348567fd17140b064f002d246e3653658e22379c
 ```
 
 ## Goal
@@ -272,6 +272,14 @@ This is not a code-scope escalation to A. It is an external test-environment blo
 可复用经验只提供少量候选供 Slice 收尾，不记录开发流水账，不作为 Task PASS 门槛。
 
 ## B Review Result
+
+### 2026-10-19 用户要求最小修正后的执行口径
+
+- 用户指出工具设计过重并要求开始实施。本轮保持同一 Task／Base／Goal／合同，只修假通过和关键证据，不新建监控框架、治理对象或产品功能。此前审查建议中的“每轮完整前后快照”等实现方式不是新增验收义务；按原 Task 的首次／增量／停止后恢复前／重启前后关键检查点保存必要状态即可。批次／消费者上限可结合已有真实日志、代码及确定性测试证明，不要求每项都另造自动监控。
+- 本轮已实施：正常轮次复用现有 Completed／本次执行时间检查，拒绝失败标志和未完成结果；复用原生扫描完成 helper；查询停止分别记录请求与确认并核对每库原生查询边界；按项目＋媒体源核对原始探测启动身份与默认并发；检查已有对象批次日志；停止收尾尝试原生再运行并在恢复前核对旧／新指纹与地址；保存关键五字段／主流签名和脱敏服务日志；已启动实例成功清理要求两项服务完整退出证据，失败保留诊断目录。未改 C#、schema、探测／取消／调度业务语义。
+- 实施检查点：`348567fd17140b064f002d246e3653658e22379c`。受影响大库工具 27 项、包工具 30 项先通过；中间工作树完整 Python discovery **231/231 PASS**（5.988s unittest／6.331s command wall）。后续只增加／补充签名与停止回调用例和同一工具的小修正，最终受影响大库工具 **31/31 PASS**（0.135s unittest／0.451s command wall），治理及 `git diff --check` PASS；不把中间全套结果写成最终提交全套已通过。证据为 `.git/validation-evidence/2b49767c0c8e0fa439bfcf8328554e29bcf752c5/minimal-tool-fix-20261019T133605Z/`，`checks.json`／`final-checks.json` 分别记录准确文件摘要、完整 patch、命令／UTC／退出码／原始日志。共享清理 helper 改动影响 Python 多入口，所以追加一次廉价全量 Python，未运行 C# 或实机长测；未操作运行容器。
+- 提交后最终核对：在实现 SHA `348567fd17140b064f002d246e3653658e22379c`、仅 TASK 报告脏改动时，完整 Python **233/233 PASS**（5.867s unittest／6.173s command wall）；四项实现／测试文件 SHA-256 与 `final-checks.json` 全部相同。记录为同目录 `committed-python-all.json`／`committed-python-all.log`。这是实施反馈，不是作者自称独立 B PASS；未运行最终指定实机门槛。
+- **仍未完成**：BR-43-4 的准备期资源观测／预算执行与空闲窗口；增量样本实际 Guid 批次分布；本修正的真实停止／重启和新候选指定最终门槛。既有长测只保留历史观察，不把它们写成本工具修正后的 PASS。本轮作者同时实施工具，不宣称对自己的改动完成独立 B 审查。当前进入修正中，不签发 Task PASS／Closure Packet，不开启新 Task、不关闭 Slice。
 
 Current decision: 2026-10-19 evidence audit; supersedes conflicting historical reports.
 
