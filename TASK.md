@@ -5,13 +5,13 @@
 ```text
 Task ID: 4.3
 Parent Slice: 4
-Status: FIX REQUIRED
+Status: READY FOR B REVIEW
 Task Base: a06a80fac90a86085f25116568aa24b54847c562
 Contract Checkpoint: 611c31c31115b02c3fb60cef2826d9348e352b7b
 Difficulty: High
 Test Level: T4
 Planner / Reviewer: B
-Implementation Head: 7c5169e9f1b6e527b016360708b9155805afd7ee
+Implementation Head: b1199d65577448b498315ddbe16f1d65c671e8ba
 ```
 
 ## Goal
@@ -189,6 +189,26 @@ RO-4 的实际 JellyfinProxy 联调（后续 4.4）、单独 Slice Final／Closu
 - Remaining In-Slice Work：RO-2 本 Task 待 B 独立验收（含 3000 级）；RO-4 后续 4.4；单独 Slice Final、事实协调与 Closure Packet。
 - Risks / Deviations：1000 为 Developer 聚焦开发反馈，非 B 独立验收或 Slice Final；3000 级与完整全量回归、独立复现交 B。真实大库停止依赖真实时序，已保留每次自然重试与未命中记录；RO-4 代理、其他 Jellyfin／平台、通用性能 SLA 仍 NOT RUN。首次失败与多次重跑原始证据保留在各运行目录。
 - Head SHA：original `850224a2e910e2131771699e9ae77e53d3b265c8`; correction `70acae9`; FIX-REQUIRED correction `7c5169e9f1b6e527b016360708b9155805afd7ee`。
+
+可复用经验只提供少量候选供 Slice 收尾，不记录开发流水账，不作为 Task PASS 门槛。
+
+## Developer Completion Report — FIX REQUIRED correction round 2
+
+- Changed Files：`scripts/run_isolated_large_library_integration.py`、`tests/test_isolated_large_library_integration.py`。纯报告更新 `TASK.md`。未改 schema、业务规则、稳定需求、Slice／Roadmap、C# 产品代码。
+- Implemented（仅修 B Finding #1，保持原 Base／Goal／Scope）：
+  - 新增 `overall_acceptance_status(required_stages)`：任一必需阶段未满足即返回 `("FAIL", 1)`，否则 `("PASS", 0)`，使未观测到的准备阶段停止失败关闭而不是 exit 0。
+  - 把三次自然重试抽成 `run_query_stage_stop_attempts()`：每次保留独立 attempt 记录（started／execution／events／observed），只在真正命中查询窗口时提前结束；未命中时返回 `observed=False` 与全部尝试证据，由 `run_scenario` 据此走 `required_stages` 并保留 `NOT RUN` 记录、实例对账与清理。
+  - `run_scenario` 末尾不再硬编码 `"status": "PASS"`／`return 0`，改用 `overall_acceptance_status({"actual_query_stage_stop": candidate_start_seen})` 决定 summary 状态与退出码。未注入等待、未改原生停止语义、未弱化要求。
+- Tests and Results（fix head `b1199d65577448b498315ddbe16f1d65c671e8ba`）：
+  - `python3 -m unittest discover -s tests -p 'test_isolated_large_library_integration.py' -v` **18/18 PASS**（新增 3 例：未观测必需阶段→FAIL/1、三次未命中保留全部 attempt 且 `observed=False`、命中即停）。
+  - `python3 -m unittest discover -s tests` **214/214 PASS**（全量 Python 发现，无 B 先前记录的 2 failures／6 errors；先前已由 `7c5169e` 系列模块共享修正解决）。
+  - `bash scripts/dotnet-local test tests/Jellyfin.Plugin.StrmProbeOptimizer.Tests/…csproj --configuration Release --no-restore --filter '…BatchCheckTests|…ProbeCoordinatorTests|…PlaybackOptimizerTests'` **138/138 PASS**（约 4s；C# 未改，仅受影响回归确认）。
+  - `python3 scripts/check_governance.py` PASS；`git diff --check` 干净。
+  - 未运行（交 B 全量／独立验收）：完整 C# build／format、三个既有默认实机回归、包／扫描全场景、fresh 1000／3000 大库、RO-4 代理、单独 Slice Final。本会话遵守“测试时间 < 本轮 30%”比例，仅跑聚焦反馈；真实 1000／3000 由 B 在独立验收阶段重跑。
+- Decisions：B Finding #1 已按要求修在同一个 Task 的工具／测试内；未改合同、取消语义、样本数量或验收含义。上一轮 1000 级 PASS 证据基于修正前可执行输入，对本修正失效，须由 B 在新 head 上重跑。
+- Remaining In-Slice Work：RO-2 待 B 独立验收（含 fresh 1000 与 3000）；RO-4 后续 4.4；单独 Slice Final、事实协调与 Closure Packet。
+- Risks / Deviations：修正仅覆盖“未观测阶段不得总 PASS”的控制；真实查询窗口是否命中仍依赖运行时序，未命中会如实 FAIL／NOT RUN。3000 级仍 NOT RUN。
+- Head SHA：fix-required correction round 2 `b1199d65577448b498315ddbe16f1d65c671e8ba`。
 
 可复用经验只提供少量候选供 Slice 收尾，不记录开发流水账，不作为 Task PASS 门槛。
 
