@@ -266,7 +266,7 @@ This finding does not move the Task Base, alter scope or contract, or satisfy RO
 
 ## Developer Completion Report — FIX REQUIRED correction round 3
 
-- Changed Files：`scripts/run_isolated_large_library_integration.py`、`tests/test_isolated_large_library_integration.py`。纯报告更新 `TASK.md`。未改 schema、业务规则、稳定需求、Slice／Roadmap、C# 产品代码。
+- Changed Files：`scripts/run_isolated_large_library_integration.py`、`tests/test_isolated_large_library_integration.py`；纯事实文档同步 `docs/test-matrix.md`、`docs/compatibility.md`（把 RO-2 指针更新到本轮修正 head 与两次既有 FIX REQUIRED）；纯报告更新 `TASK.md`。未改 schema、业务规则、稳定需求、Slice／Roadmap、C# 产品代码。
 - Implemented（仅修 B Finding #1，保持原 Base／Goal／Scope）：
   - 把 `run_scenario` 的场景主体抽成 `run_scenario_body(...)`，运行期资源放进 `ScenarioState`（`workspace`／`before_state`／`sampler`）。`run_scenario` 在 `try` 内调用主体，`finally` 调用 `finalize_scenario(...)` 执行 sampler 停止、实例对账与清理，任一失败把 `summary["status"]` 置为 `FAIL`。
   - `run_scenario` 不再在 `try` 内返回，而是在 `finally` 全部完成、证据写入后依据最终 `summary["status"]` 返回 `0/1`。这样清理或对账失败不可能让命令以 0 退出，也不弱化清理要求；原诊断字段（`sampler_cleanup_error`／`instance_reconciliation_error`／`cleanup_error`）与尝试记录保留。

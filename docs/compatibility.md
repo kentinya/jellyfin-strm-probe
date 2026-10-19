@@ -88,7 +88,7 @@ Slice 2 已验证 SQLite 指纹的真实重启／失败恢复、多源身份、�
 
 ## 真实大库（Slice 4 RO-2，Developer 开发反馈）
 
-`scripts/run_isolated_large_library_integration.py` 在同一固定组合的 ZIP 安装隔离实例上创建真实原生已索引的受支持 STRM，并驱动原生批量任务完成首次信任、未变、少量增量、准备／分批停止和重启核对。B 对原始实现 head `850224a2e910e2131771699e9ae77e53d3b265c8`／ZIP `edf0aa9ab75a2fb83dea991e04b1b51d661ae5dc3db4d5829668cdd09288ba8d` 的两级 `PASS` 判 FIX REQUIRED（查询阶段停止证据可混入 overlap 旧日志）；修正 head `7c5169e9f1b6e527b016360708b9155805afd7ee` 按当前尝试时间戳过滤、拒绝已读对象的执行，并用低延迟流式 log follower 命中极短查询窗口，但 B 再次判 FIX REQUIRED（三次未命中时仍总 PASS／退出 0）。当前修正 head `b1199d65577448b498315ddbe16f1d65c671e8ba` 使未观测到的必需查询阶段停止失败关闭，并保留全部 attempt 证据、实例对账与清理；fresh 1000／3000 交 B 独立验收。详细计数、成本字段与限制见 [测试矩阵](test-matrix.md#slice-4-大库验收本地运行)。
+`scripts/run_isolated_large_library_integration.py` 在同一固定组合的 ZIP 安装隔离实例上创建真实原生已索引的受支持 STRM，并驱动原生批量任务完成首次信任、未变、少量增量、准备／分批停止和重启核对。B 对原始实现 head `850224a2e910e2131771699e9ae77e53d3b265c8`／ZIP `edf0aa9ab75a2fb83dea991e04b1b51d661ae5dc3db4d5829668cdd09288ba8d` 的两级 `PASS` 判 FIX REQUIRED（查询阶段停止证据可混入 overlap 旧日志）；修正 head `7c5169e9f1b6e527b016360708b9155805afd7ee` 按当前尝试时间戳过滤、拒绝已读对象的执行，并用低延迟流式 log follower 命中极短查询窗口，但 B 再次判 FIX REQUIRED（三次未命中时仍总 PASS／退出 0）。修正 head `b1199d65577448b498315ddbe16f1d65c671e8ba` 使未观测到的必需查询阶段停止失败关闭；B 又判 FIX REQUIRED（清理／对账失败仍可能退出 0）。当前修正 head `1c3e0176a285774641da265513a9f76510be666a` 在 `finally` 完成后再依据最终状态派生退出码，使 sampler／对账／清理任一失败均强制非零退出，并保留原诊断字段；fresh 1000／3000 交 B 独立验收。详细计数、成本字段与限制见 [测试矩阵](test-matrix.md#slice-4-大库验收本地运行)。
 
 该结果为 Developer 开发反馈，不是 B 独立验收或 Slice Final；完整回归、独立复现与最终门槛由 B 承担。当前未验证：其他 Jellyfin 版本／平台、外部代理、真实 OpenList 及通用性能 SLA。
 
