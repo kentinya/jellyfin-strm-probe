@@ -5,7 +5,7 @@
 ```text
 Task ID: 4.3
 Parent Slice: 4
-Status: IN PROGRESS
+Status: READY FOR B REVIEW
 Task Base: a06a80fac90a86085f25116568aa24b54847c562
 Contract Checkpoint: 539c01ca8ba4f0ce8c9eb59b32b88bbb337e7ce3
 Difficulty: High
@@ -275,7 +275,7 @@ RO-4 的实际 JellyfinProxy 联调（后续 4.4）、单独 Slice Final／Closu
 
 - 本轮将既有工作区中与 Task 4.3 直接相关的 7 个文件做普通本地提交，候选实现 SHA 为 `4cdd174da8c7af988df4962934fc510d206fd838`；未推送、未移动 Task／Slice Base、未修改 C# 产品代码或生产／共享实例。提交内容包括保留库副本复用入口、全部实际 1004 项的下限校验、显式副本指纹重置、资源预算／服务采样／失败收尾、真实 Guid 批次选择及相应测试和事实文档同步。
 - 本轮实际反馈：`python3 -m unittest discover -s tests -p 'test_isolated_large_library_integration.py' -v` **52/52 PASS**；`python3 -m unittest discover -s tests -p 'test_isolated_package_integration.py' -v` **30/30 PASS**；三处 Python 文件 `py_compile`、`python3 scripts/check_governance.py` 和 `git diff --check` 均 PASS。测试与治理均针对提交前相同的可执行内容；提交后工作区保持干净。
-- 这只是 Developer 本地候选，不是 B 独立审查或 Task PASS。全量 Python／C# build、test、format、完整包／扫描／批量／配置实机、独立新鲜大库门禁、RO-4 代理和 Slice Final 本轮未运行；既有 B `FIX REQUIRED`、Task `IN PROGRESS`、复用库及全部失败／聚焦证据均保留。下一步由 B 审查 `Base..4cdd174` 并决定后续独立门禁，不能以本地 82 项聚焦测试替代完整验收。
+- 这只是 Developer 本地候选，不是 B 独立审查或 Task PASS。全量 Python／C# build、test、format、完整包／扫描／批量／配置实机、独立新鲜大库门禁、RO-4 代理和 Slice Final 本轮未运行；既有 B `FIX REQUIRED`、复用库及全部失败／聚焦证据均保留。当前候选按流程交为 **READY FOR B REVIEW**；下一步由 B 审查 `Base..4cdd174` 并决定后续独立门禁，不能以本地 82 项聚焦测试替代完整验收。
 
 ## B Review Result — media-service teardown correction after `dcce752`
 

@@ -11,7 +11,7 @@
 
 ## 当前边界
 
-Slice 1／2／3 均已经 A 审查完整 Base..Implementation Head 并关闭为 PASS / CLOSED；历史合同／最终决定及不可变快照见 [关闭账本](progress.md)。Slice 3 Base `6da90ab6bd8995d8204ae0b7faf786c823699fe6`、接受实现 `7c64eb5dcad6e5f20fb7eb41819be2521f65484d`。AF-1 经同一 Task 纠正、B 复审及新 Slice Final 后由 A 重新审查闭合；旧拒绝和失败保留。Slice 3 关闭快照为 `03169b07d110964562f7da31d2c3d7add82e5ff5`。A 已在独立一轮选择并激活 [Slice 4](../SLICE.md)，Base 固定为该关闭提交，Implementation Head 为 NOT SET；Task 4.1 的 RO-1 安装包已由 B 独立 PASS；Task 4.2 的 RO-3 完整扫描重叠候选经 B 判 FIX REQUIRED 后已在原 Task 修正（真实窗口内变化、逐源／选源对账、跨批停止与单项失败隔离、外置原始证据），修正候选 `eac764d9…` 已交为 READY FOR B REVIEW；以上 4.2 候选信息为历史记录；当前 Task 4.3 为 IN PROGRESS，按 2026-10-19 用户授权改为至少 1000 项真实原生候选，复用现存全部 1004 项，不再要求两级运行；B 需在新 Contract Checkpoint 后重核合法性，既有 FIX REQUIRED 不因数量变更而自动解除；RO-2／RO-4 新增验收仍 NOT RUN，激活不表示已交付。
+Slice 1／2／3 均已经 A 审查完整 Base..Implementation Head 并关闭为 PASS / CLOSED；历史合同／最终决定及不可变快照见 [关闭账本](progress.md)。Slice 3 Base `6da90ab6bd8995d8204ae0b7faf786c823699fe6`、接受实现 `7c64eb5dcad6e5f20fb7eb41819be2521f65484d`。AF-1 经同一 Task 纠正、B 复审及新 Slice Final 后由 A 重新审查闭合；旧拒绝和失败保留。Slice 3 关闭快照为 `03169b07d110964562f7da31d2c3d7add82e5ff5`。A 已在独立一轮选择并激活 [Slice 4](../SLICE.md)，Base 固定为该关闭提交，Implementation Head 为 NOT SET；Task 4.1 的 RO-1 安装包已由 B 独立 PASS；Task 4.2 的 RO-3 完整扫描重叠候选经 B 判 FIX REQUIRED 后已在原 Task 修正（真实窗口内变化、逐源／选源对账、跨批停止与单项失败隔离、外置原始证据），修正候选 `eac764d9…` 已交为 READY FOR B REVIEW；以上 4.2 候选信息为历史记录；当前 Task 4.3 候选已交为 READY FOR B REVIEW，按 2026-10-19 用户授权改为至少 1000 项真实原生候选，复用现存全部 1004 项，不再要求两级运行；B 需在新 Contract Checkpoint 后重核合法性，既有 FIX REQUIRED 不因数量变更或交接而自动解除；RO-2／RO-4 新增验收仍 NOT RUN，交接不表示已交付。
 
 从 V3.0 的三个 Slice 改为四个 Slice 是实质规划调整；旧规划见重规划前检查点 `4b1d0468c1e43e6e9034ef98e99b6cc44ea59485`。旧生成器 P1 始终排除，当前 P1 专指 V4.2 核心插件。
 

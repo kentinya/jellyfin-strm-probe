@@ -135,7 +135,7 @@ git diff --check
 
 2026-10-16 用户后续明确授权本次直接规划 Task，并固定方案指导后续 B；因此本轮 A 可兼任规划，保留 B 独立审查与 A Slice 最终审查责任。[交付方案](docs/slice-4-delivery-plan.md) 固定 4.1 安装与恢复 → 4.2 完整扫描并发 → 4.3 真实大库 → 4.4 实际代理联调，根 TASK 每次只激活一个。2026-10-18 用户进一步授权 A 将当前大库验收从此前的十万候选调整为至少 3000 个真实原生候选；2026-10-19 用户进一步授权当前门槛为至少 1000 个，直接使用现存 1004 个受支持库内源，保留全部项目，不另跑 3000 级。历史规划和实际 3000 项运行数量、失败／审查结论保留；当前合同、Task 和同步文档以至少 1000 为准。这是 Material Contract Change，B 需在本 Contract Checkpoint 后重新核查 Task 合法性；本轮仍不实施插件。
 
-Base 固定；Slice 的 Implementation Head 仍为 NOT SET，不用本次文档提交冒充实现。当前 Task 4.3 保持 IN PROGRESS，已有实现及 FIX REQUIRED 审查事实以 TASK 和不可变历史为准；B 需在本次至少 1000 项门槛的新 Contract Checkpoint 后重核 Task 合法性，再决定继续／调整／重规划，不把数量调整当作独立验收 PASS。改变 Required Outcomes／Surfaces、当前 Task 边界或安全／正确性验收含义时，A 先提交明确的新合同，B 再决定后续实施。
+Base 固定；Slice 的 Implementation Head 仍为 NOT SET，不用本次文档提交冒充实现。当前 Task 4.3 候选已按流程交为 READY FOR B REVIEW；已有 FIX REQUIRED 审查事实以 TASK 和不可变历史为准，B 需在本次至少 1000 项门槛的新 Contract Checkpoint 后重核 Task 合法性，再决定继续／调整／重规划，不把数量调整或本地候选交接当作独立验收 PASS。改变 Required Outcomes／Surfaces、当前 Task 边界或安全／正确性验收含义时，A 先提交明确的新合同，B 再决定后续实施。
 
 全部必要结果满足后 B 停止新增 Task，单独执行 Slice Final，形成一份 Closure Packet 并交为 READY FOR A REVIEW。A 审查完整 Base..Implementation Head，判 PASS、FIX REQUIRED 或 PARTIAL / RESCOPE；P2／P3、可选证明和措辞不单独阻止 PASS。PASS 后一次性协调 CURRENT、SLICE／TASK、Roadmap／Progress／README 和简短角色经验，宣布 PASS / CLOSED 并停止；选择其他 Slice 另开一轮。
 
