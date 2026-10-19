@@ -901,7 +901,8 @@ def run_scenario(package: Path, count: int, evidence_dir: Path, timeout: int, ke
                     return True
                 return False
 
-            attempt_stop = run_task(auth, recorder, timeout=run_timeout, stop_after=stop_during_query)
+            attempt_stop = run_task(auth, recorder, timeout=run_timeout, stop_after=stop_during_query,
+                                    poll_seconds=0.05)
             attempt_events = batch_log_events(container, attempt_started)
             read_started = any(event["kind"] == "OBJECT_READ_STARTED" for event in attempt_events)
             observed = seen.is_set() and bool(state_at_stop) and not read_started
