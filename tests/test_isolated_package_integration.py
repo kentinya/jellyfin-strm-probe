@@ -73,7 +73,7 @@ class PackageEnvironmentTests(unittest.TestCase):
         with patch.object(package_environment, "run", side_effect=[listed, inspected]):
             states = package_environment.inspect_owned_container_states()
         self.assertEqual(states, [{
-            "name": "package-jellyfin", "status": "exited", "exit_code": 0,
+            "name": "package-jellyfin", "service": None, "status": "exited", "exit_code": 0,
             "oom_killed": False, "error": "", "finished_at": "2026-10-19T00:00:00Z",
         }])
 
@@ -91,6 +91,35 @@ class PackageEnvironmentTests(unittest.TestCase):
                                              "did not terminate cleanly"):
                     package_environment.cleanup_instance()
             self.assertTrue(workspace.exists())
+
+    def test_started_cleanup_requires_both_service_exit_records(self):
+        for services in ([], [{"service": "jellyfin", "status": "exited", "exit_code": 0,
+                               "oom_killed": False, "error": "", "finished_at": "now"}]):
+            with self.subTest(services=services), tempfile.TemporaryDirectory() as tmp:
+                with patch.object(package_environment, "BASE", Path(tmp)):
+                    workspace = package_environment.select_workspace(Path(tmp) / "run")
+                    with patch.object(package_environment, "WORK", workspace), \
+                         patch.object(package_environment, "compose"), \
+                         patch.object(package_environment, "inspect_owned_container_states", return_value=services):
+                        with self.assertRaisesRegex(package_environment.PackageEnvironmentError, "exit evidence"):
+                            package_environment.cleanup_instance(required_services=("jellyfin", "media"))
+                    self.assertTrue(workspace.exists())
+
+    def test_cleanup_rejects_active_incomplete_and_error_states(self):
+        clean = {"status": "exited", "exit_code": 0, "oom_killed": False,
+                 "error": "", "finished_at": "2026-10-19T00:00:00Z"}
+        for values in ({"status": "restarting"}, {"status": "paused"}, {"oom_killed": None},
+                       {"error": "runtime error"}, {"finished_at": None}):
+            with self.subTest(values=values), tempfile.TemporaryDirectory() as tmp:
+                with patch.object(package_environment, "BASE", Path(tmp)):
+                    workspace = package_environment.select_workspace(Path(tmp) / "run")
+                    with patch.object(package_environment, "WORK", workspace), \
+                         patch.object(package_environment, "compose"), \
+                         patch.object(package_environment, "inspect_owned_container_states",
+                                      return_value=[{**clean, **values}]):
+                        with self.assertRaisesRegex(package_environment.PackageEnvironmentError, "terminate cleanly"):
+                            package_environment.cleanup_instance()
+                    self.assertTrue(workspace.exists())
 
     def test_media_fixture_names_are_distinct_and_versioned_strm_is_written(self):
         with tempfile.TemporaryDirectory() as tmp:

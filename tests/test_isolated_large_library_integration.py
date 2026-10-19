@@ -7,7 +7,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "run_isolated_large_library_integration.py"
@@ -18,6 +18,149 @@ SPEC.loader.exec_module(large)
 
 
 class LargeLibraryControlTests(unittest.TestCase):
+    def run_round_fixture(self):
+        fields = {name: 0 for name in large.REQUIRED_SUMMARY_FIELDS}
+        fields.update(candidates=4, raw_candidates=4, checked=1, skipped=0, first_trust=0,
+                      not_processed=3, actual_probe_calls=1, need_probe=1, reliable_success=1)
+        fields.update({key: False for key in ("candidate_fetch_failed", "store_unavailable",
+                       "scope_unavailable", "disabled", "stop_requested")})
+        task = {"State": "Idle", "LastExecutionResult": {"Status": "Completed",
+                "StartTimeUtc": "2026-01-01T00:00:01Z", "EndTimeUtc": "2026-01-01T00:00:02Z"}}
+        execution = {"task": task, "start_time_previous": "2026-01-01T00:00:00Z",
+                     "progress": [0, 50, 99], "stopped": False}
+        keys = [("1" * 32, "2" * 32)]
+        probes = [{"item_id": keys[0][0], "source_key": keys[0][1], "running": 2}]
+        events = [{"kind": kind} for kind in ("CANDIDATE_QUERY_STARTED",
+                  "CANDIDATE_QUERY_RETURNED", "CANDIDATE_SET_FIXED")]
+        events.append({"kind": "OBJECT_READ_RETURNED",
+                       "redacted_line": "RequestedCount 4 ReturnedCount 4"})
+        return fields, execution, probes, events, keys
+
+    def drive_round(self, fields, execution, probes, events, keys):
+        with patch.object(large, "run_task", return_value=execution), \
+             patch.object(large, "latest_summary_since", return_value="summary"), \
+             patch.object(large, "require_complete_summary", return_value=fields), \
+             patch.object(large, "probe_starts_since", return_value=probes), \
+             patch.object(large, "batch_log_events", return_value=events):
+            return large.run_round("auth", "offline", MagicMock(), "increment", 4, 1, 0,
+                                   expected_probe_keys=keys)
+
+    def test_real_round_control_accepts_success_and_rejects_failed_or_stale_execution(self):
+        values = self.run_round_fixture()
+        self.assertEqual(self.drive_round(*values)["fields"]["reliable_success"], 1)
+        fields, execution, probes, events, keys = values
+        for status in ("Failed", "Cancelled"):
+            execution["task"]["LastExecutionResult"]["Status"] = status
+            with self.assertRaisesRegex(RuntimeError, "did not complete"):
+                self.drive_round(*values)
+        execution["task"]["LastExecutionResult"]["Status"] = "Completed"
+        execution["start_time_previous"] = "2026-01-01T00:00:01Z"
+        with self.assertRaisesRegex(RuntimeError, "previous round"):
+            self.drive_round(*values)
+
+    def test_real_round_control_rejects_incomplete_work_flags_and_bad_progress(self):
+        for key in ("check_stage_incomplete", "probe_incomplete", "missing", "revoked",
+                    "read_incomplete", "unread", "store_unavailable", "scope_unavailable",
+                    "disabled", "stop_requested"):
+            with self.subTest(key=key):
+                values = self.run_round_fixture()
+                values[0][key] = True if key in {"store_unavailable", "scope_unavailable",
+                                                "disabled", "stop_requested"} else 1
+                with self.assertRaises(RuntimeError):
+                    self.drive_round(*values)
+        values = self.run_round_fixture(); values[1]["progress"] = [50, 10]
+        with self.assertRaisesRegex(RuntimeError, "decreasing progress"):
+            self.drive_round(*values)
+
+    def test_real_round_control_rejects_wrong_probe_source_concurrency_and_batch_size(self):
+        for mutate in (lambda p, e: p[0].update(source_key="3" * 32),
+                       lambda p, e: p[0].update(running=3),
+                       lambda p, e: p.clear(),
+                       lambda p, e: e[-1].update(redacted_line="RequestedCount 9999 ReturnedCount 9999")):
+            values = self.run_round_fixture(); mutate(values[2], values[3])
+            with self.assertRaises(RuntimeError):
+                self.drive_round(*values)
+
+    def test_index_preparation_requires_scan_completed_before_item_visibility(self):
+        fixture = {"names": ["supported"], "controls": {"ordinary": "ordinary",
+                                                             "out_of_scope": "outside"}}
+        with patch.object(large, "wait_native_task_idle"), \
+             patch.object(large.scan, "run_native_scan_completed", side_effect=RuntimeError("scan Failed")), \
+             patch.object(large, "poll_fixture_items") as poll:
+            with self.assertRaisesRegex(RuntimeError, "scan Failed"):
+                large.prepare_indexed_fixture("auth", fixture, MagicMock())
+            poll.assert_not_called()
+
+    def test_capture_state_saves_rows_before_rejecting_lost_fingerprint(self):
+        item_id, source_key = "1" * 32, "2" * 32
+        key = (item_id, source_key)
+        expected = {key: {"item_id": item_id, "source_key": source_key, "url_hash": large.digest("url"),
+                          "sha1": "a" * 40, "file_size": 123}}
+        item = {"Id": item_id, "MediaSources": [{"Id": source_key, "Path": "url",
+                "MediaStreams": [{"Type": "Video", "Codec": "h264"}]}]}
+        recorder = MagicMock()
+        with patch.object(large, "fingerprint_map", return_value={}), \
+             patch.object(large, "native_items_by_id", return_value={item_id: item}):
+            with self.assertRaisesRegex(RuntimeError, "do not reconcile"):
+                large.capture_state("auth", {"names": ["one"]}, {"one": item}, expected, recorder, "stopped")
+        saved = recorder.snapshot.call_args.args[1]
+        self.assertEqual(saved["expected_rows"], [expected[key]])
+        self.assertEqual(saved["actual_rows"], [])
+
+    def test_failed_started_scenario_stops_but_does_not_delete_diagnostics(self):
+        state = large.ScenarioState()
+        state.workspace = Path("/unused-owned-workspace")
+        state.instance_started = True
+        summary = {"status": "FAIL"}
+        with patch.object(large.pe, "compose") as compose, \
+             patch.object(large.pe, "inspect_owned_container_states", return_value=[]), \
+             patch.object(large.pe, "cleanup_instance") as cleanup:
+            large.finalize_scenario(summary, state, False)
+        compose.assert_called_once_with("stop")
+        cleanup.assert_not_called()
+        self.assertEqual(summary["cleanup"]["status"], "PRESERVED AFTER FAILURE")
+
+    def test_successful_started_scenario_requires_complete_service_exit_evidence(self):
+        state = large.ScenarioState()
+        state.workspace = Path("/unused-owned-workspace")
+        state.instance_started = True
+        summary = {"status": "PASS"}
+        with patch.object(large.pe, "cleanup_instance", side_effect=RuntimeError("missing service")) as cleanup:
+            large.finalize_scenario(summary, state, False)
+        cleanup.assert_called_once_with(required_services=("jellyfin", "media"))
+        self.assertEqual(summary["status"], "FAIL")
+
+    def test_capture_state_rejects_changed_native_stream_before_playback(self):
+        item_id, source_key = "1" * 32, "2" * 32
+        key = (item_id, source_key)
+        expected = {key: {"item_id": item_id, "source_key": source_key, "url_hash": large.digest("url"),
+                          "sha1": "a" * 40, "file_size": 123}}
+        item = {"Id": item_id, "MediaSources": [{"Id": source_key, "Path": "url",
+                "MediaStreams": [{"Type": "Video", "Codec": "h264"}]}]}
+        with patch.object(large, "fingerprint_map", return_value=expected), \
+             patch.object(large, "native_items_by_id", return_value={item_id: item}):
+            native = large.capture_state("auth", {"names": ["one"]}, {"one": item},
+                                         expected, MagicMock(), "pre-restart")
+            item["MediaSources"][0]["MediaStreams"][0]["Codec"] = "hevc"
+            with self.assertRaisesRegex(RuntimeError, "main-stream signature changed"):
+                large.capture_state("auth", {"names": ["one"]}, {"one": item}, expected,
+                                    MagicMock(), "restart-before-playback", native)
+
+    def test_native_stop_callback_runs_after_accepted_stop_before_settlement(self):
+        before = {"Id": "task", "State": "Idle",
+                  "LastExecutionResult": {"StartTimeUtc": "old"}}
+        running = {"Id": "task", "State": "Running", "CurrentProgressPercentage": 10}
+        cancelled = {"Id": "task", "State": "Idle",
+                     "LastExecutionResult": {"StartTimeUtc": "new", "Status": "Cancelled"}}
+        order = []
+        with patch.object(large, "current_task", side_effect=[before, running, cancelled]), \
+             patch.object(large.scan, "start_task", return_value=204), \
+             patch.object(large.scan, "stop_task", side_effect=lambda *args: order.append("stop") or 204):
+            result = large.run_task("auth", MagicMock(), stop_after=lambda *args: True, poll_seconds=0,
+                                    on_stop=lambda task: order.append("rerun"))
+        self.assertEqual(order, ["stop", "rerun"])
+        self.assertEqual(result["task"], cancelled)
+
     def test_candidate_identity_reconciliation_is_order_independent(self):
         result = large.reconcile_candidate_identities(
             ["00000000-0000-0000-0000-000000000002", "00000000-0000-0000-0000-000000000001"],
@@ -50,7 +193,9 @@ class LargeLibraryControlTests(unittest.TestCase):
             "candidate_fetch_ms": 1, "candidate_fetch_allocated_bytes": 1, "candidate_fetch_peak_bytes": 0,
             "candidate_set_estimated_bytes": 1, "candidate_set_measured_capacity_bytes": 1,
             "candidate_set_retained_bytes": 1, "batch_read_ms": 1, "batch_read_allocated_bytes": 1,
-            "batch_reads": 1,
+            "batch_reads": 1, "check_stage_incomplete": 0,
+            "candidate_fetch_failed": False, "store_unavailable": False, "scope_unavailable": False,
+            "disabled": False, "stop_requested": False,
         }
 
         with self.assertRaisesRegex(RuntimeError, "Expected 0 real plugin probes"):
@@ -67,7 +212,9 @@ class LargeLibraryControlTests(unittest.TestCase):
             "candidate_fetch_ms": 1, "candidate_fetch_allocated_bytes": 1, "candidate_fetch_peak_bytes": 0,
             "candidate_set_estimated_bytes": 1, "candidate_set_measured_capacity_bytes": 1,
             "candidate_set_retained_bytes": 1, "batch_read_ms": 1, "batch_read_allocated_bytes": 1,
-            "batch_reads": 1,
+            "batch_reads": 1, "check_stage_incomplete": 0,
+            "candidate_fetch_failed": False, "store_unavailable": False, "scope_unavailable": False,
+            "disabled": False, "stop_requested": False,
         }
 
         with self.assertRaisesRegex(RuntimeError, "Expected 3 first-trust sources"):
@@ -76,12 +223,16 @@ class LargeLibraryControlTests(unittest.TestCase):
 
     def test_missing_cost_field_is_rejected(self):
         fields = {name: 0 for name in large.REQUIRED_SUMMARY_FIELDS}
+        fields.update({key: False for key in ("candidate_fetch_failed", "store_unavailable",
+                       "scope_unavailable", "disabled", "stop_requested")})
         del fields["batch_read_allocated_bytes"]
         with self.assertRaisesRegex(RuntimeError, "missing the cost field"):
             large.validate_settlement(fields, expected_candidates=0, expected_probe_calls=0)
 
     def test_negative_cost_field_is_rejected(self):
         fields = {name: 0 for name in large.REQUIRED_SUMMARY_FIELDS}
+        fields.update({key: False for key in ("candidate_fetch_failed", "store_unavailable",
+                       "scope_unavailable", "disabled", "stop_requested")})
         fields["batch_read_allocated_bytes"] = -1
         with self.assertRaisesRegex(RuntimeError, "negative"):
             large.validate_settlement(fields, expected_candidates=0, expected_probe_calls=0)
@@ -161,17 +312,31 @@ class LargeLibraryControlTests(unittest.TestCase):
         self.assertTrue(process.terminated)
         self.assertTrue(process.waited)
 
-    def test_query_stage_stop_requires_query_started_and_no_read(self):
-        # A stop only counts as an in-query stop when the query started, the native stop was accepted and no
-        # object read began; a late stop that already read a batch is rejected.
-        started = {"stopped": True, "query_started_utc": "2026-01-01T00:00:00+00:00"}
-        self.assertTrue(large.query_stop_observed(started, [{"kind": "CANDIDATE_QUERY_STARTED"}]))
-        self.assertFalse(large.query_stop_observed(
-            started, [{"kind": "CANDIDATE_QUERY_STARTED"}, {"kind": "OBJECT_READ_STARTED"}]))
-        self.assertFalse(large.query_stop_observed({"stopped": False, "query_started_utc": None}, []))
-        self.assertFalse(large.query_stop_observed({"stopped": True, "query_started_utc": None}, []))
-        self.assertFalse(large.query_stop_observed(
-            {"stopped": True, "query_started_utc": "2026-01-01T00:00:00+00:00", "read_started": True}, []))
+    def query_stop_fixture(self):
+        execution = {"stopped": True, "read_started": False, "progress": [0],
+                     "stop_requested_utc": "2026-01-01T00:00:01+00:00",
+                     "stop_acknowledged_utc": "2026-01-01T00:00:02+00:00",
+                     "task": {"LastExecutionResult": {"Status": "Cancelled"}}}
+        library = "LibraryId 11111111-1111-1111-1111-111111111111"
+        events = [{"kind": "CANDIDATE_QUERY_STARTED", "timestamp": "2026-01-01T00:00:00+00:00",
+                   "redacted_line": library},
+                  {"kind": "CANDIDATE_QUERY_RETURNED", "timestamp": "2026-01-01T00:00:03+00:00",
+                   "redacted_line": library}]
+        return execution, events
+
+    def test_query_stage_stop_requires_real_boundaries_and_cancelled_result(self):
+        execution, events = self.query_stop_fixture()
+        self.assertTrue(large.query_stop_observed(execution, events))
+        for values in ({"stopped": False}, {"read_started": True}, {"progress": [1]},
+                       {"stop_requested_utc": "2025-12-31T23:59:59+00:00"},
+                       {"stop_acknowledged_utc": "2026-01-01T00:00:04+00:00"},
+                       {"task": {"LastExecutionResult": {"Status": "Failed"}}}):
+            with self.subTest(values=values):
+                self.assertFalse(large.query_stop_observed({**execution, **values}, events))
+        self.assertFalse(large.query_stop_observed(execution, []))
+        self.assertFalse(large.query_stop_observed(execution, events[:1]))
+        self.assertFalse(large.query_stop_observed(execution, events + [{"kind": "OBJECT_READ_STARTED"}]))
+        self.assertFalse(large.query_stop_observed(execution, events + [{"kind": "CANDIDATE_ID"}]))
 
     def test_unobserved_required_query_stage_fails_overall_result_closed(self):
         # B FIX REQUIRED: three missed query-stop attempts must not let the acceptance command exit 0/PASS.
@@ -201,11 +366,11 @@ class LargeLibraryControlTests(unittest.TestCase):
             {"actual_query_stage_stop": bool(result["observed"])}), ("FAIL", 1))
 
     def test_query_stage_stop_attempts_stops_at_first_observed_window(self):
-        observed_stop = {"stopped": True, "query_started_utc": "2026-01-01T00:00:00+00:00", "read_started": False}
+        observed_stop, observed_events = self.query_stop_fixture()
         missed_stop = {"stopped": True, "query_started_utc": None, "read_started": False}
         sequence = [
             (missed_stop, [{"kind": "OBJECT_READ_STARTED"}]),
-            (observed_stop, [{"kind": "CANDIDATE_QUERY_STARTED"}]),
+            (observed_stop, observed_events),
         ]
 
         def attempt() -> tuple[dict, list[dict]]:

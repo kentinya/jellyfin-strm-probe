@@ -107,6 +107,12 @@ def validate_settlement(fields: dict[str, int | float | bool], expected_candidat
             "Actual probe calls do not reconcile with reliable success and incomplete probes.")
     require(fields["need_probe"] == fields["reliable_success"] + fields["probe_incomplete"],
             "Need-probe count does not reconcile with completed probe outcomes.")
+    for name in ("missing", "revoked", "unread", "read_incomplete", "probe_incomplete",
+                 "check_stage_incomplete"):
+        require(fields[name] == 0, f"Normal round has incomplete work: {name}={fields[name]}.")
+    for name in ("candidate_fetch_failed", "store_unavailable", "scope_unavailable", "disabled",
+                 "stop_requested"):
+        require(fields.get(name) is False, f"Normal round has an unexpected failure/stop flag: {name}.")
     if expected_first_trust is not None:
         require(fields["first_trust"] == expected_first_trust,
                 f"Expected {expected_first_trust} first-trust sources, got {fields['first_trust']}.")
@@ -209,7 +215,8 @@ def run_query_stage_stop(auth: str, recorder: scan.EvidenceRecorder, container_n
     started = scan.now_utc()
     follower = DockerLogFollower(container_name, started)
     state: dict[str, object] = {"query_started_utc": None, "read_started": False,
-                                "stop_status": None, "stop_requested_utc": None}
+                                "stop_status": None, "stop_requested_utc": None,
+                                "stop_acknowledged_utc": None}
     lock = threading.Lock()
     stop_flag = threading.Event()
 
@@ -219,18 +226,20 @@ def run_query_stage_stop(auth: str, recorder: scan.EvidenceRecorder, container_n
             lines = current_round_log_lines(follower.drain(), started)
             if any("STRM_BATCH_OBJECT_READ_STARTED" in line for line in lines):
                 state["read_started"] = True
-            if not stop_flag.is_set() and any("STRM_BATCH_CANDIDATE_QUERY_STARTED" in line for line in lines):
+            if not stop_flag.is_set() and any("STRM_BATCH_CANDIDATE_QUERY_STARTED LibraryId " in line
+                                             for line in lines):
                 with lock:
                     if stop_flag.is_set():
                         continue
                     state["query_started_utc"] = scan.now_utc().isoformat()
+                    state["stop_requested_utc"] = scan.now_utc().isoformat()
                     try:
                         status = scan.stop_task(auth, task["Id"])
                     except Exception as error:  # noqa: BLE001 - recorded, never fatal
                         state["stop_status"] = f"error:{type(error).__name__}"
                     else:
                         state["stop_status"] = status
-                        state["stop_requested_utc"] = scan.now_utc().isoformat()
+                        state["stop_acknowledged_utc"] = scan.now_utc().isoformat()
                     stop_flag.set()
             time.sleep(0.005)
 
@@ -267,13 +276,29 @@ def run_query_stage_stop(auth: str, recorder: scan.EvidenceRecorder, container_n
 
 
 def query_stop_observed(execution: dict, events: list[dict]) -> bool:
-    """A preparation-stage stop only counts when the synchronous query actually started, the native stop was
-    accepted, and no object read began; a stop that already read a batch is a late stop, not an in-query stop."""
-    read_started = any(event["kind"] == "OBJECT_READ_STARTED" for event in events)
-    return (execution.get("stopped") is True
-            and execution.get("query_started_utc") is not None
-            and execution.get("read_started") is not True
-            and not read_started)
+    """Count only an acknowledged stop inside a recorded native per-library query."""
+    if (execution.get("stopped") is not True or execution.get("read_started") is True
+            or scan.task_status(execution.get("task", {})) not in {"cancelled", "1"}
+            or any(value != 0 for value in execution.get("progress", []))
+            or any(event["kind"] in {"OBJECT_READ_STARTED", "CANDIDATE_ID"} for event in events)):
+        return False
+    try:
+        requested = dt.datetime.fromisoformat(execution["stop_requested_utc"])
+        acknowledged = dt.datetime.fromisoformat(execution["stop_acknowledged_utc"])
+        entered: dict[str, dt.datetime] = {}
+        for event in events:
+            library = re.search(r"LibraryId ([0-9a-fA-F-]{32,36})", event.get("redacted_line", ""))
+            if library is None:
+                continue
+            instant = dt.datetime.fromisoformat(event["timestamp"])
+            if event["kind"] == "CANDIDATE_QUERY_STARTED":
+                entered[library.group(1)] = instant
+            elif event["kind"] == "CANDIDATE_QUERY_RETURNED" and library.group(1) in entered:
+                if entered[library.group(1)] <= requested <= acknowledged < instant:
+                    return True
+    except (KeyError, TypeError, ValueError):
+        return False
+    return False
 
 
 def overall_acceptance_status(required_stages: dict[str, bool]) -> tuple[str, int]:
@@ -309,6 +334,7 @@ def run_query_stage_stop_attempts(perform_attempt: Callable[[], tuple[dict, list
                          "observed": attempt_observed,
                          "query_started_utc": stop.get("query_started_utc"),
                          "stop_requested_utc": stop.get("stop_requested_utc"),
+                         "stop_acknowledged_utc": stop.get("stop_acknowledged_utc"),
                          "stop_status": stop.get("stop_status"),
                          "object_read_started": any(
                              event["kind"] == "OBJECT_READ_STARTED" for event in events),
@@ -323,6 +349,7 @@ def run_query_stage_stop_attempts(perform_attempt: Callable[[], tuple[dict, list
 
 def run_task(auth: str, recorder: scan.EvidenceRecorder, timeout: int = MAX_TASK_TIMEOUT,
              *, stop_after: Callable[[dict, dict], bool] | None = None,
+             on_stop: Callable[[dict], None] | None = None,
              poll_seconds: float = POLL_SECONDS) -> dict:
     task = current_task(auth)
     previous = scan.last_start(task)
@@ -349,6 +376,8 @@ def run_task(auth: str, recorder: scan.EvidenceRecorder, timeout: int = MAX_TASK
             recorder.record("batch_stop_requested", status=stop_status, state=state,
                             progress=raw_progress, result=result)
             stopped = True
+            if on_stop is not None:
+                on_stop(observed)
         if saw_run and state in {"idle", "0"} and result:
             final = {"task": observed, "result": result, "start_time_previous": previous,
                      "stopped": stopped, "progress": progress,
@@ -763,7 +792,8 @@ def prepare_indexed_fixture(auth: str, fixture: dict[str, object], recorder: sca
     wanted = list(fixture["names"]) + [name for name in fixture["controls"].values()
                                         if name != fixture["controls"]["out_of_scope"]]
     wait_native_task_idle(auth, scan.SCAN_TASK_KEY)
-    scan.refresh_library(auth)
+    task, interval = scan.run_native_scan_completed(auth, "large-library indexing", timeout=3600)
+    recorder.record("fixture_scan_completed", task=task, interval=interval)
     items = poll_fixture_items(auth, wanted, recorder, deadline_seconds=3600)
     item_ids = [canonical_guid(item["Id"], "fixture item") for item in items.values()]
     require(len(set(item_ids)) == len(item_ids), "Jellyfin merged two physical fixture files into one item.")
@@ -855,13 +885,36 @@ def capture_candidates(auth: str, library_id: str, fixture: dict[str, object], i
 def run_round(auth: str, container: str, recorder: scan.EvidenceRecorder, label: str,
               expected_candidates: int, expected_probes: int, expected_first_trust: int | None = None,
               timeout: int = MAX_TASK_TIMEOUT,
-              expected_candidate_ids: list[str] | None = None) -> dict[str, object]:
+              expected_candidate_ids: list[str] | None = None, *,
+              expected_probe_keys: list[tuple[str, str]] | None = None) -> dict[str, object]:
     started = scan.now_utc()
     execution = run_task(auth, recorder, timeout=timeout)
+    scan.require_completed_execution(execution["task"], execution["start_time_previous"], label)
+    progress = execution["progress"]
+    require(all(0 <= value <= 100 for value in progress)
+            and all(left <= right for left, right in zip(progress, progress[1:])),
+            f"{label} has invalid or decreasing progress.")
     summary_line = latest_summary_since(container, started)
     fields = require_complete_summary(summary_line)
     validate_settlement(fields, expected_candidates, expected_probes, expected_first_trust)
+    # The three deliberately unsupported in-scope controls are the only normal exclusions.
+    require(fields["not_processed"] == 3 and fields["checked"] == expected_candidates - 3,
+            f"{label} did not check exactly the supported fixtures and exclude the three controls.")
+    probes = probe_starts_since(container, started)
+    require(len(probes) == expected_probes, f"{label} raw probe starts disagree with its summary.")
+    require(all(1 <= probe["running"] <= 2 for probe in probes),
+            f"{label} exceeded the configured two-probe limit.")
+    actual_keys = [(probe["item_id"], probe["source_key"]) for probe in probes]
+    require(expected_probe_keys is not None or expected_probes == 0,
+            f"{label} has no independent expected probe identities.")
+    require(sorted(actual_keys) == sorted(expected_probe_keys or []),
+            f"{label} probed unexpected, duplicate or missing sources.")
     events = batch_log_events(container, started)
+    for event in events:
+        if event["kind"] == "OBJECT_READ_RETURNED":
+            requested = re.search(r"RequestedCount (\d+) ReturnedCount (\d+)", event["redacted_line"])
+            require(requested is not None and 0 <= int(requested[2]) <= int(requested[1]) <= 128,
+                    f"{label} has missing or oversized object-batch evidence.")
     logged_ids = [event["candidate_id"] for event in events if event.get("kind") == "CANDIDATE_ID"]
     identity_reconciliation = None
     if expected_candidate_ids is not None:
@@ -873,9 +926,10 @@ def run_round(auth: str, container: str, recorder: scan.EvidenceRecorder, label:
     require(any(event["kind"] == "CANDIDATE_SET_FIXED" for event in events) or execution["stopped"],
             f"{label} has no fixed candidate-set marker.")
     recorder.record("large_library_round", label=label, summary_line=summary_line, fields=fields,
-                    task_execution=execution, phase_events=events,
+                    task_execution=execution, phase_events=events, probe_starts=probes,
                     candidate_identity_reconciliation=identity_reconciliation)
     recorder.snapshot(f"round-{label}-{time.time_ns()}", {"fields": fields, "task_execution": execution,
+                                                          "probe_starts": probes,
                                                           "phase_events": events,
                                                           "candidate_identity_reconciliation": identity_reconciliation})
     return {"summary": summary_line, "fields": fields, "execution": execution,
@@ -927,6 +981,48 @@ def assert_native_sources(auth: str, fixture: dict[str, object], items: dict[str
                 f"Native item {name!r} does not retain its expected current address.")
 
 
+def capture_state(auth: str, fixture: dict, items: dict, expected: dict,
+                  recorder: scan.EvidenceRecorder, label: str, native_expected: dict | None = None) -> dict:
+    """Save the key checkpoint as auditable rows and redacted native source signatures."""
+    actual = fingerprint_map()
+    recorder.snapshot(f"rows-{label}-{time.time_ns()}", {
+        "expected_rows": [expected[key] for key in sorted(expected)],
+        "actual_rows": [actual[key] for key in sorted(actual)]})
+    current = native_items_by_id(auth)
+    native = {}
+    for name in fixture["names"]:
+        item_id = canonical_guid(items[name]["Id"], name)
+        item = current.get(item_id)
+        require(item is not None, f"{label}: a supported item disappeared.")
+        source_key = file_source_id(item, name)
+        source = item["MediaSources"][0]
+        streams = [stream for stream in (source.get("MediaStreams") or [])
+                   if stream.get("Type") in {"Video", "Audio"}]
+        require(bool(streams), f"{label}: a supported source lost its main stream.")
+        # Only stable media properties: no delivery URLs, private paths, or serialization-order dependence.
+        signature = [{key: stream.get(key) for key in ("Type", "Index", "Codec", "Profile",
+                     "Width", "Height", "Channels", "SampleRate", "BitRate", "IsDefault")}
+                     for stream in streams]
+        native[(item_id, source_key)] = {"item_id": item_id, "source_key": source_key,
+            "url_hash": digest(str(source.get("Path") or "")),
+            "main_stream_sha256": digest(json.dumps(
+                sorted(signature, key=lambda stream: (str(stream["Type"]), str(stream["Index"]))), sort_keys=True))}
+    recorder.snapshot(f"state-{label}-{time.time_ns()}", {
+        "expected_rows": [expected[key] for key in sorted(expected)],
+        "actual_rows": [actual[key] for key in sorted(actual)],
+        "native_sources": [native[key] for key in sorted(native)],
+        "expected_native_sources": ([native_expected[key] for key in sorted(native_expected)]
+                                    if native_expected is not None else None)})
+    reconcile_rows(expected, actual)
+    require(set(native) == set(expected), f"{label}: native source identities changed unexpectedly.")
+    require(all(native[key]["url_hash"] == expected[key]["url_hash"] for key in expected),
+            f"{label}: a native address does not match the independently expected fingerprint.")
+    if native_expected is not None:
+        require(all(native[key] == value for key, value in native_expected.items()),
+                f"{label}: native address or main-stream signature changed.")
+    return native
+
+
 def seed_controlled_contents(fixture: dict[str, object], items: dict[str, dict],
                              recorder: scan.EvidenceRecorder) -> list[dict[str, object]]:
     """Apply the pre-planned increment controls: four URL changes, four content changes, four Size changes,
@@ -971,6 +1067,7 @@ class ScenarioState:
         self.workspace = None
         self.before_state = None
         self.sampler: ResourceSampler | None = None
+        self.instance_started = False
 
 
 def finalize_scenario(summary: dict[str, object], state: "ScenarioState", keep_workspace: bool) -> None:
@@ -994,7 +1091,13 @@ def finalize_scenario(summary: dict[str, object], state: "ScenarioState", keep_w
             summary["instance_reconciliation_error"] = type(error).__name__
     if state.workspace is not None and not keep_workspace:
         try:
-            summary["cleanup"] = pe.cleanup_instance()
+            if summary.get("status") != "PASS" and state.instance_started:
+                pe.compose("stop")
+                summary["cleanup"] = {"status": "PRESERVED AFTER FAILURE",
+                                      "container_states": pe.inspect_owned_container_states()}
+            else:
+                summary["cleanup"] = pe.cleanup_instance(
+                    required_services=("jellyfin", "media") if state.instance_started else ())
         except Exception as error:
             summary["status"] = "FAIL"
             summary["cleanup_error"] = type(error).__name__
@@ -1012,6 +1115,14 @@ def run_scenario(package: Path, count: int, evidence_dir: Path, timeout: int, ke
         summary["error"] = {"type": type(error).__name__, "message": scan._safe_exception(error)}
         recorder.record("failure", error=summary["error"])
     finally:
+        if state.instance_started:
+            for service in ("jellyfin", "media"):
+                try:
+                    recorder.write_raw(f"logs/{service}.log", "\n".join(
+                        full_docker_log(pe.container_name(service))))
+                except Exception as error:
+                    summary["status"] = "FAIL"
+                    summary[service + "_log_error"] = type(error).__name__
         finalize_scenario(summary, state, keep_workspace)
         recorder.set_metadata(exit_code=0 if summary.get("status") == "PASS" else 1,
                               final_status=summary.get("status", "FAIL"))
@@ -1043,6 +1154,8 @@ def run_scenario_body(package: Path, count: int, run_id: str, recorder: "scan.Ev
                             "native_prepare_workers": 2, "plugin_probe_default": 2,
                             "sample_seconds": 1, "progress_poll_seconds": POLL_SECONDS})
 
+    # Once startup is attempted, failures preserve the run-owned directory even if bootstrap only partly ran.
+    state.instance_started = True
     pe.prepare_clean_instance()
     deploy = pe.deploy_archive(package)
     scan.restart()
@@ -1083,14 +1196,17 @@ def run_scenario_body(package: Path, count: int, run_id: str, recorder: "scan.Ev
     reconciliation = reconcile_rows(expected, first_rows)
     require(first_rows.keys() == expected.keys(), "First trust created rows outside the selected supported sources.")
     recorder.record("first_trust_reconciliation", rows=reconciliation)
+    first_native = capture_state(auth, fixture, items, expected, recorder, "first-trust")
     round2 = run_round(auth, container, recorder, "unchanged", selected["count"], 0, 0,
                        run_timeout, selected["ids"])
     assert_native_sources(auth, fixture, items)
+    capture_state(auth, fixture, items, expected, recorder, "unchanged", first_native)
 
     changes = seed_controlled_contents(fixture, items, recorder)
     auth = scan.api_auth()
     wait_native_task_idle(auth, scan.SCAN_TASK_KEY)
-    scan.refresh_library(auth)
+    task, interval = scan.run_native_scan_completed(auth, "large-library increment indexing", timeout=1800)
+    recorder.record("fixture_scan_completed", task=task, interval=interval)
     new_items = poll_fixture_items(auth, list(fixture["new_names"]), recorder, deadline_seconds=1800)
     recorder.record("missing_stream_candidates_indexed", new_names=len(new_items))
     for name in fixture["new_names"]:
@@ -1101,18 +1217,23 @@ def run_scenario_body(package: Path, count: int, run_id: str, recorder: "scan.Ev
                 f"The added source {name!r} unexpectedly has a main stream before batch checking.")
     items.update(new_items)
     fixture["names"].extend(fixture["new_names"])
+    items = wait_items_by_name(auth, list(items))
     selected = capture_candidates(auth, strm_library_id, fixture, items, recorder, "before-increment")
     expected_increment_count = selected["count"]
     auth = scan.api_auth()
     changed_round = run_round(auth, container, recorder, "controlled-increment", expected_increment_count, 16, 0,
-                              run_timeout, selected["ids"])
+                              run_timeout, selected["ids"], expected_probe_keys=[
+                                  (canonical_guid(items[change["name"]]["Id"], "changed item"),
+                                   file_source_id(items[change["name"]], "changed source")) for change in changes])
     auth = scan.api_auth()
     increment_expected = expected_all_rows(auth, fixture, items)
     increment_rows = fingerprint_map()
     increment_reconciliation = reconcile_rows(increment_expected, increment_rows)
     recorder.record("increment_reconciliation", rows=increment_reconciliation, changes=changes)
+    increment_native = capture_state(auth, fixture, items, increment_expected, recorder, "increment")
     followup = run_round(auth, container, recorder, "post-increment-unchanged", selected["count"], 0, 0,
                          run_timeout, selected["ids"])
+    capture_state(auth, fixture, items, increment_expected, recorder, "post-increment", increment_native)
 
     # Preparation-stage stop: detect the real synchronous native-query window from phase logs and stop
     # during it. The window can be short at 1000 candidates, so the task allows up to three natural retries;
@@ -1161,6 +1282,8 @@ def run_scenario_body(package: Path, count: int, run_id: str, recorder: "scan.Ev
     stop_target_ids = [*first_batch_supported[:2], *later_batch_supported[:2]]
     stop_names = [name_by_id[item_id] for item_id in stop_target_ids]
     stop_paths = [fixture["paths"][name] for name in stop_names]
+    before_stop_expected = expected_all_rows(auth, fixture, items)
+    before_stop_native = capture_state(auth, fixture, items, before_stop_expected, recorder, "before-stop")
     for index, (name, path) in enumerate(zip(stop_names, stop_paths, strict=True)):
         request_id = uuid.uuid4().hex
         url = f"http://media:8080/delay/20/{request_id}/{pe.MEDIA_MP4}"
@@ -1178,7 +1301,21 @@ def run_scenario_body(package: Path, count: int, run_id: str, recorder: "scan.Ev
             if event is not None and event["item_id"] in counts:
                 counts[event["item_id"]] = 1
         return sum(counts.values()) >= 2
-    stop_round = run_task(auth, recorder, timeout=run_timeout, stop_after=stop_after_two)
+    rerun_attempted = False
+
+    def attempt_during_drain(task: dict) -> None:
+        nonlocal rerun_attempted
+        draining = current_task(auth)
+        require(scan.task_state_name(draining) in {"cancelling", "2"},
+                "The delayed probes did not leave an observable Cancelling window.")
+        status = scan.start_task(auth, task["Id"])
+        recorder.record("rerun_during_drain", request_status=status, task_before=draining)
+        require(status in {204, 400, 409}, "Unexpected native rerun response during drain.")
+        rerun_attempted = True
+
+    stop_round = run_task(auth, recorder, timeout=run_timeout, stop_after=stop_after_two,
+                          on_stop=attempt_during_drain)
+    scan.wait_for_stable_idle(auth, stop_round["task"]["Id"])
     stop_events = batch_log_events(container, stop_started)
     started_ids = [key for key, value in probe_counts.items() if value]
     require(stop_round["stopped"] and len(started_ids) == 2,
@@ -1192,6 +1329,26 @@ def run_scenario_body(package: Path, count: int, run_id: str, recorder: "scan.Ev
             f"The stopped native task did not finish Cancelled: {scan.task_status(stop_round['task'])}.")
     require(max(stop_round["progress"], default=0) < 100,
             "The stopped task reported 100% before cancellation settlement completed.")
+    require(rerun_attempted and sum(event["kind"] == "CANDIDATE_QUERY_STARTED"
+            and "LibraryCount" in event["redacted_line"] for event in stop_events) == 1,
+            "A new batch execution entered during the old round's drain.")
+    expected_started = {canonical_guid(items[name]["Id"], name) for name in stop_names[:2]}
+    raw_starts = probe_starts_since(container, stop_started)
+    expected_started_keys = {(canonical_guid(items[name]["Id"], name), file_source_id(items[name], name))
+                             for name in stop_names[:2]}
+    require(set(started_ids) == expected_started and len(raw_starts) == 2
+            and {(probe["item_id"], probe["source_key"]) for probe in raw_starts} == expected_started_keys,
+            "The stopped round did not probe exactly the two selected first-batch sources.")
+    stopped_expected = dict(before_stop_expected)
+    stopped_native_expected = {key: dict(value) for key, value in before_stop_native.items()}
+    for name in stop_names[:2]:
+        item = items[name]
+        key = (canonical_guid(item["Id"], name), file_source_id(item, name))
+        stopped_expected[key] = expected_row(item, key[1], fixture["paths"][name])
+        # Started sources may legitimately acquire different stream properties; untouched ones may not.
+        stopped_native_expected.pop(key)
+    capture_state(auth, fixture, items, stopped_expected, recorder, "stopped-before-recovery",
+                  stopped_native_expected)
     recorder.record("batch_stop_reconciliation", started_ids=started_ids, events=stop_events,
                     progress=stop_round["progress"], state=scan.task_state_name(stop_round["task"]))
 
@@ -1200,7 +1357,9 @@ def run_scenario_body(package: Path, count: int, run_id: str, recorder: "scan.Ev
     idle_task = current_task(auth)
     require(scan.task_state_name(idle_task) in {"idle", "0"}, "The old batch task did not return to native Idle.")
     recovery = run_round(auth, container, recorder, "post-stop-recovery", selected["count"], 2, 0,
-                         run_timeout, selected["ids"])
+                         run_timeout, selected["ids"], expected_probe_keys=[
+                             (canonical_guid(items[name]["Id"], name), file_source_id(items[name], name))
+                             for name in stop_names if canonical_guid(items[name]["Id"], name) not in started_ids])
     auth = scan.api_auth()
     post_stop_expected = expected_all_rows(auth, fixture, items)
     post_stop_rows = fingerprint_map()
@@ -1214,12 +1373,15 @@ def run_scenario_body(package: Path, count: int, run_id: str, recorder: "scan.Ev
     pre_restart_expected = expected_all_rows(auth, fixture, items)
     pre_restart_rows = fingerprint_map()
     pre_restart_reconciliation = reconcile_rows(pre_restart_expected, pre_restart_rows)
+    pre_restart_native = capture_state(auth, fixture, items, pre_restart_expected, recorder, "pre-restart")
     require(pre_restart_rows.keys() == pre_restart_expected.keys(),
             "The pre-restart database has rows outside the fixed supported source set.")
     scan.restart()
     auth = scan.api_auth()
     restarted_rows = fingerprint_map()
     restart_reconciliation = reconcile_rows(pre_restart_expected, restarted_rows)
+    capture_state(auth, fixture, items, pre_restart_expected, recorder, "restart-before-playback",
+                  pre_restart_native)
     assert_native_sources(auth, fixture, items)
     recorder.record("restart_read_only_reconciliation", rows=restart_reconciliation,
                     playback_before_snapshot=False)
@@ -1250,6 +1412,7 @@ def run_scenario_body(package: Path, count: int, run_id: str, recorder: "scan.Ev
     require(extra_probes == 0, f"Post-restart PlaybackInfo caused {extra_probes} extra plugin probes.")
     after_playback_rows = fingerprint_map()
     playback_reconciliation = reconcile_rows(pre_restart_expected, after_playback_rows)
+    capture_state(auth, fixture, items, pre_restart_expected, recorder, "after-playback", pre_restart_native)
     recorder.record("post_restart_explicit_playback", requests=playback_results,
                     extra_plugin_probes=extra_probes, rows=playback_reconciliation)
 

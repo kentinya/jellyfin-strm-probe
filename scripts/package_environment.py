@@ -699,7 +699,7 @@ def reconcile_instance_state(before: dict[str, object]) -> dict[str, object]:
     return result
 
 
-def cleanup_instance() -> dict[str, object]:
+def cleanup_instance(*, required_services: tuple[str, ...] = ()) -> dict[str, object]:
     """Stop the instance and remove only the workspace this run actually created.
 
     Cleanup requires both this run's module-global ownership and the on-disk token to match.
@@ -717,8 +717,15 @@ def cleanup_instance() -> dict[str, object]:
     root = require_owned_path(WORK, label="run workspace")
     compose("stop")
     container_states = inspect_owned_container_states()
+    if required_services:
+        observed_services = [state.get("service") for state in container_states]
+        require(sorted(observed_services, key=str) == sorted(required_services),
+                "Missing or unexpected owned-service exit evidence; preserving workspace.")
     invalid = [state for state in container_states
-               if state["status"] == "running" or state["exit_code"] != 0 or state["oom_killed"]]
+               if state.get("status") != "exited" or type(state.get("exit_code")) is not int
+               or state["exit_code"] != 0 or state.get("oom_killed") is not False
+               or state.get("error") != "" or not state.get("finished_at")
+               or str(state["finished_at"]).startswith("0001-")]
     require(not invalid,
             "Owned package containers did not terminate cleanly: "
             + json.dumps(invalid, sort_keys=True))
@@ -744,9 +751,10 @@ def inspect_owned_container_states() -> list[dict[str, object]]:
         state = item.get("State", {})
         states.append({
             "name": str(item.get("Name", "")).lstrip("/"),
+            "service": item.get("Config", {}).get("Labels", {}).get("com.docker.compose.service"),
             "status": state.get("Status"),
             "exit_code": state.get("ExitCode"),
-            "oom_killed": bool(state.get("OOMKilled")),
+            "oom_killed": state.get("OOMKilled"),
             "error": state.get("Error", ""),
             "finished_at": state.get("FinishedAt"),
         })
