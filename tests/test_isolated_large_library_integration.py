@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import contextlib
 import importlib.util
+import io
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -216,6 +219,78 @@ class LargeLibraryControlTests(unittest.TestCase):
         self.assertEqual(sequence, [])
         self.assertEqual(large.overall_acceptance_status(
             {"actual_query_stage_stop": bool(result["observed"])}), ("PASS", 0))
+
+    def _run_scenario_with_finalization(self, *, reconcile_error=None, cleanup_error=None, sampler=None):
+        """Drive the real run_scenario/finalize_scenario control flow with a successful body and injected teardown.
+
+        The scenario body is stubbed so no instance is needed, while the production finalization and exit-code
+        handling run unchanged. Returns the process exit code and the printed, scrubbed summary.
+        """
+
+        def fake_body(package, count, run_id, recorder, summary, state, timeout):
+            summary["status"] = "PASS"
+            state.workspace = Path("/tmp/fake-large-workspace")
+            state.before_state = {"marker": True}
+            state.sampler = sampler
+
+        class FakeRecorder:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def record(self, *args, **kwargs):
+                pass
+
+            def set_metadata(self, *args, **kwargs):
+                pass
+
+            def finish(self, *args, **kwargs):
+                pass
+
+        with tempfile.TemporaryDirectory() as temporary:
+            evidence = Path(temporary) / "evidence"
+            with patch.object(large, "run_scenario_body", side_effect=fake_body), \
+                 patch.object(large.scan, "EvidenceRecorder", FakeRecorder), \
+                 patch.object(large.pe, "reconcile_instance_state",
+                              side_effect=reconcile_error, return_value={} if reconcile_error is None else None), \
+                 patch.object(large.pe, "cleanup_instance",
+                              side_effect=cleanup_error, return_value={} if cleanup_error is None else None):
+                output = io.StringIO()
+                with contextlib.redirect_stdout(output):
+                    exit_code = large.run_scenario(Path("package.zip"), 1000, evidence, 60, False)
+            summary = json.loads(output.getvalue())
+
+        return exit_code, summary
+
+    def test_cleanup_failure_after_successful_body_forces_nonzero_exit_and_fail_status(self):
+        # B FIX REQUIRED: a required cleanup failure must never leave the command reporting success, even when
+        # the observed scenario body itself reported PASS.
+        exit_code, summary = self._run_scenario_with_finalization(
+            cleanup_error=RuntimeError("cleanup exploded"))
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(summary["status"], "FAIL")
+        self.assertIn("cleanup_error", summary)
+
+    def test_reconciliation_failure_after_successful_body_forces_nonzero_exit_and_fail_status(self):
+        exit_code, summary = self._run_scenario_with_finalization(
+            reconcile_error=RuntimeError("instance disturbed"))
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(summary["status"], "FAIL")
+        self.assertIn("instance_reconciliation_error", summary)
+
+    def test_sampler_stop_failure_after_successful_body_forces_nonzero_exit(self):
+        class FailingSampler:
+            def stop(self):
+                raise RuntimeError("sampler stop failed")
+
+        exit_code, summary = self._run_scenario_with_finalization(sampler=FailingSampler())
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(summary["status"], "FAIL")
+        self.assertIn("sampler_cleanup_error", summary)
+
+    def test_successful_finalization_keeps_zero_exit(self):
+        exit_code, summary = self._run_scenario_with_finalization()
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(summary["status"], "PASS")
 
     def test_per_source_media_route_replacement_does_not_change_neighbor(self):
         package_root = ROOT / "artifacts" / "package-env" / "runs"
