@@ -11,7 +11,7 @@ Contract Checkpoint: 611c31c31115b02c3fb60cef2826d9348e352b7b
 Difficulty: High
 Test Level: T4
 Planner / Reviewer: B
-Implementation Head: 1c3e0176a285774641da265513a9f76510be666a
+Implementation Head: dfe6dfc597e6a9fd0a6bc6cf7fdd3a9c5d242a7f
 ```
 
 ## Goal
@@ -272,6 +272,30 @@ This is not a code-scope escalation to A. It is an external test-environment blo
 可复用经验只提供少量候选供 Slice 收尾，不记录开发流水账，不作为 Task PASS 门槛。
 
 ## B Review Result
+
+Current decision: 2026-10-19 evidence audit; supersedes conflicting historical reports.
+
+```text
+Reviewed Range: a06a80fac90a86085f25116568aa24b54847c562..dfe6dfc597e6a9fd0a6bc6cf7fdd3a9c5d242a7f
+Decision: FIX REQUIRED
+Slice Required Outcomes all satisfied: NO
+Next: correct the acceptance controls/evidence in SAME Task 4.3; B retains final full-suite responsibility
+```
+
+- Fresh runner observations: 1000 run `a9ffaab115c9` (1243.540s) and 3000 run `df75b733a9fa` (3293.100s) returned exit 0 / runner `PASS`, using ZIP SHA-256 `4066980f5d67768ad98d660cbd2f0ba250a9f70c149bad65a4a5f2a8e14a117d`. Both recorded media/Jellyfin exit 0 and no OOM. The 3000 run reports first trust 3000/zero probes, increment 16 reliable probes, recovery 2, subsequent unchanged zero probes and restart row reconciliation. These observations do not resolve the blockers below. Raw runs remain in `.git/validation-evidence/dfe6dfc/b-review-20261019T111748Z-media-stop-fix2/large-1000/` and `.git/validation-evidence/dfe6dfc/b-review-20261019T114014Z-large3000/large-3000/`.
+- **P1 BR-43-1 — query-stop classification does not prove the required phase.** `query_stop_observed` accepts query-start + HTTP 204 + no object read without comparing the stop with the per-library native-query return. In the 1000 run the query returned at `11:36:59.923298Z`, all 1007 IDs merged, and the recorded stop timestamp (actually after HTTP acknowledgement) was `11:36:59.932743Z`; this proves a preparation stop but does not prove a synchronous-query stop. The 3000 run instead records acknowledgement before return and `Complete False`/zero merged IDs. Preserve that distinction. Record request initiation and acknowledgement separately, correlate actual per-library query boundaries, reject late/before-query stops, verify Cancelled/zero admission, and add negative controls.
+- **P1 BR-43-2 — stopped-state and drain-time assertions are absent.** After the stopped round settles, the tool goes directly to recovery; it never verifies the complete stopped five-field state (two started commits versus two untouched later baselines) or attempts a native run during Cancelling. Recovery can repair damage before the first full-row reconciliation. Save independent before/expected/stopped rows and native addresses/main-stream signatures BEFORE recovery; attempt rerun while delayed probes still drain and prove no new execution.
+- **P1 BR-43-3 — per-source evidence is not preserved for independent audit.** `rounds/` holds candidate identities/phase lines and summaries, not expected/actual five-field rows or native address/main-stream signatures; `logs/` is empty in both runs. `reconcile_rows` retains only counts and an expected aggregate digest. Restart verifies a main stream exists but does not compare its pre-restart signature. Preserve redacted per-source expectations/actuals and probe/save/summary/backend observations; compare complete restart state before playback. Aggregate runner PASS cannot replace this requirement.
+- **P1 BR-43-4 — required resource evidence/budget controls are incomplete.** Sampling starts after indexing/native preparation (1000 preparation 323.678s; 3000 preparation 958.995s). It observes only Jellyfin Docker stats and host MemAvailable, not preparation/media costs, cgroup peak/RSS/disk, enforceable resource abort thresholds, or the required 30-second pre/post idle windows. The 3000 run has 162 samples only from `12:29:35Z` to `12:35:04Z`, after its `11:40:14Z` start. `--timeout-seconds` limits task loops, not the complete level. Fulfil existing sampling/budget/settlement requirements without changing N or inventing a universal SLA.
+- Additional fail-open controls reproduced offline: `run_round` accepts a native task whose result is `Failed` when counters/markers match; require the current task's Completed result and valid monotonic/terminal progress for normal rounds. `cleanup_instance` accepts an empty inspected-container list and removes its workspace; after an instance was started require complete owned-service exit evidence (distinguish legitimate pre-start failure cleanup), reject missing/active/invalid states, and retain diagnostic evidence on failure. These are corrections to existing success/cleanup requirements, not new scope.
+- Evidence salvage: B read only the exact four retained stopped containers after verifying project labels, Jellyfin container IDs/image and exit state, and saved redacted logs plus content hashes under `retained-logs/` in the audit directory. Across all 14 completed-round snapshots, raw probe-start counts match their summaries (including increment 16 and recovery 2), candidate identities match the native manifests exactly, and observed batch requests/returns are at most 128. This recovers logs omitted by the runner but cannot recover deleted expected/actual SQLite/native-state snapshots, preparation sampling or drain-time rerun attempts; BR-43-2/3/4 remain unresolved.
+- Executed checks: complete Python discovery **222/222 PASS** (5.929s unittest runtime, 6.226s command wall time); five independent offline negative controls reproduce the above fail-open cases; committed governance PASS; `git diff --check` PASS. Evidence, scripts, exact commands/cwd/UTC/durations/exits: `.git/validation-evidence/dfe6dfc597e6a9fd0a6bc6cf7fdd3a9c5d242a7f/b-audit-20261019T125200Z/`. Python ran with only this Task report changed; executable/test inputs match `dfe6dfc`.
+- Existing C# restore/build/full 202-test/format and ZIP build observations are retained from `b2f19c2` (not rerun this continuation). An explicit diff confirms C# source/tests, build/dependency/SDK/packaging and fixed environment inputs unchanged through `dfe6dfc`; this does not validate changed Python environment tools or satisfy missing real gates. Known blockers justify not starting package-all/scan-all/plugin/batch/configuration or repeating expensive large runs now. Those final gates remain NOT RUN and B-owned; Developer runs changed/new tests and directly affected feedback only. Fixed-candidate full gates and independent reproduction remain mandatory; reuse only explicitly matched inputs.
+- Independence: this assistant authored environment fixes `dcce752`/`dfe6dfc`; independent review of those implementations is NOT CLAIMED. Correction to the earlier diagnosis: Python `ThreadingHTTPServer` already has daemon request threads. The added SIGTERM shutdown path demonstrates the relevant PID-1 teardown fix; non-daemon threads are not an established original cause.
+- Time accounting: the two latest large runs alone used 4536.640s. A complete earlier-round elapsed/test ledger is absent; compliance with the user's test-time <50% limit is NOT PROVEN. This continuation uses short recorded checks and no artificial waiting.
+- Same Task ID/Base/contract; no new Task, no RO-4 acceptance, no Closure Packet, no Slice closure and no `SLICE READY FOR A REVIEW`. Conflicting historical reports below are superseded by this current decision; previous failures/raw runner results remain retained.
+
+## B Review Result — historical decision
 
 ```text
 Reviewed: a06a80fac90a86085f25116568aa24b54847c562..850224a2e910e2131771699e9ae77e53d3b265c8 plus correction 70acae9cacaeddd3a494b2086a2a84c614820929 (static review; affected gates pending rerun)

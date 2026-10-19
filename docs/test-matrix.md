@@ -197,18 +197,17 @@ B 独立证据索引：`.git/validation-evidence/198f4ff2accd5bc9fcd87518a9684b9
 | Required Outcome | 当前状态 | 详情入口 |
 |---|---|---|
 | RO-1 单版本安装与恢复 | B PASS；Slice Final 未运行 | [安装包说明](package-installation.md)、[Task 4.1 历史](progress.md#当前开发指针) |
-| RO-2 真实 3000 项原生库 | Developer 已实现；B 对查询阶段停止证据可混入 overlap 旧日志、未命中仍总 PASS、清理／对账失败仍退出 0 三次判 FIX REQUIRED，当前 head `1c3e0176…` 已在 `finally` 完成后依据最终状态派生退出码并加回归；fresh 1000／3000 待 B 独立验收与 Slice Final | [TASK.md](../TASK.md)、[大库验收入口](#slice-4-大库验收本地运行) |
+| RO-2 真实 3000 项原生库 | 当前验收决定见 B 审查；runner 成功不代替完整证据 | [TASK.md](../TASK.md#b-review-result)、[大库验收入口](#slice-4-大库验收本地运行) |
 | RO-3 完整扫描重叠 | Task 4.2 修正候选待 B 复审；Slice Final 未运行 | [TASK.md](../TASK.md)、[Slice 4 合同](../SLICE.md) |
 | RO-4 实际代理播放链 | NOT RUN | [Slice 4 合同](../SLICE.md) |
 
 ### Slice 4 大库验收本地运行
 
-`scripts/run_isolated_large_library_integration.py` 在固定 Jellyfin `12.2.0`／Linux x64 的 ZIP 安装隔离实例上运行真实 1000／3000 项大库，证据外置于 `.git/validation-evidence/<source-sha>/<run-id>/large-<count>/`。B 对原始实现 head `850224a2e910e2131771699e9ae77e53d3b265c8`／同一 ZIP `edf0aa9ab75a2fb83dea991e04b1b51d661ae5dc3db4d5829668cdd09288ba8d` 的 1000／3000 两级 `status: PASS` 判 FIX REQUIRED：旧 watcher 把两秒 overlap 的旧日志当成当前尝试，造成 `execution.read_started=true` 与“无对象读取”相互矛盾的证据。修正 head `7c5169e9f1b6e527b016360708b9155805afd7ee` 按当前尝试时间戳过滤 overlap、拒绝任何已读对象的执行，并改用低延迟流式 log follower 观测极短查询窗口。B 对该修正候选再次判 FIX REQUIRED：三次尝试均未命中时 runner 仍置 `summary.status=PASS` 并退出 0。修正 head `b1199d65577448b498315ddbe16f1d65c671e8ba` 使未观测到的必需查询阶段停止失败关闭（`overall_acceptance_status` 返回 `FAIL`／退出码 1，同时保留全部 attempt 证据、实例对账与清理）；B 又判 FIX REQUIRED：清理／对账失败仍可能退出 0。当前修正 head `1c3e0176a285774641da265513a9f76510be666a` 把场景主体抽成 `run_scenario_body`，在 `finally` 完成 sampler 停止、实例对账与清理后再依据最终 `summary.status` 返回 `0/1`，任一收尾失败均强制非零退出并保留原诊断字段；在 `7c5169e9`／`b1199d65` 上取得的 1000 级 `PASS` 证据因可执行输入改变对本 head 失效，fresh 1000／3000 由 B 独立验收。
+`scripts/run_isolated_large_library_integration.py --package <最终ZIP> --count 1000|3000 --scenario all --evidence-dir <新的证据目录>` 在固定 Jellyfin `12.2.0`／Linux x64 上驱动真实原生候选。两级运行串行、独立工作区、同一 ZIP；不是模拟 ID 或开发部署。准确命令、源码／产物身份、runner 结果、B 决定与缺失门禁统一见 [TASK.md](../TASK.md#b-review-result)，不能只依据 runner 的总 PASS 判断验收完成。
 
-- 首次信任轮 `first_trust == count`、`actual_probe_calls == 0`；未变复查零探测；受控增量仅 16 个变化源各一次实际探测并全部 `reliable_success`；增量后复查零探测；准备／分批停止后已开始 2 源提交、未开始保持，随后恢复轮 2 探测并收敛；再两轮未变零探测；重启后只读核对完整五字段集合、地址与主流，16 个变化源显式选源 PlaybackInfo 零额外探测。
-- 同步查询窗口内的准备阶段停止：`7c5169e9` 在 1000 级由低延迟流式 log follower 第 1 次尝试命中（`actual_query_stage_stop: PASS`），停止后无对象读取；原生分批停止在首批 2 源实际开始后发出，已开始工作提交、后批未读取。真实查询窗口约 20–160 ms，比 `docker logs --since` 的 spawn 延迟（约 110–180 ms）短，故旧实现会稳定错过或误用 overlap 旧日志。当前 head 保证该必需阶段未命中时总结果不为 PASS，且收尾（sampler／对账／清理）失败也强制非零退出；fresh 1000／3000 同一门槛待 B 独立验收。
-- 成本字段（`candidate_fetch_ms`／`candidate_fetch_allocated_bytes`／`candidate_fetch_peak_bytes`／`candidate_set_estimated_bytes`／`candidate_set_measured_capacity_bytes`／`candidate_set_retained_bytes`／`batch_reads`／`batch_read_ms`／`batch_read_allocated_bytes`）逐轮记录；1000 级首轮 1003 候选、8 批、`candidate_fetch_ms` 约 372、`batch_read_ms` 约 394。集合与原生查询分配随 N 增长，非全库对象物化或每候选 Task。
-- 每轮运行前记录 OS／架构／SDK／CPU／内存／磁盘／inode，结束时核验实例输入未被扰动、工作区清理；`instance_reconciliation: CLEAN`。
-- 上述为 Developer 聚焦开发反馈，不是 B 独立验收或 Slice Final；完整 C#／Python 全量回归、独立复现与最终门槛由 B 承担。当前仍 NOT RUN：RO-4 实际代理、Slice Final、其他 Jellyfin／平台。
+- 首次信任／未变零插件探测，URL／内容／Size／缺流小集合按源精确探测，候选逐身份和完整五字段／原生地址／主流独立对账。
+- 查询中停止、分批停止、收尾期间再运行拒绝和恢复前旧基线保护分别验证；重启先只读比较完整预期，再显式选源播放。
+- 准备、查询／集合、对象读取、执行与收尾成本分别记录；128 对象／8 消费者／启动并发上限须有相应证据，不把 O(N) ID 集合说成恒定总内存。
+- 原始预期／实际状态、日志、资源样本和失败尝试在清理前外置保留；后补日志不能恢复已删除的状态快照，也不能把未执行步骤变成 PASS。
 
-历史用例表仍记录已执行的测试身份；不要在本节复制安装步骤、修正明细或 Developer 自报结果。完整回归由 B 承担，Developer 只运行改动文件直接影响的测试，规则见 [开发流程](development-workflow.md#测试等级)。
+这些是既有门槛，不是完成声明。完整 C#／Python、包／扫描／大库与其他指定门禁由 B 承担；Developer 只运行修改直接影响的反馈。RO-4 实际代理和单独 Slice Final 仍需另行满足；其他格式／客户端／平台和 OpenList 专有行为保持各自证据边界。

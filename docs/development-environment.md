@@ -7,7 +7,7 @@
 - `python3 scripts/development_environment.py sdk`：PASS，已存在并校验本地 SDK `10.0.401`；全局 `dotnet` 不在 PATH，统一使用 `bash scripts/dotnet-local`。
 - `python3 scripts/development_environment.py doctor`：PASS，Docker Engine `29.7.1`、Compose `v5.3.1`、本地端口、DNS、NuGet HTTPS 和不可变镜像锁均通过。
 - `python3 scripts/development_environment.py status`：若现有隔离 Jellyfin 健康检查失败，真实集成保持 `BLOCKED／NOT RUN`；不要接管或清理非本轮容器。
-- 本轮只读检查未停止、重启、接管或清理现有容器；在授权环境维护者修复该隔离实例前，包安装、播放和大库实机门槛保持 `BLOCKED／NOT RUN`，不把工具链 PASS 当产品验收。
+- 2026-10-19 续审只读检查：仓库隔离 Jellyfin 为 healthy，媒体服务在运行；本次没有停止、重启或接管运行中容器，生产实例未操作。先前 unhealthy 是历史环境阻塞，不能继续冒充当前阻塞；当前产品／证据缺口以 [Task 审查](../TASK.md#b-review-result) 为准，健康状态不等于验收 PASS。
 
 ## 当前交接与固定输入
 
