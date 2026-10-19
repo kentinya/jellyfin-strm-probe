@@ -21,15 +21,14 @@ WORKFLOW_FILES = (
     "docs/agent-experience/task-planner-reviewer.md",
     "docs/agent-experience/developer-implementation-role.md",
 )
-# Current inventory is maintained separately from the frozen V3.0 bootstrap.
+# Only current governance files are required; retired V3.0 initialization lives in Git history.
 REQUIRED_FILES = (
     SOURCE, "AGENTS.md", "CLAUDE.md", "README.md", "SLICE.md", "TASK.md",
     "Task/TEMPLATE.md", "Task/FIRST_TASK.md", "docs/scope.md",
     "docs/development-workflow.md", "docs/requirements.md", "docs/architecture.md",
     "docs/product-experience.md", "docs/roadmap.md", "docs/progress.md",
     "docs/compatibility.md", "docs/test-matrix.md", "docs/references.md",
-    "scripts/check_governance.py", "scripts/bootstrap_repository.py",
-    "scripts/bootstrap-manifest.json", "tests/test_governance.py",
+    "scripts/check_governance.py", "tests/test_governance.py",
     ".github/workflows/quality.yml", ".gitignore", ".gitattributes", ".editorconfig",
 )
 

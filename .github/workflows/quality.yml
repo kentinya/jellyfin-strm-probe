@@ -22,7 +22,7 @@ jobs:
       - name: Check governance and development environment guardrails
         run: python3 -m unittest discover -s tests -v
       - name: Check Python syntax
-        run: python3 -m py_compile scripts/check_governance.py scripts/bootstrap_repository.py scripts/development_environment.py tests/test_governance.py tests/test_development_environment.py
+        run: python3 -m py_compile scripts/check_governance.py scripts/development_environment.py tests/test_governance.py tests/test_development_environment.py
       - name: Check patch whitespace
         run: git show --format= --check HEAD
 

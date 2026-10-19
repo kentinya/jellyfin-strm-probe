@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import re
 import runpy
+import shlex
 import shutil
 import subprocess
 import sys
@@ -222,6 +223,23 @@ class GovernanceTests(unittest.TestCase):
         with (self.repo / self.source).open("a", encoding="utf-8") as document:
             document.write("\nUnauthorized edit.\n")
         self.assert_guard(False, "current V4.3 proposal was changed")
+
+    def test_retired_bootstrap_files_are_not_required(self) -> None:
+        for name in ("scripts/bootstrap_repository.py", "scripts/bootstrap-manifest.json"):
+            self.assertFalse((ROOT / name).exists())
+            self.assertFalse((self.repo / name).exists())
+        self.assert_guard(True, "PASS: committed")
+
+    def test_ci_python_syntax_targets_exist(self) -> None:
+        workflow = (ROOT / ".github/workflows/quality.yml").read_text("utf-8")
+        commands = [line.strip().removeprefix("run: ") for line in workflow.splitlines()
+                    if line.strip().startswith("run: python3 -m py_compile ")]
+        self.assertEqual(len(commands), 1)
+        targets = shlex.split(commands[0])[3:]
+        self.assertIn("scripts/check_governance.py", targets)
+        self.assertNotIn("scripts/bootstrap_repository.py", targets)
+        for name in targets:
+            self.assertTrue((ROOT / name).is_file(), name)
 
     def test_legacy_proposal_is_not_required(self) -> None:
         self.assertFalse(

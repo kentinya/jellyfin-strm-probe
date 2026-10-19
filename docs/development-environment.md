@@ -94,7 +94,7 @@ python3 -m unittest discover -s tests -v
 
 将新实例测试账户写到忽略文件 `artifacts/dev-env/credentials.local.json`，字段为 `base_url`、`username`、`password`，权限须为 0600。使用新生成的随机口令；不在日志或提交中输出内容。旧服务器的测试账户和运行数据库不属于迁移前提。运行前按当前 Task 记录全部配置／触发器／夹具状态，运行后恢复并核验；已有非本轮容器或非空包工作区继续拒绝接管。
 
-需要检查固定 Jellyfin 源码时，可在新机自行检出上述 SHA 到忽略目录；源码来源与 SHA 已在环境规格中，不要求旧主机源码树存在。不要重新运行历史 `bootstrap_repository.py` 初始化已克隆仓库。
+需要检查固定 Jellyfin 源码时，可在新机自行检出上述 SHA 到忽略目录；源码来源与 SHA 已在环境规格中，不要求旧主机源码树存在。旧 `bootstrap_repository.py` 和 `bootstrap-manifest.json` 已移除；克隆仓库无须再次初始化，需追溯时从 `aa01231` 的 Git 历史读取。
 
 ## 证据迁移与继续工作
 

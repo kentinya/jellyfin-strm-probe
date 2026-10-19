@@ -41,6 +41,14 @@ Implementation Head: 348567fd17140b064f002d246e3653658e22379c
 - **成本与收尾**：单次聚焦流程 108.080s，不重复扫描或逐源准备主流；92 次资源样本、采样错误 0，观测 cgroup 峰值 Jellyfin 367919104 bytes、媒体服务 15118336 bytes。记录实际 CPU／内存限额及预算；采样不包含历史准备成本，也未满足完整门槛的启动前后 30 秒空闲窗，不宣称完整成本验收。触发器恢复核验 PASS；两个自有容器均退出 0、无 OOM，副本和基线保留，不执行销毁清理。
 - **证据与限制**：私有证据 `.git/validation-evidence/1493cad0de07a6f9dce481d1cc16fd78e4d35245/reuse1004-20261019T143711Z-de74d1/`；含一次性执行记录、离线基线／恢复清单、逐源状态、脱敏日志、资源及完整性检查。总状态 **PARTIAL；完整 Task 验收 NOT RUN**。少量跨实际 Guid 批次增量、真实查询停止、延迟探测停止／收尾／恢复、全量回归及独立 B 仍待完成；不以本轮聚焦结果关闭现有发现或进入下一 Task。未运行 C# 构建／测试及全量 Python（无相关源码改动），未自动推送；凭据、运行库、原始证据均不上传。
 
+### 2026-10-19 用户授权的首轮脚本精简
+
+用户在脚本盘点后要求“先调整一波脚本吧”。本轮仅清理已完成使命的 V3.0 初始化工具：删除 `scripts/bootstrap_repository.py` 和 `scripts/bootstrap-manifest.json`；同步 `check_governance.py` 的必需文件清单、CI 的 Python 语法目标，以及 README／开发流程／开发环境中的历史定位。旧文件从 `aa01231` 的 Git 历史读取，不重写历史。保留 `--bootstrap` 只读规划检查、V4.3 方案哈希、现行必需文档、已提交合同和祖先关系约束，不改变产品验收或 Slice／Task 的 Base、状态和 Implementation Head。
+
+- 新增两项治理回归：已删除的旧初始化文件不再成为运行前提，CI 语法目标均指向现存文件。`python3 -m unittest discover -s tests -p 'test_governance.py' -v` **26/26 PASS**；执行修改后的 CI `py_compile` 命令、当前治理检查和 `git diff --check` 均 PASS。
+- 仅运行受影响检查；完整 Python／C#、浏览器及真实 Jellyfin 验收 **NOT RUN**，本轮未改对应源码、未启动或操作容器。未修改大库／安装环境脚本，开工前已存在的三个源码／测试文件改动逐文件哈希及完整差异摘要保持不变；1004 项准备库、基线备份和失败证据均未清理。
+- 私有检查记录：`.git/validation-evidence/aa01231ea9ebc4f3a25166da8eb8ce6bffb43dc0/` 下 `script-cleanup-20261019T145327Z/`。本次为用户明确授权的仓库维护，不代表解决 Task 4.3 的 B Findings 或完成独立验收；不自动推送。
+
 ## 实际基线、已接受结果与缺口
 
 - 规划开始 `main` 干净，治理 PASS。Task Base 是 4.2 最终 B PASS 提交；Slice Base 固定为 `03169b07d110964562f7da31d2c3d7add82e5ff5`。此前 Contract Checkpoint 为 `611c31c31115b02c3fb60cef2826d9348e352b7b`，固定交付方案初始快照为 `ae265d0dba02aa1c5599871602d4350072b7155f`；当前数量门槛以 2026-10-19 用户授权及本次提交合同为准，当前 Contract Checkpoint 指向已提交的新合同，仅同步合同指针，不代表已完成 B 合法性重核或独立验收。

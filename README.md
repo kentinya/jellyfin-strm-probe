@@ -53,4 +53,4 @@ git diff --check
 
 治理与 Python 回归只验证文档身份、已提交合同及状态约束，不代表插件构建、探测、播放或独立审查通过。Developer 只运行改动文件直接影响的测试；完整全量回归由 B 承担，规则见 [开发流程](docs/development-workflow.md#测试等级)。
 
-`scripts/bootstrap_repository.py` 与 `bootstrap-manifest.json` 是 V3.0 首次初始化历史，当前已初始化仓库不得重新运行，也不重生成旧清单。当前治理使用 V4.3 方案身份及维护中的文件清单；需要追溯旧初始化时读取 Git 历史。
+V3.0 一次性初始化脚本 `scripts/bootstrap_repository.py` 与 `scripts/bootstrap-manifest.json` 已从当前工作区移除，历史内容可从 `aa01231:scripts/bootstrap_repository.py` 和 `aa01231:scripts/bootstrap-manifest.json` 读取。克隆仓库后不再执行旧初始化；当前治理继续校验 V4.3 方案身份、现行文档和已提交 Slice／Task。`check_governance.py --bootstrap` 仅保留未初始化规划的只读检查，不负责创建 Git 或激活合同。
