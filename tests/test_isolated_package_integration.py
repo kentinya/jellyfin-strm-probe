@@ -17,6 +17,11 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def load(name: str, relative: str):
+    # Reuse an already-imported module so the whole test session shares one set of exception
+    # classes; re-executing a module under the same name would create a second PackageError and
+    # make assertRaises in a sibling test module miss the raised exception.
+    if name in sys.modules:
+        return sys.modules[name]
     spec = importlib.util.spec_from_file_location(name, ROOT / relative)
     module = importlib.util.module_from_spec(spec)
     # Register under the plain module name so the environment/integration scripts' lazy
