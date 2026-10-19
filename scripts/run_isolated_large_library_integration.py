@@ -196,6 +196,86 @@ def current_task(auth: str) -> dict:
     return matches[0]
 
 
+def run_query_stage_stop(auth: str, recorder: scan.EvidenceRecorder, container_name: str,
+                         timeout: int) -> dict:
+    """Start the native batch and stop it during the real synchronous candidate query.
+
+    The query window is short (tens to a few hundred milliseconds), so a background watcher reads only new log
+    lines and issues the native stop the moment the query-start marker appears, before any object read begins. It
+    injects no test wait, cancellation source or query change; it only observes the existing redacted diagnostics.
+    """
+    task = current_task(auth)
+    previous = scan.last_start(task)
+    started = scan.now_utc()
+    tail = LogTail(container_name, started)
+    state: dict[str, object] = {"query_started_utc": None, "read_started": False,
+                                "stop_status": None, "stop_requested_utc": None}
+    lock = threading.Lock()
+    stop_flag = threading.Event()
+
+    def watcher() -> None:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline and not stop_flag.is_set():
+            try:
+                lines = tail.poll()
+            except Exception:
+                time.sleep(0.01)
+                continue
+            if any("STRM_BATCH_OBJECT_READ_STARTED" in line for line in lines):
+                state["read_started"] = True
+            if not stop_flag.is_set() and any("STRM_BATCH_CANDIDATE_QUERY_STARTED" in line for line in lines):
+                with lock:
+                    if stop_flag.is_set():
+                        continue
+                    state["query_started_utc"] = scan.now_utc().isoformat()
+                    try:
+                        status = scan.stop_task(auth, task["Id"])
+                    except Exception as error:  # noqa: BLE001 - recorded, never fatal
+                        state["stop_status"] = f"error:{type(error).__name__}"
+                    else:
+                        state["stop_status"] = status
+                        state["stop_requested_utc"] = scan.now_utc().isoformat()
+                    stop_flag.set()
+            time.sleep(0.01)
+
+    watcher_thread = threading.Thread(target=watcher, name="query-stage-stop-watcher", daemon=True)
+    watcher_thread.start()
+    status = scan.start_task(auth, task["Id"])
+    require(status == 204, f"Jellyfin rejected the native batch start ({status}).")
+    recorder.record("batch_task_started", task_key=TASK_KEY, task_id=task["Id"], started_utc=started)
+    deadline = time.monotonic() + timeout
+    saw_run = False
+    progress: list[float] = []
+    while time.monotonic() < deadline:
+        observed = current_task(auth)
+        task_state = scan.task_state_name(observed)
+        result = scan.task_result(observed)
+        if task_state in {"running", "cancelling", "1", "2"} or scan.last_start(observed) != previous:
+            saw_run = True
+        raw_progress = observed.get("CurrentProgressPercentage")
+        if raw_progress is not None:
+            progress.append(float(raw_progress))
+        if saw_run and task_state in {"idle", "0"} and result:
+            stop_flag.set()
+            watcher_thread.join(timeout=5)
+            return {"task": observed, "result": result, "start_time_previous": previous,
+                    "stopped": state["stop_status"] == 204, "progress": progress,
+                    "started_utc": started, "ended_utc": scan.now_utc(), **state}
+        time.sleep(0.05)
+    stop_flag.set()
+    watcher_thread.join(timeout=5)
+    raise RuntimeError("The native batch task exceeded the fixed run timeout during the query-stage stop.")
+
+
+def query_stop_observed(execution: dict, events: list[dict]) -> bool:
+    """A preparation-stage stop only counts when the synchronous query actually started, the native stop was
+    accepted, and no object read began; a stop that already read a batch is a late stop, not an in-query stop."""
+    read_started = any(event["kind"] == "OBJECT_READ_STARTED" for event in events)
+    return (execution.get("stopped") is True
+            and execution.get("query_started_utc") is not None
+            and not read_started)
+
+
 def run_task(auth: str, recorder: scan.EvidenceRecorder, timeout: int = MAX_TASK_TIMEOUT,
              *, stop_after: Callable[[dict, dict], bool] | None = None,
              poll_seconds: float = POLL_SECONDS) -> dict:
@@ -883,33 +963,17 @@ def run_scenario(package: Path, count: int, evidence_dir: Path, timeout: int, ke
         stage_events: list[dict[str, object]] = []
         for attempt in range(3):
             attempt_started = scan.now_utc()
-            seen = threading.Event()
-            tail = LogTail(container, attempt_started)
-            state_at_stop: dict[str, object] = {}
-
-            def stop_during_query(task: dict, result: dict, flag: threading.Event = seen,
-                                  log_tail: LogTail = tail, observed: dict = state_at_stop) -> bool:
-                state = scan.task_state_name(task)
-                if state not in {"running", "1"}:
-                    return False
-                lines = log_tail.poll()
-                if any("STRM_BATCH_OBJECT_READ_STARTED" in line for line in lines):
-                    return False
-                if any("STRM_BATCH_CANDIDATE_QUERY_STARTED" in line for line in lines):
-                    observed.update({"state": state, "at": scan.now_utc().isoformat()})
-                    flag.set()
-                    return True
-                return False
-
-            attempt_stop = run_task(auth, recorder, timeout=run_timeout, stop_after=stop_during_query,
-                                    poll_seconds=0.05)
+            attempt_stop = run_query_stage_stop(auth, recorder, container, run_timeout)
             attempt_events = batch_log_events(container, attempt_started)
-            read_started = any(event["kind"] == "OBJECT_READ_STARTED" for event in attempt_events)
-            observed = seen.is_set() and bool(state_at_stop) and not read_started
+            observed = query_stop_observed(attempt_stop, attempt_events)
             query_attempts.append({"attempt": attempt + 1, "started_utc": attempt_started.isoformat(),
-                                   "observed": observed, "state_at_stop": state_at_stop or None,
-                                   "object_read_started": read_started, "execution": attempt_stop,
-                                   "events": attempt_events})
+                                   "observed": observed,
+                                   "query_started_utc": attempt_stop.get("query_started_utc"),
+                                   "stop_requested_utc": attempt_stop.get("stop_requested_utc"),
+                                   "stop_status": attempt_stop.get("stop_status"),
+                                   "object_read_started": any(
+                                       event["kind"] == "OBJECT_READ_STARTED" for event in attempt_events),
+                                   "execution": attempt_stop, "events": attempt_events})
             if observed:
                 candidate_start_seen.set()
                 stage_stop = attempt_stop

@@ -100,6 +100,16 @@ class LargeLibraryControlTests(unittest.TestCase):
         first = tail._dedupe(lines)  # type: ignore[attr-defined]
         self.assertEqual(first, ["a", "b"])
 
+    def test_query_stage_stop_requires_query_started_and_no_read(self):
+        # A stop only counts as an in-query stop when the query started, the native stop was accepted and no
+        # object read began; a late stop that already read a batch is rejected.
+        started = {"stopped": True, "query_started_utc": "2026-01-01T00:00:00+00:00"}
+        self.assertTrue(large.query_stop_observed(started, [{"kind": "CANDIDATE_QUERY_STARTED"}]))
+        self.assertFalse(large.query_stop_observed(
+            started, [{"kind": "CANDIDATE_QUERY_STARTED"}, {"kind": "OBJECT_READ_STARTED"}]))
+        self.assertFalse(large.query_stop_observed({"stopped": False, "query_started_utc": None}, []))
+        self.assertFalse(large.query_stop_observed({"stopped": True, "query_started_utc": None}, []))
+
     def test_per_source_media_route_replacement_does_not_change_neighbor(self):
         package_root = ROOT / "artifacts" / "package-env" / "runs"
         package_root.mkdir(parents=True, exist_ok=True)
