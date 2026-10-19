@@ -37,6 +37,8 @@ WORK = BASE
 PROJECT = "jf-strm-probe-package-" + hashlib.sha256(str(ROOT).encode()).hexdigest()[:10]
 PORT = int(os.environ.get("JF_PROBE_PACKAGE_PORT", "18097"))
 DOCKER = ["docker", "--host", "unix:///var/run/docker.sock"]
+# Optional per-run limits; other acceptance entries retain their existing defaults.
+SERVICE_RESOURCE_LIMITS: dict[str, dict[str, int | float]] = {}
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
 STRM_LIBRARY = "Package STRM Fixtures"
 # Distinct basenames so Jellyfin never groups them as alternate versions of one another.
@@ -258,6 +260,13 @@ def write_compose() -> Path:
             "frontend": {"driver": "bridge"},
         },
     }
+    for service, limits in SERVICE_RESOURCE_LIMITS.items():
+        require(service in compose["services"], "Resource limits name an unknown service.")
+        require(set(limits) == {"cpus", "mem_limit"}, "Resource limits require CPU and memory bounds.")
+        require(all(isinstance(value, (int, float)) and not isinstance(value, bool)
+                    and 0 < value < float("inf") for value in limits.values()),
+                "Resource limits must be finite positive numbers.")
+        compose["services"][service].update(limits)
     path = WORK / "compose.yaml"
     # A tiny YAML writer keeps the file self-contained without a PyYAML dependency.
     lines: list[str] = ["services:"]

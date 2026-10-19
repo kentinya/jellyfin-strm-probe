@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Run the real 1,000 or 3,000 item ZIP-installed batch acceptance scenario.
+"""Reuse a stopped prepared STRM library for focused ZIP-installed validation.
 
-This entry owns a fresh package-environment workspace and an isolated Compose project.
-It never mounts the source tree into Jellyfin, writes Jellyfin's database, or uses the
-development deployment instance. Full evidence is written outside the instance.
+The default path copies prepared data into a fresh run-owned workspace, never adopts
+an old ownership token, and retains the copy after stopping its isolated services.
+Focused results are PARTIAL, not full Task acceptance. Legacy full preparation is
+available only with the explicit --fresh option; no live or production source is used.
 """
 
 from __future__ import annotations
@@ -16,11 +17,15 @@ import os
 import platform
 import re
 import shutil
+import signal
+import socket
+import sqlite3
 import subprocess
 import sys
 import threading
 import time
 import uuid
+from contextlib import closing, contextmanager
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -150,39 +155,143 @@ def system_profile() -> dict[str, object]:
 
 
 def docker_stats(container_name: str) -> dict[str, object]:
-    result = pe.run(*pe.DOCKER, "stats", "--no-stream", "--format",
-                    "{{.MemUsage}}|{{.MemPerc}}|{{.CPUPerc}}|{{.PIDs}}", container_name, timeout=20)
-    require(result.returncode == 0, "Could not sample the owned Jellyfin container resources.")
-    fields = result.stdout.strip().split("|", 3)
-    require(len(fields) == 4, "Docker returned an incomplete resource sample.")
-    return {"memory": fields[0], "memory_percent": fields[1], "cpu_percent": fields[2], "processes": fields[3]}
+    # One short exec per service avoids docker stats' multi-second measurement window.
+    command = ("for f in memory.current memory.peak memory.max memory.events cpu.stat pids.current; do "
+               "echo SECTION:$f; cat /sys/fs/cgroup/$f; done; "
+               "echo SECTION:process; cat /proc/1/status; "
+               "echo SECTION:handles; ls /proc/1/fd | wc -l")
+    result = pe.run(*pe.DOCKER, "exec", container_name, "sh", "-c", command, timeout=20)
+    require(result.returncode == 0, "Could not sample the owned container resources.")
+    sections: dict[str, list[str]] = {}
+    current = None
+    for line in result.stdout.splitlines():
+        if line.startswith("SECTION:"):
+            current = line.partition(":")[2]
+            sections[current] = []
+        elif current is not None:
+            sections[current].append(line)
+    def number(name: str, *, optional: bool = False) -> int | None:
+        raw = sections.get(name, [])
+        if optional and not raw:
+            return None
+        require(len(raw) == 1 and raw[0].isdigit(), f"Missing numeric cgroup metric {name}.")
+        return int(raw[0])
+    process = {line.partition(":")[0]: line.partition(":")[2].strip()
+               for line in sections.get("process", []) if ":" in line}
+    require(all(name in process for name in ("VmRSS", "Threads")), "Missing process metrics.")
+    events = dict(line.split() for line in sections.get("memory.events", []))
+    cpu = dict(line.split() for line in sections.get("cpu.stat", []))
+    require("oom" in events and "oom_kill" in events and "usage_usec" in cpu,
+            "Missing cgroup CPU/OOM metrics.")
+    return {"memory_bytes": number("memory.current"), "peak_bytes": number("memory.peak", optional=True),
+            "limit_bytes": number("memory.max"), "processes": number("pids.current"),
+            "rss_bytes": int(process["VmRSS"].split()[0]) * 1024,
+            "threads": int(process["Threads"]), "handles": number("handles"),
+            "cpu_usage_usec": int(cpu["usage_usec"]),
+            "oom": int(events["oom"]), "oom_kill": int(events["oom_kill"])}
+
+
+class RunBudget:
+    """A fixed per-level safety budget, not a product performance SLA."""
+
+    def __init__(self, host: dict, timeout: int) -> None:
+        available = host.get("memory_available_bytes")
+        require(isinstance(available, int) and available > 0, "Host memory cannot be observed.")
+        self.deadline = time.monotonic() + timeout
+        self.limits = {"jellyfin": {"cpus": min(4, host["cpu_count"] or 1),
+                                     "mem_limit": int(available * 0.60)},
+                       "media": {"cpus": min(2, host["cpu_count"] or 1),
+                                  "mem_limit": int(available * 0.05)}}
+        self.floors = {"memory_available_bytes": int(available * 0.20),
+                       "root_disk_free_bytes": int(host["root_disk_free_bytes"] * 0.20),
+                       "root_inode_free": int(host["root_inode_free"] * 0.20)}
+        self.orchestrator_limit = int(available * 0.10)
+        self.failure: str | None = None
+
+    def check(self, host: dict | None = None, services: dict | None = None,
+              orchestrator_rss: int | None = None) -> None:
+        reason = self.failure
+        if time.monotonic() >= self.deadline:
+            reason = reason or "level_timeout"
+        if host is not None:
+            for key, floor in self.floors.items():
+                if not isinstance(host.get(key), int) or host[key] < floor:
+                    reason = reason or key
+        for name, metrics in (services or {}).items():
+            if (metrics["oom"] or metrics["oom_kill"]
+                    or metrics["memory_bytes"] >= self.limits[name]["mem_limit"] * 0.95):
+                reason = reason or name + "_resource_limit"
+        if orchestrator_rss is not None and orchestrator_rss > self.orchestrator_limit:
+            reason = reason or "orchestrator_rss"
+        if reason:
+            self.failure = reason
+            raise RuntimeError("Run budget exceeded: " + reason)
 
 
 class ResourceSampler:
-    def __init__(self, container_name: str, recorder: scan.EvidenceRecorder) -> None:
+    def __init__(self, container_name: str, recorder: scan.EvidenceRecorder,
+                 budget: RunBudget | None = None) -> None:
         self.container_name = container_name
         self.recorder = recorder
         self.stopped = threading.Event()
         self.thread = threading.Thread(target=self._sample, name="large-library-resource-sampler", daemon=True)
         self.failure: str | None = None
+        self.lock = threading.Lock()
+        self.budget = budget
 
     def start(self) -> None:
         self.thread.start()
 
     def stop(self) -> None:
         self.stopped.set()
-        self.thread.join(timeout=5)
+        # Two bounded Docker observations can be in flight when teardown starts.
+        self.thread.join(timeout=45)
         require(not self.thread.is_alive(), "Resource sampler did not stop cleanly.")
         require(self.failure is None, f"Resource sampling failed: {self.failure}.")
 
+    @contextmanager
+    def restart_gap(self):
+        # Planned restarts are explicit gaps, not missing-container errors silently ignored.
+        with self.lock:
+            self.recorder.record("resource_sampling_gap_started", reason="planned_restart")
+            try:
+                yield
+            finally:
+                self.recorder.record("resource_sampling_gap_ended", reason="planned_restart")
+
+    def sample_once(self) -> None:
+        host = system_profile()
+        started = time.monotonic()
+        jellyfin = docker_stats(self.container_name)
+        media = docker_stats(pe.container_name("media"))
+        rss = next(int(line.split()[1]) * 1024 for line in Path("/proc/self/status").read_text().splitlines()
+                   if line.startswith("VmRSS:"))
+        self.recorder.record("resource_sample", docker_stats=jellyfin, media_stats=media,
+                             host_memory=host["memory_available_bytes"],
+                             disk_free_bytes=host["root_disk_free_bytes"],
+                             inode_free=host["root_inode_free"], orchestrator_rss_bytes=rss,
+                             sample_duration_seconds=time.monotonic() - started)
+        if self.budget is not None:
+            self.budget.check(host, {"jellyfin": jellyfin, "media": media}, rss)
+
     def _sample(self) -> None:
         while not self.stopped.wait(1):
-            try:
-                self.recorder.record("resource_sample", docker_stats=docker_stats(self.container_name),
-                                     host_memory=system_profile()["memory_available_bytes"])
-            except Exception as error:  # Preserve sampler failure so it cannot be mistaken for a clean run.
-                self.failure = type(error).__name__
-                self.stopped.set()
+            with self.lock:
+                if self.stopped.is_set():
+                    break
+                try:
+                    self.sample_once()
+                except Exception as error:  # Sampling failures must not become a clean run.
+                    self.failure = type(error).__name__
+                    if self.budget is not None:
+                        self.budget.failure = self.budget.failure or "resource_sampling_failed"
+                    self.recorder.record("resource_sampling_failed", error=self.failure)
+                    self.stopped.set()
+
+
+def sampled_restart(sampler: ResourceSampler) -> None:
+    with sampler.restart_gap():
+        scan.restart()
 
 
 def container_identity(name: str) -> dict[str, object]:
@@ -682,29 +791,6 @@ def build_fixture(count: int, run_id: str) -> dict[str, object]:
     for name in names:
         urls[name] = url
         paths[name] = pe.write_strm(name, url, sha1, size)
-    # Choose twelve disjoint control names spread across the fixed range, then give each its own route and
-    # initial metadata before any round runs. URL/content controls start with A's real SHA-1 and Size; the
-    # Size control deliberately starts with no comparable SHA-1 and A's real Size.
-    step = max(1, count // 13)
-    indices: list[int] = []
-    cursor = step
-    while cursor < count and len(indices) < 12:
-        if cursor not in indices:
-            indices.append(cursor)
-        cursor += step
-    require(len(indices) == 12, "The candidate range is too small for twelve disjoint increment controls.")
-    chosen = [names[index] for index in indices]
-    url_group, content_group, size_group = chosen[:4], chosen[4:8], chosen[8:12]
-    require(len(url_group) == 4 and len(content_group) == 4 and len(size_group) == 4,
-            "The increment control groups are not the expected size.")
-    for group, prefix in ((url_group, "u"), (content_group, "c"), (size_group, "s")):
-        for index, name in enumerate(group):
-            route = create_source_route(f"{prefix}{index}", pe.MEDIA_MP4)
-            urls[name] = route
-            if group is size_group:
-                paths[name] = pe.write_strm(name, route, None, size)
-            else:
-                paths[name] = pe.write_strm(name, route, sha1, size)
     controls = {
         "ordinary": f"Large ordinary {run_id}",
         "legacy": f"Large legacy {run_id}",
@@ -726,8 +812,38 @@ def build_fixture(count: int, run_id: str) -> dict[str, object]:
     urls[controls["unknown"]] = url
     return {"names": names, "paths": paths, "urls": urls, "controls": controls,
             "sha1": sha1, "size": size, "ordinary_path": ordinary_path,
-            "url_group": url_group, "content_group": content_group, "size_group": size_group,
             "strm_dir": pe.WORK / "strm", "local_dir": pe.WORK / "media"}
+
+
+def assign_increment_controls(fixture: dict, items: dict, candidate_ids: list[str],
+                              recorder: scan.EvidenceRecorder) -> None:
+    """Choose three sources from each of four actual Guid batches, before native preparation/trust."""
+    ordered = sorted((canonical_guid(value, "control candidate") for value in candidate_ids),
+                     key=scan.guid_sort_key)
+    require(len(ordered) == len(set(ordered)), "Increment candidate IDs contain duplicates.")
+    names = {canonical_guid(items[name]["Id"], name): name for name in fixture["names"]}
+    batches = []
+    for offset in range(0, len(ordered), 128):
+        eligible = [(position, names[value]) for position, value in
+                    enumerate(ordered[offset:offset + 128], offset) if value in names]
+        if len(eligible) >= 3:
+            batches.append(eligible)
+    require(len(batches) >= 4, "Increment controls require four distinct real Guid batches.")
+    selected = [batches[index * (len(batches) - 1) // 3][:3] for index in range(4)]
+    observations = []
+    for column, (group, prefix) in enumerate((("url_group", "u"), ("content_group", "c"),
+                                            ("size_group", "s"))):
+        fixture[group] = []
+        for index, batch in enumerate(selected):
+            position, name = batch[column]
+            route = create_source_route(f"{prefix}{index}", pe.MEDIA_MP4)
+            fixture["urls"][name] = route
+            fixture["paths"][name] = pe.write_strm(
+                name, route, None if group == "size_group" else fixture["sha1"], fixture["size"])
+            fixture[group].append(name)
+            observations.append({"group": group, "item_id": ordered[position],
+                                 "position": position, "batch": position // 128})
+    recorder.record("increment_control_batches", controls=observations, batch_size=128)
 
 
 def create_source_route(key: str, media_name: str) -> str:
@@ -819,27 +935,38 @@ def poll_fixture_items(auth: str, names: list[str], recorder: scan.EvidenceRecor
     raise RuntimeError(f"The package instance did not index all {len(names)} STRM fixtures before the timeout.")
 
 
-def prepare_native_streams(auth: str, items: list[dict], urls: dict[str, str], recorder: scan.EvidenceRecorder) -> None:
+def prepare_native_streams(auth: str, items: list[dict], urls: dict[str, str], recorder: scan.EvidenceRecorder,
+                           sampler: ResourceSampler) -> None:
     require(scan.plugin_action(auth, False) == 204, "Could not disable the plugin for native stream preparation.")
-    scan.restart()
+    sampled_restart(sampler)
     auth = scan.api_auth()
     workers = min(2, len(items))
     failures: list[str] = []
     started = time.monotonic()
-    with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="native-stream-prepare") as pool:
-        futures = {pool.submit(scan.native_prepare_stream, auth, item, urls[item["Name"]], timeout=180): item for item in items}
-        for future in as_completed(futures, timeout=MAX_TASK_TIMEOUT):
-            item = futures[future]
+    def prepare_worker(offset: int) -> list[str]:
+        errors = []
+        for item in items[offset::workers]:
+            if sampler.budget is not None and sampler.budget.failure:
+                break
             try:
-                if not future.result():
-                    failures.append(canonical_guid(item["Id"], "unprepared item"))
+                if not scan.native_prepare_stream(auth, item, urls[item["Name"]], timeout=180):
+                    errors.append(canonical_guid(item["Id"], "unprepared item"))
             except Exception as error:
-                failures.append(f"{canonical_guid(item['Id'], 'unprepared item')}:{type(error).__name__}")
+                errors.append(f"{canonical_guid(item['Id'], 'unprepared item')}:{type(error).__name__}")
+        return errors
+
+    # Only two worker futures exist; aborts stop subsequent admission and drain current calls.
+    with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="native-stream-prepare") as pool:
+        futures = [pool.submit(prepare_worker, offset) for offset in range(workers)]
+        for future in as_completed(futures, timeout=MAX_TASK_TIMEOUT):
+            failures.extend(future.result())
+    if sampler.budget is not None:
+        sampler.budget.check()
     require(not failures, f"Native stream preparation failed for {len(failures)} sources.")
     recorder.record("native_stream_preparation_completed", count=len(items), workers=workers,
                     elapsed_seconds=time.monotonic() - started)
     require(scan.plugin_action(scan.api_auth(), True) == 204, "Could not re-enable the plugin after preparation.")
-    scan.restart()
+    sampled_restart(sampler)
 
 
 def selected_library_ids(auth: str) -> tuple[str, str]:
@@ -982,9 +1109,10 @@ def assert_native_sources(auth: str, fixture: dict[str, object], items: dict[str
 
 
 def capture_state(auth: str, fixture: dict, items: dict, expected: dict,
-                  recorder: scan.EvidenceRecorder, label: str, native_expected: dict | None = None) -> dict:
+                  recorder: scan.EvidenceRecorder, label: str, native_expected: dict | None = None,
+                  *, empty_fingerprints: bool = False) -> dict:
     """Save the key checkpoint as auditable rows and redacted native source signatures."""
-    actual = fingerprint_map()
+    actual = fingerprint_map(allow_missing=True) if empty_fingerprints else fingerprint_map()
     recorder.snapshot(f"rows-{label}-{time.time_ns()}", {
         "expected_rows": [expected[key] for key in sorted(expected)],
         "actual_rows": [actual[key] for key in sorted(actual)]})
@@ -1013,7 +1141,7 @@ def capture_state(auth: str, fixture: dict, items: dict, expected: dict,
         "native_sources": [native[key] for key in sorted(native)],
         "expected_native_sources": ([native_expected[key] for key in sorted(native_expected)]
                                     if native_expected is not None else None)})
-    reconcile_rows(expected, actual)
+    reconcile_rows({} if empty_fingerprints else expected, actual)
     require(set(native) == set(expected), f"{label}: native source identities changed unexpectedly.")
     require(all(native[key]["url_hash"] == expected[key]["url_hash"] for key in expected),
             f"{label}: a native address does not match the independently expected fingerprint.")
@@ -1068,6 +1196,8 @@ class ScenarioState:
         self.before_state = None
         self.sampler: ResourceSampler | None = None
         self.instance_started = False
+        self.budget: RunBudget | None = None
+        self.previous_alarm_handler = None
 
 
 def finalize_scenario(summary: dict[str, object], state: "ScenarioState", keep_workspace: bool) -> None:
@@ -1115,6 +1245,19 @@ def run_scenario(package: Path, count: int, evidence_dir: Path, timeout: int, ke
         summary["error"] = {"type": type(error).__name__, "message": scan._safe_exception(error)}
         recorder.record("failure", error=summary["error"])
     finally:
+        if state.previous_alarm_handler is not None:
+            signal.setitimer(signal.ITIMER_REAL, 0)
+            signal.signal(signal.SIGALRM, state.previous_alarm_handler)
+        if summary.get("status") != "PASS" and state.instance_started:
+            try:
+                auth = scan.api_auth()
+                for task in scan.task_list(auth):
+                    if scan.task_state_name(task) in {"running", "cancelling", "1", "2"}:
+                        status = scan.stop_task(auth, task["Id"])
+                        recorder.record("failure_native_stop_requested", task_key=task.get("Key"), status=status)
+                        wait_native_task_idle(auth, task["Key"], timeout=300)
+            except Exception as error:
+                summary["failure_drain_error"] = type(error).__name__
         if state.instance_started:
             for service in ("jellyfin", "media"):
                 try:
@@ -1149,10 +1292,23 @@ def run_scenario_body(package: Path, count: int, run_id: str, recorder: "scan.Ev
                                    "platform": platform.platform()},
                           inputs={"package_sha256": summary["package_identity"]["archiveSha256"],
                                   "count": count, "environment": environment})
+    state.budget = RunBudget(environment, timeout)
+    state.budget.check(environment)
+    pe.SERVICE_RESOURCE_LIMITS = state.budget.limits
     recorder.record("host_and_budget", environment=environment,
-                    limits={"task_timeout_seconds": timeout, "api_timeout_seconds": 180,
+                    limits={"level_timeout_seconds": timeout, "task_timeout_seconds": timeout,
+                            "api_timeout_seconds": 180, "drain_timeout_seconds": 300,
+                            "services": state.budget.limits, "host_floors": state.budget.floors,
+                            "orchestrator_rss_limit_bytes": state.budget.orchestrator_limit,
+                            "basis": "60% Jellyfin + 5% media + 10% orchestrator of initial MemAvailable; 20% host/storage reserve",
                             "native_prepare_workers": 2, "plugin_probe_default": 2,
                             "sample_seconds": 1, "progress_poll_seconds": POLL_SECONDS})
+    require(signal.getitimer(signal.ITIMER_REAL)[0] == 0, "Another process alarm is already active.")
+    state.previous_alarm_handler = signal.getsignal(signal.SIGALRM)
+    def check_budget(signum, frame):
+        state.budget.check()
+    signal.signal(signal.SIGALRM, check_budget)
+    signal.setitimer(signal.ITIMER_REAL, 1, 1)
 
     # Once startup is attempted, failures preserve the run-owned directory even if bootstrap only partly ran.
     state.instance_started = True
@@ -1163,17 +1319,24 @@ def run_scenario_body(package: Path, count: int, run_id: str, recorder: "scan.Ev
     require(scan.plugin_status(auth).lower() in {"active", "0"}, "The ZIP-installed plugin is not Active.")
     require(pkg.deployed_matches_archive(package).get("matched") is True,
             "The installed plugin payload does not match the tested ZIP.")
+    # Use the existing sampler during indexing and native preparation too, not just batch execution.
+    container = pe.container_name("jellyfin")
+    state.sampler = ResourceSampler(container, recorder, state.budget)
+    state.sampler.start()
     pe.add_library_authenticated(auth, "Package Local Fixtures", ["/media/local"])
     auth = scan.api_auth()
     fixture = build_fixture(count, run_id)
     items = prepare_indexed_fixture(auth, fixture, recorder)
     strm_library_id, local_library_id = selected_library_ids(auth)
     require(strm_library_id != local_library_id, "The in-scope and out-of-scope libraries are not distinct.")
+    initial_candidates = capture_candidates(auth, strm_library_id, fixture, items, recorder, "control-selection")
+    assign_increment_controls(fixture, items, initial_candidates["ids"], recorder)
+    items = prepare_indexed_fixture(auth, fixture, recorder)
     require(scan.plugin_action(auth, False) == 204, "Could not disable the plugin before native preparation.")
-    scan.restart()
+    sampled_restart(state.sampler)
     auth = scan.api_auth()
     prepare_targets = [items[name] for name in fixture["names"]]
-    prepare_native_streams(auth, prepare_targets, fixture["urls"], recorder)
+    prepare_native_streams(auth, prepare_targets, fixture["urls"], recorder, state.sampler)
     auth = scan.api_auth()
     items = wait_items_by_name(auth, list(items))
     assert_native_sources(auth, fixture, items)
@@ -1185,8 +1348,6 @@ def run_scenario_body(package: Path, count: int, run_id: str, recorder: "scan.Ev
     container = pe.container_name("jellyfin")
     identity = container_identity(container)
     recorder.set_container_identity(identity)
-    state.sampler = ResourceSampler(container, recorder)
-    state.sampler.start()
     run_timeout = min(timeout, MAX_TASK_TIMEOUT)
     round1 = run_round(auth, container, recorder, "first-trust", selected["count"], 0, count,
                        run_timeout, selected["ids"])
@@ -1364,10 +1525,16 @@ def run_scenario_body(package: Path, count: int, run_id: str, recorder: "scan.Ev
     post_stop_expected = expected_all_rows(auth, fixture, items)
     post_stop_rows = fingerprint_map()
     post_stop_reconciliation = reconcile_rows(post_stop_expected, post_stop_rows)
+    recorder.record("idle_observation_started", label="before-unchanged-a", seconds=30)
+    time.sleep(30)
     unchanged_a = run_round(auth, container, recorder, "post-stop-unchanged-a", selected["count"], 0, 0,
                             run_timeout, selected["ids"])
+    recorder.record("idle_observation_started", label="after-a-before-b", seconds=30)
+    time.sleep(30)
     unchanged_b = run_round(auth, container, recorder, "post-stop-unchanged-b", selected["count"], 0, 0,
                             run_timeout, selected["ids"])
+    recorder.record("idle_observation_started", label="after-unchanged-b", seconds=30)
+    time.sleep(30)
 
     # Restart state is checked before any PlaybackInfo call can construct a missing first-trust baseline.
     pre_restart_expected = expected_all_rows(auth, fixture, items)
@@ -1376,7 +1543,7 @@ def run_scenario_body(package: Path, count: int, run_id: str, recorder: "scan.Ev
     pre_restart_native = capture_state(auth, fixture, items, pre_restart_expected, recorder, "pre-restart")
     require(pre_restart_rows.keys() == pre_restart_expected.keys(),
             "The pre-restart database has rows outside the fixed supported source set.")
-    scan.restart()
+    sampled_restart(state.sampler)
     auth = scan.api_auth()
     restarted_rows = fingerprint_map()
     restart_reconciliation = reconcile_rows(pre_restart_expected, restarted_rows)
@@ -1440,20 +1607,401 @@ def run_scenario_body(package: Path, count: int, run_id: str, recorder: "scan.Ev
                    "remaining_gates": {"actual_query_stage_stop": "PASS" if candidate_start_seen else "NOT RUN"}})
 
 
+REUSE_ENTRIES = ("config", "cache", "strm", "media", "media-server", "credentials.local.json", ".media-prepared")
+
+
+def prepared_manifest(source: Path) -> dict[str, str]:
+    """Hash offline inputs, rejecting links and unfinished SQLite transactions."""
+    require(source.is_dir() and not source.is_symlink(), "Prepared source must be a real directory.")
+    require((source / pe.RUN_MARKER).is_file() and
+            re.fullmatch(r"[0-9a-f]{32}", (source / pe.RUN_MARKER).read_text().strip()) is not None,
+            "Prepared source has no valid provenance marker.")
+    for name in ("config/data/jellyfin.db", "strm", "media", "credentials.local.json"):
+        require((source / name).exists(), "Prepared source is incomplete: " + name)
+    hashes = {}
+    for path in sorted(source.rglob("*")):
+        require(not path.is_symlink(), "Prepared source contains a symbolic link.")
+        require(path.is_dir() or path.is_file(), "Prepared source contains a special file.")
+        require(not path.name.endswith(("-wal", "-shm", "-journal")),
+                "Prepared source has SQLite transaction sidecars; stop and checkpoint it first.")
+        if path.is_file():
+            with path.open("rb") as stream:
+                hashes[path.relative_to(source).as_posix()] = hashlib.file_digest(stream, "sha256").hexdigest()
+    return hashes
+
+
+def require_source_stopped(source: Path) -> None:
+    """Never copy a workspace that is mounted by any running Docker container."""
+    listed = pe.run(*pe.DOCKER, "ps", "-q")
+    require(listed.returncode == 0, "Cannot check running containers for prepared-source use.")
+    if not listed.stdout.strip():
+        return
+    inspected = pe.run(*pe.DOCKER, "inspect", *listed.stdout.split())
+    require(inspected.returncode == 0, "Cannot inspect prepared-source mount ownership.")
+    for container in json.loads(inspected.stdout):
+        for mount in container.get("Mounts", []):
+            if mount.get("Type") == "bind":
+                mounted = Path(mount["Source"]).resolve()
+                require(not (source == mounted or source.is_relative_to(mounted)
+                             or mounted.is_relative_to(source)),
+                        "Prepared source overlaps a running container mount; refusing a live copy.")
+
+
+def copy_prepared_workspace(source: Path) -> tuple[Path, dict[str, str]]:
+    lexical = Path(os.path.abspath(source))
+    require(not any(path.is_symlink() for path in (lexical, *lexical.parents)),
+            "Prepared source path contains a symbolic link.")
+    source = lexical.resolve(strict=True)
+    require(source.is_relative_to((pe.BASE / "runs").resolve())
+            and source != (pe.BASE / "runs").resolve(),
+            "Prepared source must be a retained package run, not an arbitrary instance.")
+    require_source_stopped(source)
+    before = prepared_manifest(source)
+    # Immutable read-only connections cannot create a journal in the prepared source.
+    for name in before:
+        if name.endswith(".db"):
+            with closing(sqlite3.connect((source / name).as_uri() + "?mode=ro&immutable=1", uri=True)) as connection:
+                require(connection.execute("PRAGMA quick_check").fetchall() == [("ok",)],
+                        "Prepared SQLite integrity check failed.")
+    target = pe.select_workspace()
+    target.chmod(0o700)
+    for name in REUSE_ENTRIES:
+        original = source / name
+        if original.is_dir():
+            shutil.copytree(original, target / name, copy_function=shutil.copy2)
+        elif original.is_file():
+            shutil.copy2(original, target / name)
+    require_source_stopped(source)
+    require(prepared_manifest(source) == before, "Prepared source changed during copy.")
+    for name, expected_hash in before.items():
+        if name.split("/", 1)[0] not in REUSE_ENTRIES:
+            continue
+        copied = target / name
+        with copied.open("rb") as stream:
+            require(hashlib.file_digest(stream, "sha256").hexdigest() == expected_hash,
+                    "Copied prepared input failed hash verification.")
+        require(not os.path.samefile(source / name, copied), "Prepared copy shares a source inode.")
+    return target, before
+
+
+def reset_copied_fingerprints(recorder: scan.EvidenceRecorder) -> None:
+    """Explicitly preserve then remove ONLY the fresh copy's first-trust store."""
+    pe.workspace()
+    database = pe.require_owned_path(pkg.fingerprint_database())
+    if database.exists():
+        saved = pe.require_owned_path(pe.WORK / "baseline-backup" / "strm-fingerprints.db")
+        saved.parent.mkdir(parents=True, exist_ok=True)
+        require(not saved.exists(), "Copied baseline backup already exists.")
+        database.rename(saved)
+        recorder.record("copied_fingerprint_reset", original_retained=True,
+                        backup_sha256=hashlib.sha256(saved.read_bytes()).hexdigest())
+
+
+def prepared_fixture(minimum: int) -> dict:
+    fixture = {"names": [], "paths": {}, "controls": {}}
+    for path in sorted((pe.WORK / "strm").iterdir()):
+        if path.suffix.lower() == ".strm":
+            manifest = scan.read_versioned_manifest(path)
+            if manifest is not None:
+                fixture["names"].append(path.stem)
+                fixture["paths"][path.stem] = path
+            else:
+                kind = "legacy" if path.read_text().splitlines()[0].startswith("http") else "unknown"
+                require(kind not in fixture["controls"], "Prepared controls are ambiguous.")
+                fixture["controls"][kind] = path.stem
+        elif path.suffix.lower() == ".mp4":
+            require("ordinary" not in fixture["controls"], "Prepared ordinary controls are ambiguous.")
+            fixture["controls"]["ordinary"] = path.stem
+    external = list((pe.WORK / "media").glob("*.strm"))
+    require(len(external) == 1, "Expected one prepared out-of-scope control.")
+    fixture["controls"]["out_of_scope"] = external[0].stem
+    require(set(fixture["controls"]) == {"legacy", "unknown", "ordinary", "out_of_scope"},
+            "Prepared library lacks required isolation controls.")
+    require(len(fixture["names"]) >= minimum >= 1000,
+            "Prepared supported source count is below the minimum; no rebuilding is attempted.")
+    return fixture
+
+
+def require_owned_reuse_containers() -> None:
+    listed = pe.run(*pe.DOCKER, "ps", "-aq", "--filter", "label=com.docker.compose.project=" + pe.PROJECT)
+    require(listed.returncode == 0, "Cannot query reuse project ownership.")
+    if not listed.stdout.strip():
+        return
+    inspected = pe.run(*pe.DOCKER, "inspect", *listed.stdout.split())
+    require(inspected.returncode == 0, "Cannot inspect reuse project ownership.")
+    for container in json.loads(inspected.stdout):
+        labels = container["Config"]["Labels"]
+        require(labels.get("com.docker.compose.project.config_files") == str(pe.WORK / "compose.yaml"),
+                "Existing project belongs to a different compose file.")
+        mounts = container.get("Mounts", [])
+        require(bool(mounts) and all(mount["Type"] == "bind" and
+                Path(mount["Source"]).resolve().is_relative_to(pe.WORK.resolve()) for mount in mounts),
+                "Existing project has foreign workspace mounts.")
+
+
+def stop_and_retain_reuse() -> dict:
+    pe.workspace()
+    require_owned_reuse_containers()
+    pe.compose("stop")
+    states = pe.inspect_owned_container_states()
+    require(sorted(state.get("service") for state in states) == ["jellyfin", "media"],
+            "Reuse service exit evidence is incomplete.")
+    require(all(state.get("status") == "exited" and type(state.get("exit_code")) is int
+                and state["exit_code"] == 0 and state.get("oom_killed") is False
+                and state.get("error") == "" and state.get("finished_at")
+                and not str(state["finished_at"]).startswith("0001-") for state in states),
+            "Reuse services did not exit cleanly; workspace retained for diagnosis.")
+    return {"status": "STOPPED AND RETAINED", "container_states": states}
+
+
+def run_prepared_checks(auth: str, scenario: str, minimum: int,
+                        recorder: scan.EvidenceRecorder, state: ScenarioState, timeout: int) -> dict:
+    fixture = prepared_fixture(minimum)
+    names = fixture["names"] + list(fixture["controls"].values())
+    native = native_items_by_id(auth)
+    items = {}
+    for item in native.values():
+        name = item.get("Name")
+        if name in names:
+            require(name not in items, "Prepared native item names are ambiguous.")
+            expected_path = ("/media/local/" if name == fixture["controls"]["out_of_scope"]
+                             else "/media/strm/") + name
+            require(str(item.get("Path") or "").rsplit(".", 1)[0] == expected_path,
+                    "Prepared native item belongs to a different physical path.")
+            items[name] = item
+    require(set(items) == set(names), "Prepared files are not all independently indexed.")
+    status, config = pe.request_json("GET", f"/Plugins/{pkg.PLUGIN_ID}/Configuration",
+                                     headers={"Authorization": auth})
+    require(status == 200, "Cannot read prepared plugin configuration.")
+    require(config.get("Enabled") is True and config.get("DetailedLog") is True
+            and config.get("BatchAllLibraries") is False and config.get("MaxConcurrentProbes") == 2,
+            "Prepared configuration must enable detailed logging, one selected library and concurrency 2.")
+    selected = config.get("BatchLibraryIds")
+    selected = selected if isinstance(selected, list) else [selected]
+    require(len(selected) == 1 and selected[0], "Prepared library selection is ambiguous.")
+    candidates = capture_candidates(auth, selected[0], fixture, items, recorder, "prepared")
+    required_ids = candidates["supported_ids"] + list(candidates["control_ids"].values())
+    reconcile_candidate_identities(required_ids, candidates["ids"])
+    require(canonical_guid(items[fixture["controls"]["out_of_scope"]]["Id"], "external control")
+            not in candidates["ids"], "Out-of-scope control leaked into the selected library.")
+    expected = expected_all_rows(auth, fixture, items)
+    assert_native_sources(auth, fixture, items)
+    baseline = fingerprint_map(allow_missing=True)
+    if scenario == "baseline":
+        require(not baseline, "First-trust needs an empty copied fingerprint store; use explicit --reset-copied-fingerprints.")
+    else:
+        reconcile_rows(expected, baseline)
+    native_before = capture_state(auth, fixture, items, expected, recorder, "before-check",
+                                  empty_fingerprints=scenario == "baseline")
+    rounds = {}
+    if scenario == "baseline":
+        rounds["first_trust"] = run_round(auth, pe.container_name("jellyfin"), recorder, "first-trust",
+            candidates["count"], 0, len(fixture["names"]), timeout, candidates["ids"], expected_probe_keys=[])["fields"]
+    capture_state(auth, fixture, items, expected, recorder, "prepared-baseline", native_before)
+    rounds["unchanged"] = run_round(auth, pe.container_name("jellyfin"), recorder, "unchanged",
+        candidates["count"], 0, 0, timeout, candidates["ids"], expected_probe_keys=[])["fields"]
+    capture_state(auth, fixture, items, expected, recorder, "unchanged", native_before)
+    if scenario in {"baseline", "restart"}:
+        started = scan.now_utc()
+        sampled_restart(state.sampler)
+        auth = scan.api_auth()
+        # No PlaybackInfo before the complete persistence comparison.
+        capture_state(auth, fixture, items, expected, recorder, "restart-before-playback", native_before)
+        require(plugin_probe_count(pe.container_name("jellyfin"), started) == 0,
+                "Restart unexpectedly started plugin probes.")
+        rounds["restart"] = {"status": "PASS", "sources": len(expected), "playback_before_snapshot": False}
+    return {"supported_count": len(expected), "candidate_count": candidates["count"], "rounds": rounds}
+
+
+REUSE_PROTECTED_AREAS = ("configuration", "media", "strm", "libraries")
+
+
+def reconcile_prepared_inputs(before: dict) -> dict:
+    """Protect copied inputs; fingerprints and task execution results are intentional outputs.
+
+    Fingerprint contents are independently reconciled at every checkpoint, while native
+    task triggers are separately restored and read back. Neither is exempted from checking.
+    """
+    after = pe.capture_instance_state()
+    for area in REUSE_PROTECTED_AREAS:
+        require(before[area] == after[area], "Prepared copy input changed: " + area)
+    return {"status": "CLEAN", "protected_areas": list(REUSE_PROTECTED_AREAS),
+            "intentional_outputs": ["fingerprint rows (checkpoint reconciled)",
+                                    "task execution results (trigger restoration verified)"]}
+
+
+def run_reuse_scenario(package: Path, source: Path, count: int, scenario: str,
+                       evidence_dir: Path, timeout: int, reset_fingerprints: bool) -> int:
+    run_id = uuid.uuid4().hex[:12]
+    recorder = scan.EvidenceRecorder(evidence_dir, run_id)
+    summary = {"run_id": run_id, "status": "FAIL", "focused_status": "FAIL",
+               "scenario": scenario, "minimum_count": count,
+               "full_task_acceptance": "NOT RUN",
+               "not_run": ["increment", "query-stage-stop", "probe-stop-and-drain", "explicit-playback", "independent-B-review"]}
+    require(scenario in {"baseline", "unchanged", "restart"}, "Unknown focused reuse scenario.")
+    require(not reset_fingerprints or scenario == "baseline", "Copied reset requires baseline scenario.")
+    state = ScenarioState()
+    source_before = None
+    triggers = None
+    previous_recorder = scan.ACTIVE_RECORDER
+    previous_globals = (pe.WORK, pe.PROJECT, pe.PORT, pe.SERVICE_RESOURCE_LIMITS,
+                        pe._OWNED_WORKSPACE, pe._RUN_TOKEN)
+    # Distinct login device prevents shared tokens from other package tools being replaced.
+    original_login = pe.login
+    original_guard = pe.guard_containers
+    def isolated_login(username, password):
+        identity = f'MediaBrowser Client="Prepared library check", Device="isolated", DeviceId="{run_id}", Version="0.1.0"'
+        status, payload = pe.request_json("POST", "/Users/AuthenticateByName",
+            headers={"Authorization": identity}, body={"Username": username, "Pw": password})
+        require(status == 200 and payload.get("AccessToken"), "Prepared instance login failed.")
+        return identity + ', Token="' + payload["AccessToken"] + '"'
+    try:
+        scan.ACTIVE_RECORDER = recorder
+        pe.login = isolated_login
+        pe.guard_containers = require_owned_reuse_containers
+        verification = pp.verify_archive(package.resolve())
+        environment = system_profile()
+        state.budget = RunBudget(environment, timeout)
+        state.budget.check(environment)
+        pe.SERVICE_RESOURCE_LIMITS = state.budget.limits
+        recorder.set_metadata(command=" ".join(sys.argv), inputs={"package_sha256": verification["archiveSha256"],
+                              "minimum_count": count, "scenario": scenario, "environment": environment})
+        state.workspace, source_before = copy_prepared_workspace(source)
+        summary["retained_workspace"] = str(state.workspace.relative_to(ROOT))
+        summary["source_manifest_sha256"] = digest(json.dumps(source_before, sort_keys=True))
+        pe.PROJECT += "-reuse-" + run_id
+        require_owned_reuse_containers()
+        with socket.socket() as listener:
+            listener.bind(("127.0.0.1", pe.PORT))
+        state.before_state = pe.capture_instance_state()
+        if reset_fingerprints:
+            reset_copied_fingerprints(recorder)
+        summary["deployment"] = pe.deploy_archive(package.resolve())
+        require(signal.getitimer(signal.ITIMER_REAL)[0] == 0, "Another process alarm is active.")
+        state.previous_alarm_handler = signal.getsignal(signal.SIGALRM)
+        signal.signal(signal.SIGALRM, lambda signum, frame: state.budget.check())
+        signal.setitimer(signal.ITIMER_REAL, 1, 1)
+        state.instance_started = True
+        startup_started = scan.now_utc()
+        pe.compose("up")
+        pe.wait_healthy()
+        auth = scan.api_auth()
+        require(scan.plugin_status(auth).lower() in {"active", "0"}, "Prepared plugin is not Active.")
+        require(pkg.deployed_matches_archive(package).get("matched") is True, "Deployed package does not match ZIP.")
+        state.sampler = ResourceSampler(pe.container_name("jellyfin"), recorder, state.budget)
+        state.sampler.start()
+        recorder.record("reuse_budget", environment=environment, limits=state.budget.limits,
+                        floors=state.budget.floors, timeout_seconds=timeout)
+        for service in ("jellyfin", "media"):
+            recorder.set_container_identity(scan.docker_container_identity(pe.container_name(service)), component=service)
+        for task in scan.task_list(auth):
+            require(task.get("Key") != "RefreshLibrary" or not scan.last_start(task)
+                    or dt.datetime.fromisoformat(scan.last_start(task).replace("Z", "+00:00")) < startup_started,
+                    "Startup unexpectedly ran a library scan; prepared data must not be reindexed.")
+            wait_native_task_idle(auth, task["Key"], timeout=min(timeout, 120))
+        triggers = scan.snapshot_triggers(auth)
+        for task_id in triggers:
+            require(scan.set_triggers(auth, task_id, []) == 204, "Cannot suspend copied task triggers.")
+        require(plugin_probe_count(pe.container_name("jellyfin"), startup_started) == 0,
+                "Prepared startup unexpectedly triggered plugin probes.")
+        summary.update(run_prepared_checks(auth, scenario, count, recorder, state, timeout))
+        summary.update(status="PARTIAL", focused_status="PASS")
+    except Exception as error:
+        summary.update(status="FAIL", focused_status="FAIL",
+                       error={"type": type(error).__name__, "message": scan._safe_exception(error)})
+        recorder.record("reuse_failure", error=summary["error"])
+    finally:
+        if state.previous_alarm_handler is not None:
+            signal.setitimer(signal.ITIMER_REAL, 0)
+            signal.signal(signal.SIGALRM, state.previous_alarm_handler)
+        errors = []
+        if state.instance_started:
+            try:
+                auth = scan.api_auth()
+                for task in scan.task_list(auth):
+                    if scan.task_state_name(task) not in {"idle", "0"}:
+                        scan.stop_task(auth, task["Id"])
+                        wait_native_task_idle(auth, task["Key"], timeout=300)
+                if triggers is not None:
+                    scan.restore_triggers(auth, triggers)
+            except Exception as error:
+                errors.append({"stage": "native task finalization", **scan._safe_exception(error)})
+            if state.sampler is not None:
+                try:
+                    state.sampler.stop()
+                except Exception as error:
+                    errors.append({"stage": "sampling", **scan._safe_exception(error)})
+            for service in ("jellyfin", "media"):
+                try:
+                    recorder.write_raw(f"logs/{service}.log", "\n".join(full_docker_log(pe.container_name(service))))
+                except Exception as error:
+                    errors.append({"stage": "logs", **scan._safe_exception(error)})
+            try:
+                summary["cleanup"] = stop_and_retain_reuse()
+            except Exception as error:
+                errors.append({"stage": "stop", **scan._safe_exception(error)})
+        if state.workspace is None and pe._OWNED_WORKSPACE != previous_globals[4]:
+            summary["retained_workspace"] = str(pe.WORK.relative_to(ROOT))
+        if source_before is not None:
+            try:
+                require(prepared_manifest(source.resolve()) == source_before, "Original prepared source changed.")
+                summary["source_unchanged"] = True
+            except Exception as error:
+                errors.append({"stage": "source integrity", **scan._safe_exception(error)})
+        if state.before_state is not None:
+            try:
+                summary["instance_reconciliation"] = reconcile_prepared_inputs(state.before_state)
+            except Exception as error:
+                errors.append({"stage": "instance reconciliation", **scan._safe_exception(error)})
+        if errors:
+            summary.update(status="FAIL", focused_status="FAIL", finalization_errors=errors)
+        pe.login = original_login
+        pe.guard_containers = original_guard
+        scan.ACTIVE_RECORDER = previous_recorder
+        (pe.WORK, pe.PROJECT, pe.PORT, pe.SERVICE_RESOURCE_LIMITS,
+         pe._OWNED_WORKSPACE, pe._RUN_TOKEN) = previous_globals
+        exit_code = 0 if summary["focused_status"] == "PASS" else 1
+        recorder.set_metadata(exit_code=exit_code, final_status=summary["status"])
+        recorder.finish(summary["status"], summary, {})
+        print(json.dumps(scan._scrub(summary), ensure_ascii=False, indent=2, sort_keys=True))
+    return exit_code
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--package", type=Path, required=True)
-    parser.add_argument("--count", type=int, choices=(1000, 3000), required=True)
-    parser.add_argument("--scenario", choices=("all",), default="all")
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--reuse-workspace", type=Path, help="Stopped prepared package workspace; copied, never adopted.")
+    mode.add_argument("--fresh", action="store_true", help="Explicit legacy full build; does not reuse prepared data.")
+    parser.add_argument("--count", type=int, default=1000, help="Minimum supported sources; reuse keeps ALL actual sources.")
+    parser.add_argument("--scenario", choices=("baseline", "unchanged", "restart", "all"))
+    parser.add_argument("--reset-copied-fingerprints", action="store_true",
+                        help="Explicitly archive/remove only the fresh copy fingerprint DB for baseline.")
     parser.add_argument("--evidence-dir", type=Path, required=True)
     parser.add_argument("--timeout-seconds", type=int, default=MAX_TASK_TIMEOUT)
-    parser.add_argument("--keep-workspace", action="store_true")
+    parser.add_argument("--keep-workspace", action="store_true",
+                        help="Legacy --fresh option; reuse always stops and retains its copy.")
     args = parser.parse_args()
+    if args.count < 1000:
+        parser.error("--count must be at least 1000.")
+    if args.fresh:
+        if args.scenario not in (None, "all") or args.reset_copied_fingerprints:
+            parser.error("--fresh only supports --scenario all and no copied-store reset.")
+        args.scenario = "all"
+    else:
+        args.scenario = args.scenario or "unchanged"
+        if args.scenario == "all":
+            parser.error("Reuse supports focused baseline/unchanged/restart, not full acceptance.")
+        if args.reset_copied_fingerprints and args.scenario != "baseline":
+            parser.error("Copied-store reset requires --scenario baseline.")
     if args.timeout_seconds <= 0 or args.timeout_seconds > MAX_TASK_TIMEOUT:
         parser.error(f"--timeout-seconds must be between 1 and {MAX_TASK_TIMEOUT}.")
     evidence_dir = args.evidence_dir.resolve()
     if evidence_dir.exists() and (not evidence_dir.is_dir() or any(evidence_dir.iterdir())):
         parser.error("--evidence-dir must be new or empty; prior evidence will not be overwritten.")
+    if args.reuse_workspace:
+        return run_reuse_scenario(args.package, args.reuse_workspace, args.count, args.scenario,
+                                  evidence_dir, args.timeout_seconds, args.reset_copied_fingerprints)
     return run_scenario(args.package, args.count, evidence_dir, args.timeout_seconds, args.keep_workspace)
 
 

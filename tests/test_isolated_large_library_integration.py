@@ -478,7 +478,7 @@ class LargeLibraryControlTests(unittest.TestCase):
             self.assertEqual(first_path.read_bytes(), b"source-b")
             self.assertEqual(second_path.read_bytes(), b"source-a")
 
-    def test_build_fixture_keeps_size_controls_without_sha1(self):
+    def test_increment_controls_use_real_guid_batches_and_size_has_no_sha1(self):
         package_root = ROOT / "artifacts" / "package-env" / "runs"
         package_root.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(dir=package_root) as temporary:
@@ -488,7 +488,18 @@ class LargeLibraryControlTests(unittest.TestCase):
             (workspace / "media" / large.pe.MEDIA_MP4).write_bytes(b"media-a")
             (workspace / "media" / large.MEDIA_B_NAME).write_bytes(b"media-bb")
             with patch.object(large.pe, "WORK", workspace):
-                fixture = large.build_fixture(40, "run")
+                fixture = large.build_fixture(512, "run")
+                # Name order is deliberately opposite to native Guid order.
+                items = {name: {"Id": f"{511-index:032x}"}
+                         for index, name in enumerate(fixture["names"])}
+                candidate_ids = [item["Id"] for item in items.values()]
+                recorder = MagicMock()
+                large.assign_increment_controls(fixture, items, candidate_ids, recorder)
+                groups = [fixture[group] for group in ("url_group", "content_group", "size_group")]
+                self.assertEqual(len({name for group in groups for name in group}), 12)
+                for group in groups:
+                    self.assertEqual({int(items[name]["Id"], 16) // 128 for name in group}, {0, 1, 2, 3})
+                self.assertEqual(len(recorder.record.call_args.kwargs["controls"]), 12)
 
             for name in fixture["url_group"] + fixture["content_group"]:
                 manifest = large.scan.read_versioned_manifest(fixture["paths"][name])
@@ -497,6 +508,40 @@ class LargeLibraryControlTests(unittest.TestCase):
                 manifest = large.scan.read_versioned_manifest(fixture["paths"][name])
                 self.assertIsNone(manifest["sha1"])
                 self.assertIsNotNone(manifest["file_size"])
+
+    def test_increment_controls_reject_insufficient_real_batches(self):
+        fixture = {"names": ["one"]}
+        with self.assertRaisesRegex(RuntimeError, "four distinct"):
+            large.assign_increment_controls(fixture, {"one": {"Id": "0" * 32}}, ["0" * 32], MagicMock())
+
+    def test_resource_sample_includes_both_services_and_host_storage(self):
+        recorder = MagicMock()
+        sampler = large.ResourceSampler("owned-jellyfin", recorder)
+        host = {"memory_available_bytes": 100, "root_disk_free_bytes": 200, "root_inode_free": 300}
+        with patch.object(large, "system_profile", return_value=host), \
+             patch.object(large, "docker_stats", side_effect=[{"memory": "jf"}, {"memory": "media"}]) as stats, \
+             patch.object(large.pe, "container_name", return_value="owned-media"):
+            sampler.sample_once()
+        self.assertEqual([call.args[0] for call in stats.call_args_list], ["owned-jellyfin", "owned-media"])
+        self.assertEqual(recorder.record.call_args.kwargs["disk_free_bytes"], 200)
+        self.assertEqual(recorder.record.call_args.kwargs["inode_free"], 300)
+
+    def test_planned_restart_records_gap_but_propagates_restart_failure(self):
+        recorder = MagicMock()
+        sampler = large.ResourceSampler("owned-jellyfin", recorder)
+        with patch.object(large.scan, "restart", side_effect=RuntimeError("restart failed")):
+            with self.assertRaisesRegex(RuntimeError, "restart failed"):
+                large.sampled_restart(sampler)
+        self.assertEqual([call.args[0] for call in recorder.record.call_args_list],
+                         ["resource_sampling_gap_started", "resource_sampling_gap_ended"])
+
+    def test_sampling_failure_still_fails_closed_outside_planned_restart(self):
+        sampler = large.ResourceSampler("owned-jellyfin", MagicMock())
+        with patch.object(sampler.stopped, "wait", side_effect=[False, True]), \
+             patch.object(sampler, "sample_once", side_effect=RuntimeError("sample failed")):
+            sampler._sample()
+        self.assertEqual(sampler.failure, "RuntimeError")
+        self.assertTrue(sampler.stopped.is_set())
 
     def test_native_page_limit_covers_a_three_thousand_candidate_library(self):
         # The candidate read must be paged, not capped at the historical fixed 5000-limit query.
@@ -516,6 +561,305 @@ class LargeLibraryControlTests(unittest.TestCase):
 
         self.assertEqual(len(items), 3000)
         self.assertEqual(len(calls), 6)
+
+
+class PreparedLibraryReuseTests(unittest.TestCase):
+    def make_prepared(self, root):
+        source = root / "runs" / "prepared"
+        for name in ("config/data", "strm", "media", "cache", "media-server"):
+            (source / name).mkdir(parents=True, exist_ok=True)
+        (source / large.pe.RUN_MARKER).write_text("a" * 32 + "\n")
+        (source / "credentials.local.json").write_text('{}')
+        with contextlib.closing(large.sqlite3.connect(source / "config/data/jellyfin.db")) as connection:
+            connection.execute("create table test (value text)")
+        (source / "strm/sentinel.strm").write_text("unchanged-source")
+        return source
+
+    def test_copy_keeps_all_files_with_new_token_and_no_shared_inodes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            source = self.make_prepared(base)
+            with patch.multiple(large.pe, BASE=base, WORK=base, _OWNED_WORKSPACE=None, _RUN_TOKEN=None), \
+                 patch.object(large, "require_source_stopped"):
+                copied, before = large.copy_prepared_workspace(source)
+                self.assertEqual(large.prepared_manifest(source), before)
+                self.assertNotEqual((copied / large.pe.RUN_MARKER).read_bytes(),
+                                    (source / large.pe.RUN_MARKER).read_bytes())
+                self.assertEqual((copied / "strm/sentinel.strm").read_text(), "unchanged-source")
+                self.assertFalse(large.os.path.samefile(source / "strm/sentinel.strm",
+                                                       copied / "strm/sentinel.strm"))
+                (copied / "strm/sentinel.strm").write_text("only-copy")
+                self.assertEqual(large.prepared_manifest(source), before)
+
+    def test_copy_refuses_live_source_before_claiming_workspace(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            source = self.make_prepared(base)
+            with patch.object(large.pe, "BASE", base), \
+                 patch.object(large, "require_source_stopped", side_effect=RuntimeError("live")), \
+                 patch.object(large.pe, "select_workspace") as select:
+                with self.assertRaisesRegex(RuntimeError, "live"):
+                    large.copy_prepared_workspace(source)
+                select.assert_not_called()
+
+    def test_copy_refuses_arbitrary_instance_symlink_and_transaction_sidecars(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            source = self.make_prepared(base)
+            with patch.object(large.pe, "BASE", base), \
+                 patch.object(large, "require_source_stopped"), \
+                 patch.object(large.pe, "select_workspace") as select:
+                with self.assertRaisesRegex(RuntimeError, "retained package run"):
+                    large.copy_prepared_workspace(base)
+                link = base / "runs/link"
+                link.symlink_to(source, target_is_directory=True)
+                with self.assertRaisesRegex(RuntimeError, "symbolic link"):
+                    large.copy_prepared_workspace(link)
+                (source / "strm/link.strm").symlink_to(source / "strm/sentinel.strm")
+                with self.assertRaisesRegex(RuntimeError, "symbolic link"):
+                    large.copy_prepared_workspace(source)
+                (source / "strm/link.strm").unlink()
+                for suffix in ("-wal", "-shm", "-journal"):
+                    sidecar = source / ("config/data/jellyfin.db" + suffix)
+                    sidecar.touch()
+                    with self.assertRaisesRegex(RuntimeError, "sidecars"):
+                        large.copy_prepared_workspace(source)
+                    sidecar.unlink()
+                select.assert_not_called()
+
+    def test_source_mount_guard_rejects_parent_child_and_exact_overlap(self):
+        source = Path("/safe/prepared")
+        for mounted in (source, source.parent, source / "config"):
+            containers = [{"Mounts": [{"Type": "bind", "Source": str(mounted)}]}]
+            with patch.object(large.pe, "run", side_effect=[
+                    MagicMock(returncode=0, stdout="id"),
+                    MagicMock(returncode=0, stdout=json.dumps(containers))]):
+                with self.assertRaisesRegex(RuntimeError, "live copy"):
+                    large.require_source_stopped(source)
+        with patch.object(large.pe, "run", return_value=MagicMock(returncode=1)):
+            with self.assertRaisesRegex(RuntimeError, "Cannot check"):
+                large.require_source_stopped(source)
+
+    def test_reuse_guard_refuses_foreign_workspace_even_beneath_package_base(self):
+        container = {"Config": {"Labels": {"com.docker.compose.project.config_files":
+                                            str(large.pe.WORK / "compose.yaml")}},
+                     "Mounts": [{"Type": "bind", "Source": str(large.pe.BASE / "runs/foreign")}]}
+        with patch.object(large.pe, "WORK", large.pe.BASE / "runs/owned"), \
+             patch.object(large.pe, "run", side_effect=[MagicMock(returncode=0, stdout="id"),
+                 MagicMock(returncode=0, stdout=json.dumps([container]))]):
+            with self.assertRaisesRegex(RuntimeError, "different compose|foreign workspace"):
+                large.require_owned_reuse_containers()
+
+    def test_prepared_fixture_retains_1004_not_truncated_to_1000(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "strm").mkdir(); (root / "media").mkdir()
+            for index in range(1004):
+                (root / "strm" / f"item-{index}.strm").write_text(
+                    "# strm-probe-version:1\nhttp://media:8080/a.mp4\n")
+            (root / "strm/legacy.strm").write_text("http://media:8080/a.mp4\n")
+            (root / "strm/unknown.strm").write_text("# strm-probe-version:99\nhttp://media:8080/a.mp4\n")
+            (root / "strm/ordinary.mp4").write_bytes(b"\x00\xff")
+            (root / "media/external.strm").write_text("outside")
+            with patch.object(large.pe, "WORK", root):
+                self.assertEqual(len(large.prepared_fixture(1000)["names"]), 1004)
+                with self.assertRaisesRegex(RuntimeError, "below the minimum"):
+                    large.prepared_fixture(1005)
+
+    def test_reset_only_moves_owned_copy_store_and_preserves_backup(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            source = self.make_prepared(base)
+            with patch.multiple(large.pe, BASE=base, WORK=base, _OWNED_WORKSPACE=None, _RUN_TOKEN=None), \
+                 patch.object(large, "require_source_stopped"):
+                copied, _ = large.copy_prepared_workspace(source)
+                database = large.pkg.fingerprint_database()
+                database.parent.mkdir(parents=True, exist_ok=True)
+                database.write_bytes(b"retained-store")
+                large.reset_copied_fingerprints(MagicMock())
+                self.assertFalse(database.exists())
+                self.assertEqual((copied / "baseline-backup/strm-fingerprints.db").read_bytes(), b"retained-store")
+                self.assertTrue((source / "strm/sentinel.strm").exists())
+            with patch.object(large.pe, "workspace", side_effect=RuntimeError("not owned")):
+                with self.assertRaisesRegex(RuntimeError, "not owned"):
+                    large.reset_copied_fingerprints(MagicMock())
+
+    def test_reuse_reconciliation_protects_inputs_but_allows_verified_outputs(self):
+        before = {area: {"file": "hash"} for area in large.pe.STATE_AREAS}
+        after = {**before, "fingerprint_database": {"file": "new-fingerprint"},
+                 "scheduled_tasks": {"file": "new-execution-result"}}
+        with patch.object(large.pe, "capture_instance_state", return_value=after):
+            self.assertEqual(large.reconcile_prepared_inputs(before)["status"], "CLEAN")
+            for area in large.REUSE_PROTECTED_AREAS:
+                changed = {**after, area: {"file": "unexpected"}}
+                with patch.object(large.pe, "capture_instance_state", return_value=changed):
+                    with self.assertRaisesRegex(RuntimeError, "input changed"):
+                        large.reconcile_prepared_inputs(before)
+
+    def test_stop_checks_both_service_exits_and_never_deletes(self):
+        states = [{"service": service, "status": "exited", "exit_code": 0, "oom_killed": False,
+                   "error": "", "finished_at": "2026-10-19T00:00:00Z"} for service in ("jellyfin", "media")]
+        with patch.object(large.pe, "workspace"), patch.object(large, "require_owned_reuse_containers"), \
+             patch.object(large.pe, "compose") as compose, \
+             patch.object(large.pe, "inspect_owned_container_states", return_value=states), \
+             patch.object(large.shutil, "rmtree") as delete:
+            self.assertEqual(large.stop_and_retain_reuse()["status"], "STOPPED AND RETAINED")
+            compose.assert_called_once_with("stop")
+            delete.assert_not_called()
+            states[0]["exit_code"] = 137
+            with self.assertRaisesRegex(RuntimeError, "did not exit cleanly"):
+                large.stop_and_retain_reuse()
+            states.pop()
+            with self.assertRaisesRegex(RuntimeError, "incomplete"):
+                large.stop_and_retain_reuse()
+
+    def execute_mock_reuse(self, failure=None, scenario="unchanged", checks_error=None):
+        stack = contextlib.ExitStack()
+        self.addCleanup(stack.close)
+        recorder = MagicMock()
+        patches = {
+            "copy_prepared_workspace": (ROOT / "artifacts/package-env/runs/test-copy", {"file": "hash"}),
+            "prepared_manifest": {"file": "hash"}, "require_owned_reuse_containers": None,
+            "system_profile": {}, "RunBudget": MagicMock(limits={}, floors={}),
+            "ResourceSampler": MagicMock(), "plugin_probe_count": 0,
+            "stop_and_retain_reuse": {"status": "STOPPED AND RETAINED"},
+            "reconcile_prepared_inputs": {"status": "CLEAN"},
+        }
+        mocks = {name: stack.enter_context(patch.object(large, name, return_value=value))
+                 for name, value in patches.items()}
+        checks = stack.enter_context(patch.object(large, "run_prepared_checks", return_value={
+            "supported_count": 1004, "candidate_count": 1007, "rounds": {"unchanged": "PASS"}},
+            side_effect=checks_error))
+        mocks["checks"] = checks
+        stack.enter_context(patch.object(large.pp, "verify_archive", return_value={"archiveSha256": "hash"}))
+        stack.enter_context(patch.object(large.scan, "EvidenceRecorder", return_value=recorder))
+        for name, value in {"capture_instance_state": {}, "deploy_archive": {}, "compose": None,
+                            "wait_healthy": "container", "container_name": "container",
+                            "reconcile_instance_state": {"status": "CLEAN"}}.items():
+            mocks[name] = stack.enter_context(patch.object(large.pe, name, return_value=value))
+        for name, value in {"api_auth": "auth", "plugin_status": "Active", "task_list": [],
+                            "snapshot_triggers": {}, "restore_triggers": None,
+                            "docker_container_identity": {}}.items():
+            mocks[name] = stack.enter_context(patch.object(large.scan, name, return_value=value))
+        stack.enter_context(patch.object(large.pkg, "deployed_matches_archive", return_value={"matched": True}))
+        stack.enter_context(patch.object(large, "full_docker_log", return_value=["log"]))
+        for name in ("getitimer", "getsignal", "signal", "setitimer"):
+            stack.enter_context(patch.object(large.signal, name, return_value=(0, 0) if name == "getitimer" else 0))
+        listener = stack.enter_context(patch.object(large.socket, "socket"))
+        for name in ("build_fixture", "prepare_native_streams", "prepare_indexed_fixture"):
+            mocks[name] = stack.enter_context(patch.object(large, name, side_effect=AssertionError("must not rebuild")))
+        mocks["prepare_clean_instance"] = stack.enter_context(patch.object(large.pe, "prepare_clean_instance",
+                                                                       side_effect=AssertionError("must not initialize")))
+        mocks["cleanup_instance"] = stack.enter_context(patch.object(large.pe, "cleanup_instance",
+                                                                 side_effect=AssertionError("must not delete")))
+        if failure:
+            mocks[failure].side_effect = RuntimeError("finalization failed")
+        with contextlib.redirect_stdout(io.StringIO()):
+            result = large.run_reuse_scenario(Path("candidate.zip"), Path("source"), 1000, scenario,
+                                             Path("evidence"), 300, False)
+        return result, recorder.finish.call_args.args[1], mocks
+
+    def test_reuse_orchestration_never_rebuilds_or_claims_full_acceptance(self):
+        result, summary, mocks = self.execute_mock_reuse()
+        self.assertEqual(result, 0)
+        self.assertEqual(summary["status"], "PARTIAL")
+        self.assertEqual(summary["focused_status"], "PASS")
+        self.assertEqual(summary["full_task_acceptance"], "NOT RUN")
+        self.assertEqual(summary["supported_count"], 1004)
+        self.assertTrue(summary["source_unchanged"])
+        for name in ("build_fixture", "prepare_native_streams", "prepare_indexed_fixture",
+                     "prepare_clean_instance", "cleanup_instance"):
+            mocks[name].assert_not_called()
+        mocks["stop_and_retain_reuse"].assert_called_once()
+
+    def test_reuse_finalization_failures_force_nonzero_and_keep_workspace(self):
+        for failure in ("stop_and_retain_reuse", "restore_triggers", "prepared_manifest", "reconcile_prepared_inputs"):
+            with self.subTest(failure=failure):
+                result, summary, _ = self.execute_mock_reuse(failure)
+                self.assertEqual(result, 1)
+                self.assertEqual(summary["status"], "FAIL")
+                self.assertTrue(summary["finalization_errors"])
+
+    def test_failed_check_still_restores_triggers_stops_and_retains(self):
+        result, summary, mocks = self.execute_mock_reuse(checks_error=RuntimeError("bad state"))
+        self.assertEqual(result, 1)
+        mocks["restore_triggers"].assert_called_once()
+        mocks["stop_and_retain_reuse"].assert_called_once()
+        mocks["cleanup_instance"].assert_not_called()
+
+    def drive_prepared_checks(self, scenario, baseline=None):
+        stack = contextlib.ExitStack()
+        self.addCleanup(stack.close)
+        names = ["item"]
+        controls = {"legacy": "legacy", "unknown": "unknown", "ordinary": "ordinary", "out_of_scope": "external"}
+        fixture = {"names": names, "controls": controls}
+        items = {name: {"Id": f"{index+1:032x}", "Name": name,
+                       "Path": "/media/" + ("local/" if name == "external" else "strm/") + name + ".strm"}
+                 for index, name in enumerate(names + list(controls.values()))}
+        expected = {("1" * 32, "2" * 32): {"item_id": "1" * 32, "source_key": "2" * 32,
+                    "url_hash": "hash", "sha1": None, "file_size": 7}}
+        ids = [items[name]["Id"] for name in names + ["legacy", "unknown", "ordinary"]]
+        candidates = {"supported_ids": [ids[0]], "ids": ids, "control_ids": dict(zip(["legacy", "unknown", "ordinary"], ids[1:])),
+                      "count": 4, "supported_count": 1}
+        for name, value in {"prepared_fixture": fixture, "native_items_by_id": {i["Id"]: i for i in items.values()},
+                            "capture_candidates": candidates, "expected_all_rows": expected,
+                            "assert_native_sources": None, "fingerprint_map": expected if baseline is None else baseline,
+                            "plugin_probe_count": 0}.items():
+            stack.enter_context(patch.object(large, name, return_value=value))
+        config = {"Enabled": True, "DetailedLog": True, "BatchAllLibraries": False,
+                  "MaxConcurrentProbes": 2, "BatchLibraryIds": ["library"]}
+        stack.enter_context(patch.object(large.pe, "request_json", return_value=(200, config)))
+        stack.enter_context(patch.object(large.pe, "container_name", return_value="owned"))
+        stack.enter_context(patch.object(large.scan, "api_auth", return_value="auth"))
+        events = []
+        capture = stack.enter_context(patch.object(large, "capture_state",
+                   side_effect=lambda *a, **kw: events.append((a[5], kw)) or {"source": "stable"}))
+        run = stack.enter_context(patch.object(large, "run_round", return_value={"fields": {"actual_probe_calls": 0}}))
+        restart = stack.enter_context(patch.object(large, "sampled_restart", side_effect=lambda *a: events.append(("restart", {}))))
+        return lambda: large.run_prepared_checks("auth", scenario, 1000, MagicMock(), large.ScenarioState(), 120), events, run
+
+    def test_first_trust_refuses_existing_fingerprints_without_silent_reset(self):
+        execute, events, run = self.drive_prepared_checks("baseline")
+        with self.assertRaisesRegex(RuntimeError, "empty copied fingerprint"):
+            execute()
+        run.assert_not_called()
+        self.assertEqual(events, [])
+
+    def test_baseline_snapshots_native_before_first_trust_and_restart_before_playback(self):
+        execute, events, run = self.drive_prepared_checks("baseline", baseline={})
+        result = execute()
+        self.assertEqual(list(result["rounds"]), ["first_trust", "unchanged", "restart"])
+        self.assertEqual(events[0], ("before-check", {"empty_fingerprints": True}))
+        self.assertEqual(events[-2:], [("restart", {}), ("restart-before-playback", {})])
+        self.assertEqual([call.args[6] for call in run.call_args_list], [1, 0])
+        self.assertTrue(all(call.args[5] == 0 for call in run.call_args_list))
+
+    def test_unchanged_only_does_not_restart(self):
+        execute, events, run = self.drive_prepared_checks("unchanged")
+        result = execute()
+        self.assertEqual(list(result["rounds"]), ["unchanged"])
+        self.assertFalse(any(label == "restart" for label, _ in events))
+        run.assert_called_once()
+
+    def test_cli_requires_explicit_mode_and_refuses_invalid_combinations(self):
+        common = ["runner", "--package", "candidate.zip", "--evidence-dir", "new-evidence"]
+        for options in ([], ["--reuse-workspace", "source", "--fresh"],
+                        ["--reuse-workspace", "source", "--scenario", "all"],
+                        ["--reuse-workspace", "source", "--reset-copied-fingerprints"],
+                        ["--fresh", "--scenario", "baseline"], ["--fresh", "--count", "999"]):
+            with patch.object(large.sys, "argv", common + options), contextlib.redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit) as error:
+                    large.main()
+                self.assertEqual(error.exception.code, 2)
+
+    def test_cli_defaults_to_1000_minimum_unchanged_and_accepts_actual_1004(self):
+        common = ["runner", "--package", "candidate.zip", "--evidence-dir", "new-evidence",
+                  "--reuse-workspace", "source"]
+        for options, count in (([], 1000), (["--count", "1004"], 1004)):
+            with patch.object(large.sys, "argv", common + options), \
+                 patch.object(large, "run_reuse_scenario", return_value=0) as execute:
+                self.assertEqual(large.main(), 0)
+                self.assertEqual(execute.call_args.args[2:4], (count, "unchanged"))
 
 
 if __name__ == "__main__":
