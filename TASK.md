@@ -5,7 +5,7 @@
 ```text
 Task ID: 4.3
 Parent Slice: 4
-Status: READY FOR B REVIEW
+Status: FIX REQUIRED
 Task Base: a06a80fac90a86085f25116568aa24b54847c562
 Contract Checkpoint: 611c31c31115b02c3fb60cef2826d9348e352b7b
 Difficulty: High
@@ -182,7 +182,7 @@ RO-4 的实际 JellyfinProxy 联调（后续 4.4）、单独 Slice Final／Closu
   - `python3 -m unittest discover -s tests -p 'test_isolated_large_library_integration.py' -v` original 13/13 PASS；correction 15/15 PASS。
   - `python3 -m unittest discover -s tests` 修正后 211/211 PASS（此前 B 记录的 2 failures／6 errors 由 `tests/test_isolated_package_integration.py` 的模块重复加载导致，已在 `7c5169e` 系列修正）。
   - 1000 级（修正 head `7c5169e9`）：`python3 scripts/run_isolated_large_library_integration.py --package … --count 1000 --scenario all` **PASS**；`actual_query_stage_stop: PASS`（流式 log follower 在第 1 次尝试命中查询窗口，停止后无对象读取）；首次信任 `candidates 1003 / first_trust 1000 / actual_probe_calls 0`；增量 `candidates 1007 / reliable_success 16 / actual_probe_calls 16`；未变与增量后复查零探测；分批停止后恢复 2 探测、再两轮零探测；实例对账 `CLEAN`、清理 `CLEANED`。证据索引 `.git/validation-evidence/7c5169e9f1b6e527b016360708b9155805afd7ee/run-20261019T051638Z-188989f9/large-1000/`。
-  - 3000 级：本修正轮 **NOT RUN**，交 B 独立验收。两次尝试如实保留：`run-20261019T054319Z-2e26b6dd` 因 developer 诊断误用工具设备身份导致运行会话 token 失效而中断（`INTERRUPTED.md`）；`run-20261019T063052Z-535010f8` 因 developer 反馈预算用尽主动停止（`DEFERRED.md`）。两次均未取得 3000 级 PASS，不冒充通过。
+  - 3000 级：本修正轮 **NOT RUN**，交 B 独立验收（Task 本就把完整 3000 门槛分配给 B；Developer 只跑 1000 级聚焦反馈）。两次尝试如实保留：`run-20261019T054319Z-2e26b6dd` 因 developer 诊断误用工具设备身份导致运行会话 token 失效而中断（`INTERRUPTED.md`）；`run-20261019T063052Z-535010f8` 在夹具索引进行中被 Developer 主动停止（`DEFERRED.md`），以遵守本轮会话“测试时间 < 总时间 30%”的比例约束并保留 3000 门槛给 B。两次均未取得 3000 级 PASS，不冒充通过。
   - `python3 scripts/package_plugin.py --configuration Release --runtime linux-x64 --output-dir artifacts/releases` PASS，归档 SHA-256 与上一致（`src/` 自 `850224a` 起未改，ZIP 未重建）。
   - 未运行（明确交 B）：完整 C#／Python 全量回归（Developer 只跑聚焦）、`format`、治理／差异、三个既有默认实机回归、包／扫描全场景、RO-4 代理联调、单独 Slice Final。
 - Decisions：只新增大库验收入口与对应工具回归，并在 `BatchCheckRunner.FetchCandidates`／批次读取处补最小脱敏诊断；不改决策、计数、取消、共享、并发、schema 或持久化语义。受控同 URL 内容／Size 变化使用**同容器**的独立合成 MP4（B）作为后端真实内容，因为同 URL 改变容器会让 Jellyfin 持久主流身份与编码器结果不匹配而被拒——这超出本 Task 的受控内容／Size 变化合同，故不采用。修正轮针对 B Findings：查询窗口极短（约 20–160 ms），`docker logs --since` 每次 spawn 的观测延迟（约 110–180 ms）会稳定错过窗口，故改用单个 `docker logs --follow` 流式 follower（`readline()` 读取，实测约 20–30 ms）观测，未注入等待／取消源或改变原生查询；未命中时仍如实 NOT RUN。同步查询内竞争仍由确定性测试覆盖。
@@ -209,3 +209,20 @@ Next: rerun the affected 1000/3000 gates on correction 70acae9cacaeddd3a494b2086
 4. C# build and full C# tests pass serially (202 tests); format, governance, and `git diff --check` pass. The complete Python discovery command was attempted but produced 2 failures and 6 errors in existing isolated-scan guard tests without a running package instance; this is recorded as NOT PASS and must be resolved or explicitly blocked before Task PASS.
 
 The working-tree correction is limited to the Task's acceptance tool and its tests; no product contract, persistence, cancellation, or scheduling rule changed. The Task remains active under the same Base and Goal. No Closure Packet or `SLICE READY FOR A REVIEW` decision is issued.
+
+### B Review Result — correction candidate `7c5169e9f1b6e527b016360708b9155805afd7ee`
+
+```text
+Reviewed: a06a80fac90a86085f25116568aa24b54847c562..7c5169e9f1b6e527b016360708b9155805afd7ee (implementation); report-only successor 9695a2e
+Decision: FIX REQUIRED
+Slice Required Outcomes all satisfied: NO — the required query-stage stop can remain NOT RUN while the acceptance command exits 0 and reports overall PASS; the 3000-item run is also NOT RUN
+Next: fix the same Task's acceptance result handling and regression test, then rerun affected feedback and B's full candidate gates
+```
+
+#### B Finding
+
+1. **FIX REQUIRED — an incomplete required query-stage stop can be reported as overall PASS.** In `scripts/run_isolated_large_library_integration.py`, after three natural attempts fail to observe the query-stage stop, the runner records `query_stage_stop: NOT RUN` at lines 1055–1058 but continues through the remaining scenario and later sets `summary.status` to `PASS`. This returns exit code 0 even though the Task requires this stage and explicitly says an incomplete required phase cannot produce total PASS. The 1000-item Developer run did observe the stage, but does not prove the missing-stage control is fail-closed, and the required 3000-item run remains NOT RUN.
+2. Fix only the same Task's tool/test: make an unobserved required stage prevent an overall PASS (while preserving the attempt evidence and cleanup), and add a regression proving the overall acceptance result is nonzero/non-PASS when all three attempts miss. Do not inject waits, alter native stop semantics, weaken the requirement, or change Slice scope.
+3. No tests or full gates were run in this B turn because the blocking control-flow defect was established by direct source review; per workflow, an existing blocker may be returned before other gates. After the fix, Developer runs the new/affected tool tests and directly affected checks. B must then review the new Task Head and run/reuse only matching complete evidence, independently exercise the fail-closed control, and complete the specified C# / Python full regression, format, packaging, package and scan integrations, fresh 1000 and 3000 large-library runs, plugin / batch / configuration integrations, governance and diff checks before PASS.
+
+This decision does not move the Task Base, change its scope or contract, or satisfy any Required Outcome. RO-4 and Slice Final remain outstanding; no Closure Packet or `SLICE READY FOR A REVIEW` decision is issued.
