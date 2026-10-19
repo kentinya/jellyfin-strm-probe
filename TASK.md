@@ -11,7 +11,7 @@ Contract Checkpoint: 611c31c31115b02c3fb60cef2826d9348e352b7b
 Difficulty: High
 Test Level: T4
 Planner / Reviewer: B
-Implementation Head: b1199d65577448b498315ddbe16f1d65c671e8ba
+Implementation Head: 1c3e0176a285774641da265513a9f76510be666a
 ```
 
 ## Goal
@@ -246,3 +246,41 @@ Next: fix the same Task's acceptance result handling and regression test, then r
 3. No tests or full gates were run in this B turn because the blocking control-flow defect was established by direct source review; per workflow, an existing blocker may be returned before other gates. After the fix, Developer runs the new/affected tool tests and directly affected checks. B must then review the new Task Head and run/reuse only matching complete evidence, independently exercise the fail-closed control, and complete the specified C# / Python full regression, format, packaging, package and scan integrations, fresh 1000 and 3000 large-library runs, plugin / batch / configuration integrations, governance and diff checks before PASS.
 
 This decision does not move the Task Base, change its scope or contract, or satisfy any Required Outcome. RO-4 and Slice Final remain outstanding; no Closure Packet or `SLICE READY FOR A REVIEW` decision is issued.
+
+### B Review Result — fail-closed correction candidate `b1199d65577448b498315ddbe16f1d65c671e8ba`
+
+```text
+Reviewed: a06a80fac90a86085f25116568aa24b54847c562..b1199d65577448b498315ddbe16f1d65c671e8ba (implementation); report-only successors 1e12879 and 5352a79
+Decision: FIX REQUIRED
+Slice Required Outcomes all satisfied: NO — the query-stage miss is now fail-closed, but reconciliation/cleanup failure can still leave the process exit code at 0; fresh 1000/3000 acceptance remains NOT RUN
+Next: correct same-Task finalization/exit handling and test cleanup/reconciliation failures, then B re-review and run the remaining candidate gates
+```
+
+#### B Finding
+
+1. **FIX REQUIRED — cleanup or instance-reconciliation failure may produce exit code 0.** `run_scenario` returns `exit_code` from inside the `try` at line 1227, before its `finally` block performs `reconcile_instance_state` and `cleanup_instance`. If either operation raises, `finally` changes `summary["status"]` to `FAIL` and writes a failing evidence summary, but Python retains the already-evaluated return value of 0. A shell/CI caller can therefore treat a failed cleanup or reconciliation as command success, contrary to the Task rule that any required cleanup failure must not produce overall PASS.
+2. The new query-stage fix itself was reviewed and its focused test passed, but its test coverage does not exercise the `run_scenario` finalization path. Keep the same Task and add a focused regression that forces reconciliation/cleanup to fail after otherwise successful execution and proves the final command return code is nonzero and the evidence status is FAIL. Preserve cleanup attempts and original diagnostics; do not weaken cleanup requirements.
+3. B ran `python3 -m unittest discover -s tests -p 'test_isolated_large_library_integration.py' -v`: 18/18 PASS (0.086s). No full regression or real-instance gates were run after identifying this blocker. After the fix, Developer runs the changed tool tests and directly affected checks; B must then review the new Task Head, independently verify fail-closed query-stop and finalization controls, and complete the specified full C# / Python full regression, format, package/scan/plugin/batch/configuration integrations, fresh 1000/3000 runs, governance and diff checks before PASS.
+
+This finding does not move the Task Base, alter scope or contract, or satisfy RO-2. RO-4, Slice Final, and Closure Packet remain outstanding; no `SLICE READY FOR A REVIEW` decision is issued.
+
+## Developer Completion Report — FIX REQUIRED correction round 3
+
+- Changed Files：`scripts/run_isolated_large_library_integration.py`、`tests/test_isolated_large_library_integration.py`。纯报告更新 `TASK.md`。未改 schema、业务规则、稳定需求、Slice／Roadmap、C# 产品代码。
+- Implemented（仅修 B Finding #1，保持原 Base／Goal／Scope）：
+  - 把 `run_scenario` 的场景主体抽成 `run_scenario_body(...)`，运行期资源放进 `ScenarioState`（`workspace`／`before_state`／`sampler`）。`run_scenario` 在 `try` 内调用主体，`finally` 调用 `finalize_scenario(...)` 执行 sampler 停止、实例对账与清理，任一失败把 `summary["status"]` 置为 `FAIL`。
+  - `run_scenario` 不再在 `try` 内返回，而是在 `finally` 全部完成、证据写入后依据最终 `summary["status"]` 返回 `0/1`。这样清理或对账失败不可能让命令以 0 退出，也不弱化清理要求；原诊断字段（`sampler_cleanup_error`／`instance_reconciliation_error`／`cleanup_error`）与尝试记录保留。
+  - 保留上一轮的 fail-closed 查询阶段停止控制（`overall_acceptance_status`／`run_query_stage_stop_attempts`）不变。
+- Tests and Results（fix head `1c3e0176a285774641da265513a9f76510be666a`）：
+  - `python3 -m unittest discover -s tests -p 'test_isolated_large_library_integration.py' -v` **22/22 PASS**（新增 4 例：清理失败、对账失败、sampler 停止失败均强制 exit 1＋summary FAIL，成功收尾保持 exit 0）。
+  - `python3 -m unittest discover -s tests` **218/218 PASS**（全量 Python 发现）。
+  - `bash scripts/dotnet-local build Jellyfin.Plugin.StrmProbeOptimizer.sln --configuration Release --no-restore` 0 警告／0 错误（约 16s）。
+  - `bash scripts/dotnet-local test tests/Jellyfin.Plugin.StrmProbeOptimizer.Tests/…csproj --configuration Release --no-restore --filter '…BatchCheckTests|…ProbeCoordinatorTests|…PlaybackOptimizerTests'` **138/138 PASS**（约 4s；C# 未改，仅受影响回归确认）。
+  - `python3 scripts/check_governance.py` PASS；`git diff --check` 干净。
+  - 未运行（交 B 全量／独立验收）：`format`、三个既有默认实机回归、包／扫描全场景、fresh 1000／3000 大库、RO-4 代理、单独 Slice Final。本会话遵守“测试时间 < 本轮 30%”比例，仅跑聚焦反馈；真实 1000／3000 由 B 在独立验收阶段重跑。
+- Decisions：B Finding #1 已按要求修在同一 Task 的工具／测试内；通过“先完成 finally、再依据最终状态派生退出码”修复，未改合同、取消语义、样本数量或验收含义。上一轮 1000 级与查询阶段停止证据基于修正前可执行输入，对本修正失效，须由 B 在新 head 上重跑。
+- Remaining In-Slice Work：RO-2 待 B 独立验收（含 fresh 1000 与 3000）；RO-4 后续 4.4；单独 Slice Final、事实协调与 Closure Packet。
+- Risks / Deviations：修正覆盖“收尾失败不得命令成功”与“未观测必需阶段不得总 PASS”两个控制；真实查询窗口是否命中仍依赖运行时序，未命中会如实 FAIL／NOT RUN。3000 级仍 NOT RUN。
+- Head SHA：fix-required correction round 3 `1c3e0176a285774641da265513a9f76510be666a`。
+
+可复用经验只提供少量候选供 Slice 收尾，不记录开发流水账，不作为 Task PASS 门槛。
