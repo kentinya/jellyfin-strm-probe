@@ -217,7 +217,7 @@ def run_query_stage_stop(auth: str, recorder: scan.EvidenceRecorder, container_n
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline and not stop_flag.is_set():
             try:
-                lines = tail.poll()
+                lines = current_round_log_lines(tail.poll(), started)
             except Exception:
                 time.sleep(0.01)
                 continue
@@ -273,6 +273,7 @@ def query_stop_observed(execution: dict, events: list[dict]) -> bool:
     read_started = any(event["kind"] == "OBJECT_READ_STARTED" for event in events)
     return (execution.get("stopped") is True
             and execution.get("query_started_utc") is not None
+            and execution.get("read_started") is not True
             and not read_started)
 
 
@@ -355,6 +356,16 @@ class LogTail:
             self.seen.add(key)
             fresh.append(line)
         return fresh
+
+
+def current_round_log_lines(lines: list[str], started: dt.datetime) -> list[str]:
+    """Discard overlap lines from before this task attempt started."""
+    current: list[str] = []
+    for line in lines:
+        timestamp = scan.parse_docker_timestamp(line)
+        if timestamp is not None and timestamp >= started:
+            current.append(line)
+    return current
 
 
 def probe_starts_since(container_name: str, since: dt.datetime) -> list[dict[str, object]]:
