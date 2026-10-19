@@ -86,6 +86,8 @@ python3 -m unittest discover -s tests -v
 
 包／扫描验收复用 `package_environment.py`，自动建立本轮新工作区、向导／测试账户、合成媒体和库，仅消费传入 ZIP；默认本机端口 18097，可在启动进程前设置现有 `JF_PROBE_PACKAGE_PORT`。打包和安装命令见 [安装说明](package-installation.md)；两级大库入口 `scripts/run_isolated_large_library_integration.py` 已由 Task 4.3 实现，命令与证据索引见 [测试矩阵](test-matrix.md#slice-4-大库验收本地运行)。project 名由当前仓库路径派生；旧主机容器名、运行 token 和鉴权身份均不必沿用。
 
+3000 项大库的执行计划自 2026-10-19 起按用户要求采用一次准备、所有需要它的轮次复用，详见 [当前 Task 的复用要求](../TASK.md#2026-10-19-用户明确的准备库复用要求)。准备库及一致离线基线跨 B／Final 保留，独立记录各轮输入与结果，最后统一清理；不影响独立干净安装验收。现有大库自动入口仍按次创建／清理工作区，不能直接用于跨次复用或据此声称已实现复用；本次仅调整文档，不改工具、不备份／恢复或操作容器。继续使用必须显式交接并核验归属，不放宽下方拒绝任意接管的规则。
+
 三个既有开发部署回归另用 `artifacts/dev-env`，不是包安装验收。新环境要运行它们时，先 `python3 scripts/development_environment.py up`，在本机默认 18096 完成新实例向导：建立仅指向 `/media/strm` 和 `/media/local` 的两个临时库，禁用实时监控、远程提供器、写回和无关自动任务，清空测试实例的插件仓库列表。端口可在启动前用现有 `JF_PROBE_PORT` 调整，测试账户文件的 base_url 必须匹配。
 
 开发回归的夹具输入为 `artifacts/dev-env/media/fixture.mp4` 及其逐字节副本 `fixture-alt.mp4`、`artifacts/dev-env/strm/Environment Fixture.strm`。在新机用锁定 Jellyfin 镜像自带 FFmpeg 制作本地合成媒体，STRM 指向容器内 `http://media:8080/fixture.mp4`，填写真实本地媒体的 SHA-1／Size；原生扫描后确认唯一项目名 `Environment Fixture`。这是测试准备，不是生产生成器；不从旧生产库复制数据。
