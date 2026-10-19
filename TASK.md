@@ -5,7 +5,7 @@
 ```text
 Task ID: 4.3
 Parent Slice: 4
-Status: READY FOR B REVIEW
+Status: FIX REQUIRED
 Task Base: a06a80fac90a86085f25116568aa24b54847c562
 Contract Checkpoint: 539c01ca8ba4f0ce8c9eb59b32b88bbb337e7ce3
 Difficulty: High
@@ -276,6 +276,25 @@ RO-4 的实际 JellyfinProxy 联调（后续 4.4）、单独 Slice Final／Closu
 - 本轮将既有工作区中与 Task 4.3 直接相关的 7 个文件做普通本地提交，候选实现 SHA 为 `4cdd174da8c7af988df4962934fc510d206fd838`；未推送、未移动 Task／Slice Base、未修改 C# 产品代码或生产／共享实例。提交内容包括保留库副本复用入口、全部实际 1004 项的下限校验、显式副本指纹重置、资源预算／服务采样／失败收尾、真实 Guid 批次选择及相应测试和事实文档同步。
 - 本轮实际反馈：`python3 -m unittest discover -s tests -p 'test_isolated_large_library_integration.py' -v` **52/52 PASS**；`python3 -m unittest discover -s tests -p 'test_isolated_package_integration.py' -v` **30/30 PASS**；三处 Python 文件 `py_compile`、`python3 scripts/check_governance.py` 和 `git diff --check` 均 PASS。测试与治理均针对提交前相同的可执行内容；提交后工作区保持干净。
 - 这只是 Developer 本地候选，不是 B 独立审查或 Task PASS。全量 Python／C# build、test、format、完整包／扫描／批量／配置实机、独立新鲜大库门禁、RO-4 代理和 Slice Final 本轮未运行；既有 B `FIX REQUIRED`、复用库及全部失败／聚焦证据均保留。当前候选按流程交为 **READY FOR B REVIEW**；下一步由 B 审查 `Base..4cdd174` 并决定后续独立门禁，不能以本地 82 项聚焦测试替代完整验收。
+
+## B Review Result — 1000 项复用候选 `4cdd174da8c7af988df4962934fc510d206fd838`
+
+```text
+Reviewed: a06a80fac90a86085f25116568aa24b54847c562..4cdd174da8c7af988df4962934fc510d206fd838; report-only successor 96891579493c80dc3900909fd1790b67b87451af
+Contract Checkpoint: 539c01ca8ba4f0ce8c9eb59b32b88bbb337e7ce3
+Decision: FIX REQUIRED
+Slice Required Outcomes all satisfied: NO — the retained-library path is focused-only and does not implement the required increment and stop/drain rounds; the required full 1004-item run is NOT RUN
+Next: extend the same Task's reuse path to execute the complete required behavior on a copied, verified 1004-item library without fresh preparation; then Developer reports affected checks and returns the same Task for B review
+```
+
+### B Findings
+
+1. **FIX REQUIRED — the implementation cannot run the complete required scenario while reusing the retained 1004-item library.** The new `--reuse-workspace` path accepts only `baseline`, `unchanged`, or `restart`; `--scenario all` is explicitly rejected. `run_reuse_scenario` records `increment`, `query-stage-stop`, `probe-stop-and-drain`, and `explicit-playback` as `NOT RUN`. The separate `--fresh --scenario all` path creates and prepares a new library, so it is not a permitted substitute for the user's all-stage prepared-library reuse requirement. Consequently AC-3/AC-4 and the Task's required full run have no matching evidence on this candidate. Keep the same Task and make the complete increment, query-stop, in-flight stop/drain, recovery, reconciliation, and resource/cost sequence operate on the verified isolated copy; do not truncate the 1004 sources, mutate the original, or silently rebuild/re-prepare the library.
+2. B independently ran `python3 -m unittest tests.test_isolated_large_library_integration -v`: 52/52 PASS (1.311 seconds). This includes the query-boundary attempt association and miss handling, overall fail-closed status, reconciliation/cleanup nonzero exit, retained-source integrity, and tests asserting the focused path does not claim full acceptance. These are tool-control results, not real Jellyfin acceptance.
+3. The Task plan remains a legal complete RO-2 behavior unit under the committed 1000-item Contract Checkpoint; no Goal, Scope, AC, Base, or Slice contract change is needed. The worktree was clean at review start. `4cdd174..9689157` contains only `TASK.md`, `SLICE.md`, `docs/progress.md`, and `docs/roadmap.md`; no executable, dependency, lock, test, runtime-configuration, or package-input changes. The review ZIP manifest is bound to `9689157` with SHA-256 `a99ee508f37c52a52cc047b6833604a21e848d5d5d496bc053661d56cf8e6399` and matches the code inputs, but does not provide the missing full reuse run.
+4. The specified complete C# / Python regression, format, package/scan/plugin/batch/configuration integrations and required real 1004-item full scenario are NOT RUN for this B review. Previously recorded local gates are not being re-described as newly executed. The shared development instance was observed healthy but was not started, stopped, or modified. No full run was started because the current retained-library CLI explicitly rejects the required `all` scenario; no fresh-library path was used to bypass the reuse constraint.
+
+This is a same-Task implementation/acceptance-tool finding, not a contract question for A. Preserve the Task Base and all 1004 sources. After correction, B will review the new Base..Head, independently recheck the fixed controls, run the complete specified candidate gates, and independently verify the full reused-library behavior. RO-4, Slice Final, Closure Packet and A's final review remain outstanding; do not create the next Task until this Task receives B PASS, and do not issue `SLICE READY FOR A REVIEW` now.
 
 ## B Review Result — media-service teardown correction after `dcce752`
 
