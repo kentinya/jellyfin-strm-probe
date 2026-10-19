@@ -383,7 +383,12 @@ class DockerLogFollower:
         stream = getattr(self._process, "stdout", None)
         if stream is None:
             return
-        for line in stream:
+        # ``readline`` returns each line as soon as it is flushed; iterating the file object directly can
+        # block on an internal read-ahead buffer and miss the short synchronous query window.
+        while True:
+            line = stream.readline()
+            if not line:
+                break
             with self._lock:
                 self._lines.append(line.rstrip("\n"))
 

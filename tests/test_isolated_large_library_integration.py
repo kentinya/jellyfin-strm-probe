@@ -112,17 +112,11 @@ class LargeLibraryControlTests(unittest.TestCase):
         class _FakeStdout:
             def __init__(self, lines):
                 self._lines = list(lines)
-                self._index = 0
 
-            def __iter__(self):
-                return self
-
-            def __next__(self):
-                if self._index >= len(self._lines):
-                    raise StopIteration
-                line = self._lines[self._index]
-                self._index += 1
-                return line
+            def readline(self):
+                if not self._lines:
+                    return ""
+                return self._lines.pop(0)
 
         class _FakeProcess:
             def __init__(self, lines):
