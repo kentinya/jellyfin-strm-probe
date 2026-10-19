@@ -194,16 +194,16 @@ RO-4 的实际 JellyfinProxy 联调（后续 4.4）、单独 Slice Final／Closu
 ## B Review Result
 
 ```text
-Reviewed: a06a80fac90a86085f25116568aa24b54847c562..850224a2e910e2131771699e9ae77e53d3b265c8 plus correction 70acae9 (static review; affected gates pending rerun)
+Reviewed: a06a80fac90a86085f25116568aa24b54847c562..850224a2e910e2131771699e9ae77e53d3b265c8 plus correction 70acae9cacaeddd3a494b2086a2a84c614820929 (static review; affected gates pending rerun)
 Decision: FIX REQUIRED
 Slice Required Outcomes all satisfied: NO — RO-2 is blocked by an evidence/tooling inconsistency; RO-4 remains NOT RUN
-Next: rerun the affected 1000/3000 gates on correction 70acae9, then B re-review
+Next: rerun the affected 1000/3000 gates on correction 70acae9cacaeddd3a494b2086a2a84c614820929, then B re-review
 ```
 
 ### B Findings
 
 1. **FIX REQUIRED — query-stage stop evidence can mix attempts.** `LogTail` intentionally reads a two-second overlap, but `run_query_stage_stop` treated every returned marker as belonging to the current attempt. The 3000 evidence therefore records `execution.read_started=true` while the filtered phase event list contains no object-read marker. `query_stop_observed` also ignored that execution flag. This is contradictory evidence for AC-4 and cannot be reused as a PASS gate.
-2. Correction `70acae9` filters watcher lines by the current attempt's timestamp, rejects any execution that reports an object read, and adds a deterministic regression for the overlap case. The prior large-library evidence remains retained as historical evidence, but is invalid for the corrected executable input and must be rerun.
+2. Correction `70acae9cacaeddd3a494b2086a2a84c614820929` filters watcher lines by the current attempt's timestamp, rejects any execution that reports an object read, and adds a deterministic regression for the overlap case. The prior large-library evidence remains retained as historical evidence, but is invalid for the corrected executable input and must be rerun.
 3. B independently verified the existing 3000 evidence identity (source head `850224a2e910e2131771699e9ae77e53d3b265c8`, ZIP SHA-256 `edf0aa9b...`, clean instance reconciliation) and reused it only for the unaffected candidate, cost, persistence, and restart observations. It is not sufficient to close the query-stage stop gate.
 4. C# build and full C# tests pass serially (202 tests); format, governance, and `git diff --check` pass. The complete Python discovery command was attempted but produced 2 failures and 6 errors in existing isolated-scan guard tests without a running package instance; this is recorded as NOT PASS and must be resolved or explicitly blocked before Task PASS.
 
