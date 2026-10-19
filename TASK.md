@@ -192,6 +192,18 @@ RO-4 的实际 JellyfinProxy 联调（后续 4.4）、单独 Slice Final／Closu
 
 可复用经验只提供少量候选供 Slice 收尾，不记录开发流水账，不作为 Task PASS 门槛。
 
+### B Review Result — media-service teardown correction after `dcce752`
+
+```text
+Decision: FIX REQUIRED remains active; the corrected cleanup gate correctly rejected the second 1000 run
+Finding: media container still exited 137 because ThreadingHTTPServer could block shutdown on active request threads
+Correction: isolated_media_server now uses daemon request threads, block_on_close=False, and an explicit SIGTERM/SIGINT shutdown path
+```
+
+- The second corrected-tool 1000 run completed all business rounds but returned `FAIL` with the media container `Exited (137)` and Jellyfin `Exited (0)`, proving the new cleanup gate is fail-closed. Its evidence remains at `.git/validation-evidence/dcce752/b-review-20261019T104646Z-media-stop-fix/large-1000/`.
+- A short independent delayed-request process test now exits `0` after SIGTERM; focused media/package/large-tool tests pass (2/2, 28/28, 22/22), with governance and diff checks PASS.
+- The isolated media-server change is same-Task test infrastructure only. A fresh 1000 run is still required after this correction; 3000 remains NOT RUN. No Closure Packet or `SLICE READY FOR A REVIEW` decision is issued.
+
 ### B Review Result — teardown exit-state correction candidate (working tree after `b2f19c2`)
 
 ```text

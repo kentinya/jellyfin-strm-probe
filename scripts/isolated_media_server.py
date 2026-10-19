@@ -4,9 +4,18 @@
 from __future__ import annotations
 
 import argparse
+import signal
+import threading
 import time
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit
+
+
+class IsolatedMediaServer(ThreadingHTTPServer):
+    # Do not let an in-flight synthetic media request hold PID 1 past Compose's graceful stop window.
+    daemon_threads = True
+    block_on_close = False
+    allow_reuse_address = True
 
 
 class MediaHandler(SimpleHTTPRequestHandler):
@@ -71,8 +80,17 @@ def main() -> int:
     def handler(*handler_args: object, **handler_kwargs: object) -> MediaHandler:
         return MediaHandler(*handler_args, directory=args.directory, **handler_kwargs)
 
-    server = ThreadingHTTPServer(("0.0.0.0", args.port), handler)
+    server = IsolatedMediaServer(("0.0.0.0", args.port), handler)
+
+    def stop_server(signum: int, _frame: object) -> None:
+        # ``shutdown`` must run off the signal-handler thread because serve_forever owns
+        # the loop that it wakes; the following server_close does not wait for requests.
+        threading.Thread(target=server.shutdown, name="media-server-shutdown", daemon=True).start()
+
+    signal.signal(signal.SIGTERM, stop_server)
+    signal.signal(signal.SIGINT, stop_server)
     server.serve_forever()
+    server.server_close()
     return 0
 
 
