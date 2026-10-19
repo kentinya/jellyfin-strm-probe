@@ -1,6 +1,6 @@
 # 测试矩阵
 
-下表保留完整产品矩阵；Slice 1／2／3 均已 A 最终审查 PASS / CLOSED。播放、原生批量和完整配置页已有分层证据；当前 3000 项媒体库／完整扫描压力、外部代理及发布仍 NOT RUN。当前接受实现 `7c64eb5dcad6e5f20fb7eb41819be2521f65484d`，范围与最终决定见 [Slice 3 关闭快照](progress.md#slice-3-closed)；[Slice 4](../SLICE.md) 已 ACTIVE，Task 4.1 的 RO-1 安装包已由 B 独立 PASS（快照 `0e7b26b381ed5f71781e75d317275afa51d791e9:TASK.md`），[Task 4.2](../TASK.md) 的 RO-3 扫描验收候选经 B 判 FIX REQUIRED 后已修正为 `eac764d9…` 并交为 READY FOR B REVIEW，后续 B 依 [固定交付方案](slice-4-delivery-plan.md) 独立审查与继续规划；RO-2／RO-4 未实施或运行。下方历史状态不因新合同激活而升级。表格保留完整产品目标，不把模拟大库或代表性实机扩大为所有格式／分支／客户端通过。通常前提为受支持版本化 STRM、已有主流、历史指纹与允许探测；例外显式说明。
+下表保留完整产品矩阵；Slice 1／2／3 均已 A 最终审查 PASS / CLOSED。播放、原生批量和完整配置页已有分层证据；当前 3000 项媒体库／完整扫描压力、外部代理及发布仍 NOT RUN。当前接受实现 `7c64eb5dcad6e5f20fb7eb41819be2521f65484d`，范围与最终决定见 [Slice 3 关闭快照](progress.md#slice-3-closed)；[Slice 4](../SLICE.md) 已 ACTIVE，Task 4.1 的 RO-1 安装包已由 B 独立 PASS（快照 `0e7b26b381ed5f71781e75d317275afa51d791e9:TASK.md`），Task 4.2 的 RO-3 扫描验收候选经 B 判 FIX REQUIRED 后已修正并交为 READY FOR B REVIEW，[Task 4.3](../TASK.md) 的 RO-2 大库候选经 B 判 FIX REQUIRED 后已修正为 `7c5169e9…` 并交为 READY FOR B REVIEW（含 1000 级 PASS，3000 级交 B）；RO-4 未实施。下方历史状态不因新合同激活而升级。表格保留完整产品目标，不把模拟大库或代表性实机扩大为所有格式／分支／客户端通过。通常前提为受支持版本化 STRM、已有主流、历史指纹与允许探测；例外显式说明。
 
 保留 T01～T28 身份以便追溯，但 T08／T22 按 V4.2 改为原生探测后新地址持久化，T02／T17～T19／T27 改为最小指纹合同。旧结果不自动继承。B01～B12 为新增批量／共享并发验收。
 
@@ -197,17 +197,17 @@ B 独立证据索引：`.git/validation-evidence/198f4ff2accd5bc9fcd87518a9684b9
 | Required Outcome | 当前状态 | 详情入口 |
 |---|---|---|
 | RO-1 单版本安装与恢复 | B PASS；Slice Final 未运行 | [安装包说明](package-installation.md)、[Task 4.1 历史](progress.md#当前开发指针) |
-| RO-2 真实 3000 项原生库 | Developer 已实现并本地运行 1000／3000 两级 PASS；待 B 独立验收与 Slice Final | [TASK.md](../TASK.md)、[大库验收入口](#slice-4-大库验收本地运行) |
+| RO-2 真实 3000 项原生库 | Developer 已实现并在修正 head 本地取得 1000 级 PASS（含查询阶段停止）；3000 级本修正轮 NOT RUN，待 B 独立验收与 Slice Final | [TASK.md](../TASK.md)、[大库验收入口](#slice-4-大库验收本地运行) |
 | RO-3 完整扫描重叠 | Task 4.2 修正候选待 B 复审；Slice Final 未运行 | [TASK.md](../TASK.md)、[Slice 4 合同](../SLICE.md) |
 | RO-4 实际代理播放链 | NOT RUN | [Slice 4 合同](../SLICE.md) |
 
 ### Slice 4 大库验收本地运行
 
-`scripts/run_isolated_large_library_integration.py` 在固定 Jellyfin `12.2.0`／Linux x64 的 ZIP 安装隔离实例上运行真实 1000／3000 项大库，证据外置于 `.git/validation-evidence/<source-sha>/<run-id>/large-<count>/`。Developer 开发反馈已按源码 SHA `850224a2e910e2131771699e9ae77e53d3b265c8`、同一 ZIP `edf0aa9ab75a2fb83dea991e04b1b51d661ae5dc3db4d5829668cdd09288ba8d` 在 1000 与 3000 两级各取得一次 `status: PASS`（每级真实原生已索引受支持候选 `count`，另有 3 个库内不支持／普通对照结算为 `not_processed`）。
+`scripts/run_isolated_large_library_integration.py` 在固定 Jellyfin `12.2.0`／Linux x64 的 ZIP 安装隔离实例上运行真实 1000／3000 项大库，证据外置于 `.git/validation-evidence/<source-sha>/<run-id>/large-<count>/`。B 对原始实现 head `850224a2e910e2131771699e9ae77e53d3b265c8`／同一 ZIP `edf0aa9ab75a2fb83dea991e04b1b51d661ae5dc3db4d5829668cdd09288ba8d` 的 1000／3000 两级 `status: PASS` 判 FIX REQUIRED：旧 watcher 把两秒 overlap 的旧日志当成当前尝试，造成 `execution.read_started=true` 与“无对象读取”相互矛盾的证据。修正 head `7c5169e9f1b6e527b016360708b9155805afd7ee` 按当前尝试时间戳过滤 overlap、拒绝任何已读对象的执行，并改用低延迟流式 log follower 观测极短查询窗口；在该 head 上 1000 级重新取得 `status: PASS`（每级真实原生已索引受支持候选 `count`，另有 3 个库内不支持／普通对照结算为 `not_processed`）。3000 级本修正轮未取得 PASS，交 B 独立验收。
 
 - 首次信任轮 `first_trust == count`、`actual_probe_calls == 0`；未变复查零探测；受控增量仅 16 个变化源各一次实际探测并全部 `reliable_success`；增量后复查零探测；准备／分批停止后已开始 2 源提交、未开始保持，随后恢复轮 2 探测并收敛；再两轮未变零探测；重启后只读核对完整五字段集合、地址与主流，16 个变化源显式选源 PlaybackInfo 零额外探测。
-- 同步查询窗口内的准备阶段停止：1000 与 3000 两级均由并发 watcher 命中（`actual_query_stage_stop: PASS`），停止后无对象读取；原生分批停止在首批 2 源实际开始后发出，已开始工作提交、后批未读取。
-- 成本字段（`candidate_fetch_ms`／`candidate_fetch_allocated_bytes`／`candidate_fetch_peak_bytes`／`candidate_set_estimated_bytes`／`candidate_set_measured_capacity_bytes`／`candidate_set_retained_bytes`／`batch_reads`／`batch_read_ms`／`batch_read_allocated_bytes`）逐轮记录；3000 级首轮 3003 候选、24 批、`candidate_fetch_ms` 约 511、`batch_read_ms` 约 919。集合与原生查询分配随 N 增长，非全库对象物化或每候选 Task。
+- 同步查询窗口内的准备阶段停止：修正 head `7c5169e9` 在 1000 级由低延迟流式 log follower 第 1 次尝试命中（`actual_query_stage_stop: PASS`），停止后无对象读取；原生分批停止在首批 2 源实际开始后发出，已开始工作提交、后批未读取。真实查询窗口约 20–160 ms，比 `docker logs --since` 的 spawn 延迟（约 110–180 ms）短，故旧实现会稳定错过或误用 overlap 旧日志；3000 级同一门槛待 B 独立验收。
+- 成本字段（`candidate_fetch_ms`／`candidate_fetch_allocated_bytes`／`candidate_fetch_peak_bytes`／`candidate_set_estimated_bytes`／`candidate_set_measured_capacity_bytes`／`candidate_set_retained_bytes`／`batch_reads`／`batch_read_ms`／`batch_read_allocated_bytes`）逐轮记录；1000 级首轮 1003 候选、8 批、`candidate_fetch_ms` 约 372、`batch_read_ms` 约 394。集合与原生查询分配随 N 增长，非全库对象物化或每候选 Task。
 - 每轮运行前记录 OS／架构／SDK／CPU／内存／磁盘／inode，结束时核验实例输入未被扰动、工作区清理；`instance_reconciliation: CLEAN`。
 - 上述为 Developer 聚焦开发反馈，不是 B 独立验收或 Slice Final；完整 C#／Python 全量回归、独立复现与最终门槛由 B 承担。当前仍 NOT RUN：RO-4 实际代理、Slice Final、其他 Jellyfin／平台。
 

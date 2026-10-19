@@ -88,7 +88,7 @@ Slice 2 已验证 SQLite 指纹的真实重启／失败恢复、多源身份、�
 
 ## 真实大库（Slice 4 RO-2，Developer 开发反馈）
 
-`scripts/run_isolated_large_library_integration.py` 在同一固定组合的 ZIP 安装隔离实例上创建真实原生已索引的受支持 STRM，并驱动原生批量任务完成首次信任、未变、少量增量、准备／分批停止和重启核对。Developer 已按源码 SHA `850224a2e910e2131771699e9ae77e53d3b265c8` 与 ZIP `edf0aa9ab75a2fb83dea991e04b1b51d661ae5dc3db4d5829668cdd09288ba8d` 在 1000 与 3000 两级各取得一次 `PASS`：首次信任零插件探测、未变零探测、受控增量仅 16 个变化源探测、准备／分批停止命中且已开始工作提交、重启后完整指纹／地址／主流只读一致。详细计数、成本字段与限制见 [测试矩阵](test-matrix.md#slice-4-大库验收本地运行)。
+`scripts/run_isolated_large_library_integration.py` 在同一固定组合的 ZIP 安装隔离实例上创建真实原生已索引的受支持 STRM，并驱动原生批量任务完成首次信任、未变、少量增量、准备／分批停止和重启核对。B 对原始实现 head `850224a2e910e2131771699e9ae77e53d3b265c8`／ZIP `edf0aa9ab75a2fb83dea991e04b1b51d661ae5dc3db4d5829668cdd09288ba8d` 的两级 `PASS` 判 FIX REQUIRED（查询阶段停止证据可混入 overlap 旧日志）；修正 head `7c5169e9f1b6e527b016360708b9155805afd7ee` 按当前尝试时间戳过滤、拒绝已读对象的执行，并用低延迟流式 log follower 命中极短查询窗口，1000 级重取得 `PASS`：首次信任零插件探测、未变零探测、受控增量仅 16 个变化源探测、准备／分批停止命中且已开始工作提交、重启后完整指纹／地址／主流只读一致。3000 级本修正轮未取得 PASS，交 B 独立验收。详细计数、成本字段与限制见 [测试矩阵](test-matrix.md#slice-4-大库验收本地运行)。
 
 该结果为 Developer 开发反馈，不是 B 独立验收或 Slice Final；完整回归、独立复现与最终门槛由 B 承担。当前未验证：其他 Jellyfin 版本／平台、外部代理、真实 OpenList 及通用性能 SLA。
 

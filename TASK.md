@@ -5,13 +5,13 @@
 ```text
 Task ID: 4.3
 Parent Slice: 4
-Status: IN PROGRESS
+Status: READY FOR B REVIEW
 Task Base: a06a80fac90a86085f25116568aa24b54847c562
 Contract Checkpoint: 611c31c31115b02c3fb60cef2826d9348e352b7b
 Difficulty: High
 Test Level: T4
 Planner / Reviewer: B
-Implementation Head: 70acae9cacaeddd3a494b2086a2a84c614820929
+Implementation Head: 7c5169e9f1b6e527b016360708b9155805afd7ee
 ```
 
 ## Goal
@@ -169,25 +169,26 @@ RO-4 的实际 JellyfinProxy 联调（后续 4.4）、单独 Slice Final／Closu
 
 ## Developer Completion Report
 
-- Changed Files：`scripts/run_isolated_large_library_integration.py`（新增）、`tests/test_isolated_large_library_integration.py`（新增）、`src/Jellyfin.Plugin.StrmProbeOptimizer/Services/BatchCheckRunner.cs`（仅在 `FetchCandidates`／对象批次处追加脱敏阶段诊断与候选身份日志，不改任何决策、计数、取消或并发语义）。纯报告更新 `TASK.md`、`docs/test-matrix.md`、`docs/compatibility.md`、`docs/development-environment.md`。未改 schema、业务规则、稳定需求、Slice／Roadmap。
+- Changed Files：`scripts/run_isolated_large_library_integration.py`（新增）、`tests/test_isolated_large_library_integration.py`（新增）、`src/Jellyfin.Plugin.StrmProbeOptimizer/Services/BatchCheckRunner.cs`（仅在 `FetchCandidates`／对象批次处追加脱敏阶段诊断与候选身份日志，不改任何决策、计数、取消或并发语义）、`tests/test_isolated_package_integration.py`（仅让 `load()` 复用已导入模块，修复全量发现时的测试隔离）。纯报告更新 `TASK.md`、`docs/test-matrix.md`、`docs/compatibility.md`、`docs/development-environment.md`。未改 schema、业务规则、稳定需求、Slice／Roadmap。
 - Implemented：
   - 新增 `scripts/run_isolated_large_library_integration.py`（`--count 1000|3000 --scenario all`），只消费指定 ZIP 并部署到 4.1 的独立包实例（Compose project `jf-strm-probe-package-*-large-*`、默认端口 18097、工作区 `artifacts/package-env`），不调用 `deploy_plugin()`、不在验收期间补 DLL 或重建包；复用 `package_environment`／`package_plugin`／`run_isolated_package_integration` 的新工作区选择、镜像锁、归属检查、ZIP 校验／部署、鉴权、媒体准备、对账与清理，以及 `run_isolated_scan_integration` 的日期／运行关联、原生任务 API、只读源／五字段快照和增量 `EvidenceRecorder`。
   - 真实建库：写 `count` 个受支持版本 1 STRM 加库内普通视频／旧 STRM／未知协议对照和范围外受支持 STRM 对照；等待原生扫描任务 Idle 后发起真实扫描并轮询分页原生查询，直到全部受支持夹具索引（Jellyfin 扫描异步，任务 Completed 不等于索引完成）。插件禁用时用最多 2 个固定 worker 经原生 PlaybackInfo 持久化每个源的主流，扫描／准备的原生调用单列。
   - 完整轮次：首次信任（`first_trust==count`、零插件探测）、未变复查（零探测）、少量增量（预分配的 4 URL／4 内容／4 Size／4 缺流对照各按需一次探测并全部可靠提交）、增量后复查（零探测）、准备阶段停止（并发 watcher 命中同步查询窗口，停止后无对象读取）、分批停止（首批 2 源实际开始后原生停止，已开始提交、后批未读取、Cancelled 且进度 <100）、恢复轮（剩余变化 2 探测收敛）、两轮未变（零探测）、重启只读核对（完整五字段／地址／主流）与 16 个变化源显式选源 PlaybackInfo（零额外探测）。
   - 分层成本：逐轮记录候选获取／原生查询时间与当前线程累计分配、进程堆采样峰值、集合估算／实测容量／保留、批次读取时间／分配与批次数；身份集合、原生临时分配与对象读取分别报告，不称精确峰值或恒定总内存。
   - 脱敏：证据外置 `.git/validation-evidence/<source-sha>/<run-id>/large-<count>/`，仅保存摘要／哈希／计数，`events.jsonl` 流式追加、`rounds/` 快照、日志经 `redact_log_text`，不含完整 URL、token、Cookie 或私有路径。
-- Tests and Results（original implementation head `850224a2e910e2131771699e9ae77e53d3b265c8`; correction checkpoint `70acae9`；ZIP SHA-256 `edf0aa9ab75a2fb83dea991e04b1b51d661ae5dc3db4d5829668cdd09288ba8d`）：
+- Tests and Results（original implementation head `850224a2e910e2131771699e9ae77e53d3b265c8`; correction checkpoint `70acae9`；B FIX REQUIRED 后修正 head `7c5169e9f1b6e527b016360708b9155805afd7ee`；ZIP SHA-256 `edf0aa9ab75a2fb83dea991e04b1b51d661ae5dc3db4d5829668cdd09288ba8d`）：
   - `bash scripts/dotnet-local build … --configuration Release --no-restore` 0 警告／0 错误（约 15s）。
-  - `bash scripts/dotnet-local test … --filter 'FullyQualifiedName~BatchCheckTests|FullyQualifiedName~ProbeCoordinatorTests|FullyQualifiedName~PlaybackOptimizerTests'` 138/138 PASS（约 9s）。
-  - `python3 -m unittest discover -s tests -p 'test_isolated_large_library_integration.py' -v` original 13/13 PASS；correction 14/14 PASS。
-  - 1000 级：`python3 scripts/run_isolated_large_library_integration.py --package … --count 1000 --scenario all` **PASS**；`actual_query_stage_stop: PASS`；实例对账 `CLEAN`、清理 `CLEANED`。证据索引 `.git/validation-evidence/850224a2e910e2131771699e9ae77e53d3b265c8/run-20261019T012120Z-21426e72/large-1000/`。
-  - 3000 级：同命令 `--count 3000` **PASS**；首次信任 `candidates 3003 / first_trust 3000 / actual_probe_calls 0`；增量 `candidates 3007 / reliable_success 16 / actual_probe_calls 16`；未变与增量后复查零探测；停止后恢复 2 探测、再两轮零探测；`actual_query_stage_stop: PASS`；实例对账 `CLEAN`、清理 `CLEANED`；首轮 24 批、`candidate_fetch_ms` 511.4546、`candidate_fetch_allocated_bytes` 13820992、`candidate_fetch_peak_bytes` 2658416、`candidate_set_estimated_bytes` 120120、`candidate_set_measured_capacity_bytes` 162712、`candidate_set_retained_bytes` 149032、`batch_read_ms` 918.7819、`batch_read_allocated_bytes` 44829744。证据索引 `.git/validation-evidence/850224a2e910e2131771699e9ae77e53d3b265c8/run-20261019T023348Z-d3a0cb33/large-3000/`。
-  - `python3 scripts/package_plugin.py --configuration Release --runtime linux-x64 --output-dir artifacts/releases` PASS，归档 SHA-256 与上一致。
-  - 未运行（明确交 B）：完整 C#／Python 全量回归、`format`、治理／差异、三个既有默认实机回归、包／扫描全场景、RO-4 代理联调、单独 Slice Final。
-- Decisions：只新增大库验收入口与对应工具回归，并在 `BatchCheckRunner.FetchCandidates`／批次读取处补最小脱敏诊断；不改决策、计数、取消、共享、并发、schema 或持久化语义。受控同 URL 内容／Size 变化使用**同容器**的独立合成 MP4（B）作为后端真实内容，因为同 URL 改变容器会让 Jellyfin 持久主流身份与编码器结果不匹配而被拒——这超出本 Task 的受控内容／Size 变化合同，故不采用。同步查询窗口极短，用并发 watcher 在查询开始标记出现时立即停止，未注入等待／取消源或改变原生查询；未命中时如实 NOT RUN。
-- Remaining In-Slice Work：RO-2 本 Task 待 B 独立验收；RO-4 后续 4.4；单独 Slice Final、事实协调与 Closure Packet。
-- Risks / Deviations：1000／3000 为 Developer 聚焦开发反馈，非 B 独立验收或 Slice Final；完整全量回归与独立复现交 B。真实大库停止依赖真实时序，已保留每次自然重试与未命中记录；RO-4 代理、其他 Jellyfin／平台、通用性能 SLA 仍 NOT RUN。首次失败与多次重跑原始证据保留在各运行目录。
-- Head SHA：original `850224a2e910e2131771699e9ae77e53d3b265c8`; correction `70acae9`。
+  - `bash scripts/dotnet-local test … --filter 'FullyQualifiedName~BatchCheckTests|FullyQualifiedName~ProbeCoordinatorTests|FullyQualifiedName~PlaybackOptimizerTests'` 138/138 PASS（约 4s）。
+  - `python3 -m unittest discover -s tests -p 'test_isolated_large_library_integration.py' -v` original 13/13 PASS；correction 15/15 PASS。
+  - `python3 -m unittest discover -s tests` 修正后 211/211 PASS（此前 B 记录的 2 failures／6 errors 由 `tests/test_isolated_package_integration.py` 的模块重复加载导致，已在 `7c5169e` 系列修正）。
+  - 1000 级（修正 head `7c5169e9`）：`python3 scripts/run_isolated_large_library_integration.py --package … --count 1000 --scenario all` **PASS**；`actual_query_stage_stop: PASS`（流式 log follower 在第 1 次尝试命中查询窗口，停止后无对象读取）；首次信任 `candidates 1003 / first_trust 1000 / actual_probe_calls 0`；增量 `candidates 1007 / reliable_success 16 / actual_probe_calls 16`；未变与增量后复查零探测；分批停止后恢复 2 探测、再两轮零探测；实例对账 `CLEAN`、清理 `CLEANED`。证据索引 `.git/validation-evidence/7c5169e9f1b6e527b016360708b9155805afd7ee/run-20261019T051638Z-188989f9/large-1000/`。
+  - 3000 级：本修正轮 **NOT RUN**，交 B 独立验收。两次尝试如实保留：`run-20261019T054319Z-2e26b6dd` 因 developer 诊断误用工具设备身份导致运行会话 token 失效而中断（`INTERRUPTED.md`）；`run-20261019T063052Z-535010f8` 因 developer 反馈预算用尽主动停止（`DEFERRED.md`）。两次均未取得 3000 级 PASS，不冒充通过。
+  - `python3 scripts/package_plugin.py --configuration Release --runtime linux-x64 --output-dir artifacts/releases` PASS，归档 SHA-256 与上一致（`src/` 自 `850224a` 起未改，ZIP 未重建）。
+  - 未运行（明确交 B）：完整 C#／Python 全量回归（Developer 只跑聚焦）、`format`、治理／差异、三个既有默认实机回归、包／扫描全场景、RO-4 代理联调、单独 Slice Final。
+- Decisions：只新增大库验收入口与对应工具回归，并在 `BatchCheckRunner.FetchCandidates`／批次读取处补最小脱敏诊断；不改决策、计数、取消、共享、并发、schema 或持久化语义。受控同 URL 内容／Size 变化使用**同容器**的独立合成 MP4（B）作为后端真实内容，因为同 URL 改变容器会让 Jellyfin 持久主流身份与编码器结果不匹配而被拒——这超出本 Task 的受控内容／Size 变化合同，故不采用。修正轮针对 B Findings：查询窗口极短（约 20–160 ms），`docker logs --since` 每次 spawn 的观测延迟（约 110–180 ms）会稳定错过窗口，故改用单个 `docker logs --follow` 流式 follower（`readline()` 读取，实测约 20–30 ms）观测，未注入等待／取消源或改变原生查询；未命中时仍如实 NOT RUN。同步查询内竞争仍由确定性测试覆盖。
+- Remaining In-Slice Work：RO-2 本 Task 待 B 独立验收（含 3000 级）；RO-4 后续 4.4；单独 Slice Final、事实协调与 Closure Packet。
+- Risks / Deviations：1000 为 Developer 聚焦开发反馈，非 B 独立验收或 Slice Final；3000 级与完整全量回归、独立复现交 B。真实大库停止依赖真实时序，已保留每次自然重试与未命中记录；RO-4 代理、其他 Jellyfin／平台、通用性能 SLA 仍 NOT RUN。首次失败与多次重跑原始证据保留在各运行目录。
+- Head SHA：original `850224a2e910e2131771699e9ae77e53d3b265c8`; correction `70acae9`; FIX-REQUIRED correction `7c5169e9f1b6e527b016360708b9155805afd7ee`。
 
 可复用经验只提供少量候选供 Slice 收尾，不记录开发流水账，不作为 Task PASS 门槛。
 
