@@ -142,6 +142,6 @@ SQLite 运行时异常停止优化并尽可能原生委托，批量报告不可�
 
 ## TARGET — Slice 4 集成与单版本交付
 
-Slice 4 的目标架构以 [当前合同](../SLICE.md) 为准：在既有原生任务、ID 集合／分批、Coordinator、原生保存及 SQLite 条件提交上，补齐真实 3000 项原生库成本、完整扫描重叠、实际 JellyfinProxy 播放链和固定 Jellyfin 12.2.0／Linux x64 包安装／恢复证据；不新建调度／运行状态系统。
+Slice 4 的目标架构以 [当前合同](../SLICE.md) 为准：在既有原生任务、ID 集合／分批、Coordinator、原生保存及 SQLite 条件提交上，补齐至少 1000 项真实原生库成本（复用现存 1004 项库）、完整扫描重叠、实际 JellyfinProxy 播放链和固定 Jellyfin 12.2.0／Linux x64 包安装／恢复证据；不新建调度／运行状态系统。
 
 目标包包含插件及所需 SQLite 托管和 native 依赖，以归档摘要关联源码／构建，干净实例只消费归档验收；不会把开发工具复制产物冒充包安装。代理是固定版本的外部组件，插件保留原生 PlaybackInfo／MediaSourceId／302 契约，受控后端不改变插件只读及无 OpenList 元数据 API 的边界。代表性格式／客户端、未用 OpenList 时的专有行为和其他未测范围均按合同准确报告；这些 TARGET 不构成 CURRENT 或跨版本支持。
