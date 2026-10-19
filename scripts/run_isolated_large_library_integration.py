@@ -207,7 +207,7 @@ def run_query_stage_stop(auth: str, recorder: scan.EvidenceRecorder, container_n
     task = current_task(auth)
     previous = scan.last_start(task)
     started = scan.now_utc()
-    tail = LogTail(container_name, started)
+    follower = DockerLogFollower(container_name, started)
     state: dict[str, object] = {"query_started_utc": None, "read_started": False,
                                 "stop_status": None, "stop_requested_utc": None}
     lock = threading.Lock()
@@ -216,11 +216,7 @@ def run_query_stage_stop(auth: str, recorder: scan.EvidenceRecorder, container_n
     def watcher() -> None:
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline and not stop_flag.is_set():
-            try:
-                lines = current_round_log_lines(tail.poll(), started)
-            except Exception:
-                time.sleep(0.01)
-                continue
+            lines = current_round_log_lines(follower.drain(), started)
             if any("STRM_BATCH_OBJECT_READ_STARTED" in line for line in lines):
                 state["read_started"] = True
             if not stop_flag.is_set() and any("STRM_BATCH_CANDIDATE_QUERY_STARTED" in line for line in lines):
@@ -236,35 +232,38 @@ def run_query_stage_stop(auth: str, recorder: scan.EvidenceRecorder, container_n
                         state["stop_status"] = status
                         state["stop_requested_utc"] = scan.now_utc().isoformat()
                     stop_flag.set()
-            time.sleep(0.01)
+            time.sleep(0.005)
 
     watcher_thread = threading.Thread(target=watcher, name="query-stage-stop-watcher", daemon=True)
-    watcher_thread.start()
-    status = scan.start_task(auth, task["Id"])
-    require(status == 204, f"Jellyfin rejected the native batch start ({status}).")
-    recorder.record("batch_task_started", task_key=TASK_KEY, task_id=task["Id"], started_utc=started)
-    deadline = time.monotonic() + timeout
-    saw_run = False
-    progress: list[float] = []
-    while time.monotonic() < deadline:
-        observed = current_task(auth)
-        task_state = scan.task_state_name(observed)
-        result = scan.task_result(observed)
-        if task_state in {"running", "cancelling", "1", "2"} or scan.last_start(observed) != previous:
-            saw_run = True
-        raw_progress = observed.get("CurrentProgressPercentage")
-        if raw_progress is not None:
-            progress.append(float(raw_progress))
-        if saw_run and task_state in {"idle", "0"} and result:
-            stop_flag.set()
-            watcher_thread.join(timeout=5)
-            return {"task": observed, "result": result, "start_time_previous": previous,
-                    "stopped": state["stop_status"] == 204, "progress": progress,
-                    "started_utc": started, "ended_utc": scan.now_utc(), **state}
-        time.sleep(0.05)
-    stop_flag.set()
-    watcher_thread.join(timeout=5)
-    raise RuntimeError("The native batch task exceeded the fixed run timeout during the query-stage stop.")
+    try:
+        watcher_thread.start()
+        status = scan.start_task(auth, task["Id"])
+        require(status == 204, f"Jellyfin rejected the native batch start ({status}).")
+        recorder.record("batch_task_started", task_key=TASK_KEY, task_id=task["Id"], started_utc=started)
+        deadline = time.monotonic() + timeout
+        saw_run = False
+        progress: list[float] = []
+        while time.monotonic() < deadline:
+            observed = current_task(auth)
+            task_state = scan.task_state_name(observed)
+            result = scan.task_result(observed)
+            if task_state in {"running", "cancelling", "1", "2"} or scan.last_start(observed) != previous:
+                saw_run = True
+            raw_progress = observed.get("CurrentProgressPercentage")
+            if raw_progress is not None:
+                progress.append(float(raw_progress))
+            if saw_run and task_state in {"idle", "0"} and result:
+                stop_flag.set()
+                watcher_thread.join(timeout=5)
+                return {"task": observed, "result": result, "start_time_previous": previous,
+                        "stopped": state["stop_status"] == 204, "progress": progress,
+                        "started_utc": started, "ended_utc": scan.now_utc(), **state}
+            time.sleep(0.05)
+        raise RuntimeError("The native batch task exceeded the fixed run timeout during the query-stage stop.")
+    finally:
+        stop_flag.set()
+        watcher_thread.join(timeout=5)
+        follower.close()
 
 
 def query_stop_observed(execution: dict, events: list[dict]) -> bool:
@@ -356,6 +355,56 @@ class LogTail:
             self.seen.add(key)
             fresh.append(line)
         return fresh
+
+
+class DockerLogFollower:
+    """Stream new container log lines with low latency so a stop can be issued during the short,
+    synchronous candidate query.
+
+    The real query window is only tens to a few hundred milliseconds; re-spawning ``docker logs --since``
+    every poll adds that process's start-up cost and misses the window. A single follow process reads the
+    existing redacted diagnostics as they are written and injects no test wait, cancellation source or
+    native-query change. The initial look-back is filtered per attempt by ``current_round_log_lines``.
+    """
+
+    def __init__(self, container_name: str, since: dt.datetime,
+                 *, popen: Callable[..., object] | None = None) -> None:
+        self.container = container_name
+        self._lines: list[str] = []
+        self._lock = threading.Lock()
+        args = [*pe.DOCKER, "logs", "--follow", "--timestamps",
+                "--since", f"{since.timestamp() - 2.0:.6f}", container_name]
+        self._process = (popen or subprocess.Popen)(
+            args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, cwd=ROOT)
+        self._thread = threading.Thread(target=self._read, name="docker-log-follower", daemon=True)
+        self._thread.start()
+
+    def _read(self) -> None:
+        stream = getattr(self._process, "stdout", None)
+        if stream is None:
+            return
+        for line in stream:
+            with self._lock:
+                self._lines.append(line.rstrip("\n"))
+
+    def drain(self) -> list[str]:
+        with self._lock:
+            lines, self._lines = self._lines, []
+        return lines
+
+    def close(self) -> None:
+        try:
+            self._process.terminate()
+        except Exception:  # noqa: BLE001 - a dead follow process is not fatal
+            pass
+        try:
+            self._process.wait(timeout=5)
+        except Exception:  # noqa: BLE001
+            try:
+                self._process.kill()
+            except Exception:  # noqa: BLE001
+                pass
+        self._thread.join(timeout=5)
 
 
 def current_round_log_lines(lines: list[str], started: dt.datetime) -> list[str]:

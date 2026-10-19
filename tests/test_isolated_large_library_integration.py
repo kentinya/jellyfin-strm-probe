@@ -108,6 +108,62 @@ class LargeLibraryControlTests(unittest.TestCase):
         ]
         self.assertEqual(large.current_round_log_lines(lines, started), [lines[1]])
 
+    def test_docker_log_follower_streams_and_closes_without_injection(self):
+        class _FakeStdout:
+            def __init__(self, lines):
+                self._lines = list(lines)
+                self._index = 0
+
+            def __iter__(self):
+                return self
+
+            def __next__(self):
+                if self._index >= len(self._lines):
+                    raise StopIteration
+                line = self._lines[self._index]
+                self._index += 1
+                return line
+
+        class _FakeProcess:
+            def __init__(self, lines):
+                self.stdout = _FakeStdout(lines)
+                self.terminated = False
+                self.waited = False
+
+            def terminate(self):
+                self.terminated = True
+
+            def wait(self, timeout=None):
+                self.waited = True
+                return 0
+
+            def kill(self):
+                raise AssertionError("kill must not be reached after a clean terminate")
+
+        captured: dict[str, list[str]] = {}
+        process = _FakeProcess(["2026-01-01T00:00:01.100000000Z CANDIDATE_QUERY_STARTED\n"])
+
+        def fake_popen(args, **kwargs):
+            captured["args"] = list(args)
+            return process
+
+        follower = large.DockerLogFollower(
+            "container", large.dt.datetime(2026, 1, 1, tzinfo=large.dt.timezone.utc), popen=fake_popen)
+        lines: list[str] = []
+        for _ in range(200):
+            lines.extend(follower.drain())
+            if lines:
+                break
+            large.time.sleep(0.005)
+        follower.close()
+
+        self.assertIn("--follow", captured["args"])
+        self.assertIn("container", captured["args"])
+        self.assertEqual(len(lines), 1)
+        self.assertIn("CANDIDATE_QUERY_STARTED", lines[0])
+        self.assertTrue(process.terminated)
+        self.assertTrue(process.waited)
+
     def test_query_stage_stop_requires_query_started_and_no_read(self):
         # A stop only counts as an in-query stop when the query started, the native stop was accepted and no
         # object read began; a late stop that already read a batch is rejected.
