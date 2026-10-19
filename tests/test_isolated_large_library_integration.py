@@ -170,6 +170,53 @@ class LargeLibraryControlTests(unittest.TestCase):
         self.assertFalse(large.query_stop_observed(
             {"stopped": True, "query_started_utc": "2026-01-01T00:00:00+00:00", "read_started": True}, []))
 
+    def test_unobserved_required_query_stage_fails_overall_result_closed(self):
+        # B FIX REQUIRED: three missed query-stop attempts must not let the acceptance command exit 0/PASS.
+        self.assertEqual(large.overall_acceptance_status({"actual_query_stage_stop": False}), ("FAIL", 1))
+        self.assertEqual(large.overall_acceptance_status({"actual_query_stage_stop": True}), ("PASS", 0))
+        self.assertEqual(
+            large.overall_acceptance_status({"actual_query_stage_stop": True, "other": False}),
+            ("FAIL", 1))
+
+    def test_query_stage_stop_attempts_keeps_every_missed_attempt_and_reports_unobserved(self):
+        missed_stop = {"stopped": True, "query_started_utc": None, "read_started": False}
+        calls: list[int] = []
+
+        def attempt() -> tuple[dict, list[dict]]:
+            calls.append(1)
+            return missed_stop, [{"kind": "OBJECT_READ_STARTED"}]
+
+        result = large.run_query_stage_stop_attempts(attempt)
+
+        self.assertEqual(len(calls), 3)
+        self.assertFalse(result["observed"])
+        self.assertIsNone(result["stop"])
+        self.assertEqual(len(result["attempts"]), 3)
+        self.assertTrue(all(not item["observed"] for item in result["attempts"]))
+        self.assertTrue(all(item["object_read_started"] for item in result["attempts"]))
+        self.assertEqual(large.overall_acceptance_status(
+            {"actual_query_stage_stop": bool(result["observed"])}), ("FAIL", 1))
+
+    def test_query_stage_stop_attempts_stops_at_first_observed_window(self):
+        observed_stop = {"stopped": True, "query_started_utc": "2026-01-01T00:00:00+00:00", "read_started": False}
+        missed_stop = {"stopped": True, "query_started_utc": None, "read_started": False}
+        sequence = [
+            (missed_stop, [{"kind": "OBJECT_READ_STARTED"}]),
+            (observed_stop, [{"kind": "CANDIDATE_QUERY_STARTED"}]),
+        ]
+
+        def attempt() -> tuple[dict, list[dict]]:
+            return sequence.pop(0)
+
+        result = large.run_query_stage_stop_attempts(attempt)
+
+        self.assertTrue(result["observed"])
+        self.assertIs(result["stop"], observed_stop)
+        self.assertEqual(len(result["attempts"]), 2)
+        self.assertEqual(sequence, [])
+        self.assertEqual(large.overall_acceptance_status(
+            {"actual_query_stage_stop": bool(result["observed"])}), ("PASS", 0))
+
     def test_per_source_media_route_replacement_does_not_change_neighbor(self):
         package_root = ROOT / "artifacts" / "package-env" / "runs"
         package_root.mkdir(parents=True, exist_ok=True)

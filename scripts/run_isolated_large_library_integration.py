@@ -276,6 +276,51 @@ def query_stop_observed(execution: dict, events: list[dict]) -> bool:
             and not read_started)
 
 
+def overall_acceptance_status(required_stages: dict[str, bool]) -> tuple[str, int]:
+    """Map required-stage outcomes to the overall acceptance status and process exit code.
+
+    A required stage that is not satisfied (for example the real in-query stop was never observed) must fail
+    closed: the run cannot report an overall PASS or exit 0 even when every other observation succeeded. The
+    attempt evidence and cleanup are still recorded by the caller.
+    """
+    unmet = sorted(name for name, satisfied in required_stages.items() if not satisfied)
+    if unmet:
+        return "FAIL", 1
+    return "PASS", 0
+
+
+def run_query_stage_stop_attempts(perform_attempt: Callable[[], tuple[dict, list[dict]]],
+                                  max_attempts: int = 3) -> dict[str, object]:
+    """Run the natural in-query stop attempts and return the observed stage plus every attempt's evidence.
+
+    Each attempt records its own start instant, execution and phase events so an unobserved attempt is kept
+    rather than overwritten. ``observed`` is only true when a real in-query stop was seen; an unobserved stage
+    is left for the caller to fail the overall acceptance result closed.
+    """
+    attempts: list[dict[str, object]] = []
+    stage_stop: dict | None = None
+    stage_events: list[dict] = []
+    observed = False
+    for index in range(max_attempts):
+        attempt_started = scan.now_utc()
+        stop, events = perform_attempt()
+        attempt_observed = query_stop_observed(stop, events)
+        attempts.append({"attempt": index + 1, "started_utc": attempt_started.isoformat(),
+                         "observed": attempt_observed,
+                         "query_started_utc": stop.get("query_started_utc"),
+                         "stop_requested_utc": stop.get("stop_requested_utc"),
+                         "stop_status": stop.get("stop_status"),
+                         "object_read_started": any(
+                             event["kind"] == "OBJECT_READ_STARTED" for event in events),
+                         "execution": stop, "events": events})
+        if attempt_observed:
+            observed = True
+            stage_stop = stop
+            stage_events = events
+            break
+    return {"observed": observed, "attempts": attempts, "stop": stage_stop, "events": stage_events}
+
+
 def run_task(auth: str, recorder: scan.EvidenceRecorder, timeout: int = MAX_TASK_TIMEOUT,
              *, stop_after: Callable[[dict, dict], bool] | None = None,
              poll_seconds: float = POLL_SECONDS) -> dict:
@@ -1020,32 +1065,25 @@ def run_scenario(package: Path, count: int, evidence_dir: Path, timeout: int, ke
 
         # Preparation-stage stop: detect the real synchronous native-query window from phase logs and stop
         # during it. The window can be short at 1000 candidates, so the task allows up to three natural retries;
-        # an unobserved window is reported NOT RUN rather than a fabricated in-query PASS.
+        # an unobserved window is reported NOT RUN rather than a fabricated in-query PASS and it fails the
+        # overall acceptance result closed instead of exiting 0.
         auth = scan.api_auth()
-        query_attempts: list[dict[str, object]] = []
-        candidate_start_seen = threading.Event()
-        stage_stop: dict | None = None
-        stage_events: list[dict[str, object]] = []
-        for attempt in range(3):
+
+        def perform_query_stop_attempt() -> tuple[dict, list[dict]]:
+            nonlocal auth
             attempt_started = scan.now_utc()
             attempt_stop = run_query_stage_stop(auth, recorder, container, run_timeout)
             attempt_events = batch_log_events(container, attempt_started)
-            observed = query_stop_observed(attempt_stop, attempt_events)
-            query_attempts.append({"attempt": attempt + 1, "started_utc": attempt_started.isoformat(),
-                                   "observed": observed,
-                                   "query_started_utc": attempt_stop.get("query_started_utc"),
-                                   "stop_requested_utc": attempt_stop.get("stop_requested_utc"),
-                                   "stop_status": attempt_stop.get("stop_status"),
-                                   "object_read_started": any(
-                                       event["kind"] == "OBJECT_READ_STARTED" for event in attempt_events),
-                                   "execution": attempt_stop, "events": attempt_events})
-            if observed:
-                candidate_start_seen.set()
-                stage_stop = attempt_stop
-                stage_events = attempt_events
-                break
-            auth = scan.api_auth()
-        if candidate_start_seen.is_set():
+            if not query_stop_observed(attempt_stop, attempt_events):
+                auth = scan.api_auth()
+            return attempt_stop, attempt_events
+
+        query_stage = run_query_stage_stop_attempts(perform_query_stop_attempt)
+        candidate_start_seen = bool(query_stage["observed"])
+        query_attempts = query_stage["attempts"]
+        stage_stop = query_stage["stop"]
+        stage_events = query_stage["events"]
+        if candidate_start_seen:
             require(stage_stop is not None and stage_stop["stopped"],
                     "The candidate-query stop was not sent after the query began.")
             require(not any(event["kind"] == "OBJECT_READ_STARTED" for event in stage_events),
@@ -1166,7 +1204,9 @@ def run_scenario(package: Path, count: int, evidence_dir: Path, timeout: int, ke
 
         sampler.stop()
         sampler = None
-        summary.update({"status": "PASS", "deployment": deploy, "container_identity": identity,
+        required_stages = {"actual_query_stage_stop": candidate_start_seen}
+        overall_status, exit_code = overall_acceptance_status(required_stages)
+        summary.update({"status": overall_status, "deployment": deploy, "container_identity": identity,
                        "native_candidates": selected, "rounds": {
                            "first_trust": round1["fields"], "unchanged": round2["fields"],
                            "controlled_increment": changed_round["fields"],
@@ -1183,8 +1223,8 @@ def run_scenario(package: Path, count: int, evidence_dir: Path, timeout: int, ke
                        "post_restart_playback": {"source_count": len(playback_results),
                                                  "extra_plugin_probes": extra_probes,
                                                  "reconciliation": playback_reconciliation},
-                       "remaining_gates": {"actual_query_stage_stop": "PASS" if candidate_start_seen.is_set() else "NOT RUN"}})
-        return 0
+                       "remaining_gates": {"actual_query_stage_stop": "PASS" if candidate_start_seen else "NOT RUN"}})
+        return exit_code
     except Exception as error:
         summary["status"] = "FAIL"
         summary["error"] = {"type": type(error).__name__, "message": scan._safe_exception(error)}
