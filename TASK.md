@@ -11,7 +11,7 @@ Contract Checkpoint: 539c01ca8ba4f0ce8c9eb59b32b88bbb337e7ce3
 Difficulty: High
 Test Level: T4
 Planner / Reviewer: B
-Implementation Head: 348567fd17140b064f002d246e3653658e22379c
+Implementation Head: 4cdd174da8c7af988df4962934fc510d206fd838
 ```
 
 ## Goal
@@ -270,6 +270,12 @@ RO-4 的实际 JellyfinProxy 联调（后续 4.4）、单独 Slice Final／Closu
 - **证据与后续**：run=8490fe83e4eb；私有目录 .git/validation-evidence/dba296a06e8f58727f2977318c93c64d39e9badf/batch-coverage-20261019T161021Z/，含独立计划、预期／实际、全日志／采样、网络预检和 audited-coverage-checkpoint.json。私有执行输入 SHA-256 973f54212c4828ddaf69adda48a4fbc8e16eed585517916e36f24bdd09bf060a；result SHA-256 a4199200f7b1b9fbbea32c5fa87409344a54c855b64f36f142a1ef0488b25f6b。本次首轮执行与事后审计通过，聚焦 PASS／总结果 PARTIAL；补充先前批次／空闲窗缺口，不将分次 Developer 补证拼成最终全阶段验收。原有查询停止／分批收尾证据另列；完整固定候选全量门禁、B 独立复现／资源判断、RO-4 与 Slice Final 仍待完成。保留既有 FIX REQUIRED／Task Base／状态，不自动推送。
 
 - **本轮检查**：治理、git diff --check、三处新增本地链接／锚点和开工前工具／测试文件哈希核验 PASS。可执行输入未改，不机械重跑上一轮已记录的 182 项；本轮没有新 C#／Python 全量、format、全套实机或独立 B 结果。准确检查与成本表见本轮私有目录的 focused-document-checks.json、COSTS.md 和 INDEX.md。
+
+### 2026-10-20 本地实现候选检查点（非完整验收）
+
+- 本轮将既有工作区中与 Task 4.3 直接相关的 7 个文件做普通本地提交，候选实现 SHA 为 `4cdd174da8c7af988df4962934fc510d206fd838`；未推送、未移动 Task／Slice Base、未修改 C# 产品代码或生产／共享实例。提交内容包括保留库副本复用入口、全部实际 1004 项的下限校验、显式副本指纹重置、资源预算／服务采样／失败收尾、真实 Guid 批次选择及相应测试和事实文档同步。
+- 本轮实际反馈：`python3 -m unittest discover -s tests -p 'test_isolated_large_library_integration.py' -v` **52/52 PASS**；`python3 -m unittest discover -s tests -p 'test_isolated_package_integration.py' -v` **30/30 PASS**；三处 Python 文件 `py_compile`、`python3 scripts/check_governance.py` 和 `git diff --check` 均 PASS。测试与治理均针对提交前相同的可执行内容；提交后工作区保持干净。
+- 这只是 Developer 本地候选，不是 B 独立审查或 Task PASS。全量 Python／C# build、test、format、完整包／扫描／批量／配置实机、独立新鲜大库门禁、RO-4 代理和 Slice Final 本轮未运行；既有 B `FIX REQUIRED`、Task `IN PROGRESS`、复用库及全部失败／聚焦证据均保留。下一步由 B 审查 `Base..4cdd174` 并决定后续独立门禁，不能以本地 82 项聚焦测试替代完整验收。
 
 ## B Review Result — media-service teardown correction after `dcce752`
 
