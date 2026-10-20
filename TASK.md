@@ -5,7 +5,7 @@
 ```text
 Task ID: 4.3
 Parent Slice: 4
-Status: FIX REQUIRED
+Status: READY FOR B REVIEW
 Task Base: a06a80fac90a86085f25116568aa24b54847c562
 Contract Checkpoint: 539c01ca8ba4f0ce8c9eb59b32b88bbb337e7ce3
 Difficulty: High
@@ -14,7 +14,7 @@ Planner / Reviewer: B
 Implementation Head: 8573dfbffebb785261668f9cd5c895be937e000e
 ```
 
-当前 B 决定以文末 [2026-10-20 完整复用候选复审](#b-review-20261020) 为准；此前报告与审查保留历史，不以 Developer 的全场景 PASS 代替 B 验收。
+当前 B 审查以文末 [2026-10-20 工具用途复核与定级更正](#b-purpose-reassessment-20261020) 为准；前次 FIX REQUIRED 及其复现事实保留历史，但两项 P1 定级已撤回，候选回到 READY FOR B REVIEW，尚未签发 Task PASS。
 
 ## Goal
 
@@ -84,12 +84,12 @@ python3 scripts/run_isolated_large_library_integration.py \
 
 实现约束：
 
-- 只复制并使用已核验的 1004 项准备库副本；不得截成 1000、修改原库、接管原容器／token、调用 `prepare_clean_instance`、重新建库、重新扫描全库或逐源重新准备已有主流。`--fresh --scenario all` 仍是独立兼容入口，不能作为本修正或验收替代。
+- 只复制并使用已核验的 1004 项准备库副本；不得截成 1000、修改原库、接管原容器／token、调用 `prepare_clean_instance`、重新建库或逐源重新准备全库已有主流。为受控夹具变更调用原生索引扫描不等于重建／全库重探测；须如实披露扫描范围与成本，受影响的主流准备仍仅限受控源。`--fresh --scenario all` 仍是独立兼容入口，不能作为本修正或验收替代。
 - 将现有 fresh 流程中的行为轮次与“建库／准备输入”分离。复用模式从副本读取并核对全部 1004 项文件、原生项目／物理源 ID、库关系、地址和必要主媒体流，然后在同一副本上执行完整行为轮次；不得复制出另一套只做聚焦检查的逻辑。
 - 完整轮次必须包含：副本指纹库显式清空并保存备份后的首次信任、未变零探测、跨真实 Guid 批次的 URL／内容 SHA-1／Size／缺主流增量、真实同步查询窗口停止、已开始两项探测后的停止／收尾及收尾期间重跑尝试、旧轮完全 Idle 后恢复、两轮未变、重启前后完整指纹／地址／主流核对，以及变更源的显式 PlaybackInfo 检查。停止和重启之间不得恢复基线掩盖演进状态。
 - 每个阶段保存独立的预期／实际五字段行、候选及结算身份、实际探测开始／成功／保存、地址和主流签名、批次／消费者／并发边界、进度／停止延迟、资源采样和脱敏原始日志；不能只保留总数或让后续恢复覆盖停止前状态。
 - 任一必需阶段未观测、候选／源对账不完整、停止后新准入、收尾／对账／采样／清理失败、资源超限、超时或输入副本改变，整体必须 `FAIL` 且非零退出，并保留副本和诊断；不得用 `PARTIAL` 或 `focused_status=PASS` 冒充完整 Task PASS。成功复用场景才可将 `full_task_acceptance` 改为 `PASS`。
-- 补充编排回归：`reuse + all` 不调用建库／扫描／主流准备，不改变原库，确实执行上述所有阶段；每个阶段的失败控制都返回 `FAIL`／非零；现有保留库安全、候选身份、停止边界、资源和清理负例继续通过。Developer 只运行改动文件直接影响的测试，并列出未运行的全量与真实门禁。
+- 补充编排回归：`reuse + all` 不调用重新建库／全库主流准备，不改变原库；允许必要的原生夹具索引扫描和受影响源主流修复，确实执行上述所有阶段；每个阶段的失败控制都返回 `FAIL`／非零；现有保留库安全、候选身份、停止边界、资源和清理负例继续通过。Developer 只运行改动文件直接影响的测试，并列出未运行的全量与真实门禁。
 
 完成后保留同一 Task ID、Task Base、Contract Checkpoint 和 1000 项合同，提交新的实现 Head 和准确证据；B 再独立复现完整复用流程并运行最终指定门禁。不要新建 Task，不要以旧 fresh 运行或当前 focused 运行替代本修正。
 
@@ -537,6 +537,8 @@ This finding does not move the Task Base, alter scope or contract, or satisfy RO
 
 ## B Review Result — 2026-10-20 retained-library full-scenario candidate
 
+> 历史审查：两项 P1 定级和由此要求的实施修正已被文末用途复核替代；独立复现及当轮 NOT RUN 事实保留。
+
 ```text
 Reviewed Range: a06a80fac90a86085f25116568aa24b54847c562..8573dfbffebb785261668f9cd5c895be937e000e
 Report-only Head: 34194161f917bd7b5986759c344bc8432725587b
@@ -567,3 +569,14 @@ Next: correct SAME Task 4.3; Developer runs affected checks; B retains complete 
 - 本机私有证据：`.git/validation-evidence/34194161f917bd7b5986759c344bc8432725587b/b-review-20261020T033820Z/`，包含输入文件摘要、独立复现源码／原始日志、262 项完整日志、精确命令／UTC／退出码／耗时及原 run-5 审计／文件摘要；不上传原始证据、数据库或凭据。早期 shell／传输语法错误未执行预定命令，已纠正，不算测试或验收结果。
 
 RO-2 仍未取得 B PASS；RO-4 未完成，RO-1／RO-3 保留已提交历史决定，待最终候选门禁核对。全部 RO 未满足，不造新 Task，不提交 Closure Packet 或 `SLICE READY FOR A REVIEW`，不自行关闭 Slice。若去除准备全库扫描确需改变现有合同义务，先交 A；本轮发现本身属于同 Task 工具修正，不改变范围。
+
+<a id="b-purpose-reassessment-20261020"></a>
+
+## B 用途复核与审查定级更正 — 2026-10-20
+
+- **目的先行**：产品交付的是版本化 STRM 的按需原生探测与正确地址／媒体流持久化，不是取消 Jellyfin 原生扫描。`run_isolated_large_library_integration.py` 是 RO-2 的隔离验收工具：复用 1004 项已准备库，验证首次信任／未变零插件探测、少量变化精确探测、停止／收尾／恢复、重启与播放正确性及成本；它不是另一套产品或长期库管理框架。
+- **BR-43-R1 撤销 P1，保留 P2 表述问题**：真实 helper 确实执行一次全库原生索引扫描，scope／docstring／完成报告却称仅 12 项或不扫描，这些描述不准确。但原生索引扫描不等于重建库、全库重新准备主流或全库插件重探测。源码只为 12 个受控变更源修复主流；run-5 证明首次信任 1004 项零插件探测、后续 16 项增量，原库未变、收尾完整。此前 B 把自身过严的不扫描指导升级为用户业务约束，不能据此否定该运行。现修订这项执行指导，不改数量、隔离、业务不变量或 RO 验收含义；不要求项目级扫描替代实现或新增扫描拦截框架。
+- **BR-43-R2 降为 P2 结果字段一致性问题**：离线复现属实，收尾失败后 `full_task_acceptance` 可残留 PASS；但退出码为 1，整体及证据最终状态均 FAIL，现有代码／CI 未发现仅消费此字段放行的路径。它不是已观察到的失败验收被放行，也不是插件正确性失败。任何收尾失败仍不得接受为 PASS，B 必须同时核验退出码、整体终态与原始收尾证据，不能单读该字段；字段一致性宜最小修正，不以此要求新增一轮工具工程或先退回 Developer。若发现真实消费路径忽略整体失败，重新按影响定级。
+- **证据恢复复用资格**：撤回前次仅因准备扫描而排除 run-5 的决定。先前核验的实际 patch 与 `8573dfbffebb785261668f9cd5c895be937e000e` 一致、固定 ZIP 摘要一致及原始行为／状态对账仍有效；该全场景运行可作为匹配门槛的候选证据，不因来源是 Developer 或角色变化机械重跑。262 项 B 全量 Python 及独立失败控制保持原事实，不将历史部分结果拼写成全部最终门槛通过。
+- **当前交接**：同一 Task 4.3 回到 READY FOR B REVIEW，两项不再作为 P0／P1 实施阻塞，不新增 Task，不修改产品／验收工具源码。当前不签发 PASS；完整 T4 和独立关键验收中尚未满足的部分仍由 B 负责，先核对匹配证据，只补缺失／不匹配门槛，不把全量交回 Developer。RO-4 及 Slice Final 仍未完成，不能提交 Closure Packet 或宣称 SLICE READY FOR A REVIEW。
+- **本轮检查**：开工工作区干净、治理 PASS；只复核文档、真实调用、结果消费者及既有原始证据，未运行产品／实机测试、未操作容器、未改保留库。提交前只做治理、TASK 本地链接／锚点与差异检查；测试／检查用时以实际命令计，不通过空等扩大本轮时间。
