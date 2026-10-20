@@ -169,7 +169,9 @@ Closure Packet 包含：Slice、Base／Head、Required Outcomes 完成状态、�
 
 A 审查完整 Base..Implementation Head 和真实用户结果，A Final Review 明确记录 `Reviewed Range`、`Decision`、`P0/P1 Blockers`，可返回 PASS、FIX REQUIRED、PARTIAL / RESCOPE。FIX REQUIRED 保持 Base，交回 B 计划原 Slice 内修正，不提前填写关闭协调结果。
 
-PASS 后在同一个关闭检查点协调 CURRENT 文档、SLICE、Roadmap、Progress、README，记录 `Closure Reconciliation` 与 `PASS / CLOSED`，将 `TASK.md` 设为无活动任务，并写明 `Next Action: A SELECTS THE NEXT LARGE SLICE`。该检查点记录已经审查的 Implementation Head，不暗中扩展产品审查范围；若协调将改变范围、架构合同或安全规则，返回 PARTIAL / RESCOPE。关闭检查点完成后停止；下一 Slice 的选择与激活是另一项动作，不能把自动铺开后续实现夹入关闭工作。
+PASS 后在同一个关闭检查点协调 CURRENT 文档、SLICE、Roadmap、Progress、README，记录 `Closure Reconciliation` 与 `PASS / CLOSED`，将 `TASK.md` 设为无活动任务，并按已授权需求与路线图填写真实下一步：仍有后续 Slice 待选择时使用 `Next Action: A SELECTS THE NEXT LARGE SLICE`；当前开发范围已全部交付、没有待规划 Slice 时使用 `Next Action: NONE (CURRENT DEVELOPMENT SCOPE COMPLETE)`，停止并等待新增需求，不为填充下一步而创造 Slice。
+
+该检查点记录已经审查的 Implementation Head，不暗中扩展产品审查范围；若协调将改变范围、架构合同或安全规则，返回 PARTIAL / RESCOPE。关闭检查点完成后停止；确有后续需求时，Slice 的选择与激活是另一项动作，不能把自动铺开后续实现夹入关闭工作。
 
 关闭检查点同时审阅三份角色经验文档；每个角色至多补充 1～3 条值得复用的新经验，用“问题 → 做法 → 适用条件”写清，合并重复、替换过时条目。没有新经验不凑数；经验不是 Task PASS 门槛，不记录提交号、计数或流水账。Developer 本项目经验在产生具体实施事实前保持空白。
 

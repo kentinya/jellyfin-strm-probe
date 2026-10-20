@@ -11,7 +11,7 @@
 
 ## 当前边界
 
-四个 Slice 的已接受范围与历史决定见 [关闭账本](progress.md)。Slice 4 的完整证据见 [Closure Packet](../SLICE.md#closure-packet)，A 最终决定与协调见 [A Final Review](../SLICE.md#a-final-review)。无活动实施 Task；代理撤出项保持历史 NOT RUN、不计 PASS、不宣称兼容。关闭后停止，下一 Slice 的选择与激活是单独动作。
+四个 Slice 已覆盖并交付当前已授权开发需求，没有待规划的后续 Slice；已接受范围与历史决定见 [关闭账本](progress.md)。Slice 4 的完整证据见 [Closure Packet](../SLICE.md#closure-packet)，A 最终决定与协调见 [A Final Review](../SLICE.md#a-final-review)。无活动实施 Task，开发停止，等待新增需求；现有 P2、延期和范围外未验证项不自动形成新 Slice。代理撤出项保持历史 NOT RUN、不计 PASS、不宣称兼容。
 
 从 V3.0 的三个 Slice 改为四个 Slice 是实质规划调整；旧规划见重规划前检查点 `4b1d0468c1e43e6e9034ef98e99b6cc44ea59485`。旧生成器 P1 始终排除，当前 P1 专指 V4.2 核心插件。
 

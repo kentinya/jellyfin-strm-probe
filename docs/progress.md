@@ -58,4 +58,4 @@ Slice 4 交付固定 Jellyfin 12.2.0／Linux x64 的本地 ZIP、完整安装／
 
 开发依据为 [稳定需求](requirements.md)、维护中的架构及已提交合同，用户范围与原方案退出治理的边界见 [范围说明](scope.md)。上方是四个已完成 A 最终审查的 Slice 账本。
 
-最后 Slice 的候选、原始证据和最终决定统一见 [Closure Packet](../SLICE.md#closure-packet) 与 [A Final Review](../SLICE.md#a-final-review)。根 [TASK.md](../TASK.md) 无活动实施任务，准备库持续保留。关闭后停止；`Next Action: A SELECTS THE NEXT LARGE SLICE`，尚未选择或激活下一项。关闭后的文档治理只同步入口与事实，不新增产品验收或重开 Slice。
+最后 Slice 的候选、原始证据和最终决定统一见 [Closure Packet](../SLICE.md#closure-packet) 与 [A Final Review](../SLICE.md#a-final-review)。当前已授权开发需求已交付，没有待规划的后续 Slice；根 [TASK.md](../TASK.md) 无活动实施任务，准备库持续保留。`Next Action: NONE (CURRENT DEVELOPMENT SCOPE COMPLETE)`，开发停止，等待新增需求。关闭后的文档治理只同步入口与事实，不新增产品验收或重开 Slice。
