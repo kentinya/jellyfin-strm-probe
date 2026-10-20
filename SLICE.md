@@ -4,7 +4,7 @@
 Slice ID: 4
 Name: 大规模集成与单版本交付
 Owner: A
-Status: READY FOR A REVIEW
+Status: PASS / CLOSED
 Base SHA: 03169b07d110964562f7da31d2c3d7add82e5ff5
 Implementation Head: 8573dfbffebb785261668f9cd5c895be937e000e
 ```
@@ -151,7 +151,7 @@ Slice Final 仍须在最后候选／同一 ZIP 验证全部当前门槛，含扫
 
 ### B 决定、候选与审查范围
 
-2026-10-20，B 独立最终审查 **PASS；SLICE READY FOR A REVIEW**。RO-1～RO-3／AC-1～AC-6、AC-8 已满足，未发现 P0／P1；停止新增 Task。此为 B 的最终交接，A 尚未裁定，不是 Slice PASS / CLOSED。
+2026-10-20，B 独立最终审查 **PASS；SLICE READY FOR A REVIEW**。RO-1～RO-3／AC-1～AC-6、AC-8 已满足，未发现 P0／P1；停止新增 Task。以下保留 B 交接时的事实与复用决定；A 的独立裁定和关闭协调见 [A Final Review](#a-final-review)。
 
 - Slice Base：`03169b07d110964562f7da31d2c3d7add82e5ff5`；Implementation Head：`8573dfbffebb785261668f9cd5c895be937e000e`。B 核对完整 Base..Implementation Head 以及下列 Task Base..Head；合同检查点 `65286326aaf933510a0645296ec36f8721aa1bc5`，实际最终审查 checkout `51319254fc4426349f7023cc0efa9d61ecbe2a26`。其后本次只有交接 Markdown 变化。
 - 实现内容：固定 Linux x64 归档／依赖与安装恢复旅程、完整扫描重叠验收、真实大库复用与成本验收，以及批量／探测的脱敏观测；没有增加代理、调度器或状态机。
@@ -199,15 +199,42 @@ Slice Final 仍须在最后候选／同一 ZIP 验证全部当前门槛，含扫
 
 新三源专属实例正常停止、exit 0、无 OOM，并只清理本轮新建的小夹具工作区；既有门禁的配置／全部触发器／媒体／STRM 恢复记录逐项核对。现存 1004 项准备库 `artifacts/package-env/runs/run-20261019-104647-796ca45c` 的 1170 文件清单摘要仍为 `189b67c66e608833b27fa818de24bb1611788565c87eeffc0568b9eefe958bd2`；本轮未启动、重置、复制或清理它。准备库／基线／副本跨开发阶段继续保留，Slice 结束也不自动清理。
 
-Developer 本轮无活动实施任务，无需承担全量门禁；若 A 返回同 Slice 必要修正，Developer 仅运行直接影响验证并报告省略项，B 继续拥有完整门禁及独立验收。A 下一步审完整 Base..Implementation Head、原始索引与上述复用决定，独立裁定；只有 A PASS 后才做关闭协调、CURRENT／TARGET／README 等最终事实统一、路线图关闭和下一步选择。本轮不代填 A 结论、不关闭、不推送。
+Developer 在 B 本轮 Final 无活动实施任务，无需承担全量门禁；若 A 返回同 Slice 必要修正，Developer 仅运行直接影响验证并报告省略项，B 继续拥有完整门禁及独立验收。A 的责任是审完整 Base..Implementation Head、原始索引与上述复用决定，独立裁定；B 交接时未代填 A 结论、未关闭或推送。最终决定见下节。
 
 ## A Final Review
 
 ```text
-Reviewed Range: NOT SET
-Decision: NOT REVIEWED
-P0/P1 Blockers: NOT ASSESSED
-Closure Reconciliation: NOT STARTED
+Reviewed Range: 03169b07d110964562f7da31d2c3d7add82e5ff5..8573dfbffebb785261668f9cd5c895be937e000e
+Review Checkout: 9b36a42307b5c1576dbb49c99b64e6d364c470cc
+Decision: PASS
+P0/P1 Blockers: NONE FOUND
+Closure Reconciliation: COMPLETED IN THIS CHECKPOINT
 ```
 
-NEXT ACTION: A REVIEWS THE SLICE CLOSURE PACKET; SLICE READY FOR A REVIEW
+2026-10-20，A 完成完整 Slice 差异、Task 4.1～4.3 固定审查范围、当前合同与原始证据审查，接受 RO-1～RO-3／AC-1～AC-6、AC-8。Slice ID、Base、Implementation Head 和已提交 B 决定保持不变。原 RO-4／AC-7 仍为按用户授权不执行、历史 NOT RUN，不计 PASS、不宣称代理兼容。
+
+### 独立审查与证据复用
+
+A 从真实 Base..Implementation Head 审查产品、构建／依赖、隔离验收工具／测试和治理变化，核对插件改动为单版本包身份、Linux x64 依赖及脱敏观测；没有新增调度／状态系统或改变探测、提交、权限和停止规则。核验实现后的已提交变化仅为 Markdown，并逐字节核对 65 项可执行输入、66 项较广输入、锁／SDK／镜像身份、同 ZIP 及原始门禁文件。完整差异与独立结果保存在本机索引 `.git/validation-evidence/8573dfbffebb785261668f9cd5c895be937e000e/a-final-review-20261020/INDEX.md`，仅本机可读。
+
+A 明确接受 B 本次 Final 的逐门禁复用决定：原始 locked restore／Release build／202 项 C#／format、完整 plugin／batch／configuration、同 ZIP package／scan／large 与新增三源重启补证均可核验，B 本次全量 Python 262 项及文档检查另有原始记录。A 独立重算输入／原始文件摘要、候选与五字段／地址／主流状态及执行计数，未重新执行 C# 或真实 Jellyfin 产品验收；关闭时新运行消费变更文档的治理、Markdown／锚点与差异检查。没有把旧 Task PASS 标签直接当作 Final，也没有把 A 的只读核验写成新实机运行。
+
+| 结果／验收 | A 核验与接受依据 |
+|---|---|
+| RO-1／AC-1～AC-2 | ZIP 与旁置清单／每文件摘要、程序集／GUID／ABI／依赖和实际部署负载一致；构建来源确为 `b2f19c24f05d806ab75f152f36a302582e60ad67`，构建输入与接受实现匹配。原始 package all 覆盖干净／Slice 3 安装替换、配置／SQLite 备份恢复、禁用移除重装、坏包拒绝与有效安装保护；查看页面原始截图和 MP4／MKV 原生 Web 时间／画面推进记录。 |
+| RO-2／AC-3～AC-4 | 全部 1004 项首次信任前无指纹且已有原生主流，首次及未变零插件探测；逐身份／完整五字段／原生地址主流对账。12 项受控变化跨四个真实批次，加 4 项缺流恰为 16 次；查询中停止无对象读取，分批停止后 2 项已开始提交／2 项保留旧基线，恢复仅余 2 项。全部 1008 源重启前后及播放后状态一致；原始成本、8 批、并发和资源／正常退出记录匹配，未将累计分配或采样峰值称为恒定内存。 |
+| RO-3／AC-5～AC-6 | 从原始时序重算完整扫描与播放／批量的实际交集，核对有限增删移库、URL B→C 旧基线保护、136 源收敛、手动刷新、定时、双向共享、并发、停止收尾及故障修复。新增同 ZIP 三源补证中，变化批量源与合并版本 A／B 的重启前、重启后任何 PlaybackInfo 前、逐源显式选源后五字段／原生地址／主流签名完全相等，三个当前源选源正确且零额外探测。 |
+| AC-8／共同不变量 | 原生权限／委托、URL 优先与有效哈希／Size、首次信任例外、实际成功保存及稳定 Manifest 条件提交、失败／竞态保护、已开始共享和停止语义由完整控制与真实对照共同覆盖。核对配置／全部触发器／媒体／STRM 恢复、归属保护、日志脱敏及已披露限制；1004 项准备库只读重算 1170 文件摘要，与保留基线记录相同，未启动／复制／重置／清理。 |
+
+新增三源补证原进程退出 1 仍保留为 FAIL：失败来自外部容器挂载列表排序观察，产品断言已完成。A 独立只读 inspect 并以完整挂载排列重算原摘要，9 个外部容器的 StartedAt／image／挂载内容均相同，接受独立观察裁定；未修改原结果或重跑产品。未保存完整原始 PlaybackInfo 响应的限制照实保留。plugin／batch 私有适配只补异步夹具前提和饱和前预热，原函数／断言／阈值保留；851 ms 观察不推导冷启动 2.5 秒承诺，历史失败不改写。
+
+非阻塞 P2 继续保留：正式扫描工具未内置三阶段完整重启观察（本次独立补齐）、异步夹具准备仍用私有适配、既有跨日日志关联／措辞。其他 Jellyfin／平台／格式／客户端、audio-only 与指定逐分支实机、物理原生数据库保存故障注入、OpenList 专有行为、镜像完整构建溯源、通用性能与线上发布均未扩大为支持声明。不为这些延期或 P2 延长 Slice、启动新 Task。
+
+### Closure Reconciliation
+
+- 本检查点只协调 Markdown：SLICE 记录本裁定与 PASS / CLOSED，TASK 保持无活动实施任务，Roadmap／Progress 关闭并保留全部 Base／接受实现及历史决定。
+- README、架构 CURRENT／明确延期、安装／兼容支持范围、矩阵和固定交付方案统一引用本次接受事实；不改稳定需求、安全不变量、V4.3 原文或原始失败。
+- 审阅三份角色经验，各补充一条具体可复用做法；不复制 Task 流水账，不改变授权或门槛。
+- 同一已验证 ZIP 保留本地可交接，未重新构建、上传发布或推送；准备库、基线与保留副本继续跨阶段保留。关闭后停止，不选择或激活下一 Slice。
+
+NEXT ACTION: A SELECTS THE NEXT LARGE SLICE

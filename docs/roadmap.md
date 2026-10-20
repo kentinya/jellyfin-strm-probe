@@ -7,11 +7,11 @@
 | 1 — Jellyfin 核心接入与指纹提交验证 | P0：固定目标版本，证明核心接入、跳过／主动探测、可靠成功信号及 URL 变化后的原生持久化 | PASS / CLOSED | 原始 Base 保留，V4.2 修订合同；隔离 Jellyfin 环境 |
 | 2 — 播放检查与历史指纹完整闭环 | P1：只读解析、决策、首次信任、最小 SQLite 指纹、稳定多源、播放按需探测、已开始探测共享／全局并发、正常收尾、核心配置及失败恢复，满足 T01～T28 的核心部分 | PASS / CLOSED | Slice 1 PASS / CLOSED；Base 为关闭提交 |
 | 3 — Jellyfin 原生批量检查任务 | P2：完整配置页／媒体库范围、原生运行／停止／定时、候选 ID 集合与分批对象／固定消费者、仅撤销未开始工作／已开始探测收尾后再开放新轮、播放混合共享、进度统计及恢复（并发默认 2、1～8） | PASS / CLOSED | Slice 2 PASS / CLOSED；Base 为关闭提交 |
-| 4 — 大规模集成与单版本交付 | P3：至少 1000 项真实 STRM 媒体库／成本（复用现存全部 1004 项）、完整扫描与播放／批量重叠、固定 Jellyfin／Linux x64 安装包和恢复旅程；JellyfinProxy 按用户授权不验证 | ACTIVE | Slice 3 PASS / CLOSED；Base 为关闭提交 |
+| 4 — 大规模集成与单版本交付 | P3：至少 1000 项真实 STRM 媒体库／成本（复用现存全部 1004 项）、完整扫描与播放／批量重叠、固定 Jellyfin／Linux x64 安装包和恢复旅程；JellyfinProxy 按用户授权不验证 | PASS / CLOSED | Slice 3 PASS / CLOSED；Base 为关闭提交 |
 
 ## 当前边界
 
-Slice 1／2／3 已经 A 最终审查并 PASS / CLOSED，历史决定和快照见 [关闭账本](progress.md)。Slice 4 的 B 最终决定与当前交接统一见 [Closure Packet](../SLICE.md#closure-packet)，无新增实施 Task；表中 ACTIVE 表示尚未由 A 关闭。代理撤出项保持历史 NOT RUN、不计 PASS、不宣称兼容；A 独立最终审查和关闭协调仍保留。
+四个 Slice 的已接受范围与历史决定见 [关闭账本](progress.md)。Slice 4 的完整证据见 [Closure Packet](../SLICE.md#closure-packet)，A 最终决定与协调见 [A Final Review](../SLICE.md#a-final-review)。无活动实施 Task；代理撤出项保持历史 NOT RUN、不计 PASS、不宣称兼容。关闭后停止，下一 Slice 的选择与激活是单独动作。
 
 从 V3.0 的三个 Slice 改为四个 Slice 是实质规划调整；旧规划见重规划前检查点 `4b1d0468c1e43e6e9034ef98e99b6cc44ea59485`。旧生成器 P1 始终排除，当前 P1 专指 V4.2 核心插件。
 

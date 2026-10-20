@@ -7,6 +7,7 @@
 | 1 — Jellyfin 核心接入与指纹提交验证 | `8a6a955357a6fe7a6aea9dafead0ec33ffd203f3` | `2b1e1b5bcf77b06997fabed5a31147838db16b47` | PASS / CLOSED；2026-10-13；[关闭快照与证据](#slice-1-closed) |
 | 2 — 播放检查与历史指纹完整闭环 | `924816a84c74f5d79c107478f2d40e621cb8be8d` | `59fd3f7e4b6623449a691574fb69b817db72c2ae` | PASS / CLOSED；2026-10-14；[关闭范围与证据](#slice-2-closed) |
 | 3 — Jellyfin 原生批量检查任务 | `6da90ab6bd8995d8204ae0b7faf786c823699fe6` | `7c64eb5dcad6e5f20fb7eb41819be2521f65484d` | PASS / CLOSED；2026-10-16；[关闭范围与证据](#slice-3-closed) |
+| 4 — 大规模集成与单版本交付 | `03169b07d110964562f7da31d2c3d7add82e5ff5` | `8573dfbffebb785261668f9cd5c895be937e000e` | PASS / CLOSED；2026-10-20；[关闭范围与证据](#slice-4-closed) |
 
 <a id="slice-1-closed"></a>
 ## Slice 1 关闭快照与证据
@@ -41,8 +42,20 @@ Slice 3 交付完整配置页／所选媒体库、Jellyfin 原生「STRM 媒体�
 - 本机索引：`.git/validation-evidence/7c64eb5dcad6e5f20fb7eb41819be2521f65484d/` 下的 `slice-final-20261016/INDEX.md`、`b-review-20261016/INDEX.md` 与 `a-final-review-20261016/INDEX.md`。仅本工作区可读；原始命令、身份、日志、计数、交互／截图、恢复和复用范围均可核验。
 - 历史十万模拟候选验证有界对象／消费者及 O(N) ID 成本，代表实机验证多库多批／多版本；不构成历史真实十万库或恒定总内存证明。日志跨日关联与指数措辞保留 P2。当前至少 1000 项真实媒体库／完整扫描压力、外部代理／OpenList、广泛格式／客户端和发布仍 NOT RUN；逐分支／audio-only 实机、物理数据库保存故障注入、完整镜像构建溯源与通用性能证明沿用既有边界。
 
+<a id="slice-4-closed"></a>
+## Slice 4 关闭范围与证据
+
+Slice 4 交付固定 Jellyfin 12.2.0／Linux x64 的本地 ZIP、完整安装／恢复说明，以及真实大库增量、完整扫描与播放／批量重叠的分层验证。A 对完整 Base..Implementation Head 裁定 PASS，未发现 P0／P1；没有扩大跨版本、格式、客户端或通用性能支持。
+
+- 审查 checkout `9b36a42307b5c1576dbb49c99b64e6d364c470cc`；本关闭检查点的 [SLICE.md](../SLICE.md#a-final-review) 保留合同、B Closure Packet、A Final Review 和关闭协调，根 TASK 保持无活动实施任务。关闭只改 Markdown，不移动 Base／Implementation Head、不新增实施、不推送或激活下一 Slice。
+- Task 4.1～4.3 的固定 Base..Head、报告和 B PASS 快照统一保留于 [Closure Packet](../SLICE.md#b-决定候选与审查范围)。旧 4.4 未实施，按用户授权停止、不记 PASS；原 RO-4／AC-7 保持历史 NOT RUN，JellyfinProxy 不验证且无兼容承诺。
+- B 本次独立 Final 核验并采用匹配的完整 C#／Python、plugin／batch／configuration、同 ZIP 安装／扫描／大库原始门禁，另新运行三源完整重启证明和当前文档检查；未声称重新执行所有昂贵门禁。A 独立核验输入、包、原始文件及用户结果后明确接受复用，未再次运行产品验收。原始失败、准备适配和证据缺失限制均保留。
+- 原始本机索引：`.git/validation-evidence/51319254fc4426349f7023cc0efa9d61ecbe2a26/b-slice-final-20261020T140212Z/INDEX.md` 与 `.git/validation-evidence/8573dfbffebb785261668f9cd5c895be937e000e/a-final-review-20261020/INDEX.md`；只在本机，不随 Git 上传。具体 ZIP 摘要、成本、对账、补证与明确延期见合同。
+- MP4／MKV 原生 Web 实际播放、安装升级及禁用／移除／重装恢复、现存全部 1004 项首次信任和未变零探测、小集合增量／停止恢复、完整原生扫描重叠、源身份／五字段／原生地址主流的重启前后证明均在本次接受范围。准备库、基线及保留副本持续供后续需要它的开发阶段复用，关闭不清理。
+- P2：正式扫描工具尚未内置完整三阶段重启观察、异步准备私有适配及既有日志／措辞。其他平台／格式／客户端、OpenList 专有行为、指定逐分支及 audio-only 实机、物理数据库保存故障注入、完整镜像构建溯源和线上发布仍不在已验证声明内；不改写历史十万／3000 结果。
+
 ## 当前开发指针
 
-开发基准 V4.3 原文不变，用户范围覆盖见 [范围说明](scope.md)。上方仅为 Slice 1／2／3 的 A 已关闭历史账本。
+开发基准 V4.3 原文不变，用户范围覆盖见 [范围说明](scope.md)。上方是四个已完成 A 最终审查的 Slice 账本。
 
-当前 Slice 的候选、B 最终决定、原始证据／复用与新测、Task 审查快照及下一责任人统一见 [Closure Packet](../SLICE.md#closure-packet)。根 [TASK.md](../TASK.md) 无活动实施任务；旧代理 4.4 停止、不记 PASS，准备库持续保留。B 交接不构成 A 关闭决定，不在此新增 Slice 4 关闭账本。
+最后 Slice 的候选、原始证据和最终决定统一见 [Closure Packet](../SLICE.md#closure-packet) 与 [A Final Review](../SLICE.md#a-final-review)。根 [TASK.md](../TASK.md) 无活动实施任务，准备库持续保留。关闭后停止；`Next Action: A SELECTS THE NEXT LARGE SLICE`，本检查点没有选择或激活下一项。

@@ -35,7 +35,7 @@
 
 ## 本地安装包
 
-固定组合（Jellyfin `12.2.0`／Linux x64）的可交接安装包由仓库内工具生成并验证：
+固定组合（Jellyfin `12.2.0`／Linux x64）的可交接安装包由仓库内工具生成并验证；已接受包的身份、原生播放／大库／扫描证据和限制见 [A 最终审查](SLICE.md#a-final-review)，具体安装步骤见 [安装包说明](docs/package-installation.md)。本地安装交付不包含线上发布或插件仓库上架。
 
 ```bash
 python3 scripts/package_plugin.py --configuration Release --runtime linux-x64 --output-dir artifacts/releases

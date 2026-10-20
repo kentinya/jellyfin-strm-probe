@@ -9,7 +9,7 @@
 | 候选源码 | 已记录标签提交 | 定位用途 |
 |---|---|---|
 | Jellyfin v10.11.8 | `2c62d40f0d13926874eef9118a95be0dcee4e659` | 旧规划候选；此前读取 global.json 为 SDK 9.0.0／latestMinor，仍需目标框架与包核实 |
-| Jellyfin v12.2 | `ca0f16eb7c195f720a1493ed469a27c4657db0c6` | V4.2 最初调研候选；后续固定为当前实测组合，仍无发布包兼容声明 |
+| Jellyfin v12.2 | `ca0f16eb7c195f720a1493ed469a27c4657db0c6` | V4.2 最初调研候选；后续固定为当前实测组合，单版本包范围见下文 |
 
 先固定一个隔离服务器版本／镜像 digest、相应源码 SHA、框架、依赖和 SDK，再构建。不能由两组标签推定一个插件包兼容两版。
 
@@ -57,7 +57,7 @@ Slice 1 不再要求人为传入可取消 token 的真实原生取消验证，�
 
 B 另在隔离实例临时开启 Debug，两次地址变化都观察到 `ProbeProvider`、`MovieNfoProvider`、`TrickplayProvider` 各调用一次，ETag 改变，匹配探测和合成媒体 GET 各一次，PlaybackInfo 为 91／75 ms。日志级别与 STRM 已恢复。提供器调用不证明远程下载／Trickplay 生成，不提供开销分项或生产性能承诺；原始脱敏证据见 Closure Packet 引用的 B 索引。
 
-上述为有限核心原型及独立 Slice Final 证据，A 已据此关闭 Slice 1；发布包、多版本／广泛媒体兼容和外部代理联调仍未验证。完整矩阵状态继续按 [测试矩阵](test-matrix.md) 与 [Task 历史指针](progress.md#slice-1-closed) 区分。
+上述为有限核心原型及独立 Slice Final 证据，A 已据此关闭 Slice 1；在该历史关闭时，发布包、多版本／广泛媒体兼容和外部代理联调仍未验证。后续接受事实按下文、[测试矩阵](test-matrix.md) 与 [关闭账本](progress.md) 区分。
 
 ## Slice 1 风险门槛
 
@@ -92,7 +92,7 @@ Slice 2 已验证 SQLite 指纹的真实重启／失败恢复、多源身份、�
 
 Task 4.2／RO-3 与 Task 4.3／RO-2 已获 B PASS，准确实现／审查快照统一见 [合同当前交接](../SLICE.md#事实更新与停止规则)。4.3 最终完整报告、早期 PARTIAL／失败、工具修正和 B 原始证据索引保留于 `57c5072db0cebf4bcf5fa64c3cde635e9a23dcb3:TASK.md`；既有 plugin／batch 完整门禁包含已披露的私有异步夹具准备适配，不声称未经适配命令通过。准备库、基线与失败副本继续保留。
 
-当前候选的独立最终审查、完整门禁复用、新增三阶段重启补证及全部限制统一见 [Closure Packet](../SLICE.md#closure-packet)。B 交接不代替 A 最终裁定；不扩展为其他 Jellyfin／平台、通用性能 SLA 或全格式兼容。
+最后候选的完整门禁复用、新增三阶段重启补证及全部限制见 [Closure Packet](../SLICE.md#closure-packet)，A 的接受范围与独立核验见 [A Final Review](../SLICE.md#a-final-review)。本地单版本 ZIP、真实大库与完整扫描的分层证据已纳入接受范围；不扩展为其他 Jellyfin／平台、通用性能 SLA 或全格式兼容。完整阶段比对覆盖五字段、当前项目／源身份、原生地址和必要主流，先于重启后 PlaybackInfo 取源，避免以播放修复替代持久化证明。
 
 ## JellyfinProxy 与 OpenList 未验证
 

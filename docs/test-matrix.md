@@ -1,6 +1,6 @@
 # 测试矩阵
 
-下表保留产品用例身份与分层证据；Slice 1／2／3 已 A 最终审查 PASS / CLOSED。Slice 4 的 Task 4.1～4.3 已获 B PASS，准确接受事实／快照统一见 [当前合同](../SLICE.md#事实更新与停止规则)，不能替代独立 Slice Final。按 2026-10-20 用户授权，JellyfinProxy 专属 RO-4／AC-7 验收撤出当前范围：历史 NOT RUN、按用户授权不执行，不计 PASS、不宣称代理兼容。原生播放／多源／换地址／失败恢复／重启、MP4／MKV Web 播放、包／扫描／全部 1004 项大库及完整最终回归不变。下方已关闭 Slice 的历史结果不改写，模拟／代表性实机不扩大为所有格式／分支／客户端通过。通常前提为受支持版本化 STRM、已有主流、历史指纹与允许探测；例外显式说明。
+下表保留产品用例身份与分层证据；四个 Slice 的接受范围见 [关闭账本](progress.md)，Slice 4 完整门禁、复用与独立核验统一见 [Closure Packet](../SLICE.md#closure-packet) 和 [A Final Review](../SLICE.md#a-final-review)，不能只凭 Task PASS 代替 Final。按 2026-10-20 用户授权，JellyfinProxy 专属 RO-4／AC-7 验收撤出当前范围：历史 NOT RUN、按用户授权不执行，不计 PASS、不宣称代理兼容。原生播放／多源／换地址／失败恢复／重启、MP4／MKV Web 播放、包／扫描／全部 1004 项大库及完整最终回归不变。下方已关闭 Slice 的历史结果不改写，模拟／代表性实机不扩大为所有格式／分支／客户端通过。通常前提为受支持版本化 STRM、已有主流、历史指纹与允许探测；例外显式说明。
 
 保留 T01～T28 身份以便追溯，但 T08／T22 按 V4.2 改为原生探测后新地址持久化，T02／T17～T19／T27 改为最小指纹合同。旧结果不自动继承。B01～B12 为新增批量／共享并发验收。
 
@@ -196,9 +196,9 @@ B 独立证据索引：`.git/validation-evidence/198f4ff2accd5bc9fcd87518a9684b9
 
 | Required Outcome | 当前状态 | 详情入口 |
 |---|---|---|
-| RO-1 单版本安装与恢复 | B Task 证据；最终结果见 Closure Packet | [安装包说明](package-installation.md)、[Task 4.1 历史](progress.md#当前开发指针) |
-| RO-2 至少 1000 项真实原生库（现存全部 1004 项） | B Task 证据；最终结果见 Closure Packet | [合同接受事实／快照](../SLICE.md#事实更新与停止规则)、[大库验收入口](#slice-4-大库验收本地运行) |
-| RO-3 完整扫描重叠 | 最终结果及三源重启独立补证见 Closure Packet | [当前合同](../SLICE.md#事实更新与停止规则) |
+| RO-1 单版本安装与恢复 | 最终证据见 Closure Packet，接受决定见 A Final Review | [安装包说明](package-installation.md)、[A Final Review](../SLICE.md#a-final-review) |
+| RO-2 至少 1000 项真实原生库（现存全部 1004 项） | 完整复用场景及成本已纳入本次 Final；聚焦 PARTIAL 单列 | [A Final Review](../SLICE.md#a-final-review)、[大库验收入口](#slice-4-大库验收本地运行) |
+| RO-3 完整扫描重叠 | 完整扫描与三源三阶段重启补证分别核验后纳入 Final | [Closure Packet](../SLICE.md#closure-packet)、[A Final Review](../SLICE.md#a-final-review) |
 | 原 RO-4 实际代理播放链 | 按 2026-10-20 用户授权撤出当前验收；历史 NOT RUN，不计 PASS／无兼容声明 | [范围覆盖](scope.md#2026-10-20-用户授权撤出-jellyfinproxy-验收)、[当前交接](../TASK.md) |
 
 ### Slice 4 大库验收本地运行

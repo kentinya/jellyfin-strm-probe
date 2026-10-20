@@ -1,6 +1,6 @@
 # 单版本安装、配置与恢复说明
 
-本页说明首版固定组合的本地安装包、配置、备份／恢复、禁用／移除／重装步骤与已验证支持范围。它是 [Slice 4](../SLICE.md) RO-1 的交付材料；大库与扫描分别属于 RO-2／RO-3，当前审查状态见合同，不在本页复制。按 2026-10-20 用户授权不验证 JellyfinProxy，代理未验证、不承诺兼容；当前最终交接与证据范围见 [Closure Packet](../SLICE.md#closure-packet)。
+本页说明首版固定组合的本地安装包、配置、备份／恢复、禁用／移除／重装步骤与已验证支持范围。它是 [Slice 4](../SLICE.md) RO-1 的交付材料；大库与扫描分别属于 RO-2／RO-3，最终接受范围见 [A Final Review](../SLICE.md#a-final-review)，不在本页复制状态。按用户授权不验证 JellyfinProxy，代理未验证、不承诺兼容；原始证据见 [Closure Packet](../SLICE.md#closure-packet)。
 
 ## 已验证支持范围
 
@@ -98,6 +98,6 @@ URL 变化必探测、SHA-1／Size 决策、Modified 忽略与权限边界是固
 - 启动核心注册失败：明确报告；不承诺一定自动回退。
 - 媒体不可达、探测失败或探测期间 STRM 变化：保留旧可信指纹，修复后下次重新比较。
 
-## 未交付范围
+## 交付与未验证边界
 
-RO-2 大库／RO-3 扫描的 Task 审查事实见 [当前合同](../SLICE.md#事实更新与停止规则)，不由本页安装步骤代替；独立最终结果见 [Closure Packet](../SLICE.md#closure-packet)。JellyfinProxy 专属验收按用户授权撤出，历史 NOT RUN、不宣称兼容；真实 OpenList 专有行为及线上发布／上架未验证或执行，本轮不推送。
+RO-2 大库／RO-3 扫描的证据与本地 ZIP 安装证据分别接受，见 [Closure Packet](../SLICE.md#closure-packet) 与 [A 最终决定](../SLICE.md#a-final-review)，不由本页安装步骤代替。安装交付只提供本地包和说明，线上发布／上架未执行。JellyfinProxy 专属验收按用户授权撤出，历史 NOT RUN、不宣称兼容；真实 OpenList 专有行为及其他未测组合仍未验证。
