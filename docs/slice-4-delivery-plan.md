@@ -1,6 +1,6 @@
 # Slice 4 固定交付方案与 Task 规划指导
 
-本页保留已完成 Slice 的规划依据；当前 Task 入口见 [TASK.md](../TASK.md)，最终证据与关闭决定见 [Closure Packet](../SLICE.md#closure-packet) 和 [A Final Review](../SLICE.md#a-final-review)。下文推进顺序与规划约束只解释当时如何完成交付，不构成关闭后继续实施的授权。
+本页保留已完成 Slice 的规划依据；当前 Task 入口见 [TASK.md](../TASK.md)，最终证据与关闭决定见 [Closure Packet](progress.md#slice-4-closed) 和 [A Final Review](progress.md#slice-4-closed)。下文推进顺序与规划约束只解释当时如何完成交付，不构成关闭后继续实施的授权。
 
 ## 授权、效力与基线
 
@@ -17,11 +17,11 @@
 | 4.1 — 单版本安装包与完整安装恢复旅程 | RO-1；形成可重复本地打包、只从 ZIP 安装的隔离验收、原有测试安装替换、配置／指纹保护和恢复说明。两类代表视频和原生 Web 实际播放纳入本单元，不留给最后补验。 | AC-1／AC-2 及 AC-8 的包／身份／恢复部分；可分发 ZIP、依赖／许可／摘要清单、准确安装与恢复材料、真实安装／替换／禁用／移除／重装／重启证据。 | 已获 B PASS；初始首个 Task，High／T4。 |
 | 4.2 — 完整扫描与播放／批量并发下的正确性 | RO-3；在受控多库／多版本夹具中让完整原生扫描、播放和批量真实重叠，有限增删／移库／URL／内容变化及独立强制刷新；停止后重跑、稳定集合收敛和重启。 | AC-5／AC-6 及 AC-8 对应部分；可重复扫描验收入口、事件时序、实际探测／保存／指纹／范围和进度对账、必要产品修复及完整回归。 | 已获 B PASS；初始依赖 4.1 B PASS，High／T4。 |
 | 4.3 — 真实 1000 项原生库的增量检查与成本 | RO-2；复用现存 1004 项准备库，在固定资源下完成至少 1000 个原生已索引的受支持 STRM，首次信任、未变、小集合增量、准备／分批停止和重跑。 | AC-3／AC-4 及 AC-8 对应部分；真实候选／源／主流来源与集合对账、完整批量结果、O(N) ID／原生临时成本／对象／工作上限、时间／内存／停止延迟和收尾证据。 | 已获 B PASS；初始依赖 4.2 B PASS，复用安装候选／工具，High／T4。 |
-| 4.4 — 原实际 JellyfinProxy 播放链兼容与交接 | 代理专属 RO-4／AC-7 按 2026-10-20 用户授权撤出，原计划未实施；历史 NOT RUN，不记 PASS。 | 不再构建／部署／验证代理；原生播放／选源／URL／主流／失败恢复／重启／MP4／MKV Web 播放保留于 RO-1／RO-3 与 Final，非代理完整回归及事实交接保留。 | 原 ID／Task Base／完整计划见根 TASK 的 Git 快照指针；B 已重判停止，不是产品通过或 Slice 关闭。 |
+| 4.4 — 原实际 JellyfinProxy 播放链兼容与交接 | 代理专属 RO-4／AC-7 按 2026-10-20 用户授权撤出，原计划未实施；历史 NOT RUN，不记 PASS。 | 不再构建／部署／验证代理；原生播放／选源／URL／主流／失败恢复／重启／MP4／MKV Web 播放保留于 RO-1／RO-3 与 Final，非代理完整回归及事实交接保留。 | 原 ID／Task Base／完整计划见关闭账本的固定 Git 快照指针；B 已重判停止，不是产品通过或 Slice 关闭。 |
 
-4.1～4.3 的 B PASS、固定审查范围和快照统一见 [Closure Packet](../SLICE.md#b-决定候选与审查范围)。撤出代理后，B 已重核三个 RO／全部保留 Surfaces，无必要实施缺口而直接完成独立 Slice Final，未为测试、交接、P2 或重复证明新增 4.4。Final 与 A 审查的完整证据独立记录，不能把三个旧 Task PASS 拼成 Final。
+4.1～4.3 的 B PASS、固定审查范围和快照统一见 [Closure Packet](progress.md#slice-4-closed)。撤出代理后，B 已重核三个 RO／全部保留 Surfaces，无必要实施缺口而直接完成独立 Slice Final，未为测试、交接、P2 或重复证明新增 4.4。Final 与 A 审查的完整证据独立记录，不能把三个旧 Task PASS 拼成 Final。
 
-2026-10-20 B 已在合同 `65286326aaf933510a0645296ec36f8721aa1bc5` 后完成该重核，未发现新的必要实施缺口，明确停止旧 4.4。原重核决定见 [根 TASK](../TASK.md#2026-10-20-b-合同重核与旧-44-裁决)，独立 Final 与匹配证据复用决定见 [Closure Packet](../SLICE.md#closure-packet)，A 最终决定和关闭协调见 [A Final Review](../SLICE.md#a-final-review)。以下保留本 Slice 的规划约束，不构成关闭后继续实施的授权。
+2026-10-20 B 已在合同 `65286326aaf933510a0645296ec36f8721aa1bc5` 后完成该重核，未发现新的必要实施缺口，明确停止旧 4.4。原重核决定及固定 TASK 快照见 [关闭账本](progress.md#slice-4-closed)，独立 Final 与匹配证据复用决定见上述快照的 Closure Packet，A 最终决定和关闭协调见 A Final Review。以下保留本 Slice 的规划约束，不构成关闭后继续实施的授权。
 
 ## 固定机制与推进方法
 

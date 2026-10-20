@@ -47,8 +47,8 @@ Slice 3 交付完整配置页／所选媒体库、Jellyfin 原生「STRM 媒体�
 
 Slice 4 交付固定 Jellyfin 12.2.0／Linux x64 的本地 ZIP、完整安装／恢复说明，以及真实大库增量、完整扫描与播放／批量重叠的分层验证。A 对完整 Base..Implementation Head 裁定 PASS，未发现 P0／P1；没有扩大跨版本、格式、客户端或通用性能支持。
 
-- A 关闭检查点 `020b05a6cb2026fbc5e6bcdf5e868345470594fb`；审查 checkout `9b36a42307b5c1576dbb49c99b64e6d364c470cc`。[SLICE.md](../SLICE.md#a-final-review) 保留合同、B Closure Packet、A Final Review 和关闭协调，根 TASK 保持无活动实施任务。该次关闭只改 Markdown，不移动 Base／Implementation Head、不新增实施、不推送或激活下一 Slice。
-- Task 4.1～4.3 的固定 Base..Head、报告和 B PASS 快照统一保留于 [Closure Packet](../SLICE.md#b-决定候选与审查范围)。旧 4.4 未实施，按用户授权停止、不记 PASS；原 RO-4／AC-7 保持历史 NOT RUN，JellyfinProxy 不验证且无兼容承诺。
+- A 关闭检查点 `020b05a6cb2026fbc5e6bcdf5e868345470594fb`；审查 checkout `9b36a42307b5c1576dbb49c99b64e6d364c470cc`。该提交的 SLICE.md 保留完整合同、B Closure Packet、A Final Review 与关闭协调，TASK.md 保留当时交接和 B 决定。用 `git show 020b05a6cb2026fbc5e6bcdf5e868345470594fb:SLICE.md` 及同 SHA 的 TASK.md 读取；后续根合同切换不改写该历史。关闭只改 Markdown，不移动 Base／Implementation Head、不新增实施、不推送或激活下一 Slice。
+- Task 4.1～4.3 的固定 Base..Head、报告和 B PASS 快照统一保留于上述 SLICE.md 的 Closure Packet／“B 决定、候选与审查范围”章节。旧 4.4 未实施，按用户授权停止、不记 PASS；ID／Task Base／原计划见 `4cc02048fb50c3c0b50a1b1b116246b202d86aaf:TASK.md`，撤出代理后的 B 重核见 `51319254fc4426349f7023cc0efa9d61ecbe2a26:TASK.md`。原 RO-4／AC-7 保持历史 NOT RUN，JellyfinProxy 不验证且无兼容承诺。
 - B 本次独立 Final 核验并采用匹配的完整 C#／Python、plugin／batch／configuration、同 ZIP 安装／扫描／大库原始门禁，另新运行三源完整重启证明和当前文档检查；未声称重新执行所有昂贵门禁。A 独立核验输入、包、原始文件及用户结果后明确接受复用，未再次运行产品验收。原始失败、准备适配和证据缺失限制均保留。
 - 原始本机索引：`.git/validation-evidence/51319254fc4426349f7023cc0efa9d61ecbe2a26/b-slice-final-20261020T140212Z/INDEX.md` 与 `.git/validation-evidence/8573dfbffebb785261668f9cd5c895be937e000e/a-final-review-20261020/INDEX.md`；只在本机，不随 Git 上传。具体 ZIP 摘要、成本、对账、补证与明确延期见合同。
 - MP4／MKV 原生 Web 实际播放、安装升级及禁用／移除／重装恢复、现存全部 1004 项首次信任和未变零探测、小集合增量／停止恢复、完整原生扫描重叠、源身份／五字段／原生地址主流的重启前后证明均在本次接受范围。准备库、基线及保留副本持续供后续需要它的开发阶段复用，关闭不清理。
@@ -58,4 +58,4 @@ Slice 4 交付固定 Jellyfin 12.2.0／Linux x64 的本地 ZIP、完整安装／
 
 开发依据为 [稳定需求](requirements.md)、维护中的架构及已提交合同，用户范围与原方案退出治理的边界见 [范围说明](scope.md)。上方是四个已完成 A 最终审查的 Slice 账本。
 
-最后 Slice 的候选、原始证据和最终决定统一见 [Closure Packet](../SLICE.md#closure-packet) 与 [A Final Review](../SLICE.md#a-final-review)。当前已授权开发需求已交付，没有待规划的后续 Slice；根 [TASK.md](../TASK.md) 无活动实施任务，准备库持续保留。`Next Action: NONE (CURRENT DEVELOPMENT SCOPE COMPLETE)`，开发停止，等待新增需求。关闭后的文档治理只同步入口与事实，不新增产品验收或重开 Slice。
+此前四个 Slice 的接受范围与原始证据见上方固定 Git 快照。2026-10-20 用户新增八类真实播放测试及 GitHub Actions 失败修复需求，已建立 [Slice 5 规划合同](../SLICE.md) 和 [执行设计](slice-5-playback-test-plan.md)；根 [TASK.md](../TASK.md) 无活动实施任务，下一步先由 A 激活合同、B 再规划 Task。本轮未运行新增产品验收或修复 CI，已知返回主流误判的产品修复仍待用户决定；历史接受事实不改写，现存全部 1004 项准备库持续保留。

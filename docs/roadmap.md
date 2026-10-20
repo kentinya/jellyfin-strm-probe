@@ -8,10 +8,11 @@
 | 2 — 播放检查与历史指纹完整闭环 | P1：只读解析、决策、首次信任、最小 SQLite 指纹、稳定多源、播放按需探测、已开始探测共享／全局并发、正常收尾、核心配置及失败恢复，满足 T01～T28 的核心部分 | PASS / CLOSED | Slice 1 PASS / CLOSED；Base 为关闭提交 |
 | 3 — Jellyfin 原生批量检查任务 | P2：完整配置页／媒体库范围、原生运行／停止／定时、候选 ID 集合与分批对象／固定消费者、仅撤销未开始工作／已开始探测收尾后再开放新轮、播放混合共享、进度统计及恢复（并发默认 2、1～8） | PASS / CLOSED | Slice 2 PASS / CLOSED；Base 为关闭提交 |
 | 4 — 大规模集成与单版本交付 | P3：至少 1000 项真实 STRM 媒体库／成本（复用现存全部 1004 项）、完整扫描与播放／批量重叠、固定 Jellyfin／Linux x64 安装包和恢复旅程；JellyfinProxy 按用户授权不验证 | PASS / CLOSED | Slice 3 PASS / CLOSED；Base 为关闭提交 |
+| 5 — 真实播放决策全场景验证与 CI 修复 | 自备媒体／STRM、固定 Jellyfin 和指定 ZIP 安装，八类决策的真实播放／ffprobe／持久化／重启对账、主流误判回归，以及干净检出的 GitHub Actions 三处失败修复 | PLANNED | Slice 1～4 已关闭；新增用户需求，先由 A 激活合同、B 再规划 Task |
 
 ## 当前边界
 
-四个 Slice 已覆盖并交付当前已授权开发需求，没有待规划的后续 Slice；已接受范围与历史决定见 [关闭账本](progress.md)。Slice 4 的完整证据见 [Closure Packet](../SLICE.md#closure-packet)，A 最终决定与协调见 [A Final Review](../SLICE.md#a-final-review)。无活动实施 Task，开发停止，等待新增需求；现有 P2、延期和范围外未验证项不自动形成新 Slice。代理撤出项保持历史 NOT RUN、不计 PASS、不宣称兼容。
+Slice 1～4 已交付此前授权范围，历史决定见 [关闭账本](progress.md)。2026-10-20 用户新增下一 Slice 的真实播放全场景测试及 CI 修复需求，当前合同见 [Slice 5](../SLICE.md)，场景和执行设计见 [播放测试及 CI 计划](slice-5-playback-test-plan.md)。当前只有规划，没有活动实施 Task；产品成功判定修复仍待用户决定。代理撤出项保持历史 NOT RUN、不计 PASS、不宣称兼容。
 
 从 V3.0 的三个 Slice 改为四个 Slice 是实质规划调整；旧规划见重规划前检查点 `4b1d0468c1e43e6e9034ef98e99b6cc44ea59485`。旧生成器 P1 始终排除，当前 P1 专指 V4.2 核心插件。
 

@@ -71,7 +71,7 @@ V4.2 重规划属于实质合同变更：当时 Slice 1 没有产品实现，核
 
 2026-10-18 用户授权 A 将当前大库验收从历史规划中的至少 100000 个候选调整为至少 3000 个真实原生候选。历史快照、关闭账本和既往模拟结果保留原数值并明确为历史事实。2026-10-19 用户进一步授权当前门槛为至少 1000 个真实原生候选，使用现存 1004 个受支持库内源，不截取为 1000，不另跑 3000 级；当前 ACTIVE Slice、Roadmap、Task 和同步文档以此为准。真实历史运行的 3000 等数量与原结论保留。本次数量调整属于 Material Contract Change，B 必须在新的 Contract Checkpoint 后重新核查当前 Task 的合法性；保持 Slice／Task Base、既有审查结论和其他 Required Outcome，不授权本轮插件或工具实施。
 
-2026-10-20 用户授权不验证 JellyfinProxy，A 以 Material Contract Change 撤出 Slice 4 的 RO-4／AC-7 和代理专属 Required Surface、构建／缓存／302／代理客户端读取验收；历史 NOT RUN，按用户授权不执行，不计 PASS、不宣称代理兼容。RO-1～RO-3、非代理完整回归、最终安装包／扫描／现存全部 1004 项大库、原生播放／选源／恢复／重启义务不变。A 的合同修订未执行产品验收；B 已在提交后重判并停止旧 4.4，完成独立 Final，A 随后完成最终审查。完整执行／复用及关闭决定见 [Closure Packet](../SLICE.md#closure-packet) 与 [A Final Review](../SLICE.md#a-final-review)，不再作为待规划工作。
+2026-10-20 用户授权不验证 JellyfinProxy，A 以 Material Contract Change 撤出 Slice 4 的 RO-4／AC-7 和代理专属 Required Surface、构建／缓存／302／代理客户端读取验收；历史 NOT RUN，按用户授权不执行，不计 PASS、不宣称代理兼容。RO-1～RO-3、非代理完整回归、最终安装包／扫描／现存全部 1004 项大库、原生播放／选源／恢复／重启义务不变。A 的合同修订未执行产品验收；B 已在提交后重判并停止旧 4.4，完成独立 Final，A 随后完成最终审查。完整执行／复用及关闭决定见 [Closure Packet](progress.md#slice-4-closed) 与 [A Final Review](progress.md#slice-4-closed)，不再作为待规划工作。
 
 按 2026-10-20 用户要求，V4.3 开发方案退出治理流程：不再列为必读或必需文件，也不校验原文哈希；本地原文缺失或修改不影响规划、实施准入或 CI。治理依据为 AGENTS、维护中的需求／架构文档及已提交 Slice／Task；保留现行必需文档、`--bootstrap` 只读规划限制和全部提交／祖先校验。此次仅调整文档依赖与发布边界，不移动 Slice／Task Base，不改变 ID 集合合同、业务规则、验收门槛或已提交审查决定。未来改变产品义务仍按上方合同变更流程执行，不能由本地方案改动直接生效。
 

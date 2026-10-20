@@ -1,8 +1,12 @@
 # 测试矩阵
 
-下表保留产品用例身份与分层证据；四个 Slice 的接受范围见 [关闭账本](progress.md)，Slice 4 完整门禁、复用与独立核验统一见 [Closure Packet](../SLICE.md#closure-packet) 和 [A Final Review](../SLICE.md#a-final-review)，不能只凭 Task PASS 代替 Final。按 2026-10-20 用户授权，JellyfinProxy 专属 RO-4／AC-7 验收撤出当前范围：历史 NOT RUN、按用户授权不执行，不计 PASS、不宣称代理兼容。原生播放／多源／换地址／失败恢复／重启、MP4／MKV Web 播放、包／扫描／全部 1004 项大库及完整最终回归不变。下方已关闭 Slice 的历史结果不改写，模拟／代表性实机不扩大为所有格式／分支／客户端通过。通常前提为受支持版本化 STRM、已有主流、历史指纹与允许探测；例外显式说明。
+下表保留产品用例身份与分层证据；四个 Slice 的接受范围见 [关闭账本](progress.md)，Slice 4 完整门禁、复用与独立核验统一见 [Closure Packet](progress.md#slice-4-closed) 和 [A Final Review](progress.md#slice-4-closed)，不能只凭 Task PASS 代替 Final。按 2026-10-20 用户授权，JellyfinProxy 专属 RO-4／AC-7 验收撤出当前范围：历史 NOT RUN、按用户授权不执行，不计 PASS、不宣称代理兼容。原生播放／多源／换地址／失败恢复／重启、MP4／MKV Web 播放、包／扫描／全部 1004 项大库及完整最终回归不变。下方已关闭 Slice 的历史结果不改写，模拟／代表性实机不扩大为所有格式／分支／客户端通过。通常前提为受支持版本化 STRM、已有主流、历史指纹与允许探测；例外显式说明。
 
 保留 T01～T28 身份以便追溯，但 T08／T22 按 V4.2 改为原生探测后新地址持久化，T02／T17～T19／T27 改为最小指纹合同。旧结果不自动继承。B01～B12 为新增批量／共享并发验收。
+
+## 新增真实播放验证计划
+
+用户要求在下一 Slice 逐项执行八类播放决策，自备媒体／STRM、部署固定 Jellyfin 并安装插件，同时修复 GitHub Actions 失败。新增 P01～P08、ColorRange 返回主流误判、失败恢复／重启及 CI-F1～CI-F3 的完整输入和证据要求统一见 [Slice 5 执行设计](slice-5-playback-test-plan.md)，状态与放行条件见 [当前合同](../SLICE.md)。本轮只规划，新增真实用例与修复后 CI 均 NOT RUN；下方既往 PASS／NOT RUN 不升级为新增矩阵结果。
 
 ## 核心播放与指纹
 
@@ -45,15 +49,15 @@
 | B01 | 并发默认／配置边界 | 默认 2；1 与 8 可用；0、9、非整数保存反馈，实际并发不越界 | CONFIG-001、CONCURRENCY-002 | 配置＋协调集成＋真实计数 | PASS（配置／确定性 1、2、8／启动生效实机） |
 | B02 | 多项目播放与批量混合探测 | 共用插件全局上限；Jellyfin／其他插件独立探测不被限流 | CONCURRENCY-002 | 隔离实机并发对照 | PASS（真实混合上限／独立原生刷新） |
 | B03 | 媒体库范围及类型过滤 | 默认全部，可选部分；普通媒体、旧／不支持 STRM 不探测；候选 ID 去重固定，分批重核当前范围／对象，消失／移出安全结算，新增下轮发现 | BATCH-002、COMPAT-002、CONFIG-001 | ID 集合／分批夹具＋实机库 | PASS（集合／范围／多批／多版本控制及实机） |
-| B04 | 大量已有主流的首次任务／随后增量变化 | 默认信任，不全库重探测；仅缺流／变化者执行，与播放决策一致 | STATE-001、BATCH-002、BATCH-003 | 大规模夹具＋真实增量计数 | PASS（Slice 3 代表性实机；Slice 4 全部 1004 项真实大库与增量）；分层证据见 [Closure Packet](../SLICE.md#closure-packet) |
+| B04 | 大量已有主流的首次任务／随后增量变化 | 默认信任，不全库重探测；仅缺流／变化者执行，与播放决策一致 | STATE-001、BATCH-002、BATCH-003 | 大规模夹具＋真实增量计数 | PASS（Slice 3 代表性实机；Slice 4 全部 1004 项真实大库与增量）；分层证据见 [Closure Packet](progress.md#slice-4-closed) |
 | B05 | 批量与播放同源，含排队／已开始及播放不允许探测 | 只加入已实际开始的探测；排队请求保持各自生命周期并在执行前重查，避免重复；播放不提高权限，独立批量上下文可执行 | DECISION-006、CONCURRENCY-001、BATCH-003 | 混合并发＋真实计数 | PASS（确定性权限／排队及双向实机共享） |
 | B06 | 两入口遇成功／失败／保存失败／Manifest 再变 | 使用同一提交门槛，无错误新指纹；无法确认的刷新不计成功 | PROBE-002、BATCH-003 | 失败注入＋真实结果／存储 | PASS（保存失败控制／真实成功失败竞态）；NOT RUN（物理数据库保存故障实机注入） |
 | B07 | 停止候选获取／后续批次／未开始工作，含已开始仅批量／播放共享及启动竞态 | 未开始撤销，其他调用者排队不受影响；所有已开始探测继续完成并可按全部成功条件提交；任务停止收尾等待其结算、资源释放，不误报全库完成 | CONCURRENCY-001、BATCH-004 | 开始／停止竞态＋真实任务停止／收尾 | PASS（确定性开始／停止边界及真实取消收尾） |
 | B08 | 单项损坏／探测失败及全局数据库不可用 | 单项报告未完成；旧指纹保留；状态库不可用停止优化，不转全库探测；恢复可再查 | MANIFEST-003、FAILURE-001、PROBE-003 | 注入＋实机恢复 | PASS（单项隔离／状态库全局失败及修复重启） |
 | B09 | 进度、完成／取消统计和日志 | 单调进度；成功仅可靠结果；计数可对账，信任接管算跳过；不泄露地址／秘密 | BATCH-005、PRIVACY-001 | 原生任务 UI／日志＋结果对账 | PASS（进度／结果／汇总与脱敏对账） |
 | B10 | 原生任务注册、手动／定时／停止、配置 | 名称正确，默认无触发；管理员原生设置；无独立按钮／调度器／扫描后触发；关闭播放检查仍可批量 | BATCH-001、BATCH-006、CONFIG-001 | 固定版本原生任务实测 | PASS（真实注册／无默认触发／定时重启／配置页） |
-| B11 | 媒体库扫描／手动刷新同时增删或更新 STRM | 不提交过期指纹、不越范围、不假定时间计划已串行完成；后续增量可收敛 | BATCH-002、BATCH-006、REFRESH-001 | 隔离扫描竞态＋任务 | PASS（Slice 3 范围／增删控制；Slice 4 完整扫描重叠及收敛）；分层证据见 [Closure Packet](../SLICE.md#closure-packet) |
-| B12 | 历史十万模拟候选／真实大库成本／并发配置变更／ID 或批次获取故障 | 完整媒体对象按批次限制，固定消费者，不创建全库 Task；全部 ID／去重／排序与原生获取临时成本单列，不宣称总内存恒定；提前结束无许可泄漏 | CONCURRENCY-002、BATCH-002 | 压力指标＋代表性实机运行 | PASS（Slice 3 历史十万模拟；Slice 4 真实大库分层成本）；模拟与真实结果分别见 [Closure Packet](../SLICE.md#closure-packet) 及历史索引 |
+| B11 | 媒体库扫描／手动刷新同时增删或更新 STRM | 不提交过期指纹、不越范围、不假定时间计划已串行完成；后续增量可收敛 | BATCH-002、BATCH-006、REFRESH-001 | 隔离扫描竞态＋任务 | PASS（Slice 3 范围／增删控制；Slice 4 完整扫描重叠及收敛）；分层证据见 [Closure Packet](progress.md#slice-4-closed) |
+| B12 | 历史十万模拟候选／真实大库成本／并发配置变更／ID 或批次获取故障 | 完整媒体对象按批次限制，固定消费者，不创建全库 Task；全部 ID／去重／排序与原生获取临时成本单列，不宣称总内存恒定；提前结束无许可泄漏 | CONCURRENCY-002、BATCH-002 | 压力指标＋代表性实机运行 | PASS（Slice 3 历史十万模拟；Slice 4 真实大库分层成本）；模拟与真实结果分别见 [Closure Packet](progress.md#slice-4-closed) 及历史索引 |
 
 ## 补充边界
 
@@ -106,7 +110,7 @@ A 审查完整 Slice Base..接受实现后裁定 PASS / CLOSED，AF-1 闭合，�
 
 ## Slice 2 历史执行与对账
 
-以下保留 Slice 2 当时的实际结果与限制；本节的批量、UI 或发布 NOT RUN 只描述当时边界，后续接受状态以上方矩阵、[关闭账本](progress.md) 与 [Slice 4 最终决定](../SLICE.md#a-final-review) 为准。
+以下保留 Slice 2 当时的实际结果与限制；本节的批量、UI 或发布 NOT RUN 只描述当时边界，后续接受状态以上方矩阵、[关闭账本](progress.md) 与 [Slice 4 最终决定](progress.md#slice-4-closed) 为准。
 
 Task 2.1／2.2 已 B 审查 PASS；最新接受实现 `59fd3f7e4b6623449a691574fb69b817db72c2ae`，Task 2.2 完整计划／报告／B 决定见 `76cd9e997548c4ffef04a8dd8f9b0d4ef4376347:TASK.md`。六个 Required Outcomes／六个 Required Surfaces 与单独 Final 已由 A 最终审查接受，Slice 2 PASS / CLOSED；A 独立重跑 C# 112/112，并核验匹配输入后复用下述 Final 原始证据。上表仍按完整产品证据类型保留，不能把核心部分通过升级为真实批量、UI、外部代理或所有实机分支 PASS。
 
@@ -194,13 +198,13 @@ B 独立证据索引：`.git/validation-evidence/198f4ff2accd5bc9fcd87518a9684b9
 
 ## Slice 4 验收分配
 
-本节保留 Required Outcome 的证据入口；当前最终结果及复用／新测界线统一见 [Closure Packet](../SLICE.md#closure-packet)，已完成 Task 的计划／失败／命令／证据和 B 决定从合同指向的 Git 快照读取，完整合同以 [Slice 4](../SLICE.md#slice-验收) 为准。
+本节保留 Required Outcome 的证据入口；当前最终结果及复用／新测界线统一见 [Closure Packet](progress.md#slice-4-closed)，已完成 Task 的计划／失败／命令／证据和 B 决定从合同指向的 Git 快照读取，完整合同以 [Slice 4](progress.md#slice-4-closed) 为准。
 
 | Required Outcome | 当前状态 | 详情入口 |
 |---|---|---|
-| RO-1 单版本安装与恢复 | 最终证据见 Closure Packet，接受决定见 A Final Review | [安装包说明](package-installation.md)、[A Final Review](../SLICE.md#a-final-review) |
-| RO-2 至少 1000 项真实原生库（现存全部 1004 项） | 完整复用场景及成本已纳入本次 Final；聚焦 PARTIAL 单列 | [A Final Review](../SLICE.md#a-final-review)、[大库验收入口](#slice-4-大库验收本地运行) |
-| RO-3 完整扫描重叠 | 完整扫描与三源三阶段重启补证分别核验后纳入 Final | [Closure Packet](../SLICE.md#closure-packet)、[A Final Review](../SLICE.md#a-final-review) |
+| RO-1 单版本安装与恢复 | 最终证据见 Closure Packet，接受决定见 A Final Review | [安装包说明](package-installation.md)、[A Final Review](progress.md#slice-4-closed) |
+| RO-2 至少 1000 项真实原生库（现存全部 1004 项） | 完整复用场景及成本已纳入本次 Final；聚焦 PARTIAL 单列 | [A Final Review](progress.md#slice-4-closed)、[大库验收入口](#slice-4-大库验收本地运行) |
+| RO-3 完整扫描重叠 | 完整扫描与三源三阶段重启补证分别核验后纳入 Final | [Closure Packet](progress.md#slice-4-closed)、[A Final Review](progress.md#slice-4-closed) |
 | 原 RO-4 实际代理播放链 | 按 2026-10-20 用户授权撤出当前验收；历史 NOT RUN，不计 PASS／无兼容声明 | [范围覆盖](scope.md#2026-10-20-用户授权撤出-jellyfinproxy-验收)、[当前交接](../TASK.md) |
 
 ### Slice 4 大库验收本地运行
@@ -225,7 +229,7 @@ JF_PROBE_PACKAGE_PORT=18099 python3 scripts/run_isolated_large_library_integrati
 # 只检查未变并重启时，追加：--scenario restart
 ```
 
-旧完整建库流程仅保留为显式 --fresh --scenario all 的兼容路径，不用于现存保留库。复用 all 的工具及全场景、聚焦补证／失败／修正和 B 独立审查完整保留于 `57c5072db0cebf4bcf5fa64c3cde635e9a23dcb3:TASK.md`，用 git show 读取；其最终 B PASS 是当前 Task 层结论，早期 PARTIAL 和失败不回写为 PASS。当前接受事实见 [合同交接](../SLICE.md#事实更新与停止规则)。准备数据持续复用，结果证据必须核验匹配输入，旧 Task PASS 不能代替最终候选的独立 Slice Final。
+旧完整建库流程仅保留为显式 --fresh --scenario all 的兼容路径，不用于现存保留库。复用 all 的工具及全场景、聚焦补证／失败／修正和 B 独立审查完整保留于 `57c5072db0cebf4bcf5fa64c3cde635e9a23dcb3:TASK.md`，用 git show 读取；其最终 B PASS 是当前 Task 层结论，早期 PARTIAL 和失败不回写为 PASS。当前接受事实见 [合同交接](progress.md#slice-4-closed)。准备数据持续复用，结果证据必须核验匹配输入，旧 Task PASS 不能代替最终候选的独立 Slice Final。
 
 - 首次信任／未变零插件探测，URL／内容／Size／缺流小集合按源精确探测，候选逐身份和完整五字段／原生地址／主流独立对账。
 - 查询中停止、分批停止、收尾期间再运行拒绝和恢复前旧基线保护分别验证；重启先只读比较完整预期，再显式选源播放。

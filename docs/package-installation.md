@@ -1,6 +1,6 @@
 # 单版本安装、配置与恢复说明
 
-本页说明首版固定组合的本地安装包、配置、备份／恢复、禁用／移除／重装步骤与已验证支持范围。它是 [Slice 4](../SLICE.md) RO-1 的交付材料；大库与扫描分别属于 RO-2／RO-3，最终接受范围见 [A Final Review](../SLICE.md#a-final-review)，不在本页复制状态。按用户授权不验证 JellyfinProxy，代理未验证、不承诺兼容；原始证据见 [Closure Packet](../SLICE.md#closure-packet)。
+本页说明首版固定组合的本地安装包、配置、备份／恢复、禁用／移除／重装步骤与已验证支持范围。它是 [Slice 4](progress.md#slice-4-closed) RO-1 的交付材料；大库与扫描分别属于 RO-2／RO-3，最终接受范围见 [A Final Review](progress.md#slice-4-closed)，不在本页复制状态。按用户授权不验证 JellyfinProxy，代理未验证、不承诺兼容；原始证据见 [Closure Packet](progress.md#slice-4-closed)。
 
 ## 已验证支持范围
 
@@ -100,4 +100,4 @@ URL 变化必探测、SHA-1／Size 决策、Modified 忽略与权限边界是固
 
 ## 交付与未验证边界
 
-RO-2 大库／RO-3 扫描的证据与本地 ZIP 安装证据分别接受，见 [Closure Packet](../SLICE.md#closure-packet) 与 [A 最终决定](../SLICE.md#a-final-review)，不由本页安装步骤代替。安装交付只提供本地包和说明，线上发布／上架未执行。JellyfinProxy 专属验收按用户授权撤出，历史 NOT RUN、不宣称兼容；真实 OpenList 专有行为及其他未测组合仍未验证。
+RO-2 大库／RO-3 扫描的证据与本地 ZIP 安装证据分别接受，见 [Closure Packet](progress.md#slice-4-closed) 与 [A 最终决定](progress.md#slice-4-closed)，不由本页安装步骤代替。安装交付只提供本地包和说明，线上发布／上架未执行。JellyfinProxy 专属验收按用户授权撤出，历史 NOT RUN、不宣称兼容；真实 OpenList 专有行为及其他未测组合仍未验证。

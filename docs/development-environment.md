@@ -9,7 +9,7 @@
 - `python3 scripts/development_environment.py sdk`：PASS，已存在并校验本地 SDK `10.0.401`；全局 `dotnet` 不在 PATH，统一使用 `bash scripts/dotnet-local`。
 - `python3 scripts/development_environment.py doctor`：PASS，Docker Engine `29.7.1`、Compose `v5.3.1`、本地端口、DNS、NuGet HTTPS 和不可变镜像锁均通过。
 - `python3 scripts/development_environment.py status`：若现有隔离 Jellyfin 健康检查失败，真实集成保持 `BLOCKED／NOT RUN`；不要接管或清理非本轮容器。
-- 2026-10-19 续审只读检查：当时仓库隔离 Jellyfin 为 healthy，媒体服务在运行；该次未停止、重启或接管运行中容器，生产实例未操作。更早的 unhealthy 记录不作为当前阻塞；健康状态也不等于产品验收 PASS，最终验收以 [Closure Packet](../SLICE.md#closure-packet) 为准。
+- 2026-10-19 续审只读检查：当时仓库隔离 Jellyfin 为 healthy，媒体服务在运行；该次未停止、重启或接管运行中容器，生产实例未操作。更早的 unhealthy 记录不作为当前阻塞；健康状态也不等于产品验收 PASS，最终验收以 [Closure Packet](progress.md#slice-4-closed) 为准。
 
 ## 当前交接与固定输入
 
@@ -90,7 +90,7 @@ python3 -m unittest discover -s tests -v
 
 大库下限为至少 1000 个真实原生候选，直接使用现存全部 1004 项，不截取、不另跑 3000 级。准备库及适用基线在所有需要它的开发阶段持续复用，不能因 Task PASS 或 Slice 关闭销毁；现存有指纹的运行后状态不能冒充首次信任前基线。长期规则见 [开发流程](development-workflow.md#可核验证据与复用)，每次使用另行核验归属、输入与前置状态，不继承旧验收结果。
 
-复用入口要求源 package 工作区已停止、归属可核验，且无符号链接或 SQLite 事务旁文件；在新归属副本上运行，原库前后摘要一致，结束停止并保留副本。场景、局部修复、显式副本指纹重置、PARTIAL／完整验收区分及准确命令统一见 [大库验收入口](test-matrix.md#slice-4-大库验收本地运行)，最终结果见 [Closure Packet](../SLICE.md#closure-packet)。不重复建库或准备全库，不影响独立干净安装验收，也不放宽拒绝任意接管的规则。
+复用入口要求源 package 工作区已停止、归属可核验，且无符号链接或 SQLite 事务旁文件；在新归属副本上运行，原库前后摘要一致，结束停止并保留副本。场景、局部修复、显式副本指纹重置、PARTIAL／完整验收区分及准确命令统一见 [大库验收入口](test-matrix.md#slice-4-大库验收本地运行)，最终结果见 [Closure Packet](progress.md#slice-4-closed)。不重复建库或准备全库，不影响独立干净安装验收，也不放宽拒绝任意接管的规则。
 
 三个既有开发部署回归另用 `artifacts/dev-env`，不是包安装验收。新环境要运行它们时，先 `python3 scripts/development_environment.py up`，在本机默认 18096 完成新实例向导：建立仅指向 `/media/strm` 和 `/media/local` 的两个临时库，禁用实时监控、远程提供器、写回和无关自动任务，清空测试实例的插件仓库列表。端口可在启动前用现有 `JF_PROBE_PORT` 调整，测试账户文件的 base_url 必须匹配。
 
@@ -120,4 +120,4 @@ GitHub 的后续发布范围为代码、治理文档、依赖锁和公开环境�
 
 2026-10-19 四批次补证继续复制同一 1004 项原库，只局部准备 8 个变化对照并索引 4 个新增缺流项。18104 副本 run-20261019-161238-8665af91 已停止保留、双服务 exit=0／无 OOM、原库不变；仍只在新副本使用经无重叠预检的显式隔离子网。303.556 秒，复制前开始主机观测 304 次、服务启动后健康等待前开始服务观测 200 次；计划重启采样缺口 16.000 秒、前／间／后≥30 秒空闲窗及 RSS 趋势如实记录，不倒填历史全库准备资源成本。详见上述历史 Task 报告。
 
-以上聚焦 PARTIAL 不替代后来完成的独立 Slice Final；最终证据与接受决定见 [Closure Packet](../SLICE.md#closure-packet) 和 [A Final Review](../SLICE.md#a-final-review)。关闭和文档交接均不清理准备数据。
+以上聚焦 PARTIAL 不替代后来完成的独立 Slice Final；最终证据与接受决定见 [Closure Packet](progress.md#slice-4-closed) 和 [A Final Review](progress.md#slice-4-closed)。关闭和文档交接均不清理准备数据。

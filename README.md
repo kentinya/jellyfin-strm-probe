@@ -6,6 +6,8 @@
 
 当前工作从 [当前开发指针](docs/progress.md#当前开发指针) 进入；合同、验收状态和不可变证据由 [SLICE.md](SLICE.md)、[TASK.md](TASK.md) 与关闭账本维护。本 README 提供项目入口和可执行命令，不复制 Task 状态或审查计数。
 
+用户新增的下一 Slice 需求及场景设计见 [真实播放测试与 CI 修复计划](docs/slice-5-playback-test-plan.md)：自行准备媒体／STRM、部署并安装插件，逐项验证八类播放决策及修复干净检出的 CI 失败。当前执行边界以合同和 Task 为准，规划不代表已经实测或修复。
+
 ## 开发基准与范围
 
 当前开发依据为 [仓库约束](AGENTS.md)、[稳定需求](docs/requirements.md)、[架构](docs/architecture.md) 和已提交 Slice／Task 合同。按 2026-10-20 用户要求，V4.3 原方案退出治理，仅作可选本地参考，不再跟踪或上传 GitHub；克隆与 CI 无须该文件。历史版本与已提交审查记录保留，发布边界见 [Git 检查点](docs/development-workflow.md#6-git-检查点)。
@@ -35,7 +37,7 @@
 
 ## 本地安装包
 
-固定组合（Jellyfin `12.2.0`／Linux x64）的可交接安装包由仓库内工具生成并验证；已接受包的身份、原生播放／大库／扫描证据和限制见 [A 最终审查](SLICE.md#a-final-review)，具体安装步骤见 [安装包说明](docs/package-installation.md)。本地安装交付不包含线上发布或插件仓库上架。
+固定组合（Jellyfin `12.2.0`／Linux x64）的可交接安装包由仓库内工具生成并验证；已接受包的身份、原生播放／大库／扫描证据和限制见 [A 最终审查](docs/progress.md#slice-4-closed)，具体安装步骤见 [安装包说明](docs/package-installation.md)。本地安装交付不包含线上发布或插件仓库上架。
 
 ```bash
 python3 scripts/package_plugin.py --configuration Release --runtime linux-x64 --output-dir artifacts/releases
