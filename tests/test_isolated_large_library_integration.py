@@ -696,6 +696,24 @@ class PreparedLibraryReuseTests(unittest.TestCase):
                     with self.assertRaisesRegex(RuntimeError, "input changed"):
                         large.reconcile_prepared_inputs(before)
 
+    def test_reuse_reconciliation_allows_tracked_controlled_edits_only(self):
+        before = {area: {"file": "hash"} for area in large.pe.STATE_AREAS}
+        edited = {**before, "media": {"file": "hash", "large-source/c0.mp4": "new"},
+                  "strm": {"file": "hash", "Large 1.strm": "new"}}
+        tracker = {"media": {"large-source/c0.mp4": "new"}, "strm": {"Large 1.strm": "new"}}
+        with patch.object(large, "_REUSE_EDIT_TRACKER", tracker), \
+             patch.object(large.pe, "capture_instance_state", return_value=edited):
+            result = large.reconcile_prepared_inputs(before)
+        self.assertEqual(result["status"], "CLEAN")
+        self.assertEqual(result["controlled_edits"], {"media": ["large-source/c0.mp4"],
+                                                      "strm": ["Large 1.strm"]})
+        # An untracked edit to the same area is still rejected.
+        untracked = {**edited, "media": {"file": "hash", "large-source/c1.mp4": "surprise"}}
+        with patch.object(large, "_REUSE_EDIT_TRACKER", tracker), \
+             patch.object(large.pe, "capture_instance_state", return_value=untracked):
+            with self.assertRaisesRegex(RuntimeError, "input changed: media"):
+                large.reconcile_prepared_inputs(before)
+
     def test_stop_checks_both_service_exits_and_never_deletes(self):
         states = [{"service": service, "status": "exited", "exit_code": 0, "oom_killed": False,
                    "error": "", "finished_at": "2026-10-19T00:00:00Z"} for service in ("jellyfin", "media")]
@@ -724,6 +742,7 @@ class PreparedLibraryReuseTests(unittest.TestCase):
             "ResourceSampler": MagicMock(), "plugin_probe_count": 0,
             "stop_and_retain_reuse": {"status": "STOPPED AND RETAINED"},
             "reconcile_prepared_inputs": {"status": "CLEAN"},
+            "prepared_fixture": {"names": ["a"] * 1004, "controls": {}},
         }
         mocks = {name: stack.enter_context(patch.object(large, name, return_value=value))
                  for name, value in patches.items()}
@@ -731,6 +750,11 @@ class PreparedLibraryReuseTests(unittest.TestCase):
             "supported_count": 1004, "candidate_count": 1007, "rounds": {"unchanged": "PASS"}},
             side_effect=checks_error))
         mocks["checks"] = checks
+        full = stack.enter_context(patch.object(
+            large, "run_reuse_full_scenario",
+            side_effect=lambda auth, fixture, minimum, recorder, state, summary, timeout, deploy:
+                summary.update(status="PASS")))
+        mocks["full"] = full
         stack.enter_context(patch.object(large.pp, "verify_archive", return_value={"archiveSha256": "hash"}))
         stack.enter_context(patch.object(large.scan, "EvidenceRecorder", return_value=recorder))
         for name, value in {"capture_instance_state": {}, "deploy_archive": {}, "compose": None,
@@ -771,6 +795,101 @@ class PreparedLibraryReuseTests(unittest.TestCase):
                      "prepare_clean_instance", "cleanup_instance"):
             mocks[name].assert_not_called()
         mocks["stop_and_retain_reuse"].assert_called_once()
+        mocks["full"].assert_not_called()
+
+    def test_reuse_all_runs_full_scenario_without_rebuilding_or_rescanning(self):
+        # B FIX REQUIRED: reuse --scenario all must run the complete required behavior on the copied
+        # library rather than reject the scenario or run a weaker focused path.
+        result, summary, mocks = self.execute_mock_reuse(scenario="all")
+        self.assertEqual(result, 0)
+        self.assertEqual(summary["status"], "PASS")
+        self.assertEqual(summary["focused_status"], "PASS")
+        self.assertEqual(summary["full_task_acceptance"], "PASS")
+        self.assertEqual(summary["not_run"], ["independent-B-review"])
+        mocks["full"].assert_called_once()
+        mocks["checks"].assert_not_called()
+        for name in ("build_fixture", "prepare_native_streams", "prepare_indexed_fixture",
+                     "prepare_clean_instance", "cleanup_instance"):
+            mocks[name].assert_not_called()
+        mocks["stop_and_retain_reuse"].assert_called_once()
+
+    def test_reuse_all_full_scenario_failure_is_nonzero_and_preserved(self):
+        result, summary, mocks = self.execute_mock_reuse("full", scenario="all")
+        self.assertEqual(result, 1)
+        self.assertEqual(summary["status"], "FAIL")
+        self.assertEqual(summary["focused_status"], "FAIL")
+        self.assertNotEqual(summary.get("full_task_acceptance"), "PASS")
+        mocks["stop_and_retain_reuse"].assert_called_once()
+
+    def test_reuse_full_scenario_verifies_copy_and_delegates_without_rebuilding(self):
+        names = [f"Large 29666cbef60d {i:05d}" for i in range(1004)]
+        paths = {name: Path(f"/tmp/{name}.strm") for name in names}
+        fixture = {"names": names, "paths": paths, "controls": {"out_of_scope": "external"}, "urls": {}}
+        items = {name: {"Id": f"{index:032x}", "Name": name,
+                        "Path": "/media/strm/" + name + ".strm"} for index, name in enumerate(names)}
+        items["external"] = {"Id": "f" * 32, "Name": "external", "Path": "/media/local/external.strm"}
+        supported_ids = [items[name]["Id"] for name in names]
+        candidates = {"supported_ids": supported_ids, "ids": supported_ids,
+                      "control_ids": {}, "count": len(names), "supported_count": len(names)}
+        expected = {("1" * 32, "2" * 32): {"item_id": "1" * 32, "source_key": "2" * 32,
+                    "url_hash": "hash", "sha1": None, "file_size": 7}}
+        seen = {}
+        def assign(fx, it, ids, recorder):
+            fx.update(url_group=["u"], content_group=["c"], size_group=["s"])
+        with patch.object(large, "resolve_prepared_items", return_value=items), \
+             patch.object(large, "prepared_selected_library", return_value="library"), \
+             patch.object(large.pe, "media_sha1", return_value=("a" * 40, 25179)), \
+             patch.object(large, "capture_candidates", return_value=candidates), \
+             patch.object(large, "assign_increment_controls", side_effect=assign), \
+             patch.object(large, "wait_native_task_idle"), \
+             patch.object(large.scan, "run_native_scan_completed", return_value=({}, ("a", "b"))), \
+             patch.object(large, "poll_fixture_items", return_value={}), \
+             patch.object(large, "prepare_reuse_increment_baselines") as prepare, \
+             patch.object(large.scan, "plugin_action", return_value=204), \
+             patch.object(large, "sampled_restart"), \
+             patch.object(large, "wait_items_by_name", return_value=items), \
+             patch.object(large, "reconcile_candidate_identities", return_value={}), \
+             patch.object(large, "expected_all_rows", return_value=expected), \
+             patch.object(large, "assert_native_sources"), \
+             patch.object(large, "fingerprint_map", return_value={}), \
+             patch.object(large, "capture_state", return_value={"source": "stable"}), \
+             patch.object(large, "container_identity", return_value={"id": "owned"}), \
+             patch.object(large.pe, "container_name", return_value="owned"), \
+             patch.object(large.scan, "api_auth", return_value="auth"), \
+             patch.object(large, "run_full_behavior",
+                    side_effect=lambda *a, **kw: seen.update(args=a, kwargs=kw)):
+            large.run_reuse_full_scenario("auth", fixture, 1000, MagicMock(), large.ScenarioState(),
+                                          {}, 120, {"deployment": "zip"})
+        prepare.assert_called_once()
+        self.assertEqual(prepare.call_args.args[2], ["u", "c", "s"])
+        self.assertEqual(seen["args"][2], "owned")
+
+    def test_reuse_full_scenario_refuses_nonempty_fingerprints_without_reset(self):
+        fixture = {"names": ["one"], "paths": {"one": Path("/tmp/one.strm")}, "controls": {"out_of_scope": "external"}, "urls": {}}
+        items = {"one": {"Id": "1" * 32}, "external": {"Id": "f" * 32}}
+        with patch.object(large, "resolve_prepared_items", return_value=items), \
+             patch.object(large, "prepared_selected_library", return_value="library"), \
+             patch.object(large.pe, "media_sha1", return_value=("a" * 40, 25179)), \
+             patch.object(large, "capture_candidates", return_value={"supported_ids": ["1" * 32],
+                    "ids": ["1" * 32], "control_ids": {}, "count": 1, "supported_count": 1}), \
+             patch.object(large, "assign_increment_controls",
+                    side_effect=lambda fx, *a: fx.update(url_group=[], content_group=[], size_group=[])), \
+             patch.object(large, "wait_native_task_idle"), \
+             patch.object(large.scan, "run_native_scan_completed", return_value=({}, ("a", "b"))), \
+             patch.object(large, "poll_fixture_items", return_value={}), \
+             patch.object(large, "prepare_reuse_increment_baselines"), \
+             patch.object(large.scan, "plugin_action", return_value=204), \
+             patch.object(large, "sampled_restart"), \
+             patch.object(large, "wait_items_by_name", return_value=items), \
+             patch.object(large, "reconcile_candidate_identities", return_value={}), \
+             patch.object(large, "expected_all_rows", return_value={("1" * 32, "2" * 32): {}}), \
+             patch.object(large, "assert_native_sources"), \
+             patch.object(large, "fingerprint_map", return_value={("1" * 32, "2" * 32): {}}), \
+             patch.object(large.scan, "api_auth", return_value="auth"), \
+             patch.object(large, "run_full_behavior") as behavior:
+            with self.assertRaisesRegex(RuntimeError, "empty copied fingerprint"):
+                large.run_reuse_full_scenario("auth", fixture, 1, MagicMock(), large.ScenarioState(), {}, 120, {})
+            behavior.assert_not_called()
 
     def test_reuse_finalization_failures_force_nonzero_and_keep_workspace(self):
         for failure in ("stop_and_retain_reuse", "restore_triggers", "prepared_manifest", "reconcile_prepared_inputs"):
@@ -801,14 +920,12 @@ class PreparedLibraryReuseTests(unittest.TestCase):
         ids = [items[name]["Id"] for name in names + ["legacy", "unknown", "ordinary"]]
         candidates = {"supported_ids": [ids[0]], "ids": ids, "control_ids": dict(zip(["legacy", "unknown", "ordinary"], ids[1:])),
                       "count": 4, "supported_count": 1}
-        for name, value in {"prepared_fixture": fixture, "native_items_by_id": {i["Id"]: i for i in items.values()},
+        for name, value in {"prepared_fixture": fixture, "resolve_prepared_items": items,
+                            "prepared_selected_library": "library", "native_items_by_id": {i["Id"]: i for i in items.values()},
                             "capture_candidates": candidates, "expected_all_rows": expected,
                             "assert_native_sources": None, "fingerprint_map": expected if baseline is None else baseline,
                             "plugin_probe_count": 0}.items():
             stack.enter_context(patch.object(large, name, return_value=value))
-        config = {"Enabled": True, "DetailedLog": True, "BatchAllLibraries": False,
-                  "MaxConcurrentProbes": 2, "BatchLibraryIds": ["library"]}
-        stack.enter_context(patch.object(large.pe, "request_json", return_value=(200, config)))
         stack.enter_context(patch.object(large.pe, "container_name", return_value="owned"))
         stack.enter_context(patch.object(large.scan, "api_auth", return_value="auth"))
         events = []
@@ -844,13 +961,22 @@ class PreparedLibraryReuseTests(unittest.TestCase):
     def test_cli_requires_explicit_mode_and_refuses_invalid_combinations(self):
         common = ["runner", "--package", "candidate.zip", "--evidence-dir", "new-evidence"]
         for options in ([], ["--reuse-workspace", "source", "--fresh"],
-                        ["--reuse-workspace", "source", "--scenario", "all"],
                         ["--reuse-workspace", "source", "--reset-copied-fingerprints"],
                         ["--fresh", "--scenario", "baseline"], ["--fresh", "--count", "999"]):
             with patch.object(large.sys, "argv", common + options), contextlib.redirect_stderr(io.StringIO()):
                 with self.assertRaises(SystemExit) as error:
                     large.main()
                 self.assertEqual(error.exception.code, 2)
+
+    def test_cli_accepts_reuse_all_as_the_full_retained_library_scenario(self):
+        common = ["runner", "--package", "candidate.zip", "--evidence-dir", "new-evidence",
+                  "--reuse-workspace", "source", "--count", "1000", "--scenario", "all",
+                  "--reset-copied-fingerprints"]
+        with patch.object(large.sys, "argv", common), \
+             patch.object(large, "run_reuse_scenario", return_value=0) as execute:
+            self.assertEqual(large.main(), 0)
+            self.assertEqual(execute.call_args.args[2:4], (1000, "all"))
+            self.assertTrue(execute.call_args.args[6])
 
     def test_cli_defaults_to_1000_minimum_unchanged_and_accepts_actual_1004(self):
         common = ["runner", "--package", "candidate.zip", "--evidence-dir", "new-evidence",

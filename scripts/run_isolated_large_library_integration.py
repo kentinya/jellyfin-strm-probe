@@ -67,6 +67,27 @@ def digest(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
+# While a retained-library reuse scenario runs, the tool intentionally rewrites a bounded set of
+# copied STRM/media inputs (the controlled increment). The tracker records exactly those edits so the
+# final input reconciliation can distinguish intended outputs from real corruption. It stays ``None``
+# for the legacy fresh path, where all fixtures are new relative to an empty pre-run workspace.
+_REUSE_EDIT_TRACKER: dict[str, dict[str, str]] | None = None
+
+
+def note_owned_edit(path: Path) -> None:
+    """Record a bounded, intentional copied-input edit while a reuse scenario is active."""
+    if _REUSE_EDIT_TRACKER is None:
+        return
+    resolved = pe.require_owned_path(path)
+    for area, root in (("strm", pe.WORK / "strm"), ("media", pe.WORK / "media")):
+        try:
+            relative = resolved.relative_to(root).as_posix()
+        except ValueError:
+            continue
+        _REUSE_EDIT_TRACKER.setdefault(area, {})[relative] = hashlib.sha256(resolved.read_bytes()).hexdigest()
+        return
+
+
 def canonical_guid(value: object, label: str) -> str:
     try:
         return uuid.UUID(str(value)).hex
@@ -836,10 +857,11 @@ def assign_increment_controls(fixture: dict, items: dict, candidate_ids: list[st
         fixture[group] = []
         for index, batch in enumerate(selected):
             position, name = batch[column]
-            route = create_source_route(f"{prefix}{index}", pe.MEDIA_MP4)
+            route = create_source_route(f"{prefix}{index}-{uuid.uuid4().hex[:8]}", pe.MEDIA_MP4)
             fixture["urls"][name] = route
             fixture["paths"][name] = pe.write_strm(
                 name, route, None if group == "size_group" else fixture["sha1"], fixture["size"])
+            note_owned_edit(fixture["paths"][name])
             fixture[group].append(name)
             observations.append({"group": group, "item_id": ordered[position],
                                  "position": position, "batch": position // 128})
@@ -854,6 +876,7 @@ def create_source_route(key: str, media_name: str) -> str:
     if target.exists() or target.is_symlink():
         raise RuntimeError("A per-source media route already exists.")
     os.link(source, target)
+    note_owned_edit(target)
     return "http://media:8080/" + relative.as_posix()
 
 
@@ -865,6 +888,7 @@ def replace_source_route(url: str, media_name: str) -> None:
     require(target.is_file() and not target.is_symlink(), "The per-source media route is not a regular owned file.")
     target.unlink()
     pe.copy_owned(pe.WORK / "media" / media_name, target, label="replace per-source media bytes")
+    note_owned_edit(target)
 
 
 def wait_native_task_idle(auth: str, key: str, timeout: int = 300) -> None:
@@ -1154,7 +1178,12 @@ def capture_state(auth: str, fixture: dict, items: dict, expected: dict,
 def seed_controlled_contents(fixture: dict[str, object], items: dict[str, dict],
                              recorder: scan.EvidenceRecorder) -> list[dict[str, object]]:
     """Apply the pre-planned increment controls: four URL changes, four content changes, four Size changes,
-    plus four newly indexed supported STRMs without a saved primary stream."""
+    plus four newly indexed supported STRMs without a saved primary stream.
+
+    The 12 controls were assigned by ``assign_increment_controls`` from four distinct real Guid batches and
+    their baseline primary streams were prepared for their current route URL, so the same function serves the
+    legacy fresh path and the retained-library reuse path without re-preparing the existing library.
+    """
     url_group = list(fixture["url_group"])
     content_group = list(fixture["content_group"])
     size_group = list(fixture["size_group"])
@@ -1163,21 +1192,25 @@ def seed_controlled_contents(fixture: dict[str, object], items: dict[str, dict],
     for name in url_group:
         url = create_source_route("u-change-" + uuid.uuid4().hex[:8], pe.MEDIA_MP4)
         fixture["urls"][name] = url
-        pe.write_strm(name, url, fixture["sha1"], fixture["size"])
+        fixture["paths"][name] = pe.write_strm(name, url, fixture["sha1"], fixture["size"])
+        note_owned_edit(fixture["paths"][name])
     for name in content_group:
         replace_source_route(fixture["urls"][name], media_b)
-        pe.write_strm(name, fixture["urls"][name], sha_b, size_b)
+        fixture["paths"][name] = pe.write_strm(name, fixture["urls"][name], sha_b, size_b)
+        note_owned_edit(fixture["paths"][name])
     for name in size_group:
         # Same URL and still no comparable SHA-1; the route now serves B, so the changed Size is B's real size.
         replace_source_route(fixture["urls"][name], media_b)
-        pe.write_strm(name, fixture["urls"][name], None, size_b)
+        fixture["paths"][name] = pe.write_strm(name, fixture["urls"][name], None, size_b)
+        note_owned_edit(fixture["paths"][name])
     # Add already-indexed supported STRMs without a saved primary stream. The batch must discover and probe
     # these four sources rather than trust them as first-trust rows.
     new_names = [f"Large missing-stream {uuid.uuid4().hex[:8]} {index}" for index in range(4)]
     for offset, name in enumerate(new_names):
-        url = create_source_route("m" + str(offset), pe.MEDIA_MP4)
+        url = create_source_route("m" + uuid.uuid4().hex[:8], pe.MEDIA_MP4)
         fixture["urls"][name] = url
         fixture["paths"][name] = pe.write_strm(name, url, fixture["sha1"], fixture["size"])
+        note_owned_edit(fixture["paths"][name])
     fixture["new_names"] = new_names
     changes = ([{"kind": "url", "name": name} for name in url_group]
                + [{"kind": "content", "name": name} for name in content_group]
@@ -1348,9 +1381,25 @@ def run_scenario_body(package: Path, count: int, run_id: str, recorder: "scan.Ev
     container = pe.container_name("jellyfin")
     identity = container_identity(container)
     recorder.set_container_identity(identity)
+    run_full_behavior(auth, strm_library_id, container, fixture, items, selected,
+                      recorder, state, summary, timeout, deploy, identity)
+
+
+def run_full_behavior(auth: str, strm_library_id: str, container: str, fixture: dict,
+                      items: dict, selected: dict, recorder: "scan.EvidenceRecorder",
+                      state: "ScenarioState", summary: dict[str, object], timeout: int,
+                      deploy: dict, identity: dict) -> None:
+    """Execute the complete required RO-2 behavior on an already verified candidate set.
+
+    Shared by the legacy ``--fresh`` path and the retained-library reuse path so both run the same
+    required rounds (first trust, unchanged, controlled cross-batch increment, query-stage stop,
+    in-flight stop/drain, recovery, two unchanged rounds, restart and explicit selected PlaybackInfo)
+    instead of a second, weaker code path. The caller has already verified the native sources and the
+    empty/reset first-trust store; this function mutates ``items`` and ``fixture`` in place.
+    """
     run_timeout = min(timeout, MAX_TASK_TIMEOUT)
-    round1 = run_round(auth, container, recorder, "first-trust", selected["count"], 0, count,
-                       run_timeout, selected["ids"])
+    round1 = run_round(auth, container, recorder, "first-trust", selected["count"], 0,
+                       selected["supported_count"], run_timeout, selected["ids"])
     auth = scan.api_auth()
     expected = expected_all_rows(auth, fixture, items)
     first_rows = fingerprint_map()
@@ -1450,6 +1499,7 @@ def run_scenario_body(package: Path, count: int, run_id: str, recorder: "scan.Ev
         url = f"http://media:8080/delay/20/{request_id}/{pe.MEDIA_MP4}"
         fixture["urls"][name] = url
         scan.rewrite_strm(path, url, fixture["sha1"], fixture["size"])
+        note_owned_edit(path)
     auth = scan.api_auth()
     stop_started = scan.now_utc()
     targets = {canonical_guid(items[name]["Id"], name) for name in stop_names}
@@ -1604,6 +1654,7 @@ def run_scenario_body(package: Path, count: int, run_id: str, recorder: "scan.Ev
                    "post_restart_playback": {"source_count": len(playback_results),
                                              "extra_plugin_probes": extra_probes,
                                              "reconciliation": playback_reconciliation},
+                   "required_stages": {"actual_query_stage_stop": candidate_start_seen},
                    "remaining_gates": {"actual_query_stage_stop": "PASS" if candidate_start_seen else "NOT RUN"}})
 
 
@@ -1698,7 +1749,7 @@ def reset_copied_fingerprints(recorder: scan.EvidenceRecorder) -> None:
 
 
 def prepared_fixture(minimum: int) -> dict:
-    fixture = {"names": [], "paths": {}, "controls": {}}
+    fixture = {"names": [], "paths": {}, "controls": {}, "urls": {}}
     for path in sorted((pe.WORK / "strm").iterdir()):
         if path.suffix.lower() == ".strm":
             manifest = scan.read_versioned_manifest(path)
@@ -1757,29 +1808,9 @@ def stop_and_retain_reuse() -> dict:
 def run_prepared_checks(auth: str, scenario: str, minimum: int,
                         recorder: scan.EvidenceRecorder, state: ScenarioState, timeout: int) -> dict:
     fixture = prepared_fixture(minimum)
-    names = fixture["names"] + list(fixture["controls"].values())
-    native = native_items_by_id(auth)
-    items = {}
-    for item in native.values():
-        name = item.get("Name")
-        if name in names:
-            require(name not in items, "Prepared native item names are ambiguous.")
-            expected_path = ("/media/local/" if name == fixture["controls"]["out_of_scope"]
-                             else "/media/strm/") + name
-            require(str(item.get("Path") or "").rsplit(".", 1)[0] == expected_path,
-                    "Prepared native item belongs to a different physical path.")
-            items[name] = item
-    require(set(items) == set(names), "Prepared files are not all independently indexed.")
-    status, config = pe.request_json("GET", f"/Plugins/{pkg.PLUGIN_ID}/Configuration",
-                                     headers={"Authorization": auth})
-    require(status == 200, "Cannot read prepared plugin configuration.")
-    require(config.get("Enabled") is True and config.get("DetailedLog") is True
-            and config.get("BatchAllLibraries") is False and config.get("MaxConcurrentProbes") == 2,
-            "Prepared configuration must enable detailed logging, one selected library and concurrency 2.")
-    selected = config.get("BatchLibraryIds")
-    selected = selected if isinstance(selected, list) else [selected]
-    require(len(selected) == 1 and selected[0], "Prepared library selection is ambiguous.")
-    candidates = capture_candidates(auth, selected[0], fixture, items, recorder, "prepared")
+    items = resolve_prepared_items(auth, fixture)
+    selected_id = prepared_selected_library(auth)
+    candidates = capture_candidates(auth, selected_id, fixture, items, recorder, "prepared")
     required_ids = candidates["supported_ids"] + list(candidates["control_ids"].values())
     reconcile_candidate_identities(required_ids, candidates["ids"])
     require(canonical_guid(items[fixture["controls"]["out_of_scope"]]["Id"], "external control")
@@ -1820,14 +1851,146 @@ def reconcile_prepared_inputs(before: dict) -> dict:
     """Protect copied inputs; fingerprints and task execution results are intentional outputs.
 
     Fingerprint contents are independently reconciled at every checkpoint, while native
-    task triggers are separately restored and read back. Neither is exempted from checking.
+    task triggers are separately restored and read back. The bounded set of copied STRM/media files
+    the controlled increment intentionally rewrites is tracked in ``_REUSE_EDIT_TRACKER`` so those
+    planned edits are expected rather than treated as corruption; every other input must be unchanged.
     """
+    expected = {area: dict(before[area]) for area in REUSE_PROTECTED_AREAS}
+    edits = _REUSE_EDIT_TRACKER or {}
+    for area, files in edits.items():
+        for relative, sha256 in files.items():
+            expected[area][relative] = sha256
     after = pe.capture_instance_state()
     for area in REUSE_PROTECTED_AREAS:
-        require(before[area] == after[area], "Prepared copy input changed: " + area)
+        require(expected[area] == after[area], "Prepared copy input changed: " + area)
     return {"status": "CLEAN", "protected_areas": list(REUSE_PROTECTED_AREAS),
+            "controlled_edits": {area: sorted(files) for area, files in edits.items()},
             "intentional_outputs": ["fingerprint rows (checkpoint reconciled)",
-                                    "task execution results (trigger restoration verified)"]}
+                                    "task execution results (trigger restoration verified)",
+                                    "bounded controlled increment files (independently hashed)"]}
+
+
+def resolve_prepared_items(auth: str, fixture: dict) -> dict:
+    """Resolve every prepared fixture name to its current native item, verifying the physical path."""
+    names = fixture["names"] + list(fixture["controls"].values())
+    native = native_items_by_id(auth)
+    items = {}
+    for item in native.values():
+        name = item.get("Name")
+        if name in names:
+            require(name not in items, "Prepared native item names are ambiguous.")
+            expected_path = ("/media/local/" if name == fixture["controls"]["out_of_scope"]
+                             else "/media/strm/") + name
+            require(str(item.get("Path") or "").rsplit(".", 1)[0] == expected_path,
+                    "Prepared native item belongs to a different physical path.")
+            items[name] = item
+    require(set(items) == set(names), "Prepared files are not all independently indexed.")
+    return items
+
+
+def prepared_selected_library(auth: str) -> str:
+    """Read the prepared configuration and return the single selected library id."""
+    status, config = pe.request_json("GET", f"/Plugins/{pkg.PLUGIN_ID}/Configuration",
+                                     headers={"Authorization": auth})
+    require(status == 200, "Cannot read prepared plugin configuration.")
+    require(config.get("Enabled") is True and config.get("DetailedLog") is True
+            and config.get("BatchAllLibraries") is False and config.get("MaxConcurrentProbes") == 2,
+            "Prepared configuration must enable detailed logging, one selected library and concurrency 2.")
+    selected = config.get("BatchLibraryIds")
+    selected = selected if isinstance(selected, list) else [selected]
+    require(len(selected) == 1 and selected[0], "Prepared library selection is ambiguous.")
+    return selected[0]
+
+
+def prepare_reuse_increment_baselines(auth: str, items: dict[str, dict], names: list[str],
+                                     urls: dict[str, str], recorder: scan.EvidenceRecorder,
+                                     sampler: ResourceSampler) -> None:
+    """Prepare only the 12 changed-URL increment controls' primary streams on the copied library.
+
+    The retained library's other sources keep their already-saved streams; only the controls whose STRM URL
+    changed need a fresh native primary stream before first trust. This is a bounded repair of the affected
+    preparation, not a full-library re-preparation.
+    """
+    workers = min(2, len(names))
+    failures: list[str] = []
+    started = time.monotonic()
+
+    def worker(offset: int) -> list[str]:
+        errors = []
+        for name in names[offset::workers]:
+            if sampler.budget is not None and sampler.budget.failure:
+                break
+            try:
+                if not scan.native_prepare_stream(auth, items[name], urls[name], timeout=180):
+                    errors.append(canonical_guid(items[name]["Id"], "unprepared control"))
+            except Exception as error:
+                errors.append(f"{canonical_guid(items[name]['Id'], 'unprepared control')}:{type(error).__name__}")
+        return errors
+
+    with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="reuse-control-prepare") as pool:
+        futures = [pool.submit(worker, offset) for offset in range(workers)]
+        for future in as_completed(futures, timeout=MAX_TASK_TIMEOUT):
+            failures.extend(future.result())
+    require(not failures, f"Reuse increment-baseline preparation failed for {len(failures)} controls.")
+    recorder.record("reuse_increment_baseline_prepared", count=len(names), workers=workers,
+                    elapsed_seconds=time.monotonic() - started,
+                    scope="only the 12 changed-URL controls; no full-library preparation")
+
+
+def run_reuse_full_scenario(auth: str, fixture: dict, minimum: int, recorder: scan.EvidenceRecorder,
+                            state: ScenarioState, summary: dict[str, object], timeout: int,
+                            deploy: dict) -> None:
+    """Run the complete required RO-2 behavior on a copied, verified 1004-item retained library.
+
+    Unlike the focused scenarios, this never builds, rescans the whole library or re-prepares existing
+    streams: it copies and verifies the retained sources, prepares only the 12 changed-URL increment
+    controls whose baseline stream must be repaired, requires an explicitly reset empty copied fingerprint
+    store for first trust, and then runs the shared ``run_full_behavior`` sequence (first trust, unchanged,
+    cross-batch increment, query-stage stop, in-flight stop/drain, recovery, restart and explicit
+    PlaybackInfo).
+    """
+    items = resolve_prepared_items(auth, fixture)
+    library_id = prepared_selected_library(auth)
+    fixture["sha1"], fixture["size"] = pe.media_sha1(pe.MEDIA_MP4)
+    initial = capture_candidates(auth, library_id, fixture, items, recorder, "reuse-control-selection")
+    assign_increment_controls(fixture, items, initial["ids"], recorder)
+    control_names = fixture["url_group"] + fixture["content_group"] + fixture["size_group"]
+    auth = scan.api_auth()
+    wait_native_task_idle(auth, scan.SCAN_TASK_KEY)
+    task, interval = scan.run_native_scan_completed(auth, "reuse increment control indexing", timeout=1800)
+    recorder.record("reuse_control_scan_completed", task=task, interval=interval,
+                    scope="reindex only the 12 rewritten control STRMs; library not rebuilt")
+    poll_fixture_items(auth, control_names, recorder, deadline_seconds=1800)
+    auth = scan.api_auth()
+    items.update(resolve_prepared_items(auth, fixture))
+    # Prepare only the 12 rewritten controls' baseline streams with the plugin disabled so the native
+    # PlaybackInfo calls persist a primary stream without any plugin probe or fingerprint.
+    require(scan.plugin_action(auth, False) == 204, "Could not disable the plugin for control preparation.")
+    sampled_restart(state.sampler)
+    auth = scan.api_auth()
+    prepare_reuse_increment_baselines(auth, items, control_names, fixture["urls"], recorder, state.sampler)
+    require(scan.plugin_action(scan.api_auth(), True) == 204, "Could not re-enable the plugin after preparation.")
+    sampled_restart(state.sampler)
+    auth = scan.api_auth()
+    items = wait_items_by_name(auth, list(items))
+    candidates = capture_candidates(auth, library_id, fixture, items, recorder, "reuse-all")
+    required_ids = candidates["supported_ids"] + list(candidates["control_ids"].values())
+    reconcile_candidate_identities(required_ids, candidates["ids"])
+    require(canonical_guid(items[fixture["controls"]["out_of_scope"]]["Id"], "external control")
+            not in candidates["ids"], "Out-of-scope control leaked into the selected library.")
+    require(len(candidates["supported_ids"]) >= minimum,
+            "The copied prepared library is below the required supported-source minimum.")
+    expected = expected_all_rows(auth, fixture, items)
+    assert_native_sources(auth, fixture, items)
+    rows_before = fingerprint_map(allow_missing=True)
+    require(not rows_before,
+            "Reuse --scenario all needs an empty copied fingerprint store; pass --reset-copied-fingerprints.")
+    capture_state(auth, fixture, items, expected, recorder, "before-first-trust", empty_fingerprints=True)
+    container = pe.container_name("jellyfin")
+    identity = container_identity(container)
+    recorder.set_container_identity(identity)
+    run_full_behavior(auth, library_id, container, fixture, items, candidates, recorder,
+                      state, summary, timeout, deploy, identity)
 
 
 def run_reuse_scenario(package: Path, source: Path, count: int, scenario: str,
@@ -1838,8 +2001,8 @@ def run_reuse_scenario(package: Path, source: Path, count: int, scenario: str,
                "scenario": scenario, "minimum_count": count,
                "full_task_acceptance": "NOT RUN",
                "not_run": ["increment", "query-stage-stop", "probe-stop-and-drain", "explicit-playback", "independent-B-review"]}
-    require(scenario in {"baseline", "unchanged", "restart"}, "Unknown focused reuse scenario.")
-    require(not reset_fingerprints or scenario == "baseline", "Copied reset requires baseline scenario.")
+    require(scenario in {"baseline", "unchanged", "restart", "all"}, "Unknown focused reuse scenario.")
+    require(not reset_fingerprints or scenario in {"baseline", "all"}, "Copied reset requires baseline or all scenario.")
     state = ScenarioState()
     source_before = None
     triggers = None
@@ -1859,6 +2022,8 @@ def run_reuse_scenario(package: Path, source: Path, count: int, scenario: str,
         scan.ACTIVE_RECORDER = recorder
         pe.login = isolated_login
         pe.guard_containers = require_owned_reuse_containers
+        global _REUSE_EDIT_TRACKER
+        _REUSE_EDIT_TRACKER = {}
         verification = pp.verify_archive(package.resolve())
         environment = system_profile()
         state.budget = RunBudget(environment, timeout)
@@ -1904,8 +2069,15 @@ def run_reuse_scenario(package: Path, source: Path, count: int, scenario: str,
             require(scan.set_triggers(auth, task_id, []) == 204, "Cannot suspend copied task triggers.")
         require(plugin_probe_count(pe.container_name("jellyfin"), startup_started) == 0,
                 "Prepared startup unexpectedly triggered plugin probes.")
-        summary.update(run_prepared_checks(auth, scenario, count, recorder, state, timeout))
-        summary.update(status="PARTIAL", focused_status="PASS")
+        if scenario == "all":
+            run_reuse_full_scenario(auth, prepared_fixture(count), count, recorder, state, summary,
+                                    timeout, summary["deployment"])
+            if summary.get("status") != "PASS":
+                raise RuntimeError("The retained-library full scenario did not satisfy every required stage.")
+            summary.update(focused_status="PASS", full_task_acceptance="PASS", not_run=["independent-B-review"])
+        else:
+            summary.update(run_prepared_checks(auth, scenario, count, recorder, state, timeout))
+            summary.update(status="PARTIAL", focused_status="PASS")
     except Exception as error:
         summary.update(status="FAIL", focused_status="FAIL",
                        error={"type": type(error).__name__, "message": scan._safe_exception(error)})
@@ -1958,6 +2130,7 @@ def run_reuse_scenario(package: Path, source: Path, count: int, scenario: str,
         pe.login = original_login
         pe.guard_containers = original_guard
         scan.ACTIVE_RECORDER = previous_recorder
+        _REUSE_EDIT_TRACKER = None
         (pe.WORK, pe.PROJECT, pe.PORT, pe.SERVICE_RESOURCE_LIMITS,
          pe._OWNED_WORKSPACE, pe._RUN_TOKEN) = previous_globals
         exit_code = 0 if summary["focused_status"] == "PASS" else 1
@@ -1990,10 +2163,8 @@ def main() -> int:
         args.scenario = "all"
     else:
         args.scenario = args.scenario or "unchanged"
-        if args.scenario == "all":
-            parser.error("Reuse supports focused baseline/unchanged/restart, not full acceptance.")
-        if args.reset_copied_fingerprints and args.scenario != "baseline":
-            parser.error("Copied-store reset requires --scenario baseline.")
+        if args.reset_copied_fingerprints and args.scenario not in ("baseline", "all"):
+            parser.error("Copied-store reset requires --scenario baseline or all.")
     if args.timeout_seconds <= 0 or args.timeout_seconds > MAX_TASK_TIMEOUT:
         parser.error(f"--timeout-seconds must be between 1 and {MAX_TASK_TIMEOUT}.")
     evidence_dir = args.evidence_dir.resolve()
