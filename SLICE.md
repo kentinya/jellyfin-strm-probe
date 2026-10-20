@@ -145,6 +145,8 @@ B 在新合同提交后重判旧 4.4 计划：明确停止代理计划，核对�
 
 Slice Final 仍须在最后候选／同一 ZIP 验证全部当前门槛，含扫描变化批量源及多版本 A／B 的完整重启前／重启后播放前／显式选源后五字段、地址与主流比对，不能只信旧扫描标签。B 形成 Closure Packet 后交 READY FOR A REVIEW，A 再审查完整 Base..Implementation Head；本次不是最终产品审查或关闭。
 
+2026-10-20 B 已在新合同 `65286326aaf933510a0645296ec36f8721aa1bc5` 后完成重核：旧 4.4 计划停止、不记 PASS；未发现新的非代理必要实施缺口，不新增 Task，直接准备独立 Final。保留义务／Surface 归属、输入与历史原始证据核验、包身份及 Final 执行准备见 [根 TASK](TASK.md#2026-10-20-b-合同重核与旧-44-裁决)。Final 仍 NOT RUN，当前仍 ACTIVE，Implementation Head 待最终交接填写，A 最终审查不变。
+
 ## Closure Packet
 
 NOT SUBMITTED。Task 4.1～4.3 已 B PASS；代理验证按用户授权不执行，历史 NOT RUN；独立 Slice Final、最终事实协调和完整 Closure Packet 未完成。
@@ -158,4 +160,4 @@ P0/P1 Blockers: NOT ASSESSED
 Closure Reconciliation: NOT STARTED
 ```
 
-NEXT ACTION: B RECHECKS THE WITHDRAWN TASK 4.4 UNDER THE NEW CONTRACT AND PREPARES SLICE FINAL IF NO IMPLEMENTATION GAP REMAINS
+NEXT ACTION: B RUNS THE INDEPENDENT SLICE 4 FINAL WITH THE RETAINED RESTART PROOF; NO NEW IMPLEMENTATION TASK
