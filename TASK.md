@@ -1,11 +1,15 @@
-# Task 4.3 — 真实 1000 项原生库的增量检查与成本
+# NO ACTIVE IMPLEMENTATION TASK
+
+## Task 4.3 — 真实 1000 项原生库的增量检查与成本
+
+本检查点保留完整 Task 4.3 计划、Developer／B 历史与最终 B PASS；没有活动实施任务。下一步 B 依据固定方案规划 4.4，本检查点不启动其实施。
 
 必读：[已提交 Slice 4 合同](SLICE.md)、[固定交付方案](docs/slice-4-delivery-plan.md)、[开发流程](docs/development-workflow.md)、[B 经验](docs/agent-experience/task-planner-reviewer.md)、[Developer 经验](docs/agent-experience/developer-implementation-role.md)。本 Task 仅细化 RO-2，不改变合同、Roadmap 或稳定需求。
 
 ```text
 Task ID: 4.3
 Parent Slice: 4
-Status: FIX REQUIRED
+Status: PASS
 Task Base: a06a80fac90a86085f25116568aa24b54847c562
 Contract Checkpoint: 539c01ca8ba4f0ce8c9eb59b32b88bbb337e7ce3
 Difficulty: High
@@ -14,7 +18,7 @@ Planner / Reviewer: B
 Implementation Head: 8573dfbffebb785261668f9cd5c895be937e000e
 ```
 
-当前 B 审查以文末 [2026-10-20 剩余门禁续审](#b-remaining-gates-20261020) 为准：scan-all 已补齐，大库行为已核验，两项旧 P1 保持撤回；开发部署 plugin 完整回归失败后仅修复隔离夹具前提，完整重跑、batch suite、configuration all 尚缺。Task 保持 FIX REQUIRED，不要求 Developer 为 P2 另造实现候选。
+当前 B 审查以文末 [2026-10-20 最后门禁续审与最终裁决](#b-final-gates-20261020) 为准：完整 T4 与独立验收已满足，Task 4.3 PASS；准备同步适配、原始失败和非阻塞 P2 如实保留。RO-4 与单独 Slice Final 未完成，下一步仅由 B 规划 4.4，不声明 Slice 已通过。
 
 ## Goal
 
@@ -160,7 +164,7 @@ Size 对照从最初就不提供 SHA-1，旧 Size 是真实合成媒体 A 大小
 - [x] AC-3：首次信任和未变轮次零插件实际探测、静态集合逐身份无漏重、完整五字段／地址／必要主流正确；受控 URL／内容／Size／缺流仅所需源探测且后续复查零探测，范围外及不支持对照不优化。
 - [x] AC-4：原生 ID／去重排序 O(N) 成本、原生临时分配、对象读取与活动工作分别记录；128／8／默认 2 上限有实际观测及代码／确定性证据，非全库对象物化或每候选 Task。
 - [x] AC-4：真实大库准备和分批阶段停止命中可核验，停止后零新准入；已开始工作有效提交、未开始旧基线保持，旧轮收尾前不能实际再运行；停止终态／进度／统计／延迟真实，重跑收敛并完成资源结算和只读重启核对。
-- [ ] AC-8 对应部分：最终完整 T4、同 ZIP 安装／扫描／至少 1000 项大库验收均取得真实证据，原始材料、资源与输入身份、失败与恢复／清理完整；无秘密泄露，NOT RUN／BLOCKED 不算 PASS。
+- [x] AC-8 对应部分：最终完整 T4、同 ZIP 安装／扫描／至少 1000 项大库验收均取得真实证据，原始材料、资源与输入身份、失败与恢复／清理完整；无秘密泄露，NOT RUN／BLOCKED 不算 PASS。
 - [x] 只含本 Task 的工具／测试、必要诊断、实际阻碍 RO-2 的最小产品修复与事实文档；没有合同、schema、业务规则、取消语义或额外调度／状态架构变更。
 
 ## 必要测试
@@ -640,3 +644,81 @@ RO-2 仍未取得 B PASS；RO-4 未完成，RO-1／RO-3 保留已提交历史决
 - 私有证据：.git/validation-evidence/1530ba5deb9dddb8867e0f37940227a84c8e2dfe/b-remaining-gates-20261020T050629Z，仅本机可读。含失败／重试、原始日志、独立扫描审计、源码／负载身份及隔离收尾；凭据、原始运行库与证据不入提交，1004 项库／基线持续保留。
 
 - **最终短检查及安全收尾**：完整 Python 262/262 PASS（9.325 秒命令 wall），治理／diff／本 Task 7 个本地 Markdown 链接与锚点通过；私有检查器首次传输转义错误已纠正，不计产品失败。独立复核全部触发器一致、所有原生任务 Idle、核心配置默认值、主 STRM 及媒体恢复、临时库条目已清、主播放地址／视频流正确且额外探测 0；自有两服务停止 exit 0／无 OOM，9 个既有运行容器身份／启动时间／镜像不变。原始 1004 项主准备库 1170 个文件哈希与既存备份清单逐项一致（整个工作区物理 STRM 1007，strm 子目录 1006，另有范围外对照），全部保留库及基线未启动、重建或清理。
+
+
+<a id="b-final-gates-20261020"></a>
+
+## B 最后三项门禁续审 — 2026-10-20
+
+用户明确要求 B 继续，撤销本轮先前的测试时间占比约束；历史超预算事实保留，不再以该约束停止剩余门禁。本轮先核对冻结输入与已停止专属实例归属，复用前次定向修复后的开发夹具，串行执行完整 plugin、batch suite、configuration all；不更改插件／验收工具断言，不接管生产、共享实例或重建 1004 项库。结果待实测补齐，Task 暂保持 FIX REQUIRED。
+
+
+### 首次完整重跑与继续验收
+
+- 完整 plugin 于 05:44:31.532915Z 开始，206.246 秒、exit 1；普通媒体夹具前提已通过，但在原生多版本合并后的首次 PlaybackInfo 断言中断。原始服务器日志记录 visible media source set changed／playback must retry，暂不将其归因为产品或夹具，保留失败，后续增加只读观测核实。其余前序局部结果不能冒充完整 PASS。
+- finally 独立核对配置、全部触发器、库／条目、三份媒体／STRM、全部任务 Idle、主播放正确且零额外探测；自有双服务 exit 0／无 OOM。外部容器挂载摘要的初次比较误把 Docker 返回列表顺序当作身份；逐排列对照原摘要证明 9 个既有容器挂载内容未变，且启动时间／镜像／运行状态一致。原始 FAIL 不覆写，补充 order-independent 复核材料。
+- 下一独立尝试先串行运行 batch suite、configuration all，再完整 plugin；只调整不同完整入口的执行次序以取得其他门禁结果，各入口内部场景顺序及断言不变，原始失败完整保留。时间占比不再是停止依据。
+
+- batch suite 于 05:52:25.958942Z 开始，121.230 秒、exit 1：discovery／原生定时／未变与重启分支完成；stop 场景确认两项已开始探测在停止后有效提交，一项撤销，原生终态 Cancelled；但场景要求的定时／手动排队下一轮没有进入，断言失败。不能用局部停止成功或历史包／大库结果替代完整 suite。随后独立恢复检查通过，自有服务 exit 0／无 OOM，9 个外部容器未变。
+- configuration all 改为独立串行尝试，避免前一入口失败令尚未执行门禁无限延期；完整入口内部不变。后续继续核实失败原因，不改原始失败状态。
+
+
+### B 场景准备同步说明
+
+- configuration all：05:56:02.397053Z 开始，277.062 秒、exit 0；完整浏览器／API 场景、finally 与独立边界恢复通过，双服务 exit 0／无 OOM，9 个外部容器未变。详细原始截图／响应保留，尚待最终独立审计；本结果不是完整 Task PASS。
+- 两处失败均发生在夹具索引尚在运行时：plugin 合并前只等待项目可见；batch 定时于停止收尾期间触发后，另一个 Scan Media Library 于 05:53:52.812Z 完成，而停止轮直到 05:54:00.283Z 才 Cancelled。固定原生 TaskManager.ExecuteQueuedTasks 在任意任务完成时取出队列，仅执行当时 Idle 项；忙项不会重新入队，故不能假定触发请求必定保留到停止轮之后。先不修改插件或降低“收尾后可运行”义务。
+- B 为诊断和准备明确增加两处等待：只在 multiversion_and_sqlite_failure_check 和 scenario_stop 的 wait_for_named_library_item 返回前，等待该准备扫描 Idle 且本次结果 Completed，预声明上限 120 秒；其余场景、故意并发扫描、断言、探测／停止／恢复不变。私有适配记录 scan 完整起止结果及双源 PlaybackInfo 摘要；原始脚本逐字节不变。该运行会如实注明适配，不冒称未经适配原命令通过；若仍失败则按观察继续分类，不重试至碰巧绿灯。
+
+- 配置独立审计核对 19 份浏览器 driver result 均 exit 0、13 个 summary 场景、133 个原始文件及 57 张截图，真实范围／启停／批量旅程和恢复通过。浏览器并非零错误：原生 dashboard/plugins 路由保留 2 次 CancelledError、28 次 scrollHandler 异常及插件商店包查询 404；失败注入场景另有预期配置 400／500。插件页面加载、保存、重读和任务断言均完成，原始栈未删，按观察记为原生 Web 非阻塞诊断，不夸称全站零错误。独立审计首次自加“pageErrors 必须为空”检查失败已保留，不将此额外条件变为新产品门槛。
+
+- 准备同步后的完整 plugin 于 06:01:40.849270Z 开始，489.345 秒、exit 1：多版本独立选源、URL／缺 SHA-1、SQLite 故障／修复重启、禁用／重启及全局并发 1／2 分支均完成；最后在 independent_native_refresh_check 的原有 elapsed < 2.5 秒断言失败，实际 3.12 秒。原始失败保留，不降低阈值、不将局部结果写成完整 PASS；最后的 core_configuration_api 尚未运行。独立 finally 恢复、双服务 exit 0／无 OOM、9 个外部容器不变均通过。继续核对这次原生刷新实际路径与媒体请求时序，区分原生刷新耗时和插件许可阻塞。
+
+- 准备同步后的 batch suite 于 06:10:46.479832Z 开始，477.962 秒、exit 1：七个场景（discovery、scope、stop、sharing、shared-stop、mixed、failure）均返回，但最终清理仍有一项 Batch Mixed Playback 的原生索引残留，整体 FAIL；停止场景本次已确认定时触发在收尾后启动，已提交源不重复探测、撤销源恢复。三份物理输入及配置／触发器恢复一致，但独立完整项目清单检查也拒绝这一个残留，不能沿用脚本 state_restoration 标签放行。自有双服务 exit 0／无 OOM、9 个外部容器未变；下一步仅在本轮专属实例等待准备工作结束，再通过原生扫描修复残留并复核，不动保留大库。
+
+- 原生索引残留已在同一专属实例以一次完整原生扫描移除，独立对账恢复为原始五项及三份文件；原 batch FAIL 不改写。未改断言的独立刷新诊断预先固定为三次，耗时 2.99／2.92／2.60 秒，三次均未满足原有 2.5 秒断言；新增请求／ETag 时间观测及原始探测起止材料，结果不是完整 plugin PASS。另运行最后尚缺的 core_configuration_api 分支，完成后按真实结果记录；继续使用无饱和探测的原生刷新对照辨别测试环境延迟，不凭源码猜测或盲目扩超时。
+
+### 原生冷启动与清理的定向准备修正
+
+- 五次无插件饱和探测的原生 FullRefresh 对照耗时分别为 3435／1132／763／748／741 ms；冷启动首次也超过 2.5 秒，不能把该阈值失败直接解释为插件许可阻塞。该对照原生配置、CPU 2／1536 MiB 及代码不变，完整恢复通过。三次饱和诊断全部失败的原始结论继续保留；core_configuration_api 已独立完成五个非法输入拒绝、详细日志／启停下一请求、配置重启持久化和恢复，不能拼成完整 plugin PASS。
+- 下次完整 plugin 在独立刷新场景建立饱和探测之前，以原生 FullRefresh＋ETag 先完成一次冷路径准备，原 2.5 秒断言、3 秒慢媒体、并发 1、场景和其他断言均不改。额外原生刷新在饱和窗口前记录，不能充当并发通过证据；不提高资源或超时、不自动重试 PlaybackInfo。
+- batch 的 mixed 场景在返回前发起异步原生 FullRefresh，finally 紧接着删夹具；原生工作随后读取已删除文件，与清理扫描交错。下次仅在该原生刷新返回后、删除前等待同一项目 ETag 变化，保留混合并发、原生刷新接受及所有清理断言。两项均为私有隔离准备适配、原始工具文件不变，独立报告准确命令／补充等待；若仍失败，保留失败，不宣称未经适配原命令 PASS。
+
+- 私有适配的实现记录：plugin-warmed 启动后发现新增外层包装掩盖旧准备等待的直接调用者；修正时进程已加载文件，故不把磁盘修正当已执行，已恢复并保存进程启动时的准确源文件／摘要。该次仍有效包含预饱和原生预热，但不宣称多版本准备扫描等待生效；原始完整入口、断言和结果按实际记录。尚未启动的 batch-settled 已在执行前修正调用者转发，不更改业务或断言。
+
+- plugin-warmed 的实际完整运行于 06:26:26.473774Z 开始，207.962 秒、exit 1，再次在未同步的多版本合并后首次 PlaybackInfo 中断；预饱和原生预热尚未到达，不能说预热已验证独立刷新。finally／独立恢复及外部实例边界通过。修正调用者转发后的准确私有适配在下一次启动前冻结，完整 plugin 将只在当前串行 batch 收尾与归属复核后执行，既有全部失败保留。
+
+- batch-settled 完整适配套件于 06:30:23.000166Z 开始，417.110 秒、exit 0；七场景全部通过。B 另核对原始日志本轮时窗、原生停止后两项提交／一项撤销、收尾期间零新轮、定时收尾后仅一轮、双方向共享／停止共享、130 项分两批、混合并发峰值 2 与状态库故障恢复。mixed 异步原生刷新在删夹具前 699 ms 完成并观测到 ETag 变化；独立 finally 核对五项原生项目、三份输入、配置／全部触发器与运行前完全一致，双服务 exit 0／无 OOM、9 个外部容器未变。该结果明确属于私有准备同步适配，不声称未经适配的原始命令通过；既往两次 batch FAIL 保留。播放完整套件在其安全收尾后串行启动，尚未据此判定整个 Task PASS。
+
+- plugin-prepared 完整适配套件于 06:37:49.028743Z 开始，519.730 秒、exit 0；所有原始 main 分支及最后 core_configuration_api 均完成。独立原生 FullRefresh 为 **851 ms**，保留原 <2.5 秒断言；饱和前两次原生预热分别 2202／3087 ms（第二次在并发配置重启后），均不计通过窗口。原始日志核对 pool=1、探测 06:45:29.266 实际开始、唯一慢请求 29.311→32.311 的 3 秒延迟及 33.020 成功提交；正式函数仍在唯一慢请求开始后测量独立刷新。该轮未额外记录每个刷新 HTTP 请求时间戳，不夸称毫秒级独立时序采集。多版本独立源／URL／无 SHA-1、SQLite 故障修复重启、false 权限、普通／旧／直播／禁用委托、同源共享、并发 1／2、失败／竞态与全部清理均按原断言完成。独立 finally 全状态一致、双服务 exit 0／无 OOM、9 个外部容器未变。原始未适配命令及三次诊断失败继续保留，不将它们回写为通过。
+
+### 最终 B 裁决与证据复用
+
+```text
+Reviewed Range: a06a80fac90a86085f25116568aa24b54847c562..8573dfbffebb785261668f9cd5c895be937e000e
+Report-only starting Head: 5cb81717039df627c7eafd02affd8404e08c3a9b
+Contract Checkpoint: 539c01ca8ba4f0ce8c9eb59b32b88bbb337e7ce3
+Decision: PASS
+P0/P1 Blockers: NONE FOUND
+BR-43-G1: CLOSED — remaining complete B gates obtained and independently audited
+BR-43-R1 / BR-43-R2: P2, nonblocking; earlier severity correction remains effective
+Slice Required Outcomes all satisfied: NO
+Next: B PLANS TASK 4.4 — REAL JELLYFINPROXY PLAYBACK CHAIN
+```
+
+| 必要门禁 | 最终事实与归属 |
+|---|---|
+| locked restore／Release build／全量 C#／format | 复用本次同候选 B 完整运行；全部 exit 0，C# 202/202、skip 0，build 0 warning／error；65 项可执行／测试／锁输入在原检出与隔离副本逐项一致。 |
+| 全量 Python／治理／差异／Markdown | 最终报告修改后重新执行 262 项发现及文档消费检查，准确结果保存在本轮 final-checks.json；非零发现及全部成功才保留本裁决。 |
+| 打包与 package all | 固定 ZIP SHA-256 `4066980f5d67768ad98d660cbd2f0ba250a9f70c149bad65a4a5f2a8e14a117d`；来源 `b2f19c24f05d806ab75f152f36a302582e60ad67`，buildInputs SHA-256 `362df04af4af539add03017bf129747581345e813a27ef6f0645f3da0763bbda`。打包输入及 45 个 Release 负载匹配，复用已核验打包；B 新 package-all 377.672 秒 PASS，完整安装／升级／恢复／非法包分支，不用开发部署冒充 ZIP。 |
+| scan all | B 新完整运行 816.477 秒 PASS，独立审计 54 个原始文件／1404 个事件、原生扫描与播放／批量真实重叠、136 源及停止／定时／恢复；旧扫描重启检查覆盖不足仍为 P2，最终 Slice Final 要另核变化批量源与多版本 A／B 的完整重启前后状态。 |
+| 全部现存 1004 项大库 | 明确复用已匹配的 run-5 全流程，并由 B 独立重核 43 个原始文件、逐身份／完整五字段／原生地址主流和实际日志；首次 1004 信任／零探测，增量 16，停止 2／恢复 2，两轮未变零探测，1008 当前源完整重启前后只读一致，16 个变化源显式选源播放零额外探测。另有 B 独立 1004 项首次／未变／重启复现 115.979 秒；其 focused PASS／overall PARTIAL 不冒充 full。 |
+| 三个默认开发部署回归 | configuration all 277.062 秒 PASS（19 浏览器驱动、13 summary、133 原始文件、57 截图）；batch suite 417.110 秒 PASS；plugin 519.730 秒 PASS。三者均独立审计恢复／退出和外部边界。后两者明确经已披露私有场景准备同步执行原始完整 main／断言，不声称未经适配命令 PASS。 |
+| 输入／大库保留／服务边界 | 65 项输入在两份检出一致、固定 ZIP 一致，原 1004 项准备库 1170 文件的集合／大小／mode／SHA-256 一致；自有两服务已停止、exit 0／无 OOM，9 个其他运行容器身份／启动时间／镜像／挂载不变。所有准备数据、基线及失败副本继续保留，不清理／重建或为通过而重新准备全库。 |
+
+本轮不改变产品源码、正式工具／测试、依赖、资源、阈值、业务或取消语义。私有适配修正的是异步原生夹具前提：多版本／停止场景等待准备扫描完成、独立刷新饱和前完成冷路径、mixed 删除前等待其已排队原生刷新；所有实际重叠、原断言及独立恢复仍执行。此前原始失败不是被删除或改绿，也不因为本次通过承诺冷启动原生刷新总在 2.5 秒内。BR-43-R1 描述和 R2 局部字段一致性保持 P2；B 没有只消费单一 full_task_acceptance 标签，已核整体退出、原始结果与必要收尾。
+
+**全部 RO／Surfaces 重核：** RO-1 保留 4.1 B PASS，当前同 ZIP package-all 再验证；RO-3 保留 4.2 B PASS，当前完整 scan-all 与三个默认回归保持，既存 Final 重启补证义务不消失；RO-2 本次满足 AC-3／AC-4 与 AC-8 对应部分，原生查询／ID O(N) 成本、128 对象／8 消费者／默认 2 探测、完整首次／增量／停止／重跑／资源结算／重启均已证实。RO-4 的实际代理／302／客户端内容仍 NOT RUN；安装与支持文档的旧指针留 Slice 最终事实协调，不因此扩张兼容声明。不能用四个 Task PASS 拼成 Final；尚不形成 Closure Packet、READY FOR A REVIEW 或 Slice 关闭。
+
+**证据交接：** 本机续轮索引 `.git/validation-evidence/5cb81717039df627c7eafd02affd8404e08c3a9b/b-complete-gates-20261020T054244Z/INDEX.md`；前轮完整门禁与大库审计索引通过 reuse-audit.json 关联。每次命令、私有适配源码／摘要、失败、原始日志／截图、独立审计、输入及保留库核对、最终文档测试和执行账目均留本机，不声称 GitHub 可读；无凭据／运行 DB／本机原始证据入提交。用户已撤销先前时间比例限制，历史执行偏差保留，不靠空等凑比例。只提交预期审查文档，普通本地 checkpoint，不推送。
+
+最终检查中的一次治理拒绝已保留：已通过 Task 仍作为活动首标题时，治理按既定规则拒绝 Invalid active Task status。参照 4.1／4.2 已提交通过快照，将首行改为 NO ACTIVE IMPLEMENTATION TASK，保留内部 Task 4.3／Status PASS 与所有历史，不修改治理工具或状态规则；随后重新执行全部最终文档检查。
