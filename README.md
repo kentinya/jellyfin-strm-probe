@@ -10,6 +10,8 @@
 
 [V4.3 方案](<Jellyfin STRM Probe Optimizer V4.3 开发方案.md>) 是当前基准，仅修订 V4.2 的扫描方式；V4.2 原文保留在 Git 历史。V3.0 已按用户改动从工作区移除，原文及旧合同可在 Git 检查点 `4b1d0468c1e43e6e9034ef98e99b6cc44ea59485` 中读取；不改写历史。
 
+按 2026-10-20 用户授权，当前交付不验证 JellyfinProxy，不宣称代理兼容；原生播放、安装恢复、大库与扫描验收保留，具体覆盖见 [范围说明](docs/scope.md)。V4.3 输入原文保持不变，本次范围修订以用户授权及当前合同为准。
+
 **不开发 STRM 生成程序。** 插件只读现有 STRM，不调用 OpenList 元数据 API、不下载媒体计算哈希、不改写 JellyfinProxy。首版不开发独立调度器、独立任务按钮、仅更新路径服务或扫描后自动触发，见 [范围说明](docs/scope.md)。
 
 ## 文档入口
@@ -51,6 +53,6 @@ python3 -m unittest discover -s tests -v
 git diff --check
 ```
 
-治理与 Python 回归只验证文档身份、已提交合同及状态约束，不代表插件构建、探测、播放或独立审查通过。Developer 只运行改动文件直接影响的测试；完整全量回归由 B 承担，规则见 [开发流程](docs/development-workflow.md#测试等级)。
+治理与 Python 回归只验证文档身份、已提交合同及状态约束，不代表插件构建、探测、播放或独立审查通过。Developer 只运行改动文件直接影响的测试；完整全量回归由 B 承担，规则见 [开发流程](docs/development-workflow.md#5-测试等级)。
 
 V3.0 一次性初始化脚本 `scripts/bootstrap_repository.py` 与 `scripts/bootstrap-manifest.json` 已从当前工作区移除，历史内容可从 `aa01231:scripts/bootstrap_repository.py` 和 `aa01231:scripts/bootstrap-manifest.json` 读取。克隆仓库后不再执行旧初始化；当前治理继续校验 V4.3 方案身份、现行文档和已提交 Slice／Task。`check_governance.py --bootstrap` 仅保留未初始化规划的只读检查，不负责创建 Git 或激活合同。

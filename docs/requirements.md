@@ -36,7 +36,7 @@ V4.2 的 URL 改变规则替代 V3.0 路径单独更新规则；STATE 编号现�
 | REQ-CONFIG-002 | URL 变化探测、SHA-1／Size 决策、Modified 忽略及权限是固定规则；首次信任默认开启、批量仅按需处理；不增加关闭正确性规则的开关 | 七；保留配置边界 | X09 |
 | REQ-FAILURE-001 | SQLite 运行时异常停止优化并尽可能原生委托；批量报告不可用，不继续无条件全库探测；启动接入失败明确报告 | 保留故障边界 | X04、X06、B08 |
 | REQ-PRIVACY-001 | 指纹无完整 URL／PlaybackInfo；日志、进度与证据不泄露签名、token、Cookie 或私有路径 | 八；保留隐私边界 | X10、B09 |
-| REQ-EXTERNAL-001 | 保持原生 PlaybackInfo 契约、MediaSourceId→URL 和代理 302；本项目不改代理缓存配置 | 九、十 P3 | Slice 4 联调 |
+| REQ-EXTERNAL-001 | 保持 Jellyfin 原生 PlaybackInfo 契约与 MediaSourceId→URL 的正确对应；不改代理代码或缓存配置。按 2026-10-20 用户授权，JellyfinProxy 专属联调／302／代理客户端内容验证撤出当前交付验收；未验证且不承诺兼容 | 九、十 P3；用户授权撤出代理验收 | 原生播放／多源／重启回归；代理 NOT RUN（按用户授权不执行） |
 | REQ-BATCH-001 | 通过经版本核实的 IScheduledTask／IConfigurableScheduledTask 注册「STRM 媒体信息检查」，手动运行／停止／定时均由 Jellyfin 管理；默认无自动触发 | 一、五 | B10 |
 | REQ-BATCH-002 | 用原生库查询获取所选范围的候选 ID，去重固定集合后分批读取当前媒体对象；允许一次获取全部 ID，完整对象和固定消费者有上限，不为全库创建 Task。单列 O(N) 身份内存／查询临时分配；普通／旧／不支持 STRM 不探测；新增下轮发现，消失／移出范围安全结算 | 三、七；用户授权 ID 集合方案替代逐页枚举 | B03、B04、B11、B12 |
 | REQ-BATCH-003 | 播放与批量使用相同解析、决策、协调和提交机制；批量执行不要求启动播放会话 | 二、四、八 | B04～B06 |

@@ -43,11 +43,10 @@ Slice 3 交付完整配置页／所选媒体库、Jellyfin 原生「STRM 媒体�
 
 ## 当前开发指针
 
-- 开发基准 V4.3；Slice 1／2／3 均 PASS / CLOSED，历史失败与合同变更保留在 Git／原始证据；上方账本只记录已关闭能力。
-- 最新接受实现仍是 `7c64eb5dcad6e5f20fb7eb41819be2521f65484d`。Slice 3 的真实关闭提交为 `03169b07d110964562f7da31d2c3d7add82e5ff5`，完整合同／最终包和 Task／B 身份从该快照读取。
-- 2026-10-16，A 在关闭后的独立一轮选择并激活 [Slice 4](../SLICE.md)，Base 固定为上述关闭提交，Implementation Head 为 NOT SET。必要结果为单版本安装与恢复、真实大库／成本、完整扫描重叠和实际代理播放链；用户随后授权本次直接规划首个 Task，并固定 [后续 B 的交付方案](slice-4-delivery-plan.md)；方案已先行提交为 `ae265d0dba02aa1c5599871602d4350072b7155f`，随后 [Task 4.1](../TASK.md) 计划为 PLANNED，Task Base／Contract Checkpoint 均为该 SHA。后续 4.2／4.3／4.4 待 B 逐个规划，不能直接实施。2026-10-18 的历史 3000 门槛及 2026-10-19 改为至少 1000、复用现存 1004 项的调整与新 Contract Checkpoint 见当前 `SLICE.md`、`TASK.md` 和开发流程记录。
-- Task 4.1 已由 B 独立复审 PASS，接受实现 `b5d4f2836229d16ac8add7034294c4306ddf5be1`，完整报告／审查见 `0e7b26b381ed5f71781e75d317275afa51d791e9:TASK.md`。RO-1 包安装、升级恢复及 MP4／MKV 原生 Web 播放的分层证据已接受；仍不代表 Slice 4 Final 或完整产品通过。
-- 当前 [Task 4.2](../TASK.md) 的 Base 为上述 B PASS 检查点。Developer 提交扫描验收工具／测试，候选实现 `4837cb6d98ebbc60281ab3a66c888588a1120110`，报告检查点 `9e3a5b6cff504d8e339e7b0839ad6d9f5b5ef051`；B 审查为 FIX REQUIRED（RO-3 缺口：真实窗口内的有限变化／固定候选边界、逐源／选源／成功判定、ZIP 上停止及故障控制、可核验的原始证据，BR-42-1..4）。B 独立 Python 141/141 通过，4 项控制复现验收误判；未宣称产品缺陷或重跑实机。B 本机证据索引：`.git/validation-evidence/4837cb6d98ebbc60281ab3a66c888588a1120110/b-review-20261017-04/INDEX.md`。
-- Developer 已在同一 Task 修正为候选 `eac764d9b32a1b13f8ac963f8c14888fd50db4a3`（归档 `62ae0669…`）：有限变化移到原生扫描 Running 窗口内、要求 Completed 与完整摘要、逐源与显式选源对账、跨批停止与单项失败隔离、外置 `--evidence-dir` 原始证据。修正候选已交为 READY FOR B REVIEW；RO-3 仍未签发 PASS，RO-2／RO-4 仍 NOT RUN。上述 4.2 为历史候选记录；当前 Task 4.3 候选已交为 READY FOR B REVIEW，按 2026-10-19 用户授权改为至少 1000 项并使用现存全部 1004 项，须由 B 在新 Contract Checkpoint 后重核合法性；既有 FIX REQUIRED 不因交接而解除，不因此获得 B PASS；修正证据索引：`.git/validation-evidence/eac764d9b32a1b13f8ac963f8c14888fd50db4a3/run-20261017T143741Z-92b89989/INDEX.md`。
+- 开发基准 V4.3 输入原文不变，用户范围覆盖见 [范围说明](scope.md)。Slice 1／2／3 PASS / CLOSED，历史合同／失败与审查保留；上方仅为已关闭 Slice 的历史账本，不是当前全局状态。
+- [Slice 4](../SLICE.md) 仍 ACTIVE，原 Base 保持 `03169b07d110964562f7da31d2c3d7add82e5ff5`。当前接受实现及准确 Task 4.1～4.3 B PASS 快照统一见 [合同当前交接](../SLICE.md#事实更新与停止规则)；不是完整 Slice 已通过。
+- 2026-10-20 用户明确授权 A 不验证 JellyfinProxy；原 RO-4／AC-7 和代理专属门槛从当前范围撤出，历史 NOT RUN、不记 PASS、不宣称兼容。原生播放／源身份／地址／流／恢复／重启、包／扫描／全部 1004 项大库及最终完整回归保留。
+- 原 Task 4.4 的完整 PLANNED 计划与 Base 保留于 `4cc02048fb50c3c0b50a1b1b116246b202d86aaf:TASK.md`，根 [TASK.md](../TASK.md) 暂无活动实施任务。Task 4.3 最终完整报告／失败历史／B 决定为 `57c5072db0cebf4bcf5fa64c3cde635e9a23dcb3:TASK.md`，替代之前的待复审指针，不改写旧拒绝或原始失败。
+- 下一步由 B 在新合同提交后明确重判旧 4.4 计划，核对全部保留 RO／Surfaces／AC；无实施缺口则直接准备独立 Slice Final。Final 仍须补齐变化批量源及多版本 A／B 的完整重启状态，不能只信旧扫描标签。Closure Packet、最终事实协调及 A 最终审查／关闭未完成，本轮不启动验收或实施。
 
-NEXT ACTION: B RECHECKS TASK 4.3 AFTER THE 1000-ITEM MATERIAL CONTRACT CHANGE
+NEXT ACTION: B RECHECKS THE WITHDRAWN TASK 4.4 UNDER THE NEW CONTRACT AND PREPARES SLICE FINAL IF NO IMPLEMENTATION GAP REMAINS

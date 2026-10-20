@@ -69,6 +69,8 @@ Task 计划前运行 `python3 scripts/check_governance.py`：读取 `HEAD:SLICE.
 
 2026-10-18 用户授权 A 将当前大库验收从历史规划中的至少 100000 个候选调整为至少 3000 个真实原生候选。历史快照、关闭账本和既往模拟结果保留原数值并明确为历史事实。2026-10-19 用户进一步授权当前门槛为至少 1000 个真实原生候选，使用现存 1004 个受支持库内源，不截取为 1000，不另跑 3000 级；当前 ACTIVE Slice、Roadmap、Task 和同步文档以此为准。真实历史运行的 3000 等数量与原结论保留。本次数量调整属于 Material Contract Change，B 必须在新的 Contract Checkpoint 后重新核查当前 Task 的合法性；保持 Slice／Task Base、既有审查结论和其他 Required Outcome，不授权本轮插件或工具实施。
 
+2026-10-20 用户明确授权 A 不验证 JellyfinProxy、调整相关文档。此为 Material Contract Change：当前 Slice 4 撤出 RO-4／AC-7 和代理专属 Required Surface、构建／缓存／302／代理客户端读取验收；历史 NOT RUN，按用户授权不执行，不计 PASS、不宣称代理兼容。RO-1～RO-3、非代理完整回归、最终安装包／扫描／现存全部 1004 项大库、原生播放／选源／恢复／重启义务不变。A 先提交新合同，根 TASK 暂无活动实施任务；B 在提交后重判旧 4.4 计划，非代理结果已满足时直接准备独立 Slice Final，不另造只跑测试的 Task。本轮只改文档，不实施、不运行产品验收、不关闭 Slice、不推送。
+
 当前文件治理独立检查 V4.3 方案及维护中的文件清单；V4.3 是用户授权的扫描方式最小修订，沿用已提交 ID 集合合同，不移动 Slice／Task Base 或改变其验收；V3.0 一次性 `scripts/bootstrap_repository.py`／`scripts/bootstrap-manifest.json` 已从工作区及必需文件清单移除，旧内容保留在 `aa01231` 及更早 Git 历史中，不重跑或重生成。只移除旧初始化依赖；`--bootstrap` 的只读规划限制、当前方案哈希、现行必需文档和提交／祖先校验保持不变。未来再次替换方案时，必须显式同步原文身份、需求、合同和治理回归，不能通过删除原文校验规避变更记录。
 
 ## 4. Task 规划与实施
