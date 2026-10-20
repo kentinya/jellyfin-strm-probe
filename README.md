@@ -4,7 +4,7 @@
 
 项目：`Jellyfin.Plugin.StrmProbeOptimizer`，C# 插件。SQLite 仅保存最小历史指纹，媒体流继续保存在 Jellyfin 原生库，不维护独立探测状态机。
 
-当前进度、验收状态和不可变证据只维护在 [Slice 合同](SLICE.md)、[Task](TASK.md) 与 [关闭账本](docs/progress.md)。本 README 只提供项目入口和可执行命令；不要在这里复制 Task 状态或审查计数。
+当前工作从 [当前开发指针](docs/progress.md#当前开发指针) 进入；合同、验收状态和不可变证据由 [SLICE.md](SLICE.md)、[TASK.md](TASK.md) 与关闭账本维护。本 README 提供项目入口和可执行命令，不复制 Task 状态或审查计数。
 
 ## 开发基准与范围
 

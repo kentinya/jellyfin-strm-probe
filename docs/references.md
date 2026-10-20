@@ -2,6 +2,8 @@
 
 最新补充日期：2026-10-20；原流程参考读取日期为 2026-10-13。引用外部流程并针对本项目重新编写；没有复制 mediaflow 的媒体整理实现、Storage／Recognition 架构或“禁止 FFprobe”产品规则。
 
+下方外部流程、源码定位与环境调研保留对应日期的读取事实；其中“待核实”“未实测”与 NOT RUN 只描述当时状态，不是当前待办。后来已经实证的接入、原生任务、扫描与大库结果见 [兼容性](compatibility.md) 和 [关闭账本](progress.md)；未测边界以 [测试矩阵](test-matrix.md) 为准。本次文档治理未重新读取外部来源或运行产品验收。
+
 ## 原始方案的本地参考边界与历史
 
 按 2026-10-20 用户要求，V4.3 原方案退出治理，仅保留为可选本地参考，不再跟踪或上传 GitHub，不作为必读、必需文件或哈希校验对象。当前开发依据为 AGENTS、维护中的需求／架构和已提交 Slice／Task；克隆与 CI 不需要原文。既有历史副本保留，发布边界见 [开发流程](development-workflow.md#6-git-检查点)。
@@ -18,7 +20,7 @@ V3.0 已从工作区移除，其原文 SHA-256 为 `d236cab6b3992636b524f30bbe49
 |---|---|---|
 | [development-workflow.md](https://github.com/kentinya/mediaflow/blob/ba6b4f92f278950a5e0346d7dfa1387fafac2fca/docs/development-workflow.md) | `84072c1fac4a76f7f8fdd368adc83a7350db8848` | 测试阶段、证据复用、用户冻结／恢复、合同变更与关闭后停止 |
 | [Task/TEMPLATE.md](https://github.com/kentinya/mediaflow/blob/ba6b4f92f278950a5e0346d7dfa1387fafac2fca/Task/TEMPLATE.md) | `18e9ff82b9d28c03e72e3163ba3f537d07855cf1` | 四部分测试计划、证据索引与可选经验候选 |
-| [check_governance.py](https://github.com/kentinya/mediaflow/blob/ba6b4f92f278950a5e0346d7dfa1387fafac2fca/scripts/check_governance.py) | `28ab299e43fd359f0cea04cc0e495276dcc543f3` | 接受已提交 PLANNED／无活动 Task；拒绝 PLANNED 下活动 Task，保留本项目祖先与原文校验 |
+| [check_governance.py](https://github.com/kentinya/mediaflow/blob/ba6b4f92f278950a5e0346d7dfa1387fafac2fca/scripts/check_governance.py) | `28ab299e43fd359f0cea04cc0e495276dcc543f3` | 当时借鉴 PLANNED／无活动 Task 的合法性检查；本项目现行保留提交／祖先校验，原方案校验已按用户要求移除 |
 | [AGENTS.md](https://github.com/kentinya/mediaflow/blob/ba6b4f92f278950a5e0346d7dfa1387fafac2fca/AGENTS.md) | `572d2be874e2fa724027e45f32d7835ed39e2fb2` | 按职责阅读经验，稳定需求规范与原始参考分工 |
 | [A 经验](https://github.com/kentinya/mediaflow/blob/ba6b4f92f278950a5e0346d7dfa1387fafac2fca/docs/agent-experience/slice-owner-architect-final-reviewer.md) | `6dc344e9e62548194542d6fedccdd59a6e6b72bc` | 适用方法明确标为外部参考 |
 | [B 经验](https://github.com/kentinya/mediaflow/blob/ba6b4f92f278950a5e0346d7dfa1387fafac2fca/docs/agent-experience/task-planner-reviewer.md) | `cb760a3a34155d39a270c3121f6d9a6d83e21faa` | 适用方法明确标为外部参考 |
@@ -48,7 +50,7 @@ V3.0 已从工作区移除，其原文 SHA-256 为 `d236cab6b3992636b524f30bbe49
 | [BaseItem.cs](https://github.com/jellyfin/jellyfin/blob/v12.2/MediaBrowser.Controller/Entities/BaseItem.cs) | 原方案提出的 ShortcutPath 和持久化位置，Task 1.1 核实 |
 | [MediaBrowser.Controller.csproj at v12.2](https://github.com/jellyfin/jellyfin/blob/ca0f16eb7c195f720a1493ed469a27c4657db0c6/MediaBrowser.Controller/MediaBrowser.Controller.csproj) | 本轮源码页面显示目标框架 `net10.0`；未取得固定 SDK、镜像 digest 或本项目依赖组合 |
 
-后三项是待核实定位，当前没有据此宣布接口或二进制已兼容。不读取 OpenList API 或生成程序实现，因为本次范围已经排除。
+后三项在当时仅为待核实定位，不据此宣布接口或二进制兼容。后续固定组合的实际验证见兼容性与关闭记录；OpenList API 或生成程序实现始终不属于本项目范围。
 
 ## V4.2 计划任务定位
 
@@ -62,7 +64,7 @@ V3.0 已从工作区移除，其原文 SHA-256 为 `d236cab6b3992636b524f30bbe49
 | [`MediaSourceManager.GetPlaybackMediaSources`](https://github.com/jellyfin/jellyfin/blob/ca0f16eb7c195f720a1493ed469a27c4657db0c6/Emby.Server.Implementations/Library/MediaSourceManager.cs#L2479-L2513) | 已由官方源码页面确认 `.strm` 且 `allowMediaProbe=true` 会触发 `FullRefresh`，随后重读静态媒体源；DI 替换和实际播放行为仍 NOT RUN |
 | [`ProbeProvider.FetchVideoInfo`](https://github.com/jellyfin/jellyfin/blob/ca0f16eb7c195f720a1493ed469a27c4657db0c6/MediaBrowser.Providers/MediaInfo/ProbeProvider.cs#L1498-L1601) | 已确认路径上会调用原生 `ProbeVideo` 并读取 STRM 地址；成功信号、失败保留、地址持久化和重启结果仍 NOT RUN |
 
-V4.2 的“已核对源码”是用户方案陈述；本项目仍须独立验证目标版本 API、注册、默认无触发时间、取消与进度，不把本轮不可读取的定位写成通过。
+V4.2 的“已核对源码”是当时用户方案陈述，未作为产品通过证明。目标版本 API、注册、默认无触发时间、取消与进度随后独立验证，结果见 [兼容性](compatibility.md) 与 [Slice 3 关闭记录](progress.md#slice-3-closed)；当时未能读取的定位仍按历史事实保留。
 
 ## A 开发环境准备来源
 

@@ -1,12 +1,14 @@
 # Slice 4 固定交付方案与 Task 规划指导
 
+本页保留已完成 Slice 的规划依据；当前 Task 入口见 [TASK.md](../TASK.md)，最终证据与关闭决定见 [Closure Packet](../SLICE.md#closure-packet) 和 [A Final Review](../SLICE.md#a-final-review)。下文推进顺序与规划约束只解释当时如何完成交付，不构成关闭后继续实施的授权。
+
 ## 授权、效力与基线
 
 2026-10-16，用户明确要求“由你来规划 Task，并把方案固定指导后续 B 规划 Task”。A 因此在本次兼任 Task 规划，后续 B 继续负责实际计划细化、合法性判断与独立 Task Review；本次授权不要求启动其他代理，不包含本轮插件实施，也不替代独立审查。此处记录本 Slice 的交付方案，不修改长期角色流程。
 
 上位合同为 [SLICE.md](../SLICE.md)，初次激活检查点 `8fd425019064c1422715b4d365a373b26b90c45e`；Slice Base 始终为 `03169b07d110964562f7da31d2c3d7add82e5ff5`，激活时继承的已接受产品实现为 `7c64eb5dcad6e5f20fb7eb41819be2521f65484d`。固定 Jellyfin 12.2.0／源码 `ca0f16eb7c195f720a1493ed469a27c4657db0c6`、SDK 10.0.401／net10.0、Linux x64，镜像 digest 见 [环境交接](development-environment.md)。
 
-本方案初始规定四个实施单元；2026-10-20 用户授权 A 不验证 JellyfinProxy，现按 Material Contract Change 撤出 RO-4／AC-7 和代理专属 Surface，当前必要结果为 RO-1～RO-3。安全规则、AC-1～AC-6、AC-8 的非代理完整门槛不变，规则依据为稳定需求与已提交合同。根 [TASK.md](../TASK.md) 暂无活动实施任务；旧 4.4 计划留在 Git，B 在新合同提交后重判，不能继续凭旧计划实施。
+本方案初始规定四个实施单元；2026-10-20 用户授权 A 不验证 JellyfinProxy，按 Material Contract Change 撤出 RO-4／AC-7 和代理专属 Surface，必要结果为 RO-1～RO-3。安全规则、AC-1～AC-6、AC-8 的非代理完整门槛不变，规则依据为稳定需求与已提交合同。旧 4.4 计划留在 Git，B 已在新合同提交后重判并停止该计划；根 [TASK.md](../TASK.md) 无活动实施任务。
 
 ## 实施单元与撤出记录
 
@@ -17,7 +19,7 @@
 | 4.3 — 真实 1000 项原生库的增量检查与成本 | RO-2；复用现存 1004 项准备库，在固定资源下完成至少 1000 个原生已索引的受支持 STRM，首次信任、未变、小集合增量、准备／分批停止和重跑。 | AC-3／AC-4 及 AC-8 对应部分；真实候选／源／主流来源与集合对账、完整批量结果、O(N) ID／原生临时成本／对象／工作上限、时间／内存／停止延迟和收尾证据。 | 已获 B PASS；初始依赖 4.2 B PASS，复用安装候选／工具，High／T4。 |
 | 4.4 — 原实际 JellyfinProxy 播放链兼容与交接 | 代理专属 RO-4／AC-7 按 2026-10-20 用户授权撤出，原计划未实施；历史 NOT RUN，不记 PASS。 | 不再构建／部署／验证代理；原生播放／选源／URL／主流／失败恢复／重启／MP4／MKV Web 播放保留于 RO-1／RO-3 与 Final，非代理完整回归及事实交接保留。 | 原 ID／Task Base／完整计划见根 TASK 的 Git 快照指针；B 已重判停止，不是产品通过或 Slice 关闭。 |
 
-4.1～4.3 已有 B PASS，准确接受事实和快照见 [当前合同](../SLICE.md#事实更新与停止规则)。撤出代理后，B 先重核三个 RO／全部保留 Surfaces；没有必要实施缺口时直接准备独立 Slice Final，不为测试、交接、P2 或重复证明造新 4.4。Final、Closure Packet 与 A 审查仍独立存在，不能把三个旧 Task PASS 拼成 Final。
+4.1～4.3 的 B PASS、固定审查范围和快照统一见 [Closure Packet](../SLICE.md#b-决定候选与审查范围)。撤出代理后，B 已重核三个 RO／全部保留 Surfaces，无必要实施缺口而直接完成独立 Slice Final，未为测试、交接、P2 或重复证明新增 4.4。Final 与 A 审查的完整证据独立记录，不能把三个旧 Task PASS 拼成 Final。
 
 2026-10-20 B 已在合同 `65286326aaf933510a0645296ec36f8721aa1bc5` 后完成该重核，未发现新的必要实施缺口，明确停止旧 4.4。原重核决定见 [根 TASK](../TASK.md#2026-10-20-b-合同重核与旧-44-裁决)，独立 Final 与匹配证据复用决定见 [Closure Packet](../SLICE.md#closure-packet)，A 最终决定和关闭协调见 [A Final Review](../SLICE.md#a-final-review)。以下保留本 Slice 的规划约束，不构成关闭后继续实施的授权。
 

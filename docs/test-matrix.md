@@ -45,15 +45,15 @@
 | B01 | 并发默认／配置边界 | 默认 2；1 与 8 可用；0、9、非整数保存反馈，实际并发不越界 | CONFIG-001、CONCURRENCY-002 | 配置＋协调集成＋真实计数 | PASS（配置／确定性 1、2、8／启动生效实机） |
 | B02 | 多项目播放与批量混合探测 | 共用插件全局上限；Jellyfin／其他插件独立探测不被限流 | CONCURRENCY-002 | 隔离实机并发对照 | PASS（真实混合上限／独立原生刷新） |
 | B03 | 媒体库范围及类型过滤 | 默认全部，可选部分；普通媒体、旧／不支持 STRM 不探测；候选 ID 去重固定，分批重核当前范围／对象，消失／移出安全结算，新增下轮发现 | BATCH-002、COMPAT-002、CONFIG-001 | ID 集合／分批夹具＋实机库 | PASS（集合／范围／多批／多版本控制及实机） |
-| B04 | 大量已有主流的首次任务／随后增量变化 | 默认信任，不全库重探测；仅缺流／变化者执行，与播放决策一致 | STATE-001、BATCH-002、BATCH-003 | 大规模夹具＋真实增量计数 | PASS（Slice 3 代表性首次信任／真实增量）；真实大库后续证据见 [Closure Packet](../SLICE.md#closure-packet) |
+| B04 | 大量已有主流的首次任务／随后增量变化 | 默认信任，不全库重探测；仅缺流／变化者执行，与播放决策一致 | STATE-001、BATCH-002、BATCH-003 | 大规模夹具＋真实增量计数 | PASS（Slice 3 代表性实机；Slice 4 全部 1004 项真实大库与增量）；分层证据见 [Closure Packet](../SLICE.md#closure-packet) |
 | B05 | 批量与播放同源，含排队／已开始及播放不允许探测 | 只加入已实际开始的探测；排队请求保持各自生命周期并在执行前重查，避免重复；播放不提高权限，独立批量上下文可执行 | DECISION-006、CONCURRENCY-001、BATCH-003 | 混合并发＋真实计数 | PASS（确定性权限／排队及双向实机共享） |
 | B06 | 两入口遇成功／失败／保存失败／Manifest 再变 | 使用同一提交门槛，无错误新指纹；无法确认的刷新不计成功 | PROBE-002、BATCH-003 | 失败注入＋真实结果／存储 | PASS（保存失败控制／真实成功失败竞态）；NOT RUN（物理数据库保存故障实机注入） |
 | B07 | 停止候选获取／后续批次／未开始工作，含已开始仅批量／播放共享及启动竞态 | 未开始撤销，其他调用者排队不受影响；所有已开始探测继续完成并可按全部成功条件提交；任务停止收尾等待其结算、资源释放，不误报全库完成 | CONCURRENCY-001、BATCH-004 | 开始／停止竞态＋真实任务停止／收尾 | PASS（确定性开始／停止边界及真实取消收尾） |
 | B08 | 单项损坏／探测失败及全局数据库不可用 | 单项报告未完成；旧指纹保留；状态库不可用停止优化，不转全库探测；恢复可再查 | MANIFEST-003、FAILURE-001、PROBE-003 | 注入＋实机恢复 | PASS（单项隔离／状态库全局失败及修复重启） |
 | B09 | 进度、完成／取消统计和日志 | 单调进度；成功仅可靠结果；计数可对账，信任接管算跳过；不泄露地址／秘密 | BATCH-005、PRIVACY-001 | 原生任务 UI／日志＋结果对账 | PASS（进度／结果／汇总与脱敏对账） |
 | B10 | 原生任务注册、手动／定时／停止、配置 | 名称正确，默认无触发；管理员原生设置；无独立按钮／调度器／扫描后触发；关闭播放检查仍可批量 | BATCH-001、BATCH-006、CONFIG-001 | 固定版本原生任务实测 | PASS（真实注册／无默认触发／定时重启／配置页） |
-| B11 | 媒体库扫描／手动刷新同时增删或更新 STRM | 不提交过期指纹、不越范围、不假定时间计划已串行完成；后续增量可收敛 | BATCH-002、BATCH-006、REFRESH-001 | 隔离扫描竞态＋任务 | PASS（Slice 3 确定性范围变化／实机增删及后轮收敛）；完整扫描后续证据见 [Closure Packet](../SLICE.md#closure-packet) |
-| B12 | 历史十万模拟候选／并发配置变更／ID 或批次获取故障 | 完整媒体对象按批次限制，固定消费者，不创建全库 Task；全部 ID／去重／排序与原生获取临时成本单列，不宣称总内存恒定；提前结束无许可泄漏 | CONCURRENCY-002、BATCH-002 | 压力指标＋代表性实机运行 | PASS（Slice 3 历史十万模拟有界工作／ID 成本分层及代表实机）；真实大库后续证据见 [Closure Packet](../SLICE.md#closure-packet) |
+| B11 | 媒体库扫描／手动刷新同时增删或更新 STRM | 不提交过期指纹、不越范围、不假定时间计划已串行完成；后续增量可收敛 | BATCH-002、BATCH-006、REFRESH-001 | 隔离扫描竞态＋任务 | PASS（Slice 3 范围／增删控制；Slice 4 完整扫描重叠及收敛）；分层证据见 [Closure Packet](../SLICE.md#closure-packet) |
+| B12 | 历史十万模拟候选／真实大库成本／并发配置变更／ID 或批次获取故障 | 完整媒体对象按批次限制，固定消费者，不创建全库 Task；全部 ID／去重／排序与原生获取临时成本单列，不宣称总内存恒定；提前结束无许可泄漏 | CONCURRENCY-002、BATCH-002 | 压力指标＋代表性实机运行 | PASS（Slice 3 历史十万模拟；Slice 4 真实大库分层成本）；模拟与真实结果分别见 [Closure Packet](../SLICE.md#closure-packet) 及历史索引 |
 
 ## 补充边界
 
@@ -65,7 +65,7 @@
 | X04 | 文件、原生地址／结果保存、SQLite 错误不覆盖指纹；原生回退保留探测权限；首次原生地址已过期不能静默成功 | PASS（控制＋代表实机）；NOT RUN（内部数据库故障实机注入） |
 | X05 | 同 URL 信息不足跳过并说明限制，mtime 不参与，签名查询变化仍算 URL 变化 | PASS（决策／文件／代表实机） |
 | X06 | SQLite 最小指纹／重启／schema 升级／损坏／不可写；无媒体流、完整 URL、PlaybackInfo 或独立探测状态 | PASS（SQLite／schema／重启恢复）；无旧 schema 迁移需求 |
-| X07 | 实际 ffprobe、新结果、主流与持久化关联；旧流／事件／刷新返回值不足；FullRefresh 额外开销 | PASS（本次信号／保存／实机） |
+| X07 | 实际 ffprobe、新结果、主流与持久化关联；旧流／事件／刷新返回值不足；FullRefresh 额外开销 | PASS（本次信号／保存／实机）；NOT RUN（通用 FullRefresh 开销证明） |
 | X08 | 只共享已开始探测、排队不共享、等待者退出仍收尾、不同源独立、版本变化、条件提交与完成重查 | PASS（共享／排队／批量停止及收尾） |
 | X09 | 配置保存／生效／错误反馈、默认值、固定规则不做关闭开关 | PASS（完整配置页／五项配置／批量范围与错误反馈） |
 | X10 | 签名 URL、token、Cookie、私有路径不进入状态、日志、进度或证据 | PASS（播放／指纹／批量日志与进度） |
@@ -86,6 +86,8 @@ A 实质范围调整保留矩阵 ID 与历史结果，但移除当前 Slice 1 �
 
 ## Slice 3 已接受执行与对账
 
+本节只记录 Slice 3 关闭时的证据与当时未测范围；后续真实大库、完整扫描和本地 ZIP 的已接受结果见 [Slice 4 验收分配](#slice-4-验收分配)。历史计数和限制不倒写为后续通过证明。
+
 A 审查完整 Slice Base..接受实现后裁定 PASS / CLOSED，AF-1 闭合，无剩余 P0/P1；旧拒绝／失败和每次修正留在 Git。Task 3.1 完整 B PASS 在 `aa78c06216ec30fbefd288ac4c73e9a7d44afa95:TASK.md`，Task 3.2 在 `678bcf5c3a6ba5c6743402ec27367dd76d0f101d:TASK.md`。以下索引位于本机 `.git/validation-evidence/7c64eb5dcad6e5f20fb7eb41819be2521f65484d/`，不能声称远程可读：
 
 - `slice-final-20261016/INDEX.md`：独立 Final，locked restore／Release build／format、202 C#／63 Python、默认真实 playback、批量七场景和配置页 19 场景；所有门槛 PASS，未重试。配置／全部触发器／夹具恢复，临时条目清理。
@@ -100,11 +102,11 @@ A 审查完整 Slice Base..接受实现后裁定 PASS / CLOSED，AF-1 闭合，�
 | B10／X09／X10 | 真实无默认触发、手动／定时和重启；19 个浏览器交互场景、五项配置／失效库／拒绝与未确认保存／重读／页面值驱动原生任务，必要诊断脱敏。 |
 | B12 | 历史十万模拟结算 100000 个候选、782 批，完整对象峰值 128、活动消费者不超过 8、累计消费者 Task 6256；ID 模型、容量折算、累计分配、进程堆采样及原生查询成本单列，不称总内存恒定或当前至少 1000 项真实媒体库性能。 |
 
-当前至少 1000 项真实媒体库／完整扫描压力、外部 JellyfinProxy／OpenList、广泛格式／客户端、发布 ZIP、逐分支／audio-only 实机、物理数据库保存故障注入和完整镜像构建溯源仍按原边界 NOT RUN。历史十万规划和模拟记录保留在关闭账本，不代表当前门槛。日志跨日关联及指数泛称保留 P2，不阻止关闭。
+真实大库／完整扫描压力和本地 ZIP 未在 Slice 3 验证，后续由 Slice 4 接受；JellyfinProxy／OpenList、广泛格式／客户端、逐分支／audio-only 实机、物理数据库保存故障注入和完整镜像构建溯源保持各自未验证边界。历史十万规划与模拟不代表至少 1000 项真实大库验收。日志跨日关联及指数泛称保留 P2，不阻止关闭。
 
 ## Slice 2 历史执行与对账
 
-以下保留 Slice 2 当时的实际结果与限制，后续批量／UI 当前状态以上表及 Slice 3 索引为准。
+以下保留 Slice 2 当时的实际结果与限制；本节的批量、UI 或发布 NOT RUN 只描述当时边界，后续接受状态以上方矩阵、[关闭账本](progress.md) 与 [Slice 4 最终决定](../SLICE.md#a-final-review) 为准。
 
 Task 2.1／2.2 已 B 审查 PASS；最新接受实现 `59fd3f7e4b6623449a691574fb69b817db72c2ae`，Task 2.2 完整计划／报告／B 决定见 `76cd9e997548c4ffef04a8dd8f9b0d4ef4376347:TASK.md`。六个 Required Outcomes／六个 Required Surfaces 与单独 Final 已由 A 最终审查接受，Slice 2 PASS / CLOSED；A 独立重跑 C# 112/112，并核验匹配输入后复用下述 Final 原始证据。上表仍按完整产品证据类型保留，不能把核心部分通过升级为真实批量、UI、外部代理或所有实机分支 PASS。
 
@@ -120,7 +122,7 @@ Slice 2 本机 B 索引：`.git/validation-evidence/59fd3f7e4b6623449a691574fb69
 | T23 未安装原生对照 | 补充隔离验证实际移出插件二进制目录并重启，API 与目录均证明未安装，PlaybackInfo 地址／主流正确、无插件事件、指纹不变。恢复插件／配置并重启后 0 探测；PASS。未使用“禁用”等同“未安装”。 |
 | 失败／竞态／SQLite／地址与主流重启 | 默认实机全部原 Task 2.1 场景 PASS，SQLite 未完成变化跨重启仍需探测，修复恢复；原夹具／媒体／配置恢复、临时库条目残留 0。 |
 
-以下具体用例索引保留证据层；相关测试在当前候选持续通过。T09～T11 的对应逐分支实机、音频-only 实机及 Jellyfin 内部数据库保存失败实机注入仍分别 NOT RUN，不弱化合同的逻辑全矩阵、保存失败控制与代表性真实探测／重启门槛。
+以下具体用例索引保留该次审查的证据层；后续最终候选的回归／证据复用见 Closure Packet，不把文档同步当作重新运行。T09～T11 的对应逐分支实机、音频-only 实机及 Jellyfin 内部数据库保存失败实机注入仍分别 NOT RUN，不弱化合同的逻辑全矩阵、保存失败控制与代表性真实探测／重启门槛。
 
 单独 Final 索引 `.git/validation-evidence/59fd3f7e4b6623449a691574fb69b817db72c2ae/slice-final-20261014-09/INDEX.md`：112 C#／30 Python、全部构建质量门槛、默认真实入口（706.997 秒）、补充未安装／播放检查关闭／恢复对照（107.809 秒）全部 PASS；Final 实机默认 2／保存 1 重启前仍 2／重启后 1，独立 FullRefresh 495 ms，夹具内容与初始身份一致、临时库残留 0。
 
@@ -145,7 +147,7 @@ Slice 2 本机 B 索引：`.git/validation-evidence/59fd3f7e4b6623449a691574fb69
 | X07 实际 ffprobe／新结果／主流／持久化关联 | 单元 `UrlChangeWithSameShaProbesAndCommitsOnlyAfterSavedPrimaryResult`、`NewAddressWithOldPersistedPrimaryStreamDoesNotCommitAndRemainsRetryable`、`AudioStrmRequiresAndAcceptsTheNativeAudioPrimaryStream`；实机 `same_sha_url_change`、`manual_full_refresh`（GetMediaInfo 计数与本地媒体 GET） | PASS（Task 范围） |
 | X10 隐私（URL／token／私有路径不进入状态／日志／证据） | 单元 `ConfigurationTests.InvalidPersistedConfigurationDiagnosticDoesNotLeakPrivatePaths`；实机脚本仅输出 URL 的 SHA-256、主流类型与计数，不打印签名 URL／token／Cookie／私有路径 | PASS（Task 范围） |
 
-Required Surfaces 对账：solution／测试入口、原生 PlaybackInfo 与探测／保存链、私有 SQLite 最小指纹与恢复、项目／源身份映射与 ProbeCoordinator（实际开始、只共享运行中、正常收尾、结束重查）、Jellyfin 配置保存通道与脱敏日志均有上述单元／实机证据；完整 HTML 配置页与批量范围 UI 明确延期 Slice 3，发布包与跨版本延期 Slice 4。
+Slice 2 当时的 Required Surfaces 对账：solution／测试入口、原生 PlaybackInfo 与探测／保存链、私有 SQLite 最小指纹与恢复、项目／源身份映射与 ProbeCoordinator（实际开始、只共享运行中、正常收尾、结束重查）、Jellyfin 配置保存通道与脱敏日志均有上述单元／实机证据。完整 HTML 配置页与批量范围 UI 后续在 Slice 3 接受，本地单版本包在 Slice 4 接受；跨版本兼容始终未纳入已验证声明。
 
 ### 历史实现证据指针（不替代当前最终验证）
 
@@ -182,7 +184,7 @@ Required Surfaces 对账：solution／测试入口、原生 PlaybackInfo 与探�
 
 B 独立证据索引：`.git/validation-evidence/198f4ff2accd5bc9fcd87518a9684b9d068de103/b-rereview-20261014-03/INDEX.md`。独立 C# 聚焦 65 passed／0 failed／0 skipped；实际未知／冲突协议六组输入的原生委托与无指纹已由控制 harness 核验；默认实机 JSON PASS、487.172 秒，原夹具／媒体／地址恢复且临时条目清理。T09～T12 的新增逻辑输入已逐项复现，仍无对应输入的实机分支保持 NOT RUN。
 
-这些证据支持 B 对 Task 2.1 修正候选的审查，不替代逐行完整矩阵对账。B 第二轮独立复审已确认 R1／R2／R3 全部满足并裁定 Task 2.1 PASS；详细决定与证据见 [B 审查检查点](progress.md#当前开发指针)。T01～T28、B01～B12 与 X01～X10 状态仍按上表记录；该历史 Task 2.1 没有运行外部代理／OpenList、批量任务、运行中共享／全局并发、其他 Jellyfin 版本或完整发布门槛；共享／全局上限核心现由 Task 2.2 闭合。表中标注的是具体用例的分层执行状态，不单独代表完整产品矩阵整行验收；Task PASS 以完整独立审查决定为准。
+这些证据支持 B 对 Task 2.1 修正候选的审查，不替代逐行完整矩阵对账。B 第二轮独立复审已确认 R1／R2／R3 全部满足并裁定 Task 2.1 PASS；详细决定与固定快照见 [Slice 2 关闭记录](progress.md#slice-2-closed)。T01～T28、B01～B12 与 X01～X10 的当前分层状态按本页顶部矩阵记录；该历史 Task 2.1 没有运行外部代理／OpenList、批量任务、运行中共享／全局并发、其他 Jellyfin 版本或完整发布门槛，共享／全局上限核心随后由 Task 2.2 闭合。表中标注的是具体用例的分层执行状态，不单独代表完整产品矩阵整行验收；Task PASS 以完整独立审查决定为准。
 
 按开发流程保留源码／工作区身份、精确命令、版本、隔离配置、耗时、日志及原生 ffprobe 计数。所有哈希／地址／媒体使用假数据。区分单元、真实 Jellyfin、压力夹具与外部代理；历史十万条模拟枚举不冒充当前至少 1000 项真实媒体库通过。
 
