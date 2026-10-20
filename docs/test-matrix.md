@@ -6,7 +6,7 @@
 
 ## 新增真实播放验证计划
 
-用户要求在下一 Slice 逐项执行八类播放决策，自备媒体／STRM、部署固定 Jellyfin 并安装插件，同时修复 GitHub Actions 失败。新增 P01～P08、ColorRange 返回主流误判、失败恢复／重启及 CI-F1～CI-F3 的完整输入和证据要求统一见 [Slice 5 执行设计](slice-5-playback-test-plan.md)，状态与放行条件见 [当前合同](../SLICE.md)。本轮只规划，新增真实用例与修复后 CI 均 NOT RUN；下方既往 PASS／NOT RUN 不升级为新增矩阵结果。
+用户要求在下一 Slice 逐项执行八类播放决策，自备媒体／STRM、部署固定 Jellyfin 并安装插件，同时修复 GitHub Actions 失败。新增 P01～P08、ColorRange 返回主流误判、失败恢复／重启及 CI-F1～CI-F3 的完整输入和证据要求统一见 [Slice 5 执行设计](slice-5-playback-test-plan.md)，状态与放行条件见 [当前合同](../SLICE.md)。合同激活不代表实施或验收通过，新增真实用例与修复后 CI 均 NOT RUN；下方既往 PASS／NOT RUN 不升级为新增矩阵结果。
 
 ## 核心播放与指纹
 

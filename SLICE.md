@@ -4,16 +4,16 @@
 Slice ID: 5
 Name: 真实播放决策全场景验证与 CI 修复
 Owner: A
-Status: PLANNED
+Status: ACTIVE
 Base SHA: 323a3f310100c38c373ce078767d50f4135e8cf1
 Implementation Head: NOT SET
 ~~~
 
-## 用户目标与规划边界
+## 用户目标与激活边界
 
 2026-10-20 用户要求在下一 Slice 规划八类决策的真实播放测试，自行准备媒体与 STRM、部署 Jellyfin 并安装插件，同时规划 GitHub Actions 失败修复。本合同承接新增需求，详细场景与执行设计见 [播放测试及 CI 计划](docs/slice-5-playback-test-plan.md)。
 
-本次只建立规划检查点：不激活 Slice、不建立活动实施 Task、不修改插件／测试／工作流、不部署或操作现存实例、不推送。A 后续提交 ACTIVE 合同后，B 才能按真实仓库规划实施 Task；工作包建议不代替 B 计划或独立审查。
+2026-10-20 用户在规划及实播约束确认后明确要求激活 Slice。A 据此将本合同激活，保留全部 Required Outcomes、八类决策、简化工具与截图实际查看门槛。该激活检查点提交后，下一步由 B 核对真实仓库并规划首个 Task；工作包建议不代替 B 计划或独立审查。本轮只激活合同及同步入口，不建立活动实施 Task、不修改插件／测试／工作流、不部署或操作现存实例、不推送。
 
 Base 为规划前干净 main 的真实 HEAD，不随后续文档提交移动。此前四个 Slice 的关闭结论和 Base／Implementation Head 保留，Slice 4 合同、Closure Packet、A Final Review 与旧 Task 入口见 [关闭账本](docs/progress.md#slice-4-closed)。新发现的问题不改写成旧验收已经覆盖。
 
@@ -79,7 +79,7 @@ Base 为规划前干净 main 的真实 HEAD，不随后续文档提交移动。�
 
 ## 最终验证
 
-播放、原生刷新／持久化及安装验证按 T4 管理。Developer 只跑新增／修改与直接影响的测试，B 负责完整回归及独立验收；本轮仅规划，不声称执行下列产品门槛。
+播放、原生刷新／持久化及安装验证按 T4 管理。Developer 只跑新增／修改与直接影响的测试，B 负责完整回归及独立验收；本次激活不表示下列产品门槛已经执行。
 
     bash scripts/dotnet-local restore Jellyfin.Plugin.StrmProbeOptimizer.sln --locked-mode
     bash scripts/dotnet-local build Jellyfin.Plugin.StrmProbeOptimizer.sln --configuration Release --no-restore
@@ -103,4 +103,4 @@ NOT RUN。尚无实现候选、真实矩阵或修复后 CI 结果，不具备最
     Decision: PENDING
     P0/P1 Blockers: NOT ASSESSED
 
-NEXT ACTION: A ACTIVATES THE PLANNED SLICE BEFORE B TASK PLANNING
+NEXT ACTION: B PLANS THE FIRST TASK
