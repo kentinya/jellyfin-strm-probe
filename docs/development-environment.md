@@ -24,7 +24,7 @@
 
 ## 克隆与准备
 
-用户已授权将完整开发历史与 V4.3 方案一并发布，替代旧的仅源码快照发布方式，并保留旧快照历史。新主机完整克隆即可读取固定 Base、已关闭合同和 B 决定，无须另行手动补入方案或私有 Git 迁移包。下列命令从新检出的仓库根目录执行；尚未在新主机运行，不能记为 PASS。
+开发准备依赖仓库中的代码、固定输入和维护中的治理文档。按 2026-10-20 用户要求，V4.3 原方案仅为可选本地参考，不再跟踪或上传 GitHub；新主机无须补入方案，治理与 CI 均不依赖原文。已提交开发历史、固定 Base、已关闭合同和 B 决定保留；后续发布边界见 [Git 检查点](development-workflow.md#6-git-检查点)。下列命令从新检出的仓库根目录执行；尚未在新主机运行，不能记为 PASS。
 
 ```bash
 git clone https://github.com/kentinya/jellyfin-strm-probe.git
@@ -98,7 +98,7 @@ python3 -m unittest discover -s tests -v
 
 ## 证据迁移与继续工作
 
-GitHub 同步的是 Git 历史中的代码、治理文档、依赖锁和公开环境身份。`.git/validation-evidence/`、`artifacts/`、浏览器缓存、配置、凭据、SQLite 和原始运行日志不随 clone／push 传输。本次不把这些本机资料上传到 GitHub，也不删除旧服务器资料。
+GitHub 的后续发布范围为代码、治理文档、依赖锁和公开环境身份，不重新加入本地 V4.3 原方案；此前已发布的方案历史仍存在，停止跟踪不会删除历史副本。`.git/validation-evidence/`、`artifacts/`、浏览器缓存、配置、凭据、SQLite 和原始运行日志不随 clone／push 传输。本次不推送、不把这些本机资料上传到 GitHub，也不删除旧服务器资料。
 
 旧索引仍是历史出处：没有旧目录不妨碍规划或实施，不撤销已提交审查决定；需要复用原始运行时，可单独安全迁移并核对摘要，无法核验则重跑对应门槛。新候选和单独 Slice Final 始终取得要求的新证据，不能把历史 PASS 当新主机实测 PASS。详见 [迁移流程](development-workflow.md#开发服务器迁移)。
 

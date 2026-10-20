@@ -9,6 +9,9 @@ config/*.local.*
 config/secrets.*
 secrets/
 
+# Local reference proposal; excluded from governance and future publication
+/Jellyfin STRM Probe Optimizer V4.3 开发方案.md
+
 # .NET and editor output
 **/bin/
 **/obj/

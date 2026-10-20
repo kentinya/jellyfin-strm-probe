@@ -1,6 +1,6 @@
 # Slice 路线图
 
-按 V4.3 的完整能力记录目标、次序与依赖。生命周期见 [开发流程](development-workflow.md)，详细 Task 与审查留在 Git。
+按 [稳定需求](requirements.md) 与 [范围](scope.md) 记录完整能力的目标、次序与依赖。生命周期见 [开发流程](development-workflow.md)，详细 Task 与审查留在 Git。
 
 | Slice | 目标 | Status | 依赖 |
 |---|---|---|---|

@@ -1,12 +1,12 @@
 # 参考来源
 
-最新补充日期：2026-10-14；原流程参考读取日期为 2026-10-13。引用外部流程并针对本项目重新编写；没有复制 mediaflow 的媒体整理实现、Storage／Recognition 架构或“禁止 FFprobe”产品规则。
+最新补充日期：2026-10-20；原流程参考读取日期为 2026-10-13。引用外部流程并针对本项目重新编写；没有复制 mediaflow 的媒体整理实现、Storage／Recognition 架构或“禁止 FFprobe”产品规则。
 
-## 当前原始方案与历史
+## 原始方案的本地参考边界与历史
 
-文件：[Jellyfin STRM Probe Optimizer V4.3 开发方案.md](<../Jellyfin STRM Probe Optimizer V4.3 开发方案.md>)。
+按 2026-10-20 用户要求，V4.3 原方案退出治理，仅保留为可选本地参考，不再跟踪或上传 GitHub，不作为必读、必需文件或哈希校验对象。当前开发依据为 AGENTS、维护中的需求／架构和已提交 Slice／Task；克隆与 CI 不需要原文。既有历史副本保留，发布边界见 [开发流程](development-workflow.md#6-git-检查点)。
 
-当前 V4.3 SHA-256：`ce3d1bcb74bf56da6be566283adc162f57d174e5e36d4c9a5bcb86e265ab31fc`。按用户授权仅修改扫描方式和版本标识，治理继续校验完整内容。V4.2 原文及 SHA-256 `4dc8e6aa4ebd16fa4ca32b35a6f58ac9e48932e334ac772f5c0f431a39ae32e2` 保留于 `fdcd3fc5576a1eba7835c9e9ff261ac6844a2e96`。
+V4.2 原文及历史 SHA-256 `4dc8e6aa4ebd16fa4ca32b35a6f58ac9e48932e334ac772f5c0f431a39ae32e2` 保留于 `fdcd3fc5576a1eba7835c9e9ff261ac6844a2e96`；这只是来源记录，不是当前治理校验项。
 
 V3.0 已从工作区移除，其原文 SHA-256 为 `d236cab6b3992636b524f30bbe49a91adb9ef5d6b7010ed5695cae7d65f228ae`，原文件、旧合同与旧 Task 可从 `4b1d0468c1e43e6e9034ef98e99b6cc44ea59485` 读取。历史 bootstrap 清单不重生成；当前校验不再要求已被用户删除的旧文件。版本取舍与生成器排除见 [scope.md](scope.md)。
 
@@ -87,4 +87,4 @@ V4.2 的“已核对源码”是用户方案陈述；本项目仍须独立验证
 | [TheIntroDB 范围判断](https://github.com/TheIntroDB/jellyfin-plugin/blob/daa0a9b3054edc35adcde0eda7dadec7213a935d/TheIntroDB/Providers/TheIntroDbSegmentProvider.cs#L402) | 选定库 ID 与 `ItemIds＋AncestorIds` 重核范围；不照搬空选择扩大范围或依靠媒体片段扫描的运行模式。 |
 | [固定 Jellyfin LibraryManager](https://github.com/jellyfin/jellyfin/blob/ca0f16eb7c195f720a1493ed469a27c4657db0c6/Emby.Server.Implementations/Library/LibraryManager.cs) 与 [GetItemIdsList](https://github.com/jellyfin/jellyfin/blob/ca0f16eb7c195f720a1493ed469a27c4657db0c6/Jellyfin.Server.Implementations/Item/BaseItemRepository.Querying.cs#L22) | 本地固定源码已核对 ID 投影／原生库过滤入口；同步接口无调用 token，停止检查放在调用前后，不承诺查询中断。多库、alternate、对象批次和实际运行分配尚未实测。 |
 
-后续用户授权将方案扫描文字最小修订为 V4.3，已同步文件名和完整内容摘要；V4.2 原文仍由上述 Git 快照保留，ID 集合合同与 Task 范围不变。
+历史上用户授权将方案扫描文字最小修订为 V4.3，当时同步了文件名和完整内容摘要；2026-10-20 起原方案退出治理及后续发布范围。V4.2 原文仍由上述 Git 快照保留，现行 ID 集合合同与 Task 范围不变。

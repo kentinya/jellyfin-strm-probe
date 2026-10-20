@@ -4,15 +4,12 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import re
 import subprocess
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = "Jellyfin STRM Probe Optimizer V4.3 开发方案.md"
-SOURCE_SHA256 = "ce3d1bcb74bf56da6be566283adc162f57d174e5e36d4c9a5bcb86e265ab31fc"
 COMMIT = re.compile(r"[0-9a-f]{40}")
 TASK_STATUSES = {"PLANNED", "IN PROGRESS", "READY FOR B REVIEW", "FIX REQUIRED"}
 SLICE_STATUSES = {"PLANNED", "ACTIVE", "FIX REQUIRED", "READY FOR A REVIEW", "PASS / CLOSED"}
@@ -23,7 +20,7 @@ WORKFLOW_FILES = (
 )
 # Only current governance files are required; retired V3.0 initialization lives in Git history.
 REQUIRED_FILES = (
-    SOURCE, "AGENTS.md", "CLAUDE.md", "README.md", "SLICE.md", "TASK.md",
+    "AGENTS.md", "CLAUDE.md", "README.md", "SLICE.md", "TASK.md",
     "Task/TEMPLATE.md", "Task/FIRST_TASK.md", "docs/scope.md",
     "docs/development-workflow.md", "docs/requirements.md", "docs/architecture.md",
     "docs/product-experience.md", "docs/roadmap.md", "docs/progress.md",
@@ -89,8 +86,6 @@ def check_files() -> None:
         if not path.is_file() or path.is_symlink():
             kind = "workflow file" if name in WORKFLOW_FILES else "file"
             raise ValueError(f"Required {kind} missing or symbolic: {name}")
-    if hashlib.sha256((ROOT / SOURCE).read_bytes()).hexdigest() != SOURCE_SHA256:
-        raise ValueError("The current V4.3 proposal was changed")
 
 
 def check(bootstrap: bool) -> None:

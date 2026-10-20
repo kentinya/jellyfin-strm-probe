@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import re
 import runpy
 import shlex
@@ -15,6 +14,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 NO_TASK = "# NO ACTIVE IMPLEMENTATION TASK\n\nNo implementation is authorized.\n"
+LOCAL_PROPOSAL = "Jellyfin STRM Probe Optimizer V4.3 开发方案.md"
 
 
 def replace_field(path: Path, name: str, value: str) -> None:
@@ -46,8 +46,6 @@ class GovernanceTests(unittest.TestCase):
         cls.seed.mkdir()
         checker = runpy.run_path(str(ROOT / "scripts/check_governance.py"))
         paths = [*checker["REQUIRED_FILES"], *checker["WORKFLOW_FILES"]]
-        cls.source = checker["SOURCE"]
-        cls.source_sha256 = checker["SOURCE_SHA256"]
         for name in paths:
             target = cls.seed / name
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -217,12 +215,12 @@ class GovernanceTests(unittest.TestCase):
         (self.repo / "docs/agent-experience/task-planner-reviewer.md").unlink()
         self.assert_guard(False, "Required workflow file missing")
 
-    def test_current_proposal_is_immutable(self) -> None:
-        digest = hashlib.sha256((self.repo / self.source).read_bytes()).hexdigest()
-        self.assertEqual(digest, self.source_sha256)
-        with (self.repo / self.source).open("a", encoding="utf-8") as document:
-            document.write("\nUnauthorized edit.\n")
-        self.assert_guard(False, "current V4.3 proposal was changed")
+    def test_local_proposal_content_does_not_affect_governance(self) -> None:
+        proposal = self.repo / LOCAL_PROPOSAL
+        proposal.write_text("Local reference draft.\n", encoding="utf-8")
+        self.assert_guard(True)
+        proposal.write_text("Revised local reference.\n", encoding="utf-8")
+        self.assert_guard(True)
 
     def test_retired_bootstrap_files_are_not_required(self) -> None:
         for name in ("scripts/bootstrap_repository.py", "scripts/bootstrap-manifest.json"):
@@ -247,19 +245,26 @@ class GovernanceTests(unittest.TestCase):
         )
         self.assert_guard(True)
 
-    def test_missing_current_proposal_is_rejected(self) -> None:
-        (self.repo / self.source).unlink()
-        self.assert_guard(False, "Required file missing or symbolic")
+    def test_missing_local_proposal_is_accepted(self) -> None:
+        self.assertFalse((self.repo / LOCAL_PROPOSAL).exists())
+        self.assert_guard(True)
 
-    def test_symbolic_current_proposal_is_rejected(self) -> None:
-        source = self.repo / self.source
-        copy = self.repo / "proposal-copy.md"
-        source.rename(copy)
-        source.symlink_to(copy.name)
-        self.assert_guard(False, "Required file missing or symbolic")
+    def test_local_proposal_is_excluded_from_git_add(self) -> None:
+        (self.repo / LOCAL_PROPOSAL).write_text("Local reference.\n", encoding="utf-8")
+        git(self.repo, "check-ignore", "--quiet", "--", LOCAL_PROPOSAL)
+        git(self.repo, "add", "--all")
+        self.assertEqual(git(self.repo, "ls-files", "--", LOCAL_PROPOSAL), "")
+        self.assert_guard(True)
 
     def test_missing_current_requirements_is_rejected(self) -> None:
         (self.repo / "docs/requirements.md").unlink()
+        self.assert_guard(False, "Required file missing or symbolic")
+
+    def test_symbolic_current_requirements_is_rejected(self) -> None:
+        requirements = self.repo / "docs/requirements.md"
+        copy = self.repo / "requirements-copy.md"
+        requirements.rename(copy)
+        requirements.symlink_to(copy.name)
         self.assert_guard(False, "Required file missing or symbolic")
 
     def test_review_requires_implementation(self) -> None:

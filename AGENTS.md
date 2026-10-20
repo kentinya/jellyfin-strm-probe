@@ -4,7 +4,7 @@
 
 ## 开始工作前
 
-先阅读本文件、[开发流程](docs/development-workflow.md)、根目录 [V4.3 方案](<Jellyfin STRM Probe Optimizer V4.3 开发方案.md>)、[范围说明](docs/scope.md)、[需求](docs/requirements.md)、[用户旅程](docs/product-experience.md)、[架构](docs/architecture.md)、[路线图](docs/roadmap.md)、[SLICE.md](SLICE.md) 和 [TASK.md](TASK.md)。
+先阅读本文件、[开发流程](docs/development-workflow.md)、[范围说明](docs/scope.md)、[需求](docs/requirements.md)、[用户旅程](docs/product-experience.md)、[架构](docs/architecture.md)、[路线图](docs/roadmap.md)、[SLICE.md](SLICE.md) 和 [TASK.md](TASK.md)。
 
 按当前职责阅读对应经验：[A：Slice 所有者／最终审查](docs/agent-experience/slice-owner-architect-final-reviewer.md)、[B：Task 规划／审查](docs/agent-experience/task-planner-reviewer.md)、[Developer：实施](docs/agent-experience/developer-implementation-role.md)。经验文件只提供方法参考，不改变授权、范围、测试门槛或审查责任。
 
@@ -14,7 +14,7 @@
 
 2026-10-18 用户明确要求迁移开发服务器，取消依赖旧服务器的开发流程并推送 GitHub。开发不绑定旧主机、检出绝对路径、旧资源预算、现存容器或本地证据目录；新主机按 [开发环境](docs/development-environment.md) 准备并记录实际环境。迁移不移动 Slice／Task Base、不撤销已提交审查决定、不减少产品验收门槛；本次授权包含相关治理／计划修订和向现有 GitHub origin 普通推送，不包含插件实施、历史改写或生产操作。
 
-用户随后明确要求一并上传，授权此次将 V4.3 方案与完整开发 Git 历史发布到现有 GitHub 仓库，替代此前仅发布源码快照的边界。保留远程已有快照历史并普通推送；凭据、运行数据库、忽略的构建／测试产物和本机原始证据不上传。
+2026-10-18 用户曾授权将 V4.3 方案与完整开发 Git 历史发布到现有 GitHub 仓库，替代此前仅发布源码快照的边界。2026-10-20 用户进一步要求将 V4.3 开发方案从治理流程剥离且不上传 GitHub：原文仅作可选本地参考，保留本地文件、停止 Git 跟踪并加入忽略规则；不列为必读、必需文件或哈希校验对象，克隆与 CI 不依赖它。此次要求覆盖此前上传方案的授权；本轮不推送、不改写历史，已发布历史中的副本仍保留，清除历史须另行授权。凭据、运行数据库、忽略的构建／测试产物和本机原始证据仍不上传。
 
 2026-10-18 用户曾授权 A 将大库验收门槛从 100000 调整为至少 3000 个真实原生候选。2026-10-19 用户进一步授权将当前门槛调整为至少 1000 个，直接复用现存 1004 个受支持库内源，保留全部 1004 项，不另跑 3000 级或为凑数重新建库。当前合同和同步文档以 1000 为准；历史规划、既往模拟及真实运行中的 100000／3000 数量与结论保留，不改写为新门槛的通过证明。Developer 只运行由其改动文件直接影响的测试并报告省略项；B 负责完整全量回归和独立验收。
 
@@ -26,8 +26,8 @@
 
 1. 本文件维护长期业务、架构和范围约束。
 2. `docs/development-workflow.md` 独立维护 Slice／Task 状态、Git、测试和审查流程。
-3. V4.3 是当前开发基准，仅按用户授权修订 V4.2 的扫描方式；V4.2／V3.0 原文从 Git 历史读取。`docs/scope.md` 记录版本替代与生成程序排除边界。
-4. `docs/requirements.md` 是本次插件开发的稳定需求规范；`docs/product-experience.md` 定义用户结果。原方案作为保留的输入参考，不把其中被排除的生成程序重新纳入范围。
+3. 当前开发依据为本文件、维护中的需求／架构文档和已提交 Slice／Task 合同；`docs/scope.md` 记录版本替代与生成程序排除边界。V4.3 原方案退出治理，仅可作本地参考，不授权或改变实施；历史版本记录保留在 Git 中。
+4. `docs/requirements.md` 是本次插件开发的稳定需求规范；`docs/product-experience.md` 定义用户结果。不依赖本地原方案才能理解或执行需求，不把其中被排除的生成程序重新纳入范围。
 5. `docs/architecture.md` 明确区分已经实现与目标设计。
 6. `SLICE.md` 限定当前完整能力，活动 `TASK.md` 限定其中的实施单元。
 7. `docs/agent-experience/` 保存可复用的角色经验，不保存 Task 历史或验收结论。

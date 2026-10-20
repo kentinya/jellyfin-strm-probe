@@ -2,11 +2,11 @@
 
 ## 开发基准与版本替代
 
-[V4.3 方案](<../Jellyfin STRM Probe Optimizer V4.3 开发方案.md>) 是当前开发基准；本文只记录产品边界和版本取舍。当前状态与证据统一见 [Slice](../SLICE.md)、[Task](../TASK.md) 和 [关闭账本](progress.md)。
+当前开发依据为 [仓库约束](../AGENTS.md)、[稳定需求](requirements.md)、[架构](architecture.md) 和已提交 Slice／Task 合同；本文记录产品边界和版本取舍。V4.3 原方案仅作可选本地参考，不作为治理输入。当前状态与证据统一见 [Slice](../SLICE.md)、[Task](../TASK.md) 和 [关闭账本](progress.md)。
 
 V3.0 文件的删除与 V4.2 文件的新增是本轮开始前已有的用户改动。V3.0 原文及旧 Slice／Task 可从重规划前检查点 `4b1d0468c1e43e6e9034ef98e99b6cc44ea59485` 读取，不恢复到工作区。未提供 V4.1 原文，因此以 V4.2 本身写出的规则为准，不补写中间版本历史。
 
-| 旧规划 | V4.2 引入的取舍（V4.3 沿用） |
+| 旧规划 | V4.2 引入并由现行需求保留的取舍 |
 |---|---|
 | URL 改变且 SHA-1 相同只更新路径 | 替代为 URL 改变一律要求原生探测；移除 UpdatePathOnly 与独立 ShortcutPathSynchronizer |
 | Assumed／Verified／PendingProbe／ProbeFailed 与观测状态库 | 替代为最小历史指纹；首次信任接管仍存在，不持久化独立探测状态机 |
@@ -24,9 +24,13 @@ V3.0 文件的删除与 V4.2 文件的新增是本轮开始前已有的用户改
 
 ### 2026-10-20 用户授权撤出 JellyfinProxy 验收
 
-用户明确授权 A 不验证 JellyfinProxy、调整相关文档。此为 Material Contract Change，覆盖原 V4.3 第十节 P3 及旧合同的代理验收要求；V4.3 输入原文和哈希保持不变。当前 Slice 4 撤出 RO-4／AC-7、代理专属 Surface、代理构建／缓存／302／客户端内容验收，历史 NOT RUN，按用户授权不执行，不计 PASS、不承诺代理兼容。不改代理代码／缓存策略、不调用 OpenList 元数据 API 的约束仍保留。
+用户明确授权 A 不验证 JellyfinProxy、调整相关文档。此为 Material Contract Change，覆盖原始方案及旧合同的代理验收要求；该次变更未修改原方案。当前 Slice 4 撤出 RO-4／AC-7、代理专属 Surface、代理构建／缓存／302／客户端内容验收，历史 NOT RUN，按用户授权不执行，不计 PASS、不承诺代理兼容。不改代理代码／缓存策略、不调用 OpenList 元数据 API 的约束仍保留。
 
 非代理的原生播放／MediaSourceId→URL／必要主流、换地址后首次与重启、多版本选源、失败修复、MP4／MKV 原生 Web 实际播放，以及最终同 ZIP 安装恢复／扫描／全部 1004 项大库／完整回归义务不变。旧 4.4 计划与 Base 保留 Git；A 提交合同后 B 重判剩余工作，无实施缺口则直接准备独立 Slice Final。本轮仅文档修订，不执行产品验收或关闭 Slice。
+
+### 2026-10-20 原始方案退出治理与发布
+
+用户要求将 V4.3 开发方案从治理流程剥离且不上传 GitHub。原文保留本地，停止 Git 跟踪并加入忽略规则；移除必读、必需文件、哈希校验和仓库内指向原文的链接。克隆、规划、实施与 CI 只依赖维护中的治理文档，不要求另行取得方案。本次不改变产品范围、业务规则、Slice／Task Base、已提交审查决定或验收门槛；历史版本及已发布副本不改写，详见 [Git 检查点](development-workflow.md#6-git-检查点)。
 
 ## 包含
 

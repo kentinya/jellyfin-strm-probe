@@ -6,7 +6,7 @@
 
 上位合同为 [SLICE.md](../SLICE.md)，初次激活检查点 `8fd425019064c1422715b4d365a373b26b90c45e`；Slice Base 始终为 `03169b07d110964562f7da31d2c3d7add82e5ff5`，激活时继承的已接受产品实现为 `7c64eb5dcad6e5f20fb7eb41819be2521f65484d`。固定 Jellyfin 12.2.0／源码 `ca0f16eb7c195f720a1493ed469a27c4657db0c6`、SDK 10.0.401／net10.0、Linux x64，镜像 digest 见 [环境交接](development-environment.md)。
 
-本方案初始规定四个实施单元；2026-10-20 用户授权 A 不验证 JellyfinProxy，现按 Material Contract Change 撤出 RO-4／AC-7 和代理专属 Surface，当前必要结果为 RO-1～RO-3。安全规则、AC-1～AC-6、AC-8 的非代理完整门槛不变，V4.3 输入原文不改。根 [TASK.md](../TASK.md) 暂无活动实施任务；旧 4.4 计划留在 Git，B 在新合同提交后重判，不能继续凭旧计划实施。
+本方案初始规定四个实施单元；2026-10-20 用户授权 A 不验证 JellyfinProxy，现按 Material Contract Change 撤出 RO-4／AC-7 和代理专属 Surface，当前必要结果为 RO-1～RO-3。安全规则、AC-1～AC-6、AC-8 的非代理完整门槛不变，规则依据为稳定需求与已提交合同。根 [TASK.md](../TASK.md) 暂无活动实施任务；旧 4.4 计划留在 Git，B 在新合同提交后重判，不能继续凭旧计划实施。
 
 ## 实施单元与撤出记录
 
