@@ -205,7 +205,7 @@ B 独立证据索引：`.git/validation-evidence/198f4ff2accd5bc9fcd87518a9684b9
 
 当前大库门槛为至少 1000 个真实原生候选，使用现存全部 1004 个受支持库内源，在固定 Jellyfin 12.2.0／Linux x64 上串行完成必要场景；不截取为 1000，不再要求另跑 3000 级。2026-10-19 按用户后续授权调整已有脚本：显式传入 --reuse-workspace，默认只跑 unchanged；--count 默认 1000，表示下限，不是截取数量。只接受 package-env/runs 下已停止、无符号链接／SQLite 事务旁文件的保留工作区；核验来源后复制到本轮新归属目录，不接管旧 token、不建库、不扫描、不做全库主流准备。原库前后摘要对账，副本结束停止并保留；此复用方式适用于所有需要准备库的开发阶段，不以 Task／Slice 结束为清理条件。
 
-复用场景：unchanged 验证现存完整指纹的未变轮；restart 增加重启后、任何 PlaybackInfo 前的完整持久化对账；baseline 依次跑首次信任、未变、重启，要求初始无指纹。只有 baseline 可显式使用 --reset-copied-fingerprints，将新副本的原指纹库移入副本 baseline-backup 保留；原库不变。逐项核验全部支持源、3 个库内对照和范围外对照，以及五字段指纹、原生地址、必要主流、候选身份、实际探测数和结算统计。聚焦成功返回退出码 0，但总状态必须是 PARTIAL、focused_status=PASS、full_task_acceptance=NOT RUN；不能作为完整 Task／RO-2 PASS。
+复用场景：unchanged 验证现存完整指纹的未变轮；restart 增加重启后、任何 PlaybackInfo 前的完整持久化对账；baseline 依次跑首次信任、未变、重启，要求初始无指纹；**all 在已核验副本上执行完整行为**（首次信任、未变、跨四个真实 Guid 批次的 URL／内容 SHA-1／Size／缺流增量、真实同步查询窗口停止、已开始两项探测后的停止／收尾及收尾期间重跑、旧轮 Idle 后恢复、两轮未变、重启前后完整核对、变更源显式选源 PlaybackInfo），只对 12 个改写 URL 的对照做有界原生主流修复，不重建库、不重新扫描全库、不逐源重新准备已有主流。baseline 与 all 均可显式使用 --reset-copied-fingerprints，将新副本的原指纹库移入副本 baseline-backup 保留；原库不变。逐项核验全部支持源、3 个库内对照和范围外对照，以及五字段指纹、原生地址、必要主流、候选身份、实际探测数和结算统计。聚焦场景成功返回退出码 0，但总状态必须是 PARTIAL、focused_status=PASS、full_task_acceptance=NOT RUN；只有 all 成功时才可将 full_task_acceptance 置为 PASS，且仍不能代替 B 独立验收或 Slice Final。
 
 先将下方 SHELL 变量设置为经过归属和来源核验的实际路径；ZIP 必须与本轮候选一致，不能随意换成默认目录里的另一个包。证据目录须全新或为空，端口须空闲；不指向生产或共享开发实例。
 
@@ -216,12 +216,14 @@ B 独立证据索引：`.git/validation-evidence/198f4ff2accd5bc9fcd87518a9684b9
 JF_PROBE_PACKAGE_PORT=18099 python3 scripts/run_isolated_large_library_integration.py \
   --package "$ZIP" --reuse-workspace "$PREPARED" \
   --evidence-dir "$EVIDENCE" --timeout-seconds 600
+# 完整复用行为（首次信任→增量→查询中停止→探测停止收尾→恢复→重启→显式播放）：
+# --scenario all --reset-copied-fingerprints --timeout-seconds 2400
 # 首次信任／未变／重启聚焦验证时，追加：
 # --scenario baseline --reset-copied-fingerprints
 # 只检查未变并重启时，追加：--scenario restart
 ```
 
-旧完整建库流程仅保留为显式 --fresh --scenario all 的兼容路径，不用于现存保留库；不能把这条路径当作本轮复用完整验收已实现。增量、查询中停止、延迟探测停止／收尾／恢复、显式播放均不在默认复用 CLI 的场景范围中，须单独取得相应证据；后续聚焦补证见下一段，完整门槛及 B 独立验收义务不变。准确命令、源码／产物身份、runner 结果、B 决定与缺失门槛统一见 [TASK.md](../TASK.md#b-review-result)。
+旧完整建库流程仅保留为显式 --fresh --scenario all 的兼容路径，不用于现存保留库。reuse --scenario all 已在匹配 ZIP 上取得一次 Developer 聚焦全场景 PASS（首次信任 1004／探测 0、增量 16／成功 16、查询中停止命中、分批停止收尾恢复、重启前后一致、16 项显式选源 PlaybackInfo 零额外探测），但它是 Developer 聚焦反馈，不代替 B 独立验收或 Slice Final；完整门槛及 B 独立验收义务不变。准确命令、源码／产物身份、runner 结果、B 决定与缺失门槛统一见 [TASK.md](../TASK.md#b-review-result)。
 
 2026-10-19 后续 Developer 聚焦补证已在新归属副本复用全部 1004 项，另增 4 项缺流对照：原生索引后仅预期 16 项探测／成功，后续复查 0；分批停止后已开始 2 项成功、未开始旧基线保持，恢复精确 2 项，重启前后全量对账和 16 项显式选源 PlaybackInfo 通过。用私有回放过程复用现有生命周期，未扩建 CLI；350 秒内完成，双服务 exit=0、源库不变、运行副本保留。准确 349.217 秒／221 样本及失败尝试见 [Task 增量补证](../TASK.md#2026-10-19-保留库增量与停止恢复补证非独立验收)。本次 PARTIAL，不代替查询中停止、完整回归和 B 独立验收；不宣称每类控制均跨四个不同批次。
 
