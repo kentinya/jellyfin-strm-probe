@@ -43,11 +43,6 @@ Slice 3 交付完整配置页／所选媒体库、Jellyfin 原生「STRM 媒体�
 
 ## 当前开发指针
 
-- 开发基准 V4.3 输入原文不变，用户范围覆盖见 [范围说明](scope.md)。Slice 1／2／3 PASS / CLOSED，历史合同／失败与审查保留；上方仅为已关闭 Slice 的历史账本，不是当前全局状态。
-- [Slice 4](../SLICE.md) 仍 ACTIVE，原 Base 保持 `03169b07d110964562f7da31d2c3d7add82e5ff5`。当前接受实现及准确 Task 4.1～4.3 B PASS 快照统一见 [合同当前交接](../SLICE.md#事实更新与停止规则)；不是完整 Slice 已通过。
-- 2026-10-20 用户明确授权 A 不验证 JellyfinProxy；原 RO-4／AC-7 和代理专属门槛从当前范围撤出，历史 NOT RUN、不记 PASS、不宣称兼容。原生播放／源身份／地址／流／恢复／重启、包／扫描／全部 1004 项大库及最终完整回归保留。
-- 原 Task 4.4 的完整 PLANNED 计划与 Base 保留于 `4cc02048fb50c3c0b50a1b1b116246b202d86aaf:TASK.md`，根 [TASK.md](../TASK.md) 暂无活动实施任务。Task 4.3 最终完整报告／失败历史／B 决定为 `57c5072db0cebf4bcf5fa64c3cde635e9a23dcb3:TASK.md`，替代之前的待复审指针，不改写旧拒绝或原始失败。
-- B 已在合同 `65286326aaf933510a0645296ec36f8721aa1bc5` 后完成重核：停止旧 4.4 代理计划，不记 PASS；未发现新的非代理实施缺口，不另造 Task，独立 Final 执行准备见根 TASK。65 个现有输入及 230 个历史原始文件摘要匹配，现有 ZIP 校验通过；这些只证明可核验的历史事实，不是新 Final。
-- 下一步运行独立 Slice Final，补齐变化批量源及多版本 A／B 的重启前、重启后播放前、显式选源后完整状态；最后同 ZIP 的完整门槛仍须运行。Final、Closure Packet、最终事实协调及 A 最终审查／关闭未完成；本轮未操作容器／准备库或运行产品验收。
+开发基准 V4.3 原文不变，用户范围覆盖见 [范围说明](scope.md)。上方仅为 Slice 1／2／3 的 A 已关闭历史账本。
 
-NEXT ACTION: B RUNS THE INDEPENDENT SLICE 4 FINAL WITH THE RETAINED RESTART PROOF; NO NEW IMPLEMENTATION TASK
+当前 Slice 的候选、B 最终决定、原始证据／复用与新测、Task 审查快照及下一责任人统一见 [Closure Packet](../SLICE.md#closure-packet)。根 [TASK.md](../TASK.md) 无活动实施任务；旧代理 4.4 停止、不记 PASS，准备库持续保留。B 交接不构成 A 关闭决定，不在此新增 Slice 4 关闭账本。

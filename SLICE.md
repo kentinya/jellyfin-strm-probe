@@ -4,9 +4,9 @@
 Slice ID: 4
 Name: 大规模集成与单版本交付
 Owner: A
-Status: ACTIVE
+Status: READY FOR A REVIEW
 Base SHA: 03169b07d110964562f7da31d2c3d7add82e5ff5
-Implementation Head: NOT SET
+Implementation Head: 8573dfbffebb785261668f9cd5c895be937e000e
 ```
 
 ## 激活决定与真实基线
@@ -137,7 +137,7 @@ git diff --check
 
 用户明确授权 A“不验证 JellyfinProxy，调整相关文档”。本轮撤出 RO-4／AC-7 及代理专属 Required Surface 和必要测试；不替换成模拟代理，不把代理验证悄悄保留为关闭前门槛。原生播放／源身份／URL／流、首次与重启、失败恢复和 MP4／MKV Web 播放不变。原 V4.3 方案作为输入原文保持字节与哈希不变；本次用户范围覆盖见 AGENTS、稳定需求和范围说明。
 
-Slice ID／Base 保持原值；Implementation Head 暂仍 NOT SET，待 B 最终交接明确真实实现候选，不以文档提交冒充。旧 Task 4.4 的 ID、Task Base `57c5072db0cebf4bcf5fa64c3cde635e9a23dcb3`、Contract Checkpoint、完整计划和未运行事实保留在 `4cc02048fb50c3c0b50a1b1b116246b202d86aaf:TASK.md`。根 TASK 置无活动实施任务；A 不代 B 签发 Task PASS 或以范围变更关闭 Slice。
+Slice ID／Base 保持原值；本次 A 合同变更时 Implementation Head 尚未设置，B 最终交接填写真实实现候选，不以文档提交冒充。旧 Task 4.4 的 ID、Task Base `57c5072db0cebf4bcf5fa64c3cde635e9a23dcb3`、Contract Checkpoint、完整计划和未运行事实保留在 `4cc02048fb50c3c0b50a1b1b116246b202d86aaf:TASK.md`。根 TASK 置无活动实施任务；A 不代 B 签发 Task PASS 或以范围变更关闭 Slice。
 
 当前已提交审查事实：4.1／RO-1 B PASS，快照 `0e7b26b381ed5f71781e75d317275afa51d791e9:TASK.md`；4.2／RO-3 B PASS，快照 `a06a80fac90a86085f25116568aa24b54847c562:TASK.md`；4.3／RO-2 B PASS，快照 `57c5072db0cebf4bcf5fa64c3cde635e9a23dcb3:TASK.md`，接受实现 `8573dfbffebb785261668f9cd5c895be937e000e`。全部失败、独立审查、私有准备适配与 P2 保留；不移动任何 Base。至少 1000 项门槛／全部 1004 项准备库跨阶段保留复用规则不变。
 
@@ -145,11 +145,61 @@ B 在新合同提交后重判旧 4.4 计划：明确停止代理计划，核对�
 
 Slice Final 仍须在最后候选／同一 ZIP 验证全部当前门槛，含扫描变化批量源及多版本 A／B 的完整重启前／重启后播放前／显式选源后五字段、地址与主流比对，不能只信旧扫描标签。B 形成 Closure Packet 后交 READY FOR A REVIEW，A 再审查完整 Base..Implementation Head；本次不是最终产品审查或关闭。
 
-2026-10-20 B 已在新合同 `65286326aaf933510a0645296ec36f8721aa1bc5` 后完成重核：旧 4.4 计划停止、不记 PASS；未发现新的非代理必要实施缺口，不新增 Task，直接准备独立 Final。保留义务／Surface 归属、输入与历史原始证据核验、包身份及 Final 执行准备见 [根 TASK](TASK.md#2026-10-20-b-合同重核与旧-44-裁决)。Final 仍 NOT RUN，当前仍 ACTIVE，Implementation Head 待最终交接填写，A 最终审查不变。
+2026-10-20 B 已在新合同 `65286326aaf933510a0645296ec36f8721aa1bc5` 后完成重核：旧 4.4 计划停止、不记 PASS；未发现新的非代理必要实施缺口，不新增 Task，直接准备独立 Final。保留义务／Surface 归属、输入与历史原始证据核验、包身份及 Final 执行准备见 [根 TASK](TASK.md#2026-10-20-b-合同重核与旧-44-裁决)。该次合同重核尚未运行 Final；后续最终结果与证据复用决定统一见下方 Closure Packet，A 最终审查不变。
 
 ## Closure Packet
 
-NOT SUBMITTED。Task 4.1～4.3 已 B PASS；代理验证按用户授权不执行，历史 NOT RUN；独立 Slice Final、最终事实协调和完整 Closure Packet 未完成。
+### B 决定、候选与审查范围
+
+2026-10-20，B 独立最终审查 **PASS；SLICE READY FOR A REVIEW**。RO-1～RO-3／AC-1～AC-6、AC-8 已满足，未发现 P0／P1；停止新增 Task。此为 B 的最终交接，A 尚未裁定，不是 Slice PASS / CLOSED。
+
+- Slice Base：`03169b07d110964562f7da31d2c3d7add82e5ff5`；Implementation Head：`8573dfbffebb785261668f9cd5c895be937e000e`。B 核对完整 Base..Implementation Head 以及下列 Task Base..Head；合同检查点 `65286326aaf933510a0645296ec36f8721aa1bc5`，实际最终审查 checkout `51319254fc4426349f7023cc0efa9d61ecbe2a26`。其后本次只有交接 Markdown 变化。
+- 实现内容：固定 Linux x64 归档／依赖与安装恢复旅程、完整扫描重叠验收、真实大库复用与成本验收，以及批量／探测的脱敏观测；没有增加代理、调度器或状态机。
+- 唯一最终私有索引：`.git/validation-evidence/51319254fc4426349f7023cc0efa9d61ecbe2a26/b-slice-final-20261020T140212Z/INDEX.md`。仅本机可读，原始证据、精确命令／cwd／退出／耗时、环境／包／夹具摘要及失败均保留至 A 决定；不声称 Git 推送会携带这些证据。
+
+| Task | B 审查范围（固定 Task Base..接受实现） | 完整报告／B 决定快照 |
+|---|---|---|
+| 4.1 | `ae265d0dba02aa1c5599871602d4350072b7155f..b5d4f2836229d16ac8add7034294c4306ddf5be1` | `0e7b26b381ed5f71781e75d317275afa51d791e9:TASK.md`，PASS |
+| 4.2 | `0e7b26b381ed5f71781e75d317275afa51d791e9..86946cc4ef5c0648b71aafc00aa666f2a2bb20c5` | `a06a80fac90a86085f25116568aa24b54847c562:TASK.md`，PASS |
+| 4.3 | `a06a80fac90a86085f25116568aa24b54847c562..8573dfbffebb785261668f9cd5c895be937e000e` | `57c5072db0cebf4bcf5fa64c3cde635e9a23dcb3:TASK.md`，PASS |
+
+原 4.4 计划停止、未实施、历史 NOT RUN，不记 PASS；原快照与 Base 保留于上节。
+
+### 本轮证据复用决定与完整最终门禁
+
+依本轮用户明确要求“匹配证据复用，不机械重跑 Final”，B 对固定候选的全部指定门禁重新审阅原始结果并验证输入／产物身份，将合格运行明确纳入本次独立 Final；另亲自运行缺失的关键重启复现及消费当前文档的检查。此会话指令优先于流程／旧执行准备中要求重新运行 Final 全套的文字；**本轮没有重新执行全部实机或 C# 套件**，也不是将三个 Task PASS 标签当作最终证据。不降低 RO／AC、不将全量门禁转交 Developer。
+
+当前 65 项可执行输入、较广的 66 项源码输入及所有复用门禁的锁／SDK／配置／夹具／实际镜像、包负载均核验匹配；实现后的已提交差异仅为 16 个 Markdown。原始文件重算：plugin 22、batch 21、configuration 133、scan 54、large 43，另含私有适配源码 3、构建日志与包结果。具体文件摘要及原始执行账本见索引的 `reuse-audit.json`；新文档不复用旧治理结果。
+
+| 门禁／验收 | 本次 Final 的证据与结论 |
+|---|---|
+| locked restore／Release build／C# test／format | 核验后复用原始退出 0 运行；C# 202 passed／0 failed／0 skipped。不是本轮新执行。 |
+| 全量 Python、治理、Markdown／diff | 本轮全量 Python 262/262 PASS；治理／Markdown／diff 的命令与提交后结果见最终索引。治理仅验证流程／文件，不代替产品验收。 |
+| plugin 默认完整入口／batch suite／configuration all | 核验后复用 B 完整运行与独立原始审计；包含播放／权限／共享／并发／故障恢复、批量全部七场景及页面交互。准备适配与原失败见下文。 |
+| RO-1／AC-1～2：package all | 核验后复用同 ZIP 的干净／已有安装升级、真实页面／MP4 与 MKV 原生 Web 播放、同哈希换 URL／重启、禁用／移除／重装恢复、无效包拒绝与有效安装保护；整体退出 0、恢复清理有记录。 |
+| RO-2／AC-3～4：large all | 核验后复用现存全部 1004 项的完整运行，B 另逐份重算原始快照行为；首次信任／未变均零探测，12 项跨四个实际 Guid 批次变化＋4 项新增缺流正好 16 次；停止已开始 2 项提交、未开始 2 项保留旧基线，恢复仅余 2 项；全部 1008 支持源重启播放前五字段／地址／主流一致，16 项显式选源零额外探测。 |
+| RO-3／AC-5～6：scan all | 核验后复用完整原生扫描／批量／播放真实重叠、136 源收敛、有限增删移库与 URL／内容竞态、手动刷新、定时／停止／恢复及故障对照。新增三源独立重启复现闭合下述持久化观察缺口；未声称本轮重跑 scan all。 |
+| 三源完整重启证明 | **本轮新运行**同 ZIP 专属隔离实例：变化批量源及合并版本 A／B，URL 改变而有效 SHA-1／Size 相同，实际探测 3 次；完成原生扫描及稳定收敛后，重启前、重启后任何 PlaybackInfo 前、逐源显式选源后三份只读快照的五字段／原生 URL／主流签名全部相同。三个显式 MediaSourceId 均返回对应新地址与主流、零额外探测。 |
+| AC-8／共同不变量与收尾 | 上述完整门禁、独立源／探测／指纹及资源核对、失败保留与支持材料协调共同覆盖；原库和外部运行容器未改动。 |
+
+同一最终 ZIP：`artifacts/releases/b-review-b2f19c2/Jellyfin.Plugin.StrmProbeOptimizer_linux-x64.zip`，SHA-256 `4066980f5d67768ad98d660cbd2f0ba250a9f70c149bad65a4a5f2a8e14a117d`。包的真实构建 SourceRevision 为 `b2f19c24f05d806ab75f152f36a302582e60ad67`，构建输入摘要 `362df04af4af539add03017bf129747581345e813a27ef6f0645f3da0763bbda` 与当前实现匹配；不是当前文档 HEAD 重新构建。包／扫描／大库与新增复现均消费此包；开发部署回归单独核验，不冒充 ZIP 安装。
+
+大库资源分层：首次 ID 查询 285.9508 ms、查询线程累计分配 5001656 B、采样堆增量 1271960 B；ID 模型 40280 B、容量折算 62728 B、保留量 86544 B；8 批对象读取 405.5465 ms／累计分配 17333160 B。290 次资源采样最大 cgroup 469012480 B、内核 peak 483213312 B，含三个 30 秒空闲窗口，重启采样间隙见原事件。累计分配、模型与采样峰值不是同一指标，不宣称总内存恒定或普遍性能 SLA。原生同步查询无 token，实际停止确认／返回时序及无后续对象读取均已核对。
+
+### 正确性、失败与限制
+
+- URL 优先、双侧有效内容 SHA-1／Size 规则、Modified 不触发、缺主流探测、首次信任非本次实测、仅成功保存且 Manifest 稳定才提交：完整 C# 决策／提交控制及 plugin、scan、large 的成功／失败／竞态／重启对照共同覆盖。
+- 原 `allowMediaProbe=false`、原生委托与手动刷新、开始后共享／全局上限、停止只撤销未开始工作、旧轮收尾后新轮、SQLite 故障保护／恢复：完整单元与真实 plugin／batch／scan 门禁覆盖。没有新增客户端停止到探测取消的关联。
+- 历史 plugin／batch 成功运行使用私有准备适配：等待多版本／停止夹具原生扫描完成，饱和前预热原生 FullRefresh 冷路径，mixed 删除前等待原生排队刷新。原函数／断言／2.5 秒阈值保留；预热后饱和池独立刷新 851 ms，冷路径对照约 3435 ms，不能推导冷启动普遍低于阈值。原失败／适配源码／日志及原文档治理失败均保留，不改称未经适配命令 PASS。
+- 新三源脚本产品断言全部通过，但整体首次退出 1：外部容器挂载列表顺序改变导致摘要观察失败。保留 `restart-proof-result.json` 原 FAIL；只读重新核对 9 个外部容器的 StartedAt／image／完整挂载内容，均与原摘要的排列等价，独立裁定 `restart-proof-adjudication.json` PASS。未重跑产品、未隐藏失败；快照／探测日志与显式选源断言独立可读，未保存完整原始 PlaybackInfo 响应，不宣称保存了它。
+- 非阻塞 P2：正式扫描工具未内置三阶段完整重启观察（本次独立补证）；异步测试准备适配尚非正式工具；既有日志跨日关联／措辞改进。均不影响已验证正确性，不为此延长 Slice 或新增 Task。
+- 明确延期／排除：JellyfinProxy RO-4／AC-7 按用户授权不执行、历史 NOT RUN；OpenList 专有 API／鉴权、其他 Jellyfin／平台／格式／客户端、audio-only 与指定逐分支实机、物理原生数据库保存故障注入、镜像完整构建溯源和通用性能证明保持未验证边界。只声明固定 Jellyfin 12.2.0／Linux x64、MP4／MKV／原生 Web 实测组合。
+
+### 数据保留与交给 A 的责任
+
+新三源专属实例正常停止、exit 0、无 OOM，并只清理本轮新建的小夹具工作区；既有门禁的配置／全部触发器／媒体／STRM 恢复记录逐项核对。现存 1004 项准备库 `artifacts/package-env/runs/run-20261019-104647-796ca45c` 的 1170 文件清单摘要仍为 `189b67c66e608833b27fa818de24bb1611788565c87eeffc0568b9eefe958bd2`；本轮未启动、重置、复制或清理它。准备库／基线／副本跨开发阶段继续保留，Slice 结束也不自动清理。
+
+Developer 本轮无活动实施任务，无需承担全量门禁；若 A 返回同 Slice 必要修正，Developer 仅运行直接影响验证并报告省略项，B 继续拥有完整门禁及独立验收。A 下一步审完整 Base..Implementation Head、原始索引与上述复用决定，独立裁定；只有 A PASS 后才做关闭协调、CURRENT／TARGET／README 等最终事实统一、路线图关闭和下一步选择。本轮不代填 A 结论、不关闭、不推送。
 
 ## A Final Review
 
@@ -160,4 +210,4 @@ P0/P1 Blockers: NOT ASSESSED
 Closure Reconciliation: NOT STARTED
 ```
 
-NEXT ACTION: B RUNS THE INDEPENDENT SLICE 4 FINAL WITH THE RETAINED RESTART PROOF; NO NEW IMPLEMENTATION TASK
+NEXT ACTION: A REVIEWS THE SLICE CLOSURE PACKET; SLICE READY FOR A REVIEW

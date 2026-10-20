@@ -11,7 +11,7 @@
 
 ## 当前边界
 
-Slice 1／2／3 已经 A 最终审查并 PASS / CLOSED，历史决定和快照见 [关闭账本](progress.md)。[Slice 4](../SLICE.md) 保持 ACTIVE 和原 Base，Task 4.1～4.3 已获 B PASS，但未完成单独 Slice Final。2026-10-20 用户授权撤出 JellyfinProxy 验收，原 4.4 未实施计划留在 Git，根 [TASK.md](../TASK.md) 暂无活动实施任务。B 在新合同提交后重判剩余非代理义务，无实施缺口则直接准备 Final；不把撤出项算 PASS，不宣称代理兼容。最终证据／支持说明协调、Closure Packet 和 A 审查关闭仍未完成。
+Slice 1／2／3 已经 A 最终审查并 PASS / CLOSED，历史决定和快照见 [关闭账本](progress.md)。Slice 4 的 B 最终决定与当前交接统一见 [Closure Packet](../SLICE.md#closure-packet)，无新增实施 Task；表中 ACTIVE 表示尚未由 A 关闭。代理撤出项保持历史 NOT RUN、不计 PASS、不宣称兼容；A 独立最终审查和关闭协调仍保留。
 
 从 V3.0 的三个 Slice 改为四个 Slice 是实质规划调整；旧规划见重规划前检查点 `4b1d0468c1e43e6e9034ef98e99b6cc44ea59485`。旧生成器 P1 始终排除，当前 P1 专指 V4.2 核心插件。
 

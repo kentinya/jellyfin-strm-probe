@@ -92,7 +92,7 @@ Slice 2 已验证 SQLite 指纹的真实重启／失败恢复、多源身份、�
 
 Task 4.2／RO-3 与 Task 4.3／RO-2 已获 B PASS，准确实现／审查快照统一见 [合同当前交接](../SLICE.md#事实更新与停止规则)。4.3 最终完整报告、早期 PARTIAL／失败、工具修正和 B 原始证据索引保留于 `57c5072db0cebf4bcf5fa64c3cde635e9a23dcb3:TASK.md`；既有 plugin／batch 完整门禁包含已披露的私有异步夹具准备适配，不声称未经适配命令通过。准备库、基线与失败副本继续保留。
 
-这些 Task 结论不是独立 Slice Final；最后同 ZIP 的安装恢复、扫描／大库／原生播放完整回归和最终事实协调仍未完成。Final 必须补齐扫描变化批量源与多版本 A／B 的重启前、重启后播放前、显式选源后完整五字段／地址／主流比对，不只信旧扫描标签。不扩展为其他 Jellyfin／平台、通用性能 SLA 或全格式兼容。
+当前候选的独立最终审查、完整门禁复用、新增三阶段重启补证及全部限制统一见 [Closure Packet](../SLICE.md#closure-packet)。B 交接不代替 A 最终裁定；不扩展为其他 Jellyfin／平台、通用性能 SLA 或全格式兼容。
 
 ## JellyfinProxy 与 OpenList 未验证
 
