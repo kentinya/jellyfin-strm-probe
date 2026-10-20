@@ -5,13 +5,13 @@
 ```text
 Task ID: 4.3
 Parent Slice: 4
-Status: FIX REQUIRED
+Status: READY FOR B REVIEW
 Task Base: a06a80fac90a86085f25116568aa24b54847c562
 Contract Checkpoint: 539c01ca8ba4f0ce8c9eb59b32b88bbb337e7ce3
 Difficulty: High
 Test Level: T4
 Planner / Reviewer: B
-Implementation Head: 4cdd174da8c7af988df4962934fc510d206fd838
+Implementation Head: 8573dfbffebb785261668f9cd5c895be937e000e
 ```
 
 ## Goal
@@ -505,5 +505,28 @@ This finding does not move the Task Base, alter scope or contract, or satisfy RO
 - Remaining In-Slice Work：RO-2 待 B 独立验收（含 fresh 1000 与 3000）；RO-4 后续 4.4；单独 Slice Final、事实协调与 Closure Packet。
 - Risks / Deviations：修正覆盖“收尾失败不得命令成功”与“未观测必需阶段不得总 PASS”两个控制；真实查询窗口是否命中仍依赖运行时序，未命中会如实 FAIL／NOT RUN。3000 级仍 NOT RUN。
 - Head SHA：fix-required correction round 3 `1c3e0176a285774641da265513a9f76510be666a`。
+
+可复用经验只提供少量候选供 Slice 收尾，不记录开发流水账，不作为 Task PASS 门槛。
+
+## Developer Completion Report — retained-library full-scenario correction
+
+- Changed Files：`scripts/run_isolated_large_library_integration.py`、`tests/test_isolated_large_library_integration.py`；纯报告更新 `TASK.md`。未改 schema、业务规则、稳定需求、Slice／Roadmap、C# 产品代码、`package_environment.py` 或其它共享工具。
+- Implemented（仅修 B FIX REQUIRED：复用入口必须能在已核验 1004 项副本上执行完整行为，保持原 Base／Goal／Scope）：
+  - 把 fresh 路径的完整行为序列（首次信任、未变、跨真实 Guid 批次增量、真实同步查询窗口停止、已开始两项探测后停止／收尾、恢复、两轮未变、重启前后完整核对、16 个变更源显式选源 PlaybackInfo）抽成共享 `run_full_behavior(...)`，由 `run_scenario_body`（fresh）和 `run_reuse_full_scenario`（reuse）共同调用，不再保留两套逻辑。
+  - 新增 `run_reuse_full_scenario(...)`：只复制并核对已核验 1004 项库，不调用 `prepare_clean_instance`／`build_fixture`／`prepare_native_streams`／`prepare_indexed_fixture`，不重建库、不重新扫描全库、不逐源重新准备已有主流。它读取副本配置与原生候选、逐身份对账，要求副本指纹库已显式清空，然后执行完整行为。
+  - 复用 `assign_increment_controls` 从四个真实 Guid 批次各选 3 个源作为 12 个 URL／内容／Size 对照，仅对这 12 个改写 URL 的对照用最多 2 个 worker 做有界原生主流修复（`prepare_reuse_increment_baselines`，插件禁用期间），不触碰其余 996 源；另新增 4 个缺主流项由原生扫描索引。
+  - 新增 `_REUSE_EDIT_TRACKER`／`note_owned_edit(...)`：只记录本轮有意改写的 STRM／媒体文件，`reconcile_prepared_inputs` 允许这些已独立哈希的计划内改动，任何未跟踪的副本输入变化仍使整体 FAIL。`reuse + all` 成功时 `full_task_acceptance` 才为 `PASS`，任一必需阶段未满足、失败、资源超限或清理失败仍 `FAIL`／非零退出并保留副本。
+  - 删除旧的 `reuse_increment_controls` 选择（保留库现存 12 源不跨四个批次），改为按真实批次重新选择并仅修复受影响准备。
+- Tests and Results（fix head `8573dfbffebb785261668f9cd5c895be937e000e`）：
+  - `python3 -m unittest discover -s tests -p 'test_isolated_large_library_integration.py' -v` **58/58 PASS**（新增：`reuse + all` 执行完整流程且不重建／不扫描／不清理；`reuse + all` 全流程失败非零且保留；`run_reuse_full_scenario` 核对副本并只修复 12 对照；指纹库非空且未显式重置时拒绝；受控改写仅限已跟踪文件）。
+  - `python3 -m unittest discover -s tests` **262/262 PASS**（全量 Python 发现，8.2s）。
+  - `bash scripts/dotnet-local test tests/Jellyfin.Plugin.StrmProbeOptimizer.Tests/…csproj --configuration Release --no-restore --filter '…BatchCheckTests|…ProbeCoordinatorTests|…PlaybackOptimizerTests'` **138/138 PASS**（约 4s；C# 未改，仅受影响回归确认）。
+  - `python3 scripts/check_governance.py` PASS；`git diff --check` 干净。
+  - 真实复用全场景（Developer 聚焦反馈，非 B 独立验收）：`--reuse-workspace <1004 库> --count 1000 --scenario all --reset-copied-fingerprints` 在匹配 ZIP `b-review-b2f19c2`（SHA-256 `4066980f5d67768ad98d660cbd2f0ba250a9f70c149bad65a4a5f2a8e14a117d`）上 **exit 0 / status=PASS / full_task_acceptance=PASS**。首次信任候选 1007／支持 1004／跳过 1004／首次信任 1004／实际探测 0；未变 0 探测；增量候选 1011／支持 1008／实际探测 16／可靠成功 16（4 URL＋4 内容 SHA-1＋4 Size＋4 缺流）；增量后未变 0 探测；查询阶段停止第 1 次自然尝试命中（请求 03:05:30.197729Z ≤ 确认 03:05:30.219517Z）；分批停止在 2 个延迟探测实际开始后命中、终态 Cancelled、进度最高 12.56%、收尾期间重跑未进入；恢复精确 2 探测；两轮未变 0 探测；重启前后完整五字段／地址／主流签名一致，16 变更源显式 PlaybackInfo 返回正确地址且额外探测 0；副本源未变、实例对账 CLEAN、双服务 exit 0 后停止保留。
+  - 未运行（明确交 B）：`format`、三个既有默认实机回归、包／扫描全场景、fresh 1000／3000、RO-4 代理、单独 Slice Final。Developer 只运行改动文件直接影响的测试；本会话遵守“测试时间 < 本轮 30%”比例。
+- Decisions：B Finding 已按要求修在同一 Task 的工具／测试内；未改合同、取消语义、样本数量或验收含义。保留库现存运行后状态不满足首次信任前提，因此复用全场景要求显式 `--reset-copied-fingerprints` 并把原副本指纹库备份到副本内 `baseline-backup/`，不静默清空、不改动原库。真实复用全场景使用私有包装脚本（显式无重叠子网）绕开本机 Docker 默认地址池耗尽；包装只改写本轮生成的 compose 网络、不改产品／通用工具／保留库／外部容器，属于开发环境适配，不改变候选数量、业务规则或验收含义。
+- Remaining In-Slice Work：RO-2 待 B 独立验收（含 fresh 1000 与 3000、真实大库最终候选）；RO-4 后续 4.4；单独 Slice Final、事实协调与 Closure Packet。
+- Risks / Deviations：本轮复用全场景为 Developer 聚焦反馈，非 B 独立验收或 Slice Final；它复用既有准备数据，不重跑 fresh 1000／3000，也不替代最终干净候选门禁。3000 级与完整全量回归、独立复现交 B。
+- Head SHA：retained-library full-scenario correction `8573dfbffebb785261668f9cd5c895be937e000e`。
 
 可复用经验只提供少量候选供 Slice 收尾，不记录开发流水账，不作为 Task PASS 门槛。
