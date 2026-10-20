@@ -5,7 +5,7 @@
 ```text
 Task ID: 4.3
 Parent Slice: 4
-Status: READY FOR B REVIEW
+Status: FIX REQUIRED
 Task Base: a06a80fac90a86085f25116568aa24b54847c562
 Contract Checkpoint: 539c01ca8ba4f0ce8c9eb59b32b88bbb337e7ce3
 Difficulty: High
@@ -13,6 +13,8 @@ Test Level: T4
 Planner / Reviewer: B
 Implementation Head: 8573dfbffebb785261668f9cd5c895be937e000e
 ```
+
+当前 B 决定以文末 [2026-10-20 完整复用候选复审](#b-review-20261020) 为准；此前报告与审查保留历史，不以 Developer 的全场景 PASS 代替 B 验收。
 
 ## Goal
 
@@ -530,3 +532,38 @@ This finding does not move the Task Base, alter scope or contract, or satisfy RO
 - Head SHA：retained-library full-scenario correction `8573dfbffebb785261668f9cd5c895be937e000e`。
 
 可复用经验只提供少量候选供 Slice 收尾，不记录开发流水账，不作为 Task PASS 门槛。
+
+<a id="b-review-20261020"></a>
+
+## B Review Result — 2026-10-20 retained-library full-scenario candidate
+
+```text
+Reviewed Range: a06a80fac90a86085f25116568aa24b54847c562..8573dfbffebb785261668f9cd5c895be937e000e
+Report-only Head: 34194161f917bd7b5986759c344bc8432725587b
+Contract Checkpoint: 539c01ca8ba4f0ce8c9eb59b32b88bbb337e7ce3
+Decision: FIX REQUIRED
+Slice Required Outcomes all satisfied: NO
+Next: correct SAME Task 4.3; Developer runs affected checks; B retains complete final gates and independent acceptance
+```
+
+### 合法性、真实仓库与证据审计
+
+- 开工 `main` 工作区干净，领先 `origin/main` 53 个提交；治理检查 PASS。已阅读 AGENTS、开发流程、V4.3、scope／requirements／product-experience／architecture／roadmap、SLICE／TASK、B 经验及固定交付方案。Task 仍是已提交 ACTIVE Slice 4 内完整 RO-2 行为单元；保留 ID、Task／Slice Base、Goal、Scope、High／T4 和当前至少 1000 项合同，使用全部现存 1004 项，不要求 fresh 1000／3000，不重新规划、不启动 Task 4.4。2026-10-19 的数量合同合法性决定继续有效。
+- 审查真实 Base..Implementation Head 的变化、产品诊断／共享测试工具及本次复用编排；`8573dfb..3419416` 只有 TASK 和三份事实文档，没有可执行代码、测试、锁、依赖或包输入变化。Developer run-5 的工作区 patch SHA-256 `a28acebf1dc015848f497dbf9141dc9cb2af09e2a4fffcaa8b3223d221ea87a7` 与 `git diff 1ea6ec5..8573dfb --binary` 完全一致。ZIP 实际 SHA-256 为 `4066980f5d67768ad98d660cbd2f0ba250a9f70c149bad65a4a5f2a8e14a117d`；产品／打包输入自该包来源检查点未变，但工具已变，旧最终门禁不能整体继承。
+- 阅读 `.git/validation-evidence/DEV-reuse-all/run-5/` 的 INDEX、result、events、逐源快照及原始日志，核验私有网络包装只适配本轮 Compose 子网。原始观察确有首次 1004／零探测、增量 16、恢复 2、后续未变零探测；10 个状态快照中首次信任前为 1004 预期／0 指纹，其余对应阶段完整行对账相等，重启前后有全量状态。保留这些实际观察，不撤销为插件失败，也不把 runner PASS 直接认定 B PASS。下述准备方式违反当前要求，因此该运行不作为完整 RO-2 门禁复用。原始失败、成功观察、源库及副本持续保留。
+
+### 当前阻塞项（仅本 Task）
+
+1. **P1 BR-43-R1 — 复用准备仍执行全库扫描，并错误记录成仅 12 项重索引。** `run_reuse_full_scenario` 在首次信任前的 `scripts/run_isolated_large_library_integration.py:1958–1963` 调用 `scan.run_native_scan_completed`；该 helper 实际启动 `RefreshLibrary` 原生计划任务，没有项目／12 项过滤，不是局部准备修复。run-5 原始事件也证明 Scan Media Library 于 `2026-10-20T03:01:48.793595Z–03:02:14.075753Z` 完成，而 `scope` 却写成 `reindex only the 12 rewritten control STRMs`。这违背当前 Developer 修正指导中“不重新扫描全库”的准备库复用约束。后续为新增 4 个缺流源取得真实索引的指定行为扫描另计，不与这个首次信任前准备扫描混淆。**修正**：去掉准备阶段全库扫描；如重写 12 个对照确需原生更新，只修这 12 项的受影响准备，使用项目级原生路径或避免不必要重索引，并核对其余 992 项原生身份／地址／主流未受准备修复影响。不要为绕过断言调用别名／另一个全库 helper；更新 scope／报告与真实调用相符。新增回归应穿过 `run_reuse_full_scenario` 至真实 helper／请求边界，断言首次信任前不会启动 `RefreshLibrary` 或 `/Library/Refresh`；现有外层编排 mock 把整个内层替换，因此测试名称中的“不扫描”并未覆盖这个调用。
+2. **P1 BR-43-R2 — 收尾失败后结果仍保留完整验收 PASS。** `run_reuse_scenario:2077` 在 finally 前设置 `full_task_acceptance=PASS`；`2128–2129` 遇到触发器恢复、原库完整性、副本对账或服务停止失败只改 `status/focused_status`，未撤销该字段。B 独立注入四种失败全部复现：命令退出 1、整体 FAIL，但 `full_task_acceptance=PASS` 且 `not_run` 仅剩 independent-B-review。这是相互矛盾的完整验收结果，违反本 Task“任一必要收尾失败不得标完整 PASS”的要求；**不是**声称旧的命令退出 0 缺陷复发。**修正**：完整验收状态在全部必要收尾完成后统一派生；all 场景任一执行或收尾失败均必须非 PASS，保留原诊断及副本。扩展 all 场景负向控制覆盖触发器恢复、原库完整性、副本对账、日志、sampler 和服务退出失败，检查返回码、整体状态、完整验收状态及证据 finish 输出一致；focused 场景继续 PARTIAL，不能误升级。
+
+### 本轮实际验证与后续门禁分工
+
+- B 独立离线复现脚本 `reproduce_controls.py` 穿过真实复用 finally 并在原生扫描 HTTP 边界拦截：4 个收尾状态矛盾及 1 个全库扫描调用均 **BUG REPRODUCED**（0.367s 命令 wall），零真实 API／容器操作；不是产品验收 PASS。
+- B 运行 `python3 -m unittest discover -s tests -v`：**262/262 PASS**，退出 0，8.798s 命令 wall／8.440s unittest；已包含大库 58 项控制，不重复再跑相同聚焦套件。它未覆盖上述两个缺陷，不能替代独立复现。开工治理 PASS；本报告提交前另核对治理、Markdown 链接／锚点、差异和隐私。
+- **本轮 NOT RUN**：C# locked restore／Release build／全量 test／format、重新打包、package-all／scan-all、plugin／batch-suite／configuration-all、B 独立 1004 项复用全流程、代理联调及 Slice Final。因已明确当前 P1 阻塞，按开发流程先拒绝，不启动昂贵实机门禁、不把旧结果标成本候选新 PASS。未启动／停止／接管现有容器，未清理源库、基线或副本。
+- **Developer 修正反馈**：只改同 Task 的大库工具／直接相关测试及必要事实报告；运行新增失败控制和受影响大库套件，若确实改共享 helper 再运行其直接影响回归，准确列出其余 NOT RUN。无需交还其完整 C#／Python、所有实机或 Final；不改插件、合同、取消语义或新增通用框架。
+- **B 最终门禁**：新实现 Head 到达后重新审查 Base..Head，独立复现两项修正与 fail-closed 控制；承担本 Task“最终检查点门槛”的完整 restore／build／C# test／format／Python／packaging／package-all／scan-all／三个既有实机回归／治理／差异／Markdown，以及使用全部现存 1004 项的独立完整复用流程。package／scan／large 消费同一固定最终 ZIP，串行操作实例；仅在输入和原始产物匹配并明确记录时复用，缺失／不匹配重跑对应门槛。不得用 Developer 聚焦结果替代，不再运行历史已取消的 fresh 1000／3000。预算继续遵守本轮测试耗时严格小于总耗时 50%，不靠空等扩大分母；有阻塞可先拒绝，未完成门禁不得 PASS。
+- 本机私有证据：`.git/validation-evidence/34194161f917bd7b5986759c344bc8432725587b/b-review-20261020T033820Z/`，包含输入文件摘要、独立复现源码／原始日志、262 项完整日志、精确命令／UTC／退出码／耗时及原 run-5 审计／文件摘要；不上传原始证据、数据库或凭据。早期 shell／传输语法错误未执行预定命令，已纠正，不算测试或验收结果。
+
+RO-2 仍未取得 B PASS；RO-4 未完成，RO-1／RO-3 保留已提交历史决定，待最终候选门禁核对。全部 RO 未满足，不造新 Task，不提交 Closure Packet 或 `SLICE READY FOR A REVIEW`，不自行关闭 Slice。若去除准备全库扫描确需改变现有合同义务，先交 A；本轮发现本身属于同 Task 工具修正，不改变范围。
