@@ -779,7 +779,7 @@ def play_once(auth: str, row: dict, phase: str, evidence_dir: Path, relax_consol
     phase_dir.mkdir(parents=True, exist_ok=True)
     item = row["item"]
     url = row["url"]
-    filename = row.get("watch_media") or row["file"]
+    filename = row.get("watch_media") or row.get("file") or row.get("media")
     before_probes = probe_count(url)
     before_events = plugin_event_lines()
     before_media = media_server_requests()
@@ -1571,12 +1571,15 @@ def build_matrix_rows(fixture_table: dict) -> list[dict]:
             # Fixed-URL families (P04/P06/C/F02) keep the URL constant while the file bytes on it
             # change, so the manifest address is the switch file itself, not the baseline media.
             url = MEDIA_PREFIX + media if media.startswith("switch-") else base_url
+            # The media-request counter keys off the file name behind the requested URL, so the
+            # watched file defaults to the row's own media file; static-path rows watch their
+            # partner file explicitly.
             row = {"id": f"{fmt}.{group}" + (f".{tail}" if tail else ""), "fmt": fmt, "name": item,
                    "item": item, "media_type": "video", "media": media, "url": url,
                    "old": {"sha1": old_sha, "size": old_size}, "apply": apply or {},
                    "apply_kind": apply_kind, "expect_probes": expect, "fp_kind": fp_kind,
                    "fp_tokens": fp_tokens, "fp_url": fp_url or url, "journey": journey,
-                   "trust": trust, "watch_media": watch_media}
+                   "trust": trust, "watch_media": watch_media or media}
             rows.append(row)
 
         # --- P01: missing necessary video stream, bounded removal in this run's owned copy ---------
@@ -1617,8 +1620,7 @@ def build_matrix_rows(fixture_table: dict) -> list[dict]:
                 ("03", v4, None, f"matrix-{ext}-p4b.{ext}")):
             add("P04", tail, media=f"switch-p04-{ext}.{ext}", old_sha=va, old_size=na, apply_kind="switch",
                 apply={"to": partner, "sha1": new_sha, "size": new_size}, expect=1, fp_kind="new",
-                fp_tokens=(new_sha, new_size), fp_url=MEDIA_PREFIX + f"switch-p04-{ext}.{ext}",
-                watch_media=partner)
+                fp_tokens=(new_sha, new_size), fp_url=MEDIA_PREFIX + f"switch-p04-{ext}.{ext}")
 
         # --- P05: URL unchanged, incomparable SHA-1, valid equal sizes ---------------------------
         for tail, old_sha, new_sha in (("01", va, None), ("02", None, va), ("03", None, None),
@@ -1641,7 +1643,7 @@ def build_matrix_rows(fixture_table: dict) -> list[dict]:
             partner = f"matrix-{ext}-{'p06up' if direction == 'up' else 'p4b'}.{ext}"
             add("P06", f"{tail}.{direction}", media=media, old_sha=old_sha, old_size=na, apply_kind="switch",
                 apply={"to": partner, "sha1": new_sha, "size": new_size}, expect=1, fp_kind="new",
-                fp_tokens=(new_sha, new_size), fp_url=MEDIA_PREFIX + media, watch_media=partner)
+                fp_tokens=(new_sha, new_size), fp_url=MEDIA_PREFIX + media)
 
         # --- P07: URL unchanged, SHA-1 and Size both incomparable ---------------------------------
         p07 = [("01", va, None, None, na), ("02", None, va, na, None),
@@ -1669,13 +1671,12 @@ def build_matrix_rows(fixture_table: dict) -> list[dict]:
             add("C02", tail, media=f"switch-c02-{tail}-{ext}.{ext}", old_sha=va, old_size=na,
                 apply_kind="switch", apply={"to": target, "sha1": t["sha1"], "size": str(t["size"])},
                 expect=1, fp_kind="new", fp_tokens=(t["sha1"], str(t["size"])),
-                fp_url=MEDIA_PREFIX + f"switch-c02-{tail}-{ext}.{ext}", watch_media=target)
+                fp_url=MEDIA_PREFIX + f"switch-c02-{tail}-{ext}.{ext}")
             short = fx(f"matrix-{ext}-short-{tail}.{ext}")
             add("C06", tail, media=f"switch-c06-{tail}-{ext}.{ext}", old_sha=va, old_size=na,
                 apply_kind="switch", apply={"to": f"matrix-{ext}-short-{tail}.{ext}", "sha1": None,
                                             "size": str(short["size"])}, expect=1, fp_kind="new",
-                fp_tokens=(None, str(short["size"])), fp_url=MEDIA_PREFIX + f"switch-c06-{tail}-{ext}.{ext}",
-                watch_media=f"matrix-{ext}-short-{tail}.{ext}")
+                fp_tokens=(None, str(short["size"])), fp_url=MEDIA_PREFIX + f"switch-c06-{tail}-{ext}.{ext}")
 
         # --- F: failure, old-baseline protection and same-target recovery -------------------------
         add("F01", "", media=base_media, old_sha=va, old_size=na, apply_kind="f01",
@@ -1787,20 +1788,14 @@ def apply_matrix_change(row: dict) -> dict:
     apply = row["apply"]
     kind = row["apply_kind"]
     record: dict[str, object] = {"kind": kind}
-    if kind in ("manifest", "manifest-url", "comment", "rewrite"):
-        tokens = {"sha1": apply.get("sha1", row["old"]["sha1"]), "size": apply.get("size", row["old"]["size"])}
-        if kind == "manifest-url":
+    if kind in ("manifest", "manifest-url", "comment", "rewrite", "d06"):
+        if kind in ("manifest-url", "d06"):
             tokens = {"sha1": apply.get("sha1"), "size": apply.get("size")}
-        if kind == "comment":
+        elif kind == "comment":
             tokens = dict(row["old"])
-        if kind == "rewrite":
-            current = (pe.WORK / "strm" / (row["item"] + ".strm")).read_bytes()
-            staging = pe.WORK / "strm" / ("." + row["item"] + ".rewritten.strm")
-            pe.write_owned_bytes(staging, current, label=f"rewritten STRM bytes {row['id']}")
-            os.replace(staging, pe.WORK / "strm" / (row["item"] + ".strm"))
-            record["contentSha256Unchanged"] = True
-            return record
-        if kind == "manifest-url":
+        else:
+            tokens = {"sha1": apply.get("sha1", row["old"]["sha1"]), "size": apply.get("size", row["old"]["size"])}
+        if kind in ("manifest-url", "d06"):
             record["strm"] = write_matrix_strm(row, tokens=tokens, url=apply["url"])
         elif kind == "comment":
             record["strm"] = write_matrix_strm(row, tokens=tokens, extra=apply["extra"])
@@ -1811,6 +1806,13 @@ def apply_matrix_change(row: dict) -> dict:
         stamp = time.time() + 3600
         os.utime(target, (stamp, stamp))
         record["newMtime"] = stamp
+    elif kind == "rewrite":
+        current = (pe.WORK / "strm" / (row["item"] + ".strm")).read_bytes()
+        staging = pe.WORK / "strm" / ("." + row["item"] + ".rewritten.strm")
+        pe.write_owned_bytes(staging, current, label=f"rewritten STRM bytes {row['id']}")
+        os.replace(staging, pe.WORK / "strm" / (row["item"] + ".strm"))
+        record["contentSha256Unchanged"] = True
+        return record
     elif kind == "switch":
         source = media / apply["to"]
         destination = media / row["media"]
@@ -2145,6 +2147,9 @@ def journey_f01(auth: str, row: dict, evidence_dir: Path) -> dict:
     auth = pkg.api_auth()
     result["apply"] = apply_matrix_change(row)  # manifest now points at the real 404 target
     row["url"] = row["apply"]["url"]
+    # From here the requested (and recovered) media is served from the missing target's own file
+    # name, so the media-request counter must watch that name, not the baseline A it trusted.
+    row["watch_media"] = row["apply"]["url"].rsplit("/", 1)[-1]
     failed = play_once(auth, row, "fail-window", evidence_dir, relax_console=True)
     require(failed["playback"].get("advanced") is not True,
             f"{row['id']}: the 404 target must not produce an advancing playback.")
