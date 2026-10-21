@@ -252,6 +252,21 @@ class ScenarioDefinitionTests(unittest.TestCase):
                     sys.argv = original
 
 
+class EntityClassTests(unittest.TestCase):
+    def test_native_movie_and_audio_entities_are_accepted(self):
+        self.assertEqual(playback.entity_class_failures(
+            {"MediaType": "Video", "Type": "MediaBrowser.Controller.Entities.Movies.Movie"}, "video"), [])
+        self.assertEqual(playback.entity_class_failures(
+            {"MediaType": "Audio", "Type": "MediaBrowser.Controller.Entities.Audio.Audio"}, "audio"), [])
+
+    def test_mismatched_entity_or_media_type_is_refused(self):
+        self.assertTrue(playback.entity_class_failures(
+            {"MediaType": "Video", "Type": "MediaBrowser.Controller.Entities.Audio.Audio"}, "video"))
+        self.assertTrue(playback.entity_class_failures(
+            {"MediaType": "Audio", "Type": "MediaBrowser.Controller.Entities.Movies.Movie"}, "audio"))
+        self.assertTrue(playback.entity_class_failures({"MediaType": "Video", "Type": "X.Book"}, "video"))
+
+
 class SubnetAdaptationTests(unittest.TestCase):
     def test_free_subnets_avoid_every_used_range(self):
         used = ["10.253.0.0/28", "10.253.0.16/28", "172.17.0.0/16"]

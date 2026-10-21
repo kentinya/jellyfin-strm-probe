@@ -643,6 +643,29 @@ def read_only_state(auth: str, row: dict) -> dict:
 # ---------------------------------------------------------------------------------------------------------------------
 
 
+# Jellyfin derives concrete entity types from the library collection type: a movie library yields
+# ``Movie`` (a Video), a music library yields ``Audio``. Both are still the native Video/Audio
+# entities the plugin treats as required-primary-stream owners, so the check accepts the concrete
+# class names rather than only the abstract base names.
+VIDEO_ENTITY_SUFFIXES = ("Movie", "Episode", "MusicVideo", "Video", "Trailer")
+AUDIO_ENTITY_SUFFIXES = ("Audio", "AudioBook")
+
+
+def entity_class_failures(info: dict, media_type: str) -> list[str]:
+    """Return the reasons the native item is not the expected Video/Audio entity."""
+    failures: list[str] = []
+    reported_media_type = str(info.get("MediaType") or "").lower()
+    if reported_media_type != media_type:
+        failures.append(f"native media type is {info.get('MediaType')!r}, expected {media_type!r}")
+    entity = str(info.get("Type") or "").rsplit(".", 1)[-1]
+    allowed = VIDEO_ENTITY_SUFFIXES if media_type == "video" else AUDIO_ENTITY_SUFFIXES
+    if entity not in allowed:
+        failures.append(f"native entity {info.get('Type')!r} is not one of {list(allowed)}")
+    if media_type == "audio" and entity in VIDEO_ENTITY_SUFFIXES:
+        failures.append("an audio row must not be indexed as a video entity")
+    return failures
+
+
 def prepare_instance(package: Path) -> dict:
     summary: dict[str, object] = {}
     summary["networkAdaptation"] = install_explicit_subnets()
@@ -679,15 +702,9 @@ def prepare_rows(auth: str, rows: list[dict]) -> dict:
         row["item"] = pkg.scan_and_wait(auth, row["strm_name"], MAX_WAIT)
         info = item_media_type(auth, row["item"]["Id"])
         summary[row["id"] + ".item"] = info
-        require(str(info.get("MediaType", "")).lower() == row["media_type"],
-                f"{row['id']}: the native item media type is {info.get('MediaType')!r}, "
-                f"expected {row['media_type']!r}.")
-        if row["media_type"] == "audio":
-            require("Audio" in str(info.get("Type", "")),
-                    f"{row['id']}: the native item is not an Audio entity but {info.get('Type')!r}.")
-        else:
-            require("Video" in str(info.get("Type", "")),
-                    f"{row['id']}: the native item is not a Video entity but {info.get('Type')!r}.")
+        entity_failures = entity_class_failures(info, row["media_type"])
+        require(not entity_failures, f"{row['id']}: " + "; ".join(entity_failures))
+        summary[row["id"] + ".entity"] = str(info.get("Type")).rsplit(".", 1)[-1]
     require(pkg.plugin_action(auth, False) == 204, "The package-instance plugin disable failed.")
     pkg.restart()
     auth = pkg.api_auth()
