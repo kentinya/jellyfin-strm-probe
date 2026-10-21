@@ -17,7 +17,7 @@
 // is never a plugin production dependency.
 
 import { createRequire } from 'node:module';
-import { mkdirSync, readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 
@@ -243,15 +243,33 @@ async function strictPlay(page, item, strict) {
 async function playItem(page, item, strict) {
   const mediaRequests = [];
   const playbackInfo = [];
+  let requestErrorShot = null;
+  if (strict.enabled) {
+    mkdirSync(strict.screenshotDir, { recursive: true });
+  }
   const onResponse = (response) => {
     const url = response.url();
     if (/\/videos\/|\/stream|\.m3u8|\.mp4|\.mkv|\.m4a|\.mp3|\/Audio\//i.test(url)) {
       mediaRequests.push({ status: response.status(), path: redactUrl(url), kind: 'media' });
+      // A failed media/stream response is a failure state the reviewer must be able to open; the
+      // first one is captured next to the normal screenshots without touching the legacy output.
+      if (strict.enabled && response.status() >= 400 && requestErrorShot === null) {
+        requestErrorShot = join(strict.screenshotDir, `${safeName(item.id || item.name)}-request-error-${response.status()}.png`);
+        page.screenshot({ path: requestErrorShot }).catch(() => {});
+      }
     }
     if (/\/PlaybackInfo/i.test(url)) {
       const request = response.request();
+      const index = playbackInfo.length;
       response.json().then((body) => {
-        playbackInfo.push({ status: response.status(), method: request.method(), urlPath: redactUrl(url), body: summarizePlaybackInfo(body) });
+        const entry = { status: response.status(), method: request.method(), urlPath: redactUrl(url), body: summarizePlaybackInfo(body) };
+        // The redacted summary cannot prove the full stream fields, so strict mode additionally keeps
+        // the exact raw response next to the screenshots for the three-stage field comparison.
+        if (strict.enabled) {
+          entry.rawBodyFile = join(strict.screenshotDir, `${safeName(item.id || item.name)}-playbackinfo-${index}.json`);
+          writeFileSync(entry.rawBodyFile, JSON.stringify(body, null, 2));
+        }
+        playbackInfo.push(entry);
       }).catch(() => {
         playbackInfo.push({ status: response.status(), method: request.method(), urlPath: redactUrl(url), body: null });
       });
@@ -296,6 +314,7 @@ async function playItem(page, item, strict) {
         incompleteScreenshot: strictResult.incompleteShot,
         strictObservations: strictResult.observations,
         mediaRequests: mediaRequests.slice(0, 40),
+        requestErrorScreenshot: requestErrorShot,
         playbackInfo: playbackInfo.slice(0, 10),
       };
     }

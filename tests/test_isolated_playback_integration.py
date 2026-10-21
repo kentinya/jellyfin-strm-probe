@@ -1,12 +1,9 @@
 """Guardrails for the Slice 5 baseline playback entry; these are not real Jellyfin acceptance tests.
-
 The unit controls below only prove that the tooling refuses to report a baseline as passing when
 the required evidence is missing. They are not evidence of native Jellyfin probing, persistence,
 restart survival or real playback.
 """
-
 from __future__ import annotations
-
 import importlib.util
 import json
 import sys
@@ -14,10 +11,7 @@ import tempfile
 import unittest
 import uuid
 from pathlib import Path
-
 ROOT = Path(__file__).resolve().parents[1]
-
-
 def load(name: str, relative: str):
     # Reuse an already-imported module so the whole test session shares one set of exception
     # classes (the package integration script imports ``package_plugin``/``package_environment``
@@ -29,37 +23,27 @@ def load(name: str, relative: str):
     sys.modules[name] = module
     spec.loader.exec_module(module)
     return module
-
-
 playback = load("run_isolated_playback_integration", "scripts/run_isolated_playback_integration.py")
-
 URL = "http://media:8080/baseline-mp4-a.mp4"
 SHA1 = "0123456789abcdef0123456789abcdef01234567"
 SIZE = 4096
 ITEM_ID = "8" * 8 + "-1111-2222-3333-" + "a" * 12
 SOURCE_ID = "b" * 8 + "-1111-2222-3333-" + "c" * 12
 OTHER_SOURCE_ID = "d" * 8 + "-4444-5555-6666-" + "e" * 12
-
-
 def fingerprint(**overrides) -> dict:
     row = {"item_id": "a" * 32, "source_key": "a" * 32,
            "url_hash": playback.hashlib.sha256(URL.encode()).hexdigest(), "sha1": SHA1, "file_size": SIZE}
     row.update(overrides)
     return row
-
-
 class FingerprintFieldTests(unittest.TestCase):
     def test_matching_five_field_fingerprint_is_accepted(self):
         self.assertEqual(playback.fingerprint_fields_match(fingerprint(), expected_url=URL,
                                                            sha1=SHA1, size=SIZE), [])
-
     def test_fingerprint_sha1_comparison_ignores_hex_case(self):
         self.assertEqual(playback.fingerprint_fields_match(fingerprint(sha1=SHA1.upper()),
                                                            expected_url=URL, sha1=SHA1, size=SIZE), [])
-
     def test_missing_fingerprint_is_refused(self):
         self.assertTrue(playback.fingerprint_fields_match(None, expected_url=URL, sha1=SHA1, size=SIZE))
-
     def test_wrong_url_hash_size_and_sha1_are_refused(self):
         for row, label in (
             (fingerprint(url_hash="b" * 64), "url"),
@@ -68,7 +52,6 @@ class FingerprintFieldTests(unittest.TestCase):
         ):
             failures = playback.fingerprint_fields_match(row, expected_url=URL, sha1=SHA1, size=SIZE)
             self.assertTrue(failures, label)
-
     def test_extra_or_missing_columns_are_refused(self):
         extra = fingerprint()
         extra["notes"] = "unexpected"
@@ -76,7 +59,6 @@ class FingerprintFieldTests(unittest.TestCase):
         missing = fingerprint()
         del missing["sha1"]
         self.assertTrue(playback.fingerprint_fields_match(missing, expected_url=URL, sha1=SHA1, size=SIZE))
-
     def test_a_row_for_another_item_or_source_is_refused(self):
         # The baseline compares the stored row with the item and the native source this playback
         # actually owns, not just with "some" row for the item.
@@ -93,8 +75,6 @@ class FingerprintFieldTests(unittest.TestCase):
             row, expected_url=URL, sha1=SHA1, size=SIZE,
             expected_item_id=str(uuid.UUID(int=3)), expected_source_id=str(uuid.UUID(int=2)))
         self.assertTrue(any("item id" in failure for failure in wrong_item), wrong_item)
-
-
 class PlaybackObservationTests(unittest.TestCase):
     def _entry(self, tmp: Path, **overrides) -> dict:
         start = tmp / "start.png"
@@ -126,13 +106,11 @@ class PlaybackObservationTests(unittest.TestCase):
         }
         entry.update(overrides)
         return entry
-
     def test_complete_video_observation_is_accepted(self):
         with tempfile.TemporaryDirectory() as tmp:
             self.assertEqual(playback.playback_failures(self._entry(Path(tmp)), expected_url=URL,
                                                         media_type="video",
                                                         expected_source_id=SOURCE_ID), [])
-
     def test_short_progress_is_refused(self):
         # run-9 accepted ~4.85 s of real advance because the check compared the absolute media
         # position with 5 s; the advance between start and progress is what the contract requires.
@@ -142,14 +120,12 @@ class PlaybackObservationTests(unittest.TestCase):
             failures = playback.playback_failures(entry, expected_url=URL, media_type="video",
                                                   expected_source_id=SOURCE_ID)
         self.assertTrue(any("less than 5.0 s" in failure for failure in failures), failures)
-
     def test_absolute_position_above_the_threshold_is_not_enough(self):
         with tempfile.TemporaryDirectory() as tmp:
             entry = self._entry(Path(tmp), currentTime=12.0, startCurrentTime=8.0, advancedSeconds=4.0)
             failures = playback.playback_failures(entry, expected_url=URL, media_type="video",
                                                   expected_source_id=SOURCE_ID)
         self.assertTrue(any("less than 5.0 s" in failure for failure in failures), failures)
-
     def test_missing_or_inconsistent_advance_evidence_is_refused(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -169,7 +145,6 @@ class PlaybackObservationTests(unittest.TestCase):
                 failures = playback.playback_failures(self._entry(root, **overrides), expected_url=URL,
                                                       media_type="video", expected_source_id=SOURCE_ID)
                 self.assertTrue(failures, label)
-
     def test_automation_flag_alone_is_refused(self):
         with tempfile.TemporaryDirectory() as tmp:
             failures = playback.playback_failures(
@@ -183,7 +158,6 @@ class PlaybackObservationTests(unittest.TestCase):
         self.assertIn("decoded picture width", joined)
         self.assertIn("successful media request", joined)
         self.assertIn("PlaybackInfo", joined)
-
     def test_media_requests_of_another_item_are_refused(self):
         with tempfile.TemporaryDirectory() as tmp:
             entry = self._entry(Path(tmp), mediaRequests=[
@@ -191,7 +165,6 @@ class PlaybackObservationTests(unittest.TestCase):
             failures = playback.playback_failures(entry, expected_url=URL, media_type="video",
                                                   expected_source_id=SOURCE_ID)
         self.assertTrue(any("attributable to item" in failure for failure in failures), failures)
-
     def test_missing_or_tiny_screenshots_are_refused(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -202,14 +175,12 @@ class PlaybackObservationTests(unittest.TestCase):
                 failures = playback.playback_failures(self._entry(root, **overrides), expected_url=URL,
                                                       media_type="video", expected_source_id=SOURCE_ID)
                 self.assertTrue(any("screenshot" in failure for failure in failures), failures)
-
     def test_media_error_is_refused(self):
         with tempfile.TemporaryDirectory() as tmp:
             failures = playback.playback_failures(self._entry(Path(tmp), mediaErrorCode=4),
                                                   expected_url=URL, media_type="video",
                                                   expected_source_id=SOURCE_ID)
         self.assertTrue(any("error code 4" in failure for failure in failures), failures)
-
     def test_audio_playback_refuses_a_decoded_picture_or_a_missing_element(self):
         with tempfile.TemporaryDirectory() as tmp:
             audio_entry = self._entry(Path(tmp), mediaType="audio", element="audio", videoWidth=None,
@@ -229,7 +200,6 @@ class PlaybackObservationTests(unittest.TestCase):
             failures = playback.playback_failures(absent, expected_url=URL, media_type="audio",
                                                   expected_source_id=SOURCE_ID)
         self.assertTrue(any("no native media element" in failure for failure in failures), failures)
-
     def test_source_url_or_primary_stream_mismatch_is_refused(self):
         with tempfile.TemporaryDirectory() as tmp:
             entry = self._entry(Path(tmp))
@@ -249,7 +219,6 @@ class PlaybackObservationTests(unittest.TestCase):
             failures = playback.playback_failures(entry, expected_url=URL, media_type="video",
                                                   expected_source_id=SOURCE_ID)
         self.assertTrue(any("Video stream" in failure for failure in failures), failures)
-
     def test_a_playback_info_from_another_source_id_is_refused(self):
         # The accepted URL/stream pair must belong to the source this row owns: a response for a
         # different media source GUID is a different source even when the address hash matches.
@@ -259,26 +228,20 @@ class PlaybackObservationTests(unittest.TestCase):
             failures = playback.playback_failures(entry, expected_url=URL, media_type="video",
                                                   expected_source_id=SOURCE_ID)
             self.assertTrue(any("source id" in failure for failure in failures), failures)
-
     def test_a_missing_expected_source_id_is_refused(self):
         with tempfile.TemporaryDirectory() as tmp:
             failures = playback.playback_failures(self._entry(Path(tmp)), expected_url=URL,
                                                   media_type="video", expected_source_id=None)
         self.assertTrue(any("expected native media source id was not recorded" in failure
                             for failure in failures), failures)
-
-
 class PictureEvidenceTests(unittest.TestCase):
     def _entry(self, picture, phase="progress"):
         return {"strictObservations": [{"phase": phase, "picture": picture}]}
-
     def test_a_decoded_picture_with_variation_is_accepted(self):
         picture = {"grid": [((index * 37) % 200) for index in range(64)], "distinctColors": 44}
         self.assertEqual(playback.picture_evidence_failures(self._entry(picture), "video"), [])
-
     def test_audio_rows_do_not_require_a_picture(self):
         self.assertEqual(playback.picture_evidence_failures({"strictObservations": []}, "audio"), [])
-
     def test_missing_uniform_or_unsampled_pictures_are_refused(self):
         cases = {
             "missing": {"strictObservations": []},
@@ -291,29 +254,22 @@ class PictureEvidenceTests(unittest.TestCase):
         }
         for label, entry in cases.items():
             self.assertTrue(playback.picture_evidence_failures(entry, "video"), label)
-
-
 class MeasurementWindowTests(unittest.TestCase):
     def test_zero_ffprobe_delta_is_accepted(self):
         self.assertEqual(playback.measurement_failures(phase="B01 first-trust", probes_before=3,
                                                        probes_after=3, counter_validated=True), [])
-
     def test_any_probe_inside_the_window_is_refused(self):
         failures = playback.measurement_failures(phase="B01 first-trust", probes_before=3,
                                                  probes_after=4, counter_validated=True)
         self.assertTrue(any("1 ffprobe call" in failure for failure in failures), failures)
-
     def test_missing_counter_evidence_is_not_treated_as_zero(self):
         failures = playback.measurement_failures(phase="B01 first-trust", probes_before=0,
                                                  probes_after=0, counter_validated=False)
         self.assertTrue(any("never validated" in failure for failure in failures), failures)
-
     def test_backwards_counter_is_refused(self):
         failures = playback.measurement_failures(phase="B01", probes_before=4, probes_after=2,
                                                  counter_validated=True)
         self.assertTrue(any("backwards" in failure for failure in failures), failures)
-
-
 class RestartReadbackTests(unittest.TestCase):
     sources = [{"id": SOURCE_ID, "path": URL, "pathHash": "8c5bb2d1" + "0" * 56, "protocol": "Http",
                 "container": "mp4", "runTimeTicks": 240000000, "size": SIZE,
@@ -324,13 +280,10 @@ class RestartReadbackTests(unittest.TestCase):
               "nativeSources": {"itemId": "a" * 32, "itemPath": "/media/strm/Baseline MP4.strm",
                                 "sources": sources},
               "strm_sha256": "c" * 64, "probe_count": 5}
-
     def test_matching_read_only_state_is_accepted(self):
         self.assertEqual(playback.restart_readback_failures(self.frozen, json.loads(json.dumps(self.frozen))), [])
-
     def test_missing_freeze_is_refused(self):
         self.assertTrue(playback.restart_readback_failures({}, json.loads(json.dumps(self.frozen))))
-
     def test_lost_fingerprint_stream_or_probe_free_read_is_refused(self):
         cases = {
             "fingerprint": {"fingerprint": None},
@@ -340,7 +293,6 @@ class RestartReadbackTests(unittest.TestCase):
         for label, override in cases.items():
             observed = {**json.loads(json.dumps(self.frozen)), **override}
             self.assertTrue(playback.restart_readback_failures(self.frozen, observed), label)
-
     def test_changed_address_codec_dimensions_or_source_id_is_refused(self):
         # run-9 only compared the set of stream types (["Audio", "Video"]), so an address change or
         # a completely different saved stream still compared equal; the full source must be compared.
@@ -356,17 +308,13 @@ class RestartReadbackTests(unittest.TestCase):
             observed = json.loads(json.dumps(self.frozen))
             mutate(observed["nativeSources"]["sources"])
             self.assertTrue(playback.restart_readback_failures(self.frozen, observed), label)
-
     def test_a_dropped_saved_source_is_refused(self):
         observed = json.loads(json.dumps(self.frozen))
         observed["nativeSources"]["sources"] = []
         self.assertTrue(playback.restart_readback_failures(self.frozen, observed))
-
     def test_a_freeze_without_native_sources_is_refused(self):
         frozen = {key: value for key, value in self.frozen.items() if key != "nativeSources"}
         self.assertTrue(playback.restart_readback_failures(frozen, json.loads(json.dumps(self.frozen))))
-
-
 class NativeSourceSnapshotTests(unittest.TestCase):
     payload = {"Id": "b" * 8 + "-1111-2222-3333-" + "c" * 12, "Path": "/media/strm/Baseline MP4.strm",
                "MediaSources": [{"Id": "B" * 8 + "-1111-2222-3333-" + "C" * 12, "Path": URL, "Protocol": "Http",
@@ -374,7 +322,6 @@ class NativeSourceSnapshotTests(unittest.TestCase):
                                   "MediaStreams": [{"Type": "Video", "Index": 0, "Codec": "h264", "Width": 320,
                                                      "Height": 180, "ColorRange": "tv"},
                                                     {"Type": "Audio", "Index": 1, "Codec": "aac"}]}]}
-
     def test_snapshot_keeps_source_identity_address_and_stream_fields(self):
         original = playback.pe.request_json
         playback.pe.request_json = lambda *args, **kwargs: (200, json.loads(json.dumps(self.payload)))
@@ -392,7 +339,6 @@ class NativeSourceSnapshotTests(unittest.TestCase):
         self.assertEqual(types["Video"]["Width"], 320)
         self.assertEqual(types["Video"]["ColorRange"], "tv")
         self.assertEqual(types["Audio"]["SampleRate"], None)
-
     def test_snapshot_refuses_a_failed_query(self):
         original = playback.pe.request_json
         playback.pe.request_json = lambda *args, **kwargs: (500, {})
@@ -401,7 +347,6 @@ class NativeSourceSnapshotTests(unittest.TestCase):
                 playback.native_source_snapshot("auth", self.payload["Id"])
         finally:
             playback.pe.request_json = original
-
     def test_a_private_path_is_not_copied_into_the_evidence(self):
         payload = json.loads(json.dumps(self.payload))
         payload["MediaSources"][0]["Path"] = "/media/private/user/library/movie.mp4"
@@ -414,8 +359,6 @@ class NativeSourceSnapshotTests(unittest.TestCase):
         self.assertIsNone(snapshot["sources"][0]["path"])
         self.assertEqual(snapshot["sources"][0]["pathHash"],
                          playback.hashlib.sha256(b"/media/private/user/library/movie.mp4").hexdigest())
-
-
 class ScenarioDefinitionTests(unittest.TestCase):
     def test_baseline_rows_cover_mp4_mkv_and_real_audio(self):
         rows = {row["id"]: row for row in playback.ROWS}
@@ -427,7 +370,6 @@ class ScenarioDefinitionTests(unittest.TestCase):
         self.assertTrue(rows["B03"]["file"].endswith(".m4a"))
         self.assertGreaterEqual(playback.MINIMUM_PROGRESS_SECONDS, 5)
         self.assertGreaterEqual(playback.FIXTURE_SECONDS, 20)
-
     def test_every_fixture_has_a_distinct_name_and_a_drawn_marker(self):
         names = [*playback.VIDEO_FIXTURES, *playback.AUDIO_FIXTURES]
         self.assertEqual(len(names), len(set(names)))
@@ -436,13 +378,11 @@ class ScenarioDefinitionTests(unittest.TestCase):
         for source, alias in playback.COPY_ALIASES.items():
             self.assertIn(source, names)
             self.assertNotIn(alias, names)
-
     def test_fixture_plan_covers_color_range_and_both_containers(self):
         ranges = {spec["color_range"] for spec in playback.VIDEO_FIXTURES.values()}
         self.assertEqual(ranges, {"tv", "pc", None})
         containers = {spec["container"] for spec in playback.VIDEO_FIXTURES.values()}
         self.assertEqual(containers, {"mp4", "mkv"})
-
     def test_unknown_rows_are_refused_by_the_entry_point(self):
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaises(playback.BaselineError):
@@ -454,13 +394,10 @@ class ScenarioDefinitionTests(unittest.TestCase):
                     playback.main()
                 finally:
                     sys.argv = original
-
-
 class ProbeCountTests(unittest.TestCase):
     LINE = ('[2026-10-21 02:15:11.494 +00:00] [DBG] [19] MediaBrowser.MediaEncoding.Encoder.MediaEncoder: '
             'Starting "/usr/lib/jellyfin-ffmpeg/ffprobe" with args "-analyzeduration 200M -probesize 1G '
             '-i \\"http://media:8080/baseline-mp4-a.mp4\\" -threads 0 -v warning -print_format json"')
-
     def test_escaped_quoted_url_is_counted_and_prefixes_are_not(self):
         with tempfile.TemporaryDirectory() as tmp:
             log_dir = Path(tmp) / "config" / "log"
@@ -483,23 +420,18 @@ class ProbeCountTests(unittest.TestCase):
                 self.assertEqual(playback.probe_count("http://media:8080/baseline-mkv-a.mkv"), 0)
             finally:
                 playback.pe.WORK = original
-
-
 class EntityClassTests(unittest.TestCase):
     def test_native_movie_and_audio_entities_are_accepted(self):
         self.assertEqual(playback.entity_class_failures(
             {"MediaType": "Video", "Type": "MediaBrowser.Controller.Entities.Movies.Movie"}, "video"), [])
         self.assertEqual(playback.entity_class_failures(
             {"MediaType": "Audio", "Type": "MediaBrowser.Controller.Entities.Audio.Audio"}, "audio"), [])
-
     def test_mismatched_entity_or_media_type_is_refused(self):
         self.assertTrue(playback.entity_class_failures(
             {"MediaType": "Video", "Type": "MediaBrowser.Controller.Entities.Audio.Audio"}, "video"))
         self.assertTrue(playback.entity_class_failures(
             {"MediaType": "Audio", "Type": "MediaBrowser.Controller.Entities.Movies.Movie"}, "audio"))
         self.assertTrue(playback.entity_class_failures({"MediaType": "Video", "Type": "X.Book"}, "video"))
-
-
 class SubnetAdaptationTests(unittest.TestCase):
     def test_free_subnets_avoid_every_used_range(self):
         used = ["10.253.0.0/28", "10.253.0.16/28", "172.17.0.0/16"]
@@ -510,11 +442,9 @@ class SubnetAdaptationTests(unittest.TestCase):
             for other in used:
                 used_first, used_last = playback.subnet_bounds(other)
                 self.assertFalse(first <= used_last and used_first <= last, (cidr, other))
-
     def test_no_free_block_is_refused_instead_of_reusing_one(self):
         with self.assertRaises(playback.BaselineError):
             playback.choose_free_subnets(["10.253.0.0/16"], 2)
-
     def test_injected_ipam_blocks_only_name_the_requested_networks(self):
         text = ("services:\n  a:\n    networks:\n      - acceptance\nnetworks:\n"
                 "  acceptance:\n    internal: true\n  frontend:\n    driver: bridge\n")
@@ -523,12 +453,9 @@ class SubnetAdaptationTests(unittest.TestCase):
         self.assertEqual(patched.count("ipam:"), 1)
         self.assertIn("internal: true", patched)
         self.assertTrue(patched.endswith("\n"))
-
     def test_compose_without_networks_section_is_refused(self):
         with self.assertRaises(playback.BaselineError):
             playback.inject_subnets("services:\n  a: {}\n", {"acceptance": "10.253.1.0/28"})
-
-
 class IndexRenderingTests(unittest.TestCase):
     def test_index_reports_failures_and_rows(self):
         summary = {
@@ -549,7 +476,110 @@ class IndexRenderingTests(unittest.TestCase):
         self.assertIn("media time did not advance", text)
         self.assertIn("B01", text)
         self.assertTrue(json.dumps(summary))
-
+class MatrixRowIdTests(unittest.TestCase):
+    def test_the_fixed_expansion_has_exactly_the_contract_rows(self):
+        ids = playback.matrix_row_ids()
+        self.assertEqual(len(ids), 116)
+        for fmt in ("MP4", "MKV"):
+            for t in ("01", "02", "03", "04"):
+                self.assertIn(f"{fmt}.P01.{t}", ids)
+            for t in ("01", "02", "03", "04", "05", "06", "07", "08"):
+                self.assertIn(f"{fmt}.P02.{t}", ids)
+            for t in ("01", "02", "03", "04", "05"):
+                self.assertIn(f"{fmt}.P03.{t}", ids)
+                self.assertIn(f"{fmt}.P05.{t}", ids)
+            for t in ("01", "02", "03"):
+                self.assertIn(f"{fmt}.P04.{t}", ids)
+                self.assertIn(f"{fmt}.P08.{t}", ids)
+            for t in ("01", "02", "03", "04", "05"):
+                for d in ("up", "down"):
+                    self.assertIn(f"{fmt}.P06.{t}.{d}", ids)
+            for t in ("01", "02", "03", "04", "05", "06"):
+                self.assertIn(f"{fmt}.P07.{t}", ids)
+            for t in ("limited", "full", "unspecified"):
+                self.assertIn(f"{fmt}.C02.{t}", ids)
+                self.assertIn(f"{fmt}.C06.{t}", ids)
+            for g in ("F01", "F02"):
+                self.assertIn(f"{fmt}.{g}", ids)
+            for g in ("D01", "D02", "D03", "D04", "D05", "D06"):
+                self.assertIn(f"{fmt}.{g}", ids)
+        # 44 P rows + 6 C rows + 2 F rows + 6 D rows per format
+        for fmt in ("MP4", "MKV"):
+            self.assertEqual(sum(1 for i in ids if i.startswith(fmt + ".")), 58)
+class ParsedTokenTests(unittest.TestCase):
+    def test_a_valid_sha1_and_size_parse_to_the_stored_values(self):
+        self.assertEqual(playback.parsed_tokens("A" * 40, "4096"), ("a" * 40, 4096))
+    def test_missing_tokens_store_nulls(self):
+        self.assertEqual(playback.parsed_tokens(None, None), (None, None))
+    def test_a_short_or_non_hex_sha1_is_not_a_valid_content_hash(self):
+        self.assertEqual(playback.parsed_tokens("a" * 39, "4096"), (None, 4096))
+        self.assertEqual(playback.parsed_tokens("a" * 39 + "z", "4096"), (None, 4096))
+    def test_negative_non_numeric_and_overflowing_sizes_parse_to_null(self):
+        self.assertEqual(playback.parsed_tokens(None, "-1"), (None, None))
+        self.assertEqual(playback.parsed_tokens(None, "not-a-size"), (None, None))
+        self.assertEqual(playback.parsed_tokens(None, "9223372036854775808"), (None, None))
+    def test_a_legal_zero_size_stays_zero(self):
+        self.assertEqual(playback.parsed_tokens(None, "0"), (None, 0))
+class FingerprintNullFieldTests(unittest.TestCase):
+    def test_a_null_sha1_or_size_expectation_requires_the_field_to_be_empty(self):
+        self.assertEqual(playback.fingerprint_fields_match(fingerprint(sha1=None, file_size=None),
+                                                           expected_url=URL, sha1=None, size=None), [])
+        self.assertNotEqual(playback.fingerprint_fields_match(fingerprint(sha1=SHA1),
+                                                              expected_url=URL, sha1=None, size=SIZE), [])
+        self.assertNotEqual(playback.fingerprint_fields_match(fingerprint(file_size=0),
+                                                              expected_url=URL, sha1=SHA1, size=None), [])
+class MeasurementDeltaTests(unittest.TestCase):
+    def test_a_probe_row_accepts_exactly_one_probe_in_the_window(self):
+        self.assertEqual(playback.measurement_failures(phase="r", probes_before=1, probes_after=2,
+                                                       counter_validated=True, expected_delta=1), [])
+        self.assertTrue(playback.measurement_failures(phase="r", probes_before=1, probes_after=1,
+                                                      counter_validated=True, expected_delta=1))
+        self.assertTrue(playback.measurement_failures(phase="r", probes_before=1, probes_after=3,
+                                                      counter_validated=True, expected_delta=1))
+    def test_a_record_only_window_reports_no_measurement_failure(self):
+        self.assertEqual(playback.measurement_failures(phase="r", probes_before=0, probes_after=4,
+                                                       counter_validated=True, expected_delta=None), [])
+class PaddingTests(unittest.TestCase):
+    def test_the_mp4_partner_grows_exactly_to_the_target_with_a_free_atom(self):
+        ftyp = b"\x00\x00\x00\x10ftypisom\x00\x00\x02\x00"  # a 16-byte ftyp box
+        mdat = b"mdat" + b"\x00" * 100
+        document = ftyp + mdat
+        result = playback.pad_mp4_to(document, 500)
+        self.assertEqual(len(result), 500)
+        self.assertEqual(result[:16], ftyp)
+        self.assertEqual(result[16:20], b"free")
+        self.assertEqual(int.from_bytes(result[20:24], "big"), 500 - len(document) - 8)
+    def test_the_mkv_partner_grows_exactly_to_the_target_with_an_empty_element(self):
+        # A minimal legal EBML header: the 0x84 size byte means a one-byte size of 4, so the
+        # header element ends after those 4 payload bytes, not at the document start.
+        header = b"\x1a\x45\xdf\xa3" + bytes([0x84]) + b"\x80\x42\x82\x08"
+        document = header + b"\x15\x4a" + b"\x00" * 200
+        for target in (len(document) + 7, len(document) + 300, len(document) + 400_000):
+            result = playback.pad_mkv_to(document, target)
+            self.assertEqual(len(result), target)
+            self.assertEqual(result[:len(header)], header)
+            self.assertEqual(result[len(header):len(header) + 2], b"\x15\x49")
+    def test_the_ebml_varint_matches_the_size_field_semantics(self):
+        def decode(payload: bytes) -> int:
+            first = payload[0]
+            if len(payload) == 1:
+                return first  # one-byte size values 0..254 (0xFF is the unknown-size marker)
+            zeros = 8 - first.bit_length()
+            top = first & ((1 << (7 - zeros)) - 1)
+            return (top << (8 * zeros)) | int.from_bytes(payload[1:], "big")
+        for value in (0, 1, 254, 255, 300, 16384, 1_000_000, 100_000_000):
+            encoded = playback._ebml_varint(value)
+            self.assertEqual(decode(encoded), value, value)
+class DriverContractTests(unittest.TestCase):
+    def test_the_strict_driver_records_raw_responses_and_failure_screenshots(self):
+        driver = (ROOT / "scripts" / "package_playback_driver.mjs").read_text(encoding="utf-8")
+        self.assertIn("rawBodyFile", driver)
+        self.assertIn("requestErrorScreenshot", driver)
+        self.assertIn("incompleteScreenshot", driver)
+        legacy_start = driver.index("let observed = null;")
+        legacy_block = driver[legacy_start:driver.index("const strict = strictSettings(cfg);", legacy_start)]
+        self.assertNotIn("rawBodyFile", legacy_block)
+        self.assertNotIn("requestErrorShot", legacy_block)
 
 if __name__ == "__main__":
     unittest.main()

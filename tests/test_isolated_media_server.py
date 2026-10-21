@@ -20,5 +20,93 @@ class IsolatedMediaServerTests(unittest.TestCase):
         self.assertTrue(media.IsolatedMediaServer.allow_reuse_address)
 
 
+
+
+import http.client
+import tempfile
+import threading
+
+
+def _start_server(directory):
+    def handler(*args, **kwargs):
+        return media.MediaHandler(*args, directory=str(directory), **kwargs)
+
+    server = media.IsolatedMediaServer(("127.0.0.1", 0), handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    return server, thread, server.socket.getsockname()[1]
+
+
+class RangeSupportTests(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.directory = Path(self._tmp.name)
+        self.body = bytes(range(256)) * 4  # 1024 bytes
+        (self.directory / "clip.mp4").write_bytes(self.body)
+        self.server, self.thread, self.port = _start_server(self.directory)
+
+    def tearDown(self):
+        self.server.shutdown()
+        self.server.server_close()
+        self.thread.join(timeout=5)
+        self._tmp.cleanup()
+
+    def request(self, method, path, headers=None):
+        connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=20)
+        connection.request(method, path, headers=headers or {})
+        response = connection.getresponse()
+        payload = response.read()
+        connection.close()
+        return response, payload
+
+    def test_a_rangeless_get_keeps_the_legacy_full_file_behaviour(self):
+        response, payload = self.request("GET", "/clip.mp4")
+        self.assertEqual(response.status, 200)
+        self.assertEqual(payload, self.body)
+
+    def test_a_single_byte_range_is_served_with_206_and_content_range(self):
+        response, payload = self.request("GET", "/clip.mp4", headers={"Range": "bytes=5-9"})
+        self.assertEqual(response.status, 206)
+        self.assertEqual(payload, self.body[5:10])
+        self.assertEqual(response.getheader("Content-Range"), f"bytes 5-9/{len(self.body)}")
+        self.assertEqual(int(response.getheader("Content-Length")), 5)
+        self.assertEqual(response.getheader("Accept-Ranges"), "bytes")
+
+    def test_a_head_range_returns_headers_only(self):
+        response, payload = self.request("HEAD", "/clip.mp4", headers={"Range": "bytes=0-3"})
+        self.assertEqual(response.status, 206)
+        self.assertEqual(payload, b"")
+        self.assertEqual(int(response.getheader("Content-Length")), 4)
+        self.assertEqual(response.getheader("Content-Range"), f"bytes 0-3/{len(self.body)}")
+
+    def test_an_open_ended_range_stops_at_the_real_file_length(self):
+        response, payload = self.request("GET", "/clip.mp4", headers={"Range": "bytes=999-"})
+        self.assertEqual(response.status, 206)
+        self.assertEqual(payload, self.body[999:])
+        self.assertEqual(response.getheader("Content-Range"),
+                         f"bytes 999-{len(self.body) - 1}/{len(self.body)}")
+
+    def test_an_unsatisfiable_range_is_416_with_the_valid_range(self):
+        response, payload = self.request("GET", "/clip.mp4", headers={"Range": "bytes=999999-9999999"})
+        self.assertEqual(response.status, 416)
+        self.assertEqual(payload, b"")
+        self.assertEqual(response.getheader("Content-Range"), f"bytes */{len(self.body)}")
+
+    def test_query_parameter_aliases_keep_serving_the_underlying_file(self):
+        response, payload = self.request("GET", "/clip.mp4?alias=1", headers={"Range": "bytes=0-15"})
+        self.assertEqual(response.status, 206)
+        self.assertEqual(payload, self.body[0:16])
+
+    def test_multi_suffix_and_malformed_ranges_fall_back_to_the_legacy_full_file(self):
+        for header in ("bytes=0-4,10-14", "bytes=-4", "bytes=abc"):
+            response, payload = self.request("GET", "/clip.mp4", headers={"Range": header})
+            self.assertEqual(response.status, 200, header)
+            self.assertEqual(payload, self.body, header)
+
+    def test_a_range_for_a_missing_file_is_the_existing_404(self):
+        response, _ = self.request("GET", "/absent.mp4", headers={"Range": "bytes=0-3"})
+        self.assertEqual(response.status, 404)
+
+
 if __name__ == "__main__":
     unittest.main()

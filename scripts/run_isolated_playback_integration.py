@@ -33,8 +33,10 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import shutil
+import sqlite3
 import subprocess
 import sys
 import time
@@ -114,10 +116,15 @@ def require(condition: bool, message: str) -> None:
 # ---------------------------------------------------------------------------------------------------------------------
 
 
-def fingerprint_fields_match(row: dict | None, *, expected_url: str, sha1: str, size: int,
+def fingerprint_fields_match(row: dict | None, *, expected_url: str, sha1: str | None, size: int | None,
                             expected_item_id: str | None = None,
                             expected_source_id: str | None = None) -> list[str]:
-    """Return the reasons a fingerprint row does not match the fixture (empty means it matches)."""
+    """Return the reasons a fingerprint row does not match the fixture (empty means it matches).
+
+    A ``None`` SHA-1 or size expectation means the fingerprint field must be empty/NULL (the
+    manifest omitted or could not parse that optional field); a value means the parsed value must
+    match, with the SHA-1 comparison case-insensitive on valid hex.
+    """
     if row is None:
         return ["no fingerprint row was stored"]
     failures: list[str] = []
@@ -129,9 +136,15 @@ def fingerprint_fields_match(row: dict | None, *, expected_url: str, sha1: str, 
         failures.append("the fingerprint source key is not the native media source of this row")
     if row.get("url_hash") != hashlib.sha256(expected_url.encode()).hexdigest():
         failures.append("the fingerprint URL hash does not match the STRM URL")
-    if str(row.get("sha1") or "").lower() != sha1.lower():
+    if sha1 is None:
+        if row.get("sha1"):
+            failures.append(f"the fingerprint must not carry a SHA-1 for this row, saw {row.get('sha1')!r}")
+    elif str(row.get("sha1") or "").lower() != sha1.lower():
         failures.append("the fingerprint SHA-1 does not match the fixture content")
-    if row.get("file_size") != size:
+    if size is None:
+        if row.get("file_size") is not None:
+            failures.append(f"the fingerprint must not carry a size for this row, saw {row.get('file_size')!r}")
+    elif row.get("file_size") != size:
         failures.append("the fingerprint size does not match the fixture size")
     return failures
 
@@ -287,15 +300,23 @@ def playback_failures(entry: dict | None, *, expected_url: str, media_type: str,
 
 
 def measurement_failures(*, phase: str, probes_before: int, probes_after: int,
-                         counter_validated: bool) -> list[str]:
-    """Return the reasons the measurement window for one playback phase is not trustworthy."""
+                         counter_validated: bool, expected_delta: int | None = 0) -> list[str]:
+    """Return the reasons the measurement window for one playback phase is not trustworthy.
+
+    ``expected_delta`` is the ffprobe delta the contract expects inside the window (0 for skip
+    rows, 1 for probe rows); ``None`` means record-only (native delegation rows report the real
+    count without a zero-probe obligation).
+    """
     failures: list[str] = []
+    if expected_delta is None:
+        return failures
     if not counter_validated:
         failures.append(f"{phase}: the ffprobe counter was never validated for this source")
     if probes_after < probes_before:
         failures.append(f"{phase}: the ffprobe counter went backwards")
-    elif probes_after != probes_before:
-        failures.append(f"{phase}: {probes_after - probes_before} ffprobe call(s) ran inside the window")
+    elif probes_after - probes_before != expected_delta:
+        failures.append(f"{phase}: {probes_after - probes_before} ffprobe call(s) ran inside the window, "
+                       f"expected {expected_delta}")
     return failures
 
 
@@ -653,7 +674,7 @@ def ffprobe(path_in_container: str) -> dict:
     return json.loads(result.stdout)
 
 
-def generate_fixtures() -> dict:
+def generate_fixtures(with_audio: bool = True) -> dict:
     """Generate the baseline media with the pinned Jellyfin FFmpeg and record real identities."""
     pe.workspace()
     # The FFmpeg container writes into the mounted media directory, so the audio subdirectory must
@@ -663,15 +684,16 @@ def generate_fixtures() -> dict:
         (pe.WORK / "media" / name).mkdir(parents=True, exist_ok=True)
     commands: dict[str, list[str]] = {}
     for name, spec in VIDEO_FIXTURES.items():
+        duration = int(spec.get("seconds", FIXTURE_SECONDS))
         args = ["-y", "-f", "lavfi", "-i",
-                f"{spec['pattern']}=duration={FIXTURE_SECONDS}:size=320x180:rate=15",
-                "-f", "lavfi", "-i", f"sine=frequency={spec['tone']}:duration={FIXTURE_SECONDS}"]
+                f"{spec['pattern']}=duration={duration}:size=320x180:rate=15",
+                "-f", "lavfi", "-i", f"sine=frequency={spec['tone']}:duration={duration}"]
         filters = (f"drawtext=fontfile={FONT}:text='{spec['marker']}':fontsize=48:fontcolor=white:"
                    "x=(w-text_w)/2:y=(h-text_h)/2:box=1:boxcolor=black@0.5")
         args += ["-vf", filters, "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p"]
         if spec["color_range"]:
             args += ["-color_range", str(spec["color_range"])]
-        args += ["-c:a", "aac", "-b:a", "96k", "-shortest", "-t", str(FIXTURE_SECONDS)]
+        args += ["-c:a", "aac", "-b:a", "96k", "-shortest", "-t", str(duration)]
         if spec["container"] == "mp4":
             # The local media service has no Range support yet (RO-1 Range is a later Task), so the
             # MP4 moov atom must be at the front for a real client to fetch and decode the file.
@@ -680,24 +702,26 @@ def generate_fixtures() -> dict:
         commands[name] = args
         result = ffmpeg(args)
         require(result.returncode == 0, f"Could not generate {name}: {result.stderr.strip()[-300:]}")
-    for name, spec in AUDIO_FIXTURES.items():
-        args = ["-y", "-f", "lavfi", "-i", f"sine=frequency={spec['tone']}:duration={FIXTURE_SECONDS}",
-                "-c:a", "aac", "-b:a", "128k", "-metadata", f"title={spec['title']}",
-                "-t", str(FIXTURE_SECONDS), "/out/" + name]
-        commands[name] = args
-        result = ffmpeg(args)
-        require(result.returncode == 0, f"Could not generate {name}: {result.stderr.strip()[-300:]}")
-    # The music library holds only the audio STRM; the audio fixture itself stays outside every
-    # library path so no regular (non-STRM) audio item is indexed alongside it.
     aliases: dict[str, str] = {}
     for source, alias in COPY_ALIASES.items():
+        if not with_audio and source.startswith("audio/"):
+            continue
         target = pe.WORK / "media" / alias
         target.parent.mkdir(parents=True, exist_ok=True)
         pe.copy_owned(pe.WORK / "media" / source, target, label=f"byte-identical copy {alias}")
         aliases[alias] = source
+    fixture_names = [*VIDEO_FIXTURES, *([*AUDIO_FIXTURES] if with_audio else []), *aliases]
+    if with_audio:
+        for name, spec in AUDIO_FIXTURES.items():
+            args = ["-y", "-f", "lavfi", "-i", f"sine=frequency={spec['tone']}:duration={FIXTURE_SECONDS}",
+                    "-c:a", "aac", "-b:a", "128k", "-metadata", f"title={spec['title']}",
+                    "-t", str(FIXTURE_SECONDS), "/out/" + name]
+            commands[name] = args
+            result = ffmpeg(args)
+            require(result.returncode == 0, f"Could not generate {name}: {result.stderr.strip()[-300:]}")
 
     fixtures: dict[str, dict] = {}
-    for name in [*VIDEO_FIXTURES, *AUDIO_FIXTURES, *aliases]:
+    for name in fixture_names:
         path = pe.WORK / "media" / name
         data = path.read_bytes()
         info = ffprobe("/out/" + name)
@@ -745,13 +769,17 @@ def credentials() -> dict:
     return json.loads(pe.credentials_path().read_text(encoding="utf-8"))
 
 
-def play_once(auth: str, row: dict, phase: str, evidence_dir: Path) -> dict:
-    """Start one real native web playback and capture every measurement for the phase."""
+def play_once(auth: str, row: dict, phase: str, evidence_dir: Path, relax_console: bool = False) -> dict:
+    """Start one real native web playback and capture every measurement for the phase.
+
+    ``relax_console`` is used only for the intentionally-failing F rows, where a failed media
+    request is the expected state and its console noise must not abort the capture.
+    """
     phase_dir = evidence_dir / row["id"] / phase
     phase_dir.mkdir(parents=True, exist_ok=True)
     item = row["item"]
     url = row["url"]
-    filename = row["file"]
+    filename = row.get("watch_media") or row["file"]
     before_probes = probe_count(url)
     before_events = plugin_event_lines()
     before_media = media_server_requests()
@@ -766,7 +794,7 @@ def play_once(auth: str, row: dict, phase: str, evidence_dir: Path) -> dict:
     result = pkg.run_browser_driver(PLAYBACK_DRIVER, scenario, phase_dir, timeout=420)
     require("error" not in result, f"{row['id']} {phase}: the browser driver failed: {result.get('error')}")
     require(result.get("strict") is True, f"{row['id']} {phase}: the driver did not run in strict mode.")
-    console_errors = pkg.unexpected_console_errors(result)
+    console_errors = [] if relax_console else pkg.unexpected_console_errors(result)
     require(not console_errors, f"{row['id']} {phase}: unexpected console errors {console_errors}")
     require(len(result.get("results") or []) == 1, f"{row['id']} {phase}: expected exactly one playback result.")
     entry = result["results"][0]
@@ -793,22 +821,33 @@ def play_once(auth: str, row: dict, phase: str, evidence_dir: Path) -> dict:
     return observation
 
 
-def assert_playback(row: dict, observation: dict, *, counter_validated: bool) -> None:
+def assert_playback(row: dict, observation: dict, *, counter_validated: bool,
+                    expected_delta: int | None = 0, allow_missing_media_fetch: bool = False,
+                    url_for_source: str | None = None,
+                    expected_source_url: str | None = None) -> None:
+    """Accept one successful strict playback window.
+
+    ``expected_delta`` is the contract ffprobe expectation for the window; ``url_for_source`` is
+    the URL the saved source must carry after a probe window moved the address (P02 rows);
+    ``expected_source_url`` overrides the PlaybackInfo URL identity check (D04 local media).
+    """
     phase = observation["phase"]
-    failures = playback_failures(observation["playback"], expected_url=observation["url"],
+    source_url = expected_source_url or url_for_source or observation["url"]
+    failures = playback_failures(observation["playback"], expected_url=source_url,
                                  media_type=row["media_type"],
                                  expected_source_id=observation.get("expectedSourceId"))
     failures += measurement_failures(phase=f"{row['id']} {phase}",
                                      probes_before=observation["ffprobe"]["before"],
                                      probes_after=observation["ffprobe"]["after"],
-                                     counter_validated=counter_validated)
-    if observation["mediaServerRequests"]["delta"] < 1:
+                                     counter_validated=counter_validated,
+                                     expected_delta=expected_delta)
+    if not allow_missing_media_fetch and observation["mediaServerRequests"]["delta"] < 1:
         failures.append(f"{row['id']} {phase}: the server never fetched the fixture from the media service")
     # The saved source set after the playback must still carry the expected source id, the expected
     # address and the required stream; a playback that silently resolved another source is refused.
     sources = (observation.get("nativeSources") or {}).get("sources") or []
     expected_id = normalize_source_id(observation.get("expectedSourceId"))
-    expected_hash = hashlib.sha256(observation["url"].encode()).hexdigest()
+    expected_hash = hashlib.sha256(source_url.encode()).hexdigest()
     required = "Video" if row["media_type"] == "video" else "Audio"
     matched = [source for source in sources if source.get("id") == expected_id]
     if expected_id is None:
@@ -819,19 +858,24 @@ def assert_playback(row: dict, observation: dict, *, counter_validated: bool) ->
     else:
         source = matched[0]
         if source.get("pathHash") != expected_hash:
-            failures.append(f"{row['id']} {phase}: the saved source address is not the STRM URL")
+            failures.append(f"{row['id']} {phase}: the saved source address is not the expected URL")
         stream_types = {stream.get("Type") for stream in source.get("streams") or []}
         if required not in stream_types:
             failures.append(f"{row['id']} {phase}: the saved source has no {required} stream ({sorted(stream_types)})")
     require(not failures, "; ".join(failures))
 
 
+def _strm_sha256(row: dict):
+    path = row.get("path")
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest() if path else None
+
+
 def freeze_state(auth: str, row: dict) -> dict:
     item = row["item"]
     return {
-        "fingerprint": fingerprint_row_for_item(auth, item["Id"], row["sourceKey"]),
+        "fingerprint": fingerprint_row_for_item(auth, item["Id"], row.get("sourceKey")),
         "nativeSources": native_source_snapshot(auth, item["Id"]),
-        "strm_sha256": hashlib.sha256(Path(row["path"]).read_bytes()).hexdigest(),
+        "strm_sha256": _strm_sha256(row),
         "probe_count": probe_count(row["url"]),
     }
 
@@ -839,9 +883,9 @@ def freeze_state(auth: str, row: dict) -> dict:
 def read_only_state(auth: str, row: dict) -> dict:
     item = row["item"]
     return {
-        "fingerprint": fingerprint_row_for_item(auth, item["Id"], row["sourceKey"]),
+        "fingerprint": fingerprint_row_for_item(auth, item["Id"], row.get("sourceKey")),
         "nativeSources": native_source_snapshot(auth, item["Id"]),
-        "strm_sha256": hashlib.sha256(Path(row["path"]).read_bytes()).hexdigest(),
+        "strm_sha256": _strm_sha256(row),
         "probe_count": probe_count(row["url"]),
     }
 
@@ -874,7 +918,7 @@ def entity_class_failures(info: dict, media_type: str) -> list[str]:
     return failures
 
 
-def prepare_instance(package: Path) -> dict:
+def prepare_instance(package: Path, music_library: bool = True) -> dict:
     summary: dict[str, object] = {}
     summary["networkAdaptation"] = install_explicit_subnets()
     pe.prepare_clean_instance()
@@ -883,8 +927,10 @@ def prepare_instance(package: Path) -> dict:
     pe.compose("up")
     pe.wait_healthy()
     auth = pkg.api_auth()
-    add_library(auth, MUSIC_LIBRARY, "music", [MUSIC_LIBRARY_PATH])
-    summary["libraries"] = {"movies": MOVIE_LIBRARY, "music": MUSIC_LIBRARY}
+    add_library(auth, MOVIE_LIBRARY, "movies", ["/media/strm"])
+    if music_library:
+        add_library(auth, MUSIC_LIBRARY, "music", [MUSIC_LIBRARY_PATH])
+    summary["libraries"] = {"movies": MOVIE_LIBRARY, **({"music": MUSIC_LIBRARY} if music_library else {})}
     summary["deployment"] = pe.deploy_archive(package)
     pkg.restart()
     auth = pkg.api_auth()
@@ -1118,10 +1164,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--package", type=Path, required=True)
-    parser.add_argument("--scenario", default="baseline", choices=["baseline"])
+    parser.add_argument("--scenario", default="baseline", choices=["baseline", "matrix"])
     parser.add_argument("--evidence-dir", type=Path, required=True)
     parser.add_argument("--rows", default="B01,B02,B03",
-                        help="Comma-separated row ids to run (default: all baseline rows).")
+                        help="Comma-separated row ids to run (default: all baseline rows; "
+                             "matrix ids are MP4.P02.01, MKV.C02.limited, MP4.F01, MKV.D06, ...).")
     parser.add_argument("--workspace", type=Path,
                         help="Fresh run-owned workspace under artifacts/package-env (default: auto-created).")
     parser.add_argument("--keep-workspace", action="store_true",
@@ -1129,8 +1176,12 @@ def main() -> int:
     args = parser.parse_args()
 
     selected = [part.strip() for part in args.rows.split(",") if part.strip()]
-    known = {row["id"] for row in ROWS}
-    require(set(selected) <= known, f"Unknown row ids {sorted(set(selected) - known)}; known rows are {sorted(known)}.")
+    if args.scenario == "matrix":
+        known = matrix_row_ids()
+        require(set(selected) <= known, f"Unknown matrix row ids {sorted(set(selected) - known)}.")
+    else:
+        known = {row["id"] for row in ROWS}
+        require(set(selected) <= known, f"Unknown row ids {sorted(set(selected) - known)}; known rows are {sorted(known)}.")
     package = args.package.resolve()
     evidence_dir = args.evidence_dir.resolve()
     evidence_dir.mkdir(parents=True, exist_ok=True)
@@ -1151,7 +1202,10 @@ def main() -> int:
         before_state = pe.capture_instance_state()
         baseline: dict[str, object] = {}
         summary["baseline"] = baseline
-        scenario_baseline(package, evidence_dir, selected, baseline)
+        if args.scenario == "matrix":
+            scenario_matrix(package, evidence_dir, selected, baseline)
+        else:
+            scenario_baseline(package, evidence_dir, selected, baseline)
         summary["status"] = "PASS"
         exit_code = 0
     except (BaselineError, RuntimeError, OSError, ValueError, KeyError, json.JSONDecodeError,
@@ -1175,9 +1229,11 @@ def main() -> int:
                 summary["cleanupError"] = f"{type(cleanup_error).__name__}: {cleanup_error}"
                 summary["status"] = "FAIL"
                 exit_code = 1
-        (evidence_dir / "baseline-result.json").write_text(
+        (evidence_dir / f"{args.scenario}-result.json").write_text(
             json.dumps(summary, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
-        (evidence_dir / "INDEX.md").write_text(render_index(summary), encoding="utf-8")
+        (evidence_dir / "INDEX.md").write_text(
+            render_matrix_index(summary) if args.scenario == "matrix" else render_index(summary),
+            encoding="utf-8")
         print(json.dumps(summary, ensure_ascii=False, indent=2, sort_keys=True))
     return exit_code
 
@@ -1256,6 +1312,1203 @@ def render_index(summary: dict) -> str:
               "- `<row>/<phase>/screenshots/*.png`: start and 5 s progress screenshots.",
               "- `<row>/<phase>/driver-stdout.txt`, `driver-stderr.txt`: raw browser driver output.",
               ""]
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Matrix scenario: the eight-decision video matrix with fixed row ids (Task 5.3)
+#
+# The row registry is the contract's fixed expansion: per format 44 P rows, 6 C rows, 2 F rows and
+# 6 D rows. The entry only reuses the existing sequential preparation, the strict web driver and the
+# media service; it adds no scenario configuration, DSL or scheduler. Rows keep every input frozen
+# before the measurement window (os.replace / write_owned_bytes only, nothing mutates mid-playback).
+# ---------------------------------------------------------------------------------------------------------------------
+
+MEDIA_PREFIX = "http://media:8080/"
+INT64_MAX = 9223372036854775807
+
+
+def matrix_row_ids() -> set[str]:
+    """The fixed id set of the contract expansion (unit-testable without fixtures)."""
+    ids: set[str] = set()
+    for fmt in ("MP4", "MKV"):
+        ids.update(f"{fmt}.P01.{t}" for t in ("01", "02", "03", "04"))
+        ids.update(f"{fmt}.P02.{t}" for t in ("01", "02", "03", "04", "05", "06", "07", "08"))
+        ids.update(f"{fmt}.P03.{t}" for t in ("01", "02", "03", "04", "05"))
+        ids.update(f"{fmt}.P04.{t}" for t in ("01", "02", "03"))
+        ids.update(f"{fmt}.P05.{t}" for t in ("01", "02", "03", "04", "05"))
+        ids.update(f"{fmt}.P06.{t}.{d}" for t in ("01", "02", "03", "04", "05") for d in ("up", "down"))
+        ids.update(f"{fmt}.P07.{t}" for t in ("01", "02", "03", "04", "05", "06"))
+        ids.update(f"{fmt}.P08.{t}" for t in ("01", "02", "03"))
+        ids.update(f"{fmt}.C02.{t}" for t in ("limited", "full", "unspecified"))
+        ids.update(f"{fmt}.C06.{t}" for t in ("limited", "full", "unspecified"))
+        ids.update([f"{fmt}.F01", f"{fmt}.F02"])
+        ids.update(f"{fmt}.{group}" for group in ("D01", "D02", "D03", "D04", "D05", "D06"))
+    return ids
+
+
+def matrix_extra_specs(fmt: str) -> dict[str, dict[str, object]]:
+    """The controlled extra media the matrix needs beyond the baseline fixtures.
+
+    ``p4b`` is a short (16 s) smptebars B-side: the guaranteed-shorter partner and the
+    equal-length-after-legal-padding partner. ``p06up`` is the guaranteed-longer side. The
+    ``short-*`` and plain ColorRange names are the C-row controlled targets; the evidence records
+    the actual ffprobe fields, never the generation parameters.
+    """
+    ext = "mp4" if fmt == "MP4" else "mkv"
+    prefix = f"matrix-{ext}-"
+    specs: dict[str, dict[str, object]] = {
+        prefix + f"p4b.{ext}": {"container": ext, "pattern": "smptebars", "marker": fmt + " P4B", "tone": 660,
+                               "color_range": "tv", "seconds": 16},
+        prefix + f"p06up.{ext}": {"container": ext, "pattern": "smptebars", "marker": fmt + " P06UP", "tone": 660,
+                                  "color_range": "tv", "seconds": 28},
+    }
+    for tail, marker, color_range in (("limited", "C06LIM", "tv"), ("full", "C06FULL", "pc"),
+                                      ("unspecified", "C06UNS", None)):
+        specs[prefix + f"short-{tail}.{ext}"] = {"container": ext, "pattern": "testsrc2",
+                                                 "marker": fmt + " " + marker, "tone": 440,
+                                                 "color_range": color_range, "seconds": 20}
+    if fmt == "MKV":
+        # The MP4 C02 targets reuse the baseline fixtures; MKV needs its own 24 s ColorRange targets.
+        for tail, marker, color_range in (("limited", "LIM", "tv"), ("full", "FULL", "pc"),
+                                          ("unspecified", "UNS", None)):
+            specs[f"matrix-mkv-{tail}.mkv"] = {"container": "mkv", "pattern": "testsrc2", "marker": "MKV " + marker,
+                                               "tone": 440, "color_range": color_range, "seconds": 24}
+    return specs
+
+
+def _ebml_varint(value: int) -> bytes:
+    """The canonical EBML size varint.
+
+    Values 0..254 are one byte; a 1-byte 0xFF is the unknown-size marker, so 255 or more uses
+    ``n + 1`` bytes with ``n`` leading-zero bits in the first byte (the leading zero count, not a
+    marker table, is what a Matroska reader decodes): the first byte then carries ``7 - n`` value
+    bits followed by ``n`` full payload bytes.
+    """
+    if value < 0xFF:
+        return bytes([value])
+    n = 1
+    while value >= (1 << (7 * n + 7)):
+        n += 1
+    out = bytearray(n + 1)
+    out[0] = (1 << (7 - n)) | (value >> (8 * n))
+    for i in range(1, n + 1):
+        out[i] = (value >> (8 * (n - i))) & 0xFF
+    return bytes(out)
+
+
+def pad_mkv_to(data: bytes, target: int) -> bytes:
+    """Rewrap an MKV with one legal Empty Element so the file is exactly ``target`` bytes.
+
+    The EBML header stays byte-for-byte; a spec-compliant Empty Element (id 0x1549, whose payload
+    bytes are ignored by matroska readers) supplies the legal padding between header and
+    SeekHead. The caller must verify the result is still natively probeable/decodable.
+    """
+    require(len(data) < target, "Legal padding can only grow a file, not shrink it.")
+    require(len(data) > 4 and data[:4] == b"\x1a\x45\xdf\xa3", "Not an EBML Matroska document.")
+    size_byte = data[4]
+    if size_byte == 0xFF:
+        raise BaselineError("The EBML header uses an unknown size; refusing to rewrap it.")
+    if size_byte & 0x80:
+        size_value = size_byte & 0x7F
+        header_end = 5 + size_value
+    else:
+        width = 9 - size_byte.bit_length()
+        value_mask = (1 << (8 - width)) - 1
+        rest_value = int.from_bytes(data[5:4 + width], "big") if width > 1 else 0
+        size_value = ((size_byte & value_mask) << (8 * (width - 1))) | rest_value
+        header_end = 4 + width + size_value
+    require(len(data) >= header_end, "The EBML header extends past the document bytes.")
+    header = data[:header_end]
+    rest = data[header_end:]
+    fixed = len(header) + len(rest) + 2  # header, the element id, everything after it
+    for n in (0, 1, 2, 3, 4, 7):
+        pad = target - fixed - (n + 1)
+        if pad < 0:
+            continue
+        encoding = _ebml_varint(pad)
+        if len(encoding) != n + 1:
+            continue
+        result = header + b"\x15\x49" + encoding + bytes(pad) + rest
+        require(len(result) == target, f"MKV padding produced {len(result)} bytes instead of {target}.")
+        return result
+    raise BaselineError(f"No legal Empty Element layout reaches {target} bytes.")
+
+
+def pad_mp4_to(data: bytes, target: int) -> bytes:
+    """Insert one legal ``free`` atom after the ftyp box so the MP4 is exactly ``target`` bytes."""
+    require(len(data) < target, "Legal padding can only grow a file, not shrink it.")
+    require(len(data) > 8 and data[4:8] == b"ftyp", "Not an MP4 (missing ftyp box).")
+    ftyp_length = int.from_bytes(data[0:4], "big")
+    require(ftyp_length >= 8, "The ftyp box header is shorter than itself.")
+    pad = target - len(data) - 8  # the free atom header consumes 8 of the padding bytes
+    require(pad >= 0, "The target size leaves no room for the free atom header.")
+    free_box = b"free" + pad.to_bytes(4, "big") + b"\x00" * pad
+    result = data[:ftyp_length] + free_box + data[ftyp_length:]
+    require(len(result) == target, f"MP4 padding produced {len(result)} bytes instead of {target}.")
+    return result
+
+
+def generate_matrix_fixtures() -> dict:
+    """Generate the matrix media with the pinned FFmpeg and derive the padded/truncated partners."""
+    base = generate_fixtures(with_audio=False)
+    specs: dict[str, dict[str, object]] = {}
+    specs.update(matrix_extra_specs("MP4"))
+    specs.update(matrix_extra_specs("MKV"))
+    commands = dict(base["commands"])
+    for name, spec in specs.items():
+        duration = int(spec["seconds"])
+        args = ["-y", "-f", "lavfi", "-i",
+                f"{spec['pattern']}=duration={duration}:size=320x180:rate=15",
+                "-f", "lavfi", "-i", f"sine=frequency={spec['tone']}:duration={duration}"]
+        filters = (f"drawtext=fontfile={FONT}:text='{spec['marker']}':fontsize=48:fontcolor=white:"
+                   "x=(w-text_w)/2:y=(h-text_h)/2:box=1:boxcolor=black@0.5")
+        args += ["-vf", filters, "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p"]
+        if spec["color_range"]:
+            args += ["-color_range", str(spec["color_range"])]
+        args += ["-c:a", "aac", "-b:a", "96k", "-shortest", "-t", str(duration)]
+        if spec["container"] == "mp4":
+            args += ["-movflags", "+faststart"]
+        args += ["/out/" + name]
+        commands[name] = args
+        result = ffmpeg(args)
+        require(result.returncode == 0, f"Could not generate {name}: {result.stderr.strip()[-300:]}")
+    derived: dict[str, dict] = {}
+    for ext in ("mp4", "mkv"):
+        a_bytes = (pe.WORK / "media" / f"baseline-{ext}-a.{ext}").read_bytes()
+        p4b_bytes = (pe.WORK / "media" / f"matrix-{ext}-p4b.{ext}").read_bytes()
+        require(len(p4b_bytes) < len(a_bytes),
+                f"matrix-{ext}-p4b is not shorter than baseline A; the equal-length pair is impossible.")
+        padded = pad_mp4_to(p4b_bytes, len(a_bytes)) if ext == "mp4" else pad_mkv_to(p4b_bytes, len(a_bytes))
+        pe.write_owned_bytes(pe.WORK / "media" / f"matrix-{ext}-b-padded.{ext}", padded,
+                             label=f"padded partner matrix-{ext}-b-padded")
+        truncated = a_bytes[: max(1, len(a_bytes) // 3)]
+        pe.write_owned_bytes(pe.WORK / "media" / f"matrix-{ext}-a-trunc.{ext}", truncated,
+                             label=f"truncated partner matrix-{ext}-a-trunc")
+        info = ffprobe(f"/out/matrix-{ext}-b-padded.{ext}")
+        require(info.get("streams"), f"The padded partner matrix-{ext}-b-padded is not natively probeable.")
+        derived[ext] = {"padded": f"matrix-{ext}-b-padded.{ext}", "truncated": f"matrix-{ext}-a-trunc.{ext}"}
+    fixtures = dict(base["fixtures"])
+    for name in [*specs, *derived["mp4"].values(), *derived["mkv"].values()]:
+        data = (pe.WORK / "media" / name).read_bytes()
+        streams: list[dict] = []
+        try:
+            info = ffprobe("/out/" + name)
+            streams = [{key: stream.get(key) for key in
+                        ("index", "codec_type", "codec_name", "width", "height", "pix_fmt", "color_range",
+                         "sample_rate", "channels", "duration", "disposition")}
+                       for stream in info.get("streams", [])]
+        except BaselineError:
+            streams = []  # the truncated F02 partner is intentionally not probeable
+        fixtures[name] = {"sha1": hashlib.sha1(data).hexdigest(), "size": len(data),
+                          "sha256": hashlib.sha256(data).hexdigest(),
+                          "ffprobe": {"streams": streams, "probeable": bool(streams)}}
+    return {"commands": commands, "fixtures": fixtures, "aliases": base["aliases"],
+            "derived": derived, "durationSeconds": FIXTURE_SECONDS}
+
+
+def _valid_sha1(token: object) -> bool:
+    text = str(token or "")
+    return len(text) == 40 and all(char in "0123456789abcdefABCDEF" for char in text)
+
+
+def parsed_tokens(sha1_token: object, size_token: object) -> tuple[str | None, int | None]:
+    """The fingerprint fields the plugin can derive from these manifest tokens (None = not stored).
+
+    Invalid lengths, non-hex characters, negative/non-numeric sizes and the Int64 overflow value all
+    parse to ``None`` exactly as the manifest reader rejects them; a legal 0 stays 0.
+    """
+    sha1 = str(sha1_token).lower() if _valid_sha1(sha1_token) else None
+    size = None
+    if size_token is not None:
+        text = str(size_token)
+        if re.fullmatch(r"\d+", text) and int(text) <= INT64_MAX:
+            size = int(text)
+    return sha1, size
+
+
+def build_matrix_rows(fixture_table: dict) -> list[dict]:
+    """The contract's fixed row expansion: 44 P rows + 6 C rows + F/D rows per format.
+
+    Tokens: a valid 40-hex string is real content SHA-1; ``None`` is absent; the 39-char and
+    40-char-non-hex strings are the contract's invalid L/X forms. Sizes are literal manifest
+    strings so the negative, non-numeric and Int64-overflow rows keep their real text.
+    """
+    rows: list[dict] = []
+    for fmt in ("MP4", "MKV"):
+        ext = "mp4" if fmt == "MP4" else "mkv"
+
+        def fx(name: str) -> dict:
+            return fixture_table[name]
+
+        a = fx(f"baseline-{ext}-a.{ext}")
+        b = fx(f"baseline-{ext}-b.{ext}")
+        p4b = fx(f"matrix-{ext}-p4b.{ext}")
+        p06up = fx(f"matrix-{ext}-p06up.{ext}")
+        bpad = fx(f"matrix-{ext}-b-padded.{ext}")
+        trunc = fx(f"matrix-{ext}-a-trunc.{ext}")
+        c02_targets = ({"limited": f"baseline-{ext}-limited.{ext}", "full": f"baseline-{ext}-full.{ext}",
+                        "unspecified": f"baseline-{ext}-unspecified.{ext}"} if ext == "mp4" else
+                       {"limited": "matrix-mkv-limited.mkv", "full": "matrix-mkv-full.mkv",
+                        "unspecified": "matrix-mkv-unspecified.mkv"})
+        va, na = a["sha1"], str(a["size"])
+        vb, nb = b["sha1"], str(b["size"])
+        v4, n4 = p4b["sha1"], str(p4b["size"])
+        vu, nu = p06up["sha1"], str(p06up["size"])
+        vp = bpad["sha1"]
+        vt, nt = trunc["sha1"], str(trunc["size"])
+        l39, x40 = va[:39], va[:39] + "z"
+        base_url = MEDIA_PREFIX + f"baseline-{ext}-a.{ext}"
+        copy_url = MEDIA_PREFIX + f"switch-copy-{ext}.{ext}"
+        base_media = f"baseline-{ext}-a.{ext}"
+
+        def add(group: str, tail: str, *, media: str, old_sha: object, old_size: object,
+                apply_kind: str, apply: dict | None = None, expect: int = 0,
+                fp_kind: str = "same", fp_tokens: tuple[object, object] | None = None,
+                fp_url: str | None = None, journey: str = "normal", trust: bool = True,
+                watch_media: str | None = None, item_name: str | None = None) -> None:
+            item = item_name or (f"Matrix {fmt} {group} " + tail.replace(".", " ")).strip()
+            # Fixed-URL families (P04/P06/C/F02) keep the URL constant while the file bytes on it
+            # change, so the manifest address is the switch file itself, not the baseline media.
+            url = MEDIA_PREFIX + media if media.startswith("switch-") else base_url
+            row = {"id": f"{fmt}.{group}" + (f".{tail}" if tail else ""), "fmt": fmt, "name": item,
+                   "item": item, "media_type": "video", "media": media, "url": url,
+                   "old": {"sha1": old_sha, "size": old_size}, "apply": apply or {},
+                   "apply_kind": apply_kind, "expect_probes": expect, "fp_kind": fp_kind,
+                   "fp_tokens": fp_tokens, "fp_url": fp_url or url, "journey": journey,
+                   "trust": trust, "watch_media": watch_media}
+            rows.append(row)
+
+        # --- P01: missing necessary video stream, bounded removal in this run's owned copy ---------
+        for tail, drop, prime in (("01", "all", False), ("02", "all", True),
+                                  ("03", "video", False), ("04", "video", True)):
+            add("P01", tail, media=base_media, old_sha=va, old_size=na, apply_kind="remove-streams",
+                apply={"drop": drop, "prime": prime}, expect=1, fp_kind="new", fp_tokens=(va, na),
+                journey="p01", trust=False)
+
+        # --- P02: URL changed (old manifest tokens -> new manifest tokens / watch media) ----------
+        p02 = [
+            ("01", copy_url, va, na, va, na, f"switch-copy-{ext}.{ext}"),
+            ("02", MEDIA_PREFIX + f"media-p02b-{ext}.{ext}", va, na, vb, nb, f"baseline-{ext}-b.{ext}"),
+            ("03", copy_url, None, na, None, na, f"switch-copy-{ext}.{ext}"),
+            ("04", MEDIA_PREFIX + f"media-p04b-{ext}.{ext}", None, na, None, n4, f"matrix-{ext}-p4b.{ext}"),
+            ("05", copy_url, None, None, None, None, f"switch-copy-{ext}.{ext}"),
+            ("06", copy_url, va, na, None, na, f"switch-copy-{ext}.{ext}"),
+            ("07", copy_url, None, na, va, na, f"switch-copy-{ext}.{ext}"),
+            ("08", base_url + "?alias=1", va, na, va, na, base_media),
+        ]
+        for tail, new_url, old_sha, old_size, new_sha, new_size, watch in p02:
+            add("P02", tail, media=base_media, old_sha=old_sha, old_size=old_size,
+                apply_kind="manifest-url", apply={"url": new_url, "sha1": new_sha, "size": new_size},
+                expect=1, fp_kind="new", fp_tokens=(new_sha, new_size), fp_url=new_url, watch_media=watch)
+
+        # --- P03: URL unchanged, same valid SHA-1 (Size/case/missing variants) --------------------
+        for tail, new_sha, new_size in (("01", None, None), ("02", va, str(int(na) + 1)),
+                                        ("03", None, na), ("04", va, None), ("05", va, "-1")):
+            old_sha = va.upper() if tail == "03" else va
+            apply = {k: v for k, v in (("sha1", new_sha), ("size", new_size)) if v is not None}
+            add("P03", tail, media=base_media, old_sha=old_sha, old_size=na, apply_kind="manifest",
+                apply=apply, expect=0, fp_kind="same")
+
+        # --- P04: URL unchanged, different valid SHA-1, atomic A -> partner on the fixed URL ------
+        for tail, new_sha, new_size, partner in (
+                ("01", vp, na, f"matrix-{ext}-b-padded.{ext}"),
+                ("02", v4, n4, f"matrix-{ext}-p4b.{ext}"),
+                ("03", v4, None, f"matrix-{ext}-p4b.{ext}")):
+            add("P04", tail, media=f"switch-p04-{ext}.{ext}", old_sha=va, old_size=na, apply_kind="switch",
+                apply={"to": partner, "sha1": new_sha, "size": new_size}, expect=1, fp_kind="new",
+                fp_tokens=(new_sha, new_size), fp_url=MEDIA_PREFIX + f"switch-p04-{ext}.{ext}",
+                watch_media=partner)
+
+        # --- P05: URL unchanged, incomparable SHA-1, valid equal sizes ---------------------------
+        for tail, old_sha, new_sha in (("01", va, None), ("02", None, va), ("03", None, None),
+                                       ("04", va, l39), ("05", x40, va)):
+            apply = {"size": na}
+            if new_sha is not None:
+                apply["sha1"] = new_sha
+            add("P05", tail, media=base_media, old_sha=old_sha, old_size=na, apply_kind="manifest",
+                apply=apply, expect=0, fp_kind="same")
+
+        # --- P06: URL unchanged, incomparable SHA-1, valid different sizes ------------------------
+        p06 = [("01", "up", va, None), ("01", "down", va, None),
+               ("02", "up", None, vu), ("02", "down", None, vu),
+               ("03", "up", None, None), ("03", "down", None, None),
+               ("04", "up", va, l39), ("04", "down", va, l39),
+               ("05", "up", x40, vu), ("05", "down", x40, vu)]
+        for tail, direction, old_sha, new_sha in p06:
+            media = f"switch-p06{'up' if direction == 'up' else 'down'}-{ext}.{ext}"
+            new_size = nu if direction == "up" else n4
+            partner = f"matrix-{ext}-{'p06up' if direction == 'up' else 'p4b'}.{ext}"
+            add("P06", f"{tail}.{direction}", media=media, old_sha=old_sha, old_size=na, apply_kind="switch",
+                apply={"to": partner, "sha1": new_sha, "size": new_size}, expect=1, fp_kind="new",
+                fp_tokens=(new_sha, new_size), fp_url=MEDIA_PREFIX + media, watch_media=partner)
+
+        # --- P07: URL unchanged, SHA-1 and Size both incomparable ---------------------------------
+        p07 = [("01", va, None, None, na), ("02", None, va, na, None),
+               ("03", None, None, na, na), ("04", va, l39, na, "-1"),
+               ("05", l39, va, "not-a-size", na), ("06", None, None, na, "9223372036854775808")]
+        for tail, old_sha, new_sha, old_size, new_size in p07:
+            apply: dict = {"size": new_size}
+            if new_sha is not None:
+                apply["sha1"] = new_sha
+            add("P07", tail, media=base_media, old_sha=old_sha, old_size=old_size, apply_kind="manifest",
+                apply=apply, expect=0, fp_kind="same")
+
+        # --- P08: only Modified / mtime / rewrite -------------------------------------------------
+        add("P08", "01", media=base_media, old_sha=va, old_size=na, apply_kind="mtime", expect=0,
+            fp_kind="same")
+        add("P08", "02", media=base_media, old_sha=va, old_size=na, apply_kind="comment",
+            apply={"extra": "# Modified: 2026-10-21T00:00:00Z"}, expect=0, fp_kind="same")
+        add("P08", "03", media=base_media, old_sha=va, old_size=na, apply_kind="rewrite", expect=0,
+            fp_kind="same")
+
+        # --- C: ColorRange three-stage regression -------------------------------------------------
+        for tail in ("limited", "full", "unspecified"):
+            target = c02_targets[tail]
+            t = fx(target)
+            add("C02", tail, media=f"switch-c02-{tail}-{ext}.{ext}", old_sha=va, old_size=na,
+                apply_kind="switch", apply={"to": target, "sha1": t["sha1"], "size": str(t["size"])},
+                expect=1, fp_kind="new", fp_tokens=(t["sha1"], str(t["size"])),
+                fp_url=MEDIA_PREFIX + f"switch-c02-{tail}-{ext}.{ext}", watch_media=target)
+            short = fx(f"matrix-{ext}-short-{tail}.{ext}")
+            add("C06", tail, media=f"switch-c06-{tail}-{ext}.{ext}", old_sha=va, old_size=na,
+                apply_kind="switch", apply={"to": f"matrix-{ext}-short-{tail}.{ext}", "sha1": None,
+                                            "size": str(short["size"])}, expect=1, fp_kind="new",
+                fp_tokens=(None, str(short["size"])), fp_url=MEDIA_PREFIX + f"switch-c06-{tail}-{ext}.{ext}",
+                watch_media=f"matrix-{ext}-short-{tail}.{ext}")
+
+        # --- F: failure, old-baseline protection and same-target recovery -------------------------
+        add("F01", "", media=base_media, old_sha=va, old_size=na, apply_kind="f01",
+            apply={"url": MEDIA_PREFIX + f"missing-f01-{ext}.{ext}", "sha1": None, "size": None,
+                   "recovery_file": f"matrix-{ext}-p4b.{ext}"},
+            expect=1, fp_kind="new", fp_tokens=(v4, n4),
+            fp_url=MEDIA_PREFIX + f"missing-f01-{ext}.{ext}", journey="f01", trust=True)
+        add("F02", "", media=f"switch-f02-{ext}.{ext}", old_sha=va, old_size=na, apply_kind="f02",
+            apply={"corrupt_to": f"matrix-{ext}-a-trunc.{ext}", "corrupt_sha1": vt, "corrupt_size": nt,
+                   "recovery_file": f"matrix-{ext}-p4b.{ext}"},
+            expect=1, fp_kind="new", fp_tokens=(v4, n4),
+            fp_url=MEDIA_PREFIX + f"switch-f02-{ext}.{ext}", journey="f02", trust=True)
+
+        # --- D: permissions and native delegation --------------------------------------------------
+        add("D01", "", media=base_media, old_sha=va, old_size=na, apply_kind="none", expect=0, fp_kind="same")
+        add("D02", "", media=base_media, old_sha=va, old_size=na, apply_kind="d02", expect=-1, fp_kind="same",
+            journey="d02")
+        add("D03", "", media=base_media, old_sha=va, old_size=na, apply_kind="d03", expect=-1, fp_kind="same",
+            journey="d03")
+        add("D04", "", media=f"regular-{ext}/Matrix Regular {fmt}.{ext}", old_sha=va, old_size=na,
+            apply_kind="d04", expect=-1, fp_kind="none", journey="d04", trust=False,
+            item_name=f"Matrix Regular {fmt}")
+        add("D05", "", media=base_media, old_sha=None, old_size=None, apply_kind="d05", expect=-1,
+            fp_kind="none", journey="d05", trust=False, item_name=f"Matrix {fmt} D05")
+        add("D06", "", media=base_media, old_sha=va, old_size=na, apply_kind="d06",
+            apply={"url": copy_url, "sha1": va, "size": na}, expect=1, fp_kind="new", fp_tokens=(va, na),
+            fp_url=copy_url, watch_media=f"switch-copy-{ext}.{ext}", journey="d06")
+    return rows
+
+
+def matrix_media_dir() -> Path:
+    return pe.WORK / "media"
+
+
+def setup_matrix_media(rows: list[dict]) -> dict:
+    """Create the run-owned media files every selected row touches, with A content on the switch URLs.
+
+    Every source byte comes from this run's fixtures; the switch URL files start as byte-identical
+    A content so the pre-switch state is verifiable, and ``missing-f01`` is deliberately never
+    created. Nothing here is a control API: rows switch content later through a single atomic
+    ``os.replace``.
+    """
+    media = matrix_media_dir()
+    created: dict[str, str] = {}
+    needed: set[str] = set()
+    for row in rows:
+        needed.add(row["media"])
+        apply = row["apply"]
+        for key in ("to", "recovery_file", "corrupt_to"):
+            if apply.get(key):
+                needed.add(apply[key])
+        if apply.get("url") and apply["url"].startswith(MEDIA_PREFIX + "missing-"):
+            pass  # the F01 404 target must stay missing until the recovery stage
+    source_map: dict[str, str] = {}
+    for ext in ("mp4", "mkv"):
+        source_map[f"switch-copy-{ext}.{ext}"] = f"baseline-{ext}-a.{ext}"
+        source_map[f"media-p02b-{ext}.{ext}"] = f"baseline-{ext}-b.{ext}"
+        source_map[f"media-p04b-{ext}.{ext}"] = f"matrix-{ext}-p4b.{ext}"
+    for name in sorted(needed):
+        if name in source_map:
+            source = source_map[name]
+            pe.copy_owned(media / source, media / name, label=f"matrix media {name}")
+            created[name] = "copy of " + source
+        elif name.startswith("switch-"):
+            ext = "mp4" if name.endswith(".mp4") else "mkv"
+            source = f"baseline-{ext}-a.{ext}"
+            pe.copy_owned(media / source, media / name, label=f"switch start {name}")
+            created[name] = "A content start"
+        elif "/" in name and name.startswith("regular-"):
+            # The D04 regular-media files are ordinary (non-STRM) items under their own library path.
+            ext = "mp4" if name.endswith(".mp4") else "mkv"
+            target = media / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            pe.write_owned_bytes(target, (media / f"baseline-{ext}-a.{ext}").read_bytes(),
+                                 label=f"regular media {target.name}")
+            created[name] = "regular media written from baseline A"
+        elif name.startswith("matrix-"):
+            created[name] = "generated fixture"  # already present from generate_matrix_fixtures
+    return {"created": created, "missingF01": "never created"}
+
+
+def write_matrix_strm(row: dict, tokens: dict | None = None, url: str | None = None,
+                      extra: str | None = None, unversioned: bool = False) -> dict:
+    """Write (or rewrite) the run-owned STRM for the row and return its content identity."""
+    media = "mp4" if row["fmt"] == "MP4" else "mkv"
+    base_url = url or row["url"]
+    if unversioned:
+        lines = ["# legacy unversioned stream file", base_url]
+    else:
+        value = tokens if tokens is not None else row["old"]
+        lines = ["# strm-probe-version:1"]
+        if value.get("sha1") is not None:
+            lines.append(f"# strm-probe-sha1:{value['sha1']}")
+        if value.get("size") is not None:
+            lines.append(f"# strm-probe-size:{value['size']}")
+        if extra:
+            lines.append(extra)
+        lines.append(base_url)
+    target = pe.WORK / "strm" / (row["item"] + ".strm")
+    pe.write_owned_bytes(target, ("\n".join(lines) + "\n").encode("utf-8"), label=f"STRM {row['id']}")
+    return {"path": str(target), "url": base_url, "sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
+            "lines": lines, "mediaExtension": media}
+
+
+def apply_matrix_change(row: dict) -> dict:
+    """Apply the row's frozen pre-window mutation exactly once, atomically, before the playback."""
+    media = matrix_media_dir()
+    ext = "mp4" if row["fmt"] == "MP4" else "mkv"
+    apply = row["apply"]
+    kind = row["apply_kind"]
+    record: dict[str, object] = {"kind": kind}
+    if kind in ("manifest", "manifest-url", "comment", "rewrite"):
+        tokens = {"sha1": apply.get("sha1", row["old"]["sha1"]), "size": apply.get("size", row["old"]["size"])}
+        if kind == "manifest-url":
+            tokens = {"sha1": apply.get("sha1"), "size": apply.get("size")}
+        if kind == "comment":
+            tokens = dict(row["old"])
+        if kind == "rewrite":
+            current = (pe.WORK / "strm" / (row["item"] + ".strm")).read_bytes()
+            staging = pe.WORK / "strm" / ("." + row["item"] + ".rewritten.strm")
+            pe.write_owned_bytes(staging, current, label=f"rewritten STRM bytes {row['id']}")
+            os.replace(staging, pe.WORK / "strm" / (row["item"] + ".strm"))
+            record["contentSha256Unchanged"] = True
+            return record
+        if kind == "manifest-url":
+            record["strm"] = write_matrix_strm(row, tokens=tokens, url=apply["url"])
+        elif kind == "comment":
+            record["strm"] = write_matrix_strm(row, tokens=tokens, extra=apply["extra"])
+        else:
+            record["strm"] = write_matrix_strm(row, tokens=tokens)
+    elif kind == "mtime":
+        target = pe.WORK / "strm" / (row["item"] + ".strm")
+        stamp = time.time() + 3600
+        os.utime(target, (stamp, stamp))
+        record["newMtime"] = stamp
+    elif kind == "switch":
+        source = media / apply["to"]
+        destination = media / row["media"]
+        require(source.is_file(), f"The switch source {source.name} for {row['id']} does not exist.")
+        os.replace(source, destination)  # atomic: the fixed URL serves new bytes only after this
+        record["switchedFrom"] = row["media"]
+        record["switchedTo"] = apply["to"]
+        record["switchSha256"] = hashlib.sha256(destination.read_bytes()).hexdigest()
+        tokens = {"sha1": apply.get("sha1", row["old"]["sha1"]), "size": apply.get("size", row["old"]["size"])}
+        record["strm"] = write_matrix_strm(row, tokens=tokens)
+    elif kind == "f01":
+        record["strm"] = write_matrix_strm(row, tokens={"sha1": None, "size": None}, url=apply["url"])
+        record["missingUrl"] = apply["url"]
+    elif kind == "f02":
+        source = media / apply["corrupt_to"]
+        destination = media / row["media"]
+        os.replace(source, destination)
+        record["switchedTo"] = apply["corrupt_to"]
+        record["switchSha256"] = hashlib.sha256(destination.read_bytes()).hexdigest()
+        record["strm"] = write_matrix_strm(row, tokens={"sha1": apply["corrupt_sha1"],
+                                                          "size": apply["corrupt_size"]})
+    else:
+        require(kind in ("none", "d02", "d03", "d04", "d05"), f"Unhandled apply kind {kind!r}.")
+    return record
+
+
+def recovery_stage(row: dict) -> dict:
+    """Place the recovered B bytes on the same target URL and update the manifest to its real identity."""
+    apply = row["apply"]
+    media = matrix_media_dir()
+    record: dict[str, object] = {"recoveredTo": apply["recovery_file"]}
+    if row["apply_kind"] == "f01":
+        target = media / apply["recovery_file"].rsplit("/", 1)[-1]
+        # The 404 target file now exists on the same URL with the real recovered bytes.
+        missing_name = apply["url"].rsplit("/", 1)[-1]
+        source = media / apply["recovery_file"]
+        pe.write_owned_bytes(media / missing_name, source.read_bytes(),
+                             label=f"recovered media {missing_name}")
+        target = media / missing_name
+        record["target"] = missing_name
+        record["strm"] = write_matrix_strm(row, tokens={"sha1": row["fp_tokens"][0],
+                                                          "size": row["fp_tokens"][1]},
+                                           url=apply["url"])
+    else:  # f02: the fixed URL already holds the corrupted bytes; replace them atomically.
+        source = media / apply["recovery_file"]
+        destination = media / row["media"]
+        os.replace(source, destination)
+        target = destination
+        record["target"] = destination.name
+        record["strm"] = write_matrix_strm(row, tokens={"sha1": row["fp_tokens"][0],
+                                                          "size": row["fp_tokens"][1]})
+    record["recoveredSha256"] = hashlib.sha256(target.read_bytes()).hexdigest()
+    return record
+
+
+def plugin_configuration(auth: str) -> dict:
+    status, body = pe.request_json("GET", f"/Plugins/{pkg.PLUGIN_ID}/0.1.0.0/Configuration",
+                                  headers={"Authorization": auth})
+    require(status == 200, "The plugin configuration read failed.")
+    return body
+
+
+def set_plugin_configuration(auth: str, changes: dict) -> int:
+    body = plugin_configuration(auth)
+    body.update(changes)
+    status, _ = pe.request_json("POST", f"/Plugins/{pkg.PLUGIN_ID}/0.1.0.0/Configuration", body=body,
+                                headers={"Authorization": auth})
+    return status
+
+
+def native_static_stream_read(auth: str, item_id: str, head_bytes: int = 256 * 1024) -> dict:
+    """The existing native read-only entry with no probe permission: static stream transfer."""
+    base = credentials()["base_url"]
+    request = pe.urllib.request.Request(f"{base}/Videos/{item_id}/stream?static=true",
+                                        headers={"Authorization": auth})
+    try:
+        with pe.urllib.request.urlopen(request, timeout=120) as response:
+            head = response.read(head_bytes)
+            status = response.status
+            content_type = response.headers.get("Content-Type")
+    except pe.urllib.error.HTTPError as error:
+        head = error.read(head_bytes)
+        status = error.code
+        content_type = error.headers.get("Content-Type") if error.headers else None
+    return {"status": status, "contentType": contentType, "headSha256": hashlib.sha256(head).hexdigest(),
+            "headLength": len(head)}
+
+
+def p01_stream_surgery(rows: list[dict], drop_spec: dict, evidence_dir: Path, stage: str) -> dict:
+    """Bounded stream removal in this run's stopped owned copy, then read-only verification.
+
+    The service is stopped first, the database file is backed up, the schema is inspected so the
+    stream table is never guessed, the item rows are matched by their real id bytes, and the
+    delete is parameterized to the target item plus the allowed stream types. After the service is
+    back up, the saved stream set is verified read-only before any playback in this stage.
+    """
+    import base64
+
+    record: dict[str, object] = {"stage": stage, "targets": []}
+    run(*DOCKER, "stop", "-t", "30", pe.container_name("jellyfin"), timeout=300)
+    database = pe.WORK / "config" / "data" / "db.sqlite3"
+    require(database.is_file(), "The Jellyfin database was not found at the documented path.")
+    backup_dir = evidence_dir / "db-backups"
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    backup = backup_dir / f"p01-{stage}-{uuid.uuid4().hex[:8]}.sqlite3"
+    pe.copy_owned(database, backup, label="P01 database backup")
+    record["backup"] = str(backup)
+    side_files = {name: (database.parent / name).is_file()
+                  for name in ("db.sqlite3-wal", "db.sqlite3-shm")}
+    record["walSideFiles"] = side_files
+    connection = sqlite3.connect(database)
+    try:
+        if connection.execute("PRAGMA journal_mode").fetchone()[0].lower() == "wal":
+            connection.execute("PRAGMA wal_checkpoint(TRUNCATE);")
+            connection.commit()
+        tables = [row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")]
+        stream_table: str | None = None
+        for table in tables:
+            columns = [row[1].lower() for row in connection.execute(f"PRAGMA table_info(\"{table}\")")]
+            if {"item_id", "codec", "type"} <= set(columns):
+                stream_table = table
+                break
+        require(stream_table, f"No single stream table with Item_Id/Codec/Type found in {tables}.")
+        record["streamTable"] = stream_table
+        raw_ids = [row[0] for row in connection.execute(f'SELECT DISTINCT Item_Id FROM "{stream_table}"')]
+
+        def match_item_id(item_guid_hex: str, raw: bytes) -> bool:
+            raw_hex = raw.hex()
+            # The .NET mixed-endian binary layout of a GUID: the first three little-endian blocks
+            # are byte-reversed relative to the string form, the last eight bytes are stored raw.
+            net_hex = b"".join([raw[3::-1], raw[5:3:-1], raw[7:5:-1], raw[9:7:-1], raw[10:]]).hex()
+            return raw_hex.lower() == item_guid_hex or net_hex.lower() == item_guid_hex
+
+        for row in rows:
+            item_guid = str(uuid.UUID(row["item"]["Id"])).replace("-", "").lower()
+            matches = [raw for raw in raw_ids if match_item_id(item_guid, raw)]
+            require(len(matches) == 1,
+                    f"P01 {row['id']}: expected exactly one stream row owner for the item, found {len(matches)}.")
+            kinds = ["Video", "Audio"] if drop_spec[row["id"]] == "all" else ["Video"]
+            cursor = connection.execute(
+                f'DELETE FROM "{stream_table}" WHERE Item_Id = ? AND Type IN (' +
+                ",".join("?" for _ in kinds) + ")", [bytes(matches[0]), *kinds])
+            record["targets"].append({"row": row["id"], "removedRows": cursor.rowcount, "kinds": kinds})
+        connection.commit()
+    finally:
+        connection.close()
+    record["walSideFilesAfter"] = {name: (database.parent / name).is_file()
+                                    for name in ("db.sqlite3-wal", "db.sqlite3-shm")}
+    pe.compose("up")
+    pe.wait_healthy()
+    auth = pkg.api_auth()
+    for row in rows:
+        saved = saved_stream_types(auth, row["item"]["Id"])
+        expected = [] if drop_spec[row["id"]] == "all" else ["Audio"]
+        record[f"{row['id']}.savedAfter"] = saved
+        require(sorted(saved) == sorted(expected),
+                f"P01 {row['id']}: the read-only verification after the restart saw {saved}, "
+                f"expected {expected}.")
+    return record
+
+
+def fp_expected_failures(auth: str, row: dict, *, url: str, sha1_token: object, size_token: object) -> list[str]:
+    """Check the stored five-field fingerprint against the row's parsed manifest expectation."""
+    sha1, size = parsed_tokens(sha1_token, size_token)
+    key = row.get("sourceKey") or current_source_key(auth, row["item"]["Id"])
+    observed = fingerprint_row_or_none(row["item"]["Id"], key) if key else None
+    return fingerprint_fields_match(observed, expected_url=url, sha1=sha1, size=size,
+                                    expected_item_id=row["item"]["Id"], expected_source_id=key)
+
+
+def fp_snapshot(auth: str, row: dict) -> dict | None:
+    key = row.get("sourceKey") or current_source_key(auth, row["item"]["Id"])
+    return fingerprint_row_or_none(row["item"]["Id"], key) if key else None
+
+
+def trust_play(auth: str, row: dict, evidence_dir: Path) -> dict:
+    """The first-trust journey: accept the prepared native stream and establish the fingerprint.
+
+    First trust is never a probe: the expected window delta is zero and the plugin must report no
+    probe call. The row then remembers the frozen trust fingerprint for every later comparison.
+    """
+    obs = play_once(auth, row, "first-trust", evidence_dir)
+    assert_playback(row, obs, counter_validated=True, expected_delta=0)
+    require(any("FirstTrust" in event for event in obs["pluginEvents"]),
+            f"{row['id']}: the existing stream was not accepted through first trust ({obs['pluginEvents']}).")
+    require(all(call in (0, None) for call in obs["pluginProbeCalls"]),
+            f"{row['id']}: first trust reported a plugin probe {obs['pluginEvents']}.")
+    failures = fp_expected_failures(auth, row, url=row["url"], sha1_token=row["old"]["sha1"],
+                                    size_token=row["old"]["size"])
+    require(not failures, f"{row['id']} first-trust: " + "; ".join(failures))
+    row["trust_fp"] = fp_snapshot(auth, row)
+    return obs
+
+
+def post_window_fp_failures(auth: str, row: dict) -> list[str]:
+    """The fingerprint check after a measurement window, per the row's expectation."""
+    if row["fp_kind"] == "new":
+        return fp_expected_failures(auth, row, url=row["fp_url"], sha1_token=row["fp_tokens"][0],
+                                    size_token=row["fp_tokens"][1])
+    if row["fp_kind"] == "none":
+        key = row.get("sourceKey") or current_source_key(auth, row["item"]["Id"])
+        observed = fingerprint_row_or_none(row["item"]["Id"], key) if key else None
+        return [f"{row['id']}: a fingerprint row must not exist for {row['id']}"] if observed else []
+    frozen = row.get("trust_fp")
+    observed = fp_snapshot(auth, row)
+    if frozen is None or observed is None:
+        return [f"{row['id']}: the trusted baseline fingerprint is missing before or after the window"]
+    return ([f"{row['id']}: the trusted fingerprint changed across the window: {frozen} -> {observed}"]
+            if observed != frozen else [])
+
+
+def restart_then_play(auth: str, row: dict, evidence_dir: Path, result: dict,
+                      url_for_source: str | None, record_only: bool = False) -> None:
+    """Freeze the state, restart, verify read-only, then replay without duplicate probing.
+
+    ``record_only`` is the D-row mode: native delegation rows report the real ffprobe count
+    instead of requiring zero probes, and the frozen/read-only comparison covers the sources,
+    the address, the probe count and the fingerprint presence/absence.
+    """
+    frozen = freeze_state(auth, row)
+    result["frozenBeforeRestart"] = frozen
+    pkg.restart()
+    auth = pkg.api_auth()
+    observed_state = read_only_state(auth, row)
+    if record_only:
+        if observed_state["nativeSources"] != frozen["nativeSources"]:
+            failures = [f"{row['id']}: the natively saved media sources changed across the restart"]
+        else:
+            failures = []
+        if row["fp_kind"] == "none":
+            if observed_state["fingerprint"] is not None:
+                failures.append(f"{row['id']}: a fingerprint appeared across the restart")
+        elif observed_state["fingerprint"] != frozen["fingerprint"]:
+            failures.append(f"{row['id']}: the fingerprint changed across the restart")
+        require(not failures, "; ".join(failures))
+        expected_delta = None
+    else:
+        restart_failures = restart_readback_failures(frozen, observed_state)
+        require(not restart_failures, f"{row['id']}: " + "; ".join(restart_failures))
+        expected_delta = 0
+    after = play_once(auth, row, "after-restart", evidence_dir)
+    assert_playback(row, after, counter_validated=not record_only,
+                    expected_delta=expected_delta, url_for_source=url_for_source)
+    fp_final = fp_snapshot(auth, row)
+    if not record_only:
+        require(fp_final == observed_state["fingerprint"],
+                f"{row['id']}: the fingerprint changed across the restart read-back.")
+    result["readOnlyAfterRestart"] = observed_state
+    result["afterRestart"] = {"ffprobe": after["ffprobe"], "events": after["pluginEvents"],
+                              "advancedSeconds": after["playback"].get("advancedSeconds")}
+
+
+def d_row_restart(auth: str, row: dict, evidence_dir: Path, result: dict) -> None:
+    """The D-row restart: freeze, restart, read-only compare, replay with the native probe count
+    reported but not required to be zero (contract: no native probe-count obligation)."""
+    restart_then_play(auth, row, evidence_dir, result, None, record_only=True)
+
+
+def journey_normal(auth: str, row: dict, evidence_dir: Path) -> dict:
+    result: dict[str, object] = {}
+    if row["trust"]:
+        result["firstTrust"] = trust_play(auth, row, evidence_dir)
+        auth = pkg.api_auth()
+    result["apply"] = apply_matrix_change(row) if row["apply_kind"] != "none" else {"kind": "none"}
+    if row["apply_kind"] == "manifest-url":
+        # From here on the measurement windows, the probes and the saved source all belong to the
+        # new address; the old URL stays only in the evidence record.
+        row["url"] = row["apply"]["url"]
+    obs = play_once(auth, row, "window", evidence_dir)
+    url_for_source = row["fp_url"] if row["expect_probes"] else None
+    assert_playback(row, obs, counter_validated=True, expected_delta=row["expect_probes"],
+                    url_for_source=url_for_source)
+    if row["expect_probes"]:
+        require(any(call == 1 for call in obs["pluginProbeCalls"]),
+                f"{row['id']}: the plugin reported no successful probe call ({obs['pluginEvents']}).")
+    fp_failures = post_window_fp_failures(auth, row)
+    require(not fp_failures, "; ".join(fp_failures))
+    result["window"] = {"ffprobe": obs["ffprobe"], "events": obs["pluginEvents"],
+                        "advancedSeconds": obs["playback"].get("advancedSeconds"),
+                        "screenshots": [obs["playback"].get("startScreenshot"),
+                                         obs["playback"].get("progressScreenshot")]}
+    second = play_once(auth, row, "second-play", evidence_dir)
+    assert_playback(row, second, counter_validated=True, expected_delta=0, url_for_source=url_for_source)
+    result["secondPlay"] = {"ffprobe": second["ffprobe"], "events": second["pluginEvents"]}
+    restart_then_play(auth, row, evidence_dir, result, url_for_source)
+    result["status"] = "PASS"
+    return result
+
+
+def journey_p01(auth: str, row: dict, evidence_dir: Path) -> dict:
+    drop = row["apply"]["drop"]
+    prime = row["apply"]["prime"]
+    result: dict[str, object] = {"journey": "p01", "drop": drop, "prime": prime}
+    drop_spec = {row["id"]: drop}
+    result["surgery"] = p01_stream_surgery([row], drop_spec, evidence_dir, "pre")
+    auth = pkg.api_auth()
+    require(fp_snapshot(auth, row) is None, f"{row['id']}: a fingerprint existed before the window.")
+    if prime:
+        # The "with fingerprint" P01 rows prime once: the probe succeeds and commits the fingerprint,
+        # then the streams are removed again so the window starts with a fingerprint but no streams.
+        obs = play_once(auth, row, "prime", evidence_dir, relax_console=True)
+        assert_playback(row, obs, counter_validated=True, expected_delta=1)
+        require(any(call == 1 for call in obs["pluginProbeCalls"]),
+                f"{row['id']}: the prime probe was not reported {obs['pluginEvents']}.")
+        failures = fp_expected_failures(auth, row, url=row["url"], sha1_token=row["fp_tokens"][0],
+                                        size_token=row["fp_tokens"][1])
+        require(not failures, f"{row['id']} prime: " + "; ".join(failures))
+        row["trust_fp"] = fp_snapshot(auth, row)
+        result["prime"] = {"ffprobe": obs["ffprobe"], "fingerprint": row["trust_fp"]}
+        result["surgery2"] = p01_stream_surgery([row], drop_spec, evidence_dir, "prime-after")
+        auth = pkg.api_auth()
+    obs = play_once(auth, row, "window", evidence_dir)
+    assert_playback(row, obs, counter_validated=True, expected_delta=1)
+    require(any(call == 1 for call in obs["pluginProbeCalls"]),
+            f"{row['id']}: the window probe was not reported {obs['pluginEvents']}.")
+    failures = fp_expected_failures(auth, row, url=row["url"], sha1_token=row["fp_tokens"][0],
+                                    size_token=row["fp_tokens"][1])
+    require(not failures, f"{row['id']} window: " + "; ".join(failures))
+    result["window"] = {"ffprobe": obs["ffprobe"], "events": obs["pluginEvents"],
+                        "advancedSeconds": obs["playback"].get("advancedSeconds")}
+    second = play_once(auth, row, "second-play", evidence_dir)
+    assert_playback(row, second, counter_validated=True, expected_delta=0)
+    result["secondPlay"] = {"ffprobe": second["ffprobe"], "events": second["pluginEvents"]}
+    restart_then_play(auth, row, evidence_dir, result, None)
+    result["status"] = "PASS"
+    return result
+
+
+def journey_f01(auth: str, row: dict, evidence_dir: Path) -> dict:
+    result: dict[str, object] = {"journey": "f01"}
+    result["firstTrust"] = trust_play(auth, row, evidence_dir)
+    auth = pkg.api_auth()
+    result["apply"] = apply_matrix_change(row)  # manifest now points at the real 404 target
+    row["url"] = row["apply"]["url"]
+    failed = play_once(auth, row, "fail-window", evidence_dir, relax_console=True)
+    require(failed["playback"].get("advanced") is not True,
+            f"{row['id']}: the 404 target must not produce an advancing playback.")
+    require(failed["ffprobe"]["delta"] == 1,
+            f"{row['id']}: the failed probe was not attempted {failed['ffprobe']}.")
+    require(failed["fingerprint"] == row["trust_fp"],
+            f"{row['id']}: the failed probe overwrote the trusted baseline {failed['fingerprint']}.")
+    require(failed["playback"].get("incompleteScreenshot") or failed["playback"].get("requestErrorScreenshot"),
+            f"{row['id']}: no failure screenshot was captured for the 404 window.")
+    result["failWindow"] = {"ffprobe": failed["ffprobe"], "events": failed["pluginEvents"],
+                            "screenshots": [failed["playback"].get("incompleteScreenshot"),
+                                             failed["playback"].get("requestErrorScreenshot")]}
+    retry = play_once(auth, row, "fail-retry", evidence_dir, relax_console=True)
+    require(retry["ffprobe"]["delta"] == 1, f"{row['id']}: the failed target still must be probed.")
+    require(retry["fingerprint"] == row["trust_fp"],
+            f"{row['id']}: the retry committed a fingerprint for a failed target.")
+    result["failRetry"] = {"ffprobe": retry["ffprobe"], "events": retry["pluginEvents"]}
+    frozen = freeze_state(auth, row)
+    result["frozenBeforeRestart"] = frozen
+    pkg.restart()
+    auth = pkg.api_auth()
+    observed_state = read_only_state(auth, row)
+    restart_failures = restart_readback_failures(frozen, observed_state)
+    require(not restart_failures, f"{row['id']}: " + "; ".join(restart_failures))
+    require(observed_state["fingerprint"] == row["trust_fp"],
+            f"{row['id']}: the restart changed the protected baseline.")
+    result["recovery"] = recovery_stage(row)
+    recovered = play_once(auth, row, "recovery-play", evidence_dir)
+    url_for_source = row["fp_url"]
+    assert_playback(row, recovered, counter_validated=True, expected_delta=1, url_for_source=url_for_source)
+    failures = fp_expected_failures(auth, row, url=row["fp_url"], sha1_token=row["fp_tokens"][0],
+                                    size_token=row["fp_tokens"][1])
+    require(not failures, f"{row['id']} recovery: " + "; ".join(failures))
+    result["recoveryPlay"] = {"ffprobe": recovered["ffprobe"],
+                              "advancedSeconds": recovered["playback"].get("advancedSeconds")}
+    second = play_once(auth, row, "second-play", evidence_dir)
+    assert_playback(row, second, counter_validated=True, expected_delta=0, url_for_source=url_for_source)
+    result["secondPlay"] = {"ffprobe": second["ffprobe"], "events": second["pluginEvents"]}
+    restart_then_play(auth, row, evidence_dir, result, url_for_source)
+    result["status"] = "PASS"
+    return result
+
+
+def journey_f02(auth: str, row: dict, evidence_dir: Path) -> dict:
+    result: dict[str, object] = {"journey": "f02"}
+    result["firstTrust"] = trust_play(auth, row, evidence_dir)
+    auth = pkg.api_auth()
+    result["apply"] = apply_matrix_change(row)  # the fixed URL now serves the corrupted bytes
+    failed = play_once(auth, row, "fail-window", evidence_dir, relax_console=True)
+    require(failed["playback"].get("advanced") is not True,
+            f"{row['id']}: the corrupted target must not produce an advancing playback.")
+    require(failed["ffprobe"]["delta"] == 1,
+            f"{row['id']}: the failed probe was not attempted {failed['ffprobe']}.")
+    require(failed["fingerprint"] == row["trust_fp"],
+            f"{row['id']}: the failed probe overwrote the trusted baseline {failed['fingerprint']}.")
+    result["failWindow"] = {"ffprobe": failed["ffprobe"], "events": failed["pluginEvents"],
+                            "screenshots": [failed["playback"].get("incompleteScreenshot"),
+                                             failed["playback"].get("requestErrorScreenshot")]}
+    frozen = freeze_state(auth, row)
+    result["frozenBeforeRestart"] = frozen
+    pkg.restart()
+    auth = pkg.api_auth()
+    observed_state = read_only_state(auth, row)
+    restart_failures = restart_readback_failures(frozen, observed_state)
+    require(not restart_failures, f"{row['id']}: " + "; ".join(restart_failures))
+    result["recovery"] = recovery_stage(row)
+    recovered = play_once(auth, row, "recovery-play", evidence_dir)
+    url_for_source = row["fp_url"]
+    assert_playback(row, recovered, counter_validated=True, expected_delta=1, url_for_source=url_for_source)
+    failures = fp_expected_failures(auth, row, url=row["fp_url"], sha1_token=row["fp_tokens"][0],
+                                    size_token=row["fp_tokens"][1])
+    require(not failures, f"{row['id']} recovery: " + "; ".join(failures))
+    result["recoveryPlay"] = {"ffprobe": recovered["ffprobe"],
+                              "advancedSeconds": recovered["playback"].get("advancedSeconds")}
+    second = play_once(auth, row, "second-play", evidence_dir)
+    assert_playback(row, second, counter_validated=True, expected_delta=0, url_for_source=url_for_source)
+    result["secondPlay"] = {"ffprobe": second["ffprobe"], "events": second["pluginEvents"]}
+    restart_then_play(auth, row, evidence_dir, result, url_for_source)
+    result["status"] = "PASS"
+    return result
+
+
+def journey_d02(auth: str, row: dict, evidence_dir: Path) -> dict:
+    """Whole plugin disabled: native playback of the versioned STRM, fingerprint preserved."""
+    result: dict[str, object] = {"journey": "d02"}
+    result["firstTrust"] = trust_play(auth, row, evidence_dir)
+    auth = pkg.api_auth()
+    result["configBefore"] = plugin_configuration(auth)
+    require(pkg.plugin_action(auth, False) == 204, f"{row['id']}: the plugin disable failed.")
+    pkg.restart()
+    auth = pkg.api_auth()
+    status = str(pkg.plugin_status(auth)).lower()
+    require(status not in {"active", "0"}, f"{row['id']}: the plugin remained active after disable.")
+    obs = play_once(auth, row, "native-play", evidence_dir, relax_console=True)
+    assert_playback(row, obs, counter_validated=True, expected_delta=None)
+    require(obs["fingerprint"] == row["trust_fp"],
+            f"{row['id']}: native playback with the plugin disabled changed the fingerprint.")
+    result["nativePlay"] = {"ffprobe": obs["ffprobe"], "events": obs["pluginEvents"],
+                            "advancedSeconds": obs["playback"].get("advancedSeconds"),
+                            "note": "the native probe count is the real value; zero is not required"}
+    require(pkg.plugin_action(auth, True) == 204, f"{row['id']}: the plugin re-enable failed.")
+    pkg.restart()
+    auth = pkg.api_auth()
+    d_row_restart(auth, row, evidence_dir, result)
+    result["status"] = "PASS"
+    return result
+
+
+def journey_d03(auth: str, row: dict, evidence_dir: Path) -> dict:
+    """Only the playback auto-check is off: native playback, no optimization commit."""
+    result: dict[str, object] = {"journey": "d03"}
+    result["firstTrust"] = trust_play(auth, row, evidence_dir)
+    auth = pkg.api_auth()
+    require(set_plugin_configuration(auth, {"PlaybackAutoCheck": False}) == 200,
+            f"{row['id']}: the playback-auto-check toggle failed.")
+    pkg.restart()
+    auth = pkg.api_auth()
+    require(plugin_configuration(auth).get("PlaybackAutoCheck") is False,
+            f"{row['id']}: the playback auto-check was not off after the restart.")
+    before_events = plugin_event_lines()
+    obs = play_once(auth, row, "native-play", evidence_dir, relax_console=True)
+    assert_playback(row, obs, counter_validated=True, expected_delta=None)
+    require(plugin_event_delta(before_events) == [],
+            f"{row['id']}: plugin events were emitted while the auto-check was off.")
+    require(obs["fingerprint"] == row["trust_fp"],
+            f"{row['id']}: the disabled auto-check changed the fingerprint.")
+    result["nativePlay"] = {"ffprobe": obs["ffprobe"],
+                            "advancedSeconds": obs["playback"].get("advancedSeconds")}
+    require(set_plugin_configuration(auth, {"PlaybackAutoCheck": True}) == 200,
+            f"{row['id']}: the configuration restore failed.")
+    pkg.restart()
+    auth = pkg.api_auth()
+    d_row_restart(auth, row, evidence_dir, result)
+    result["status"] = "PASS"
+    return result
+
+
+def journey_d04(auth: str, row: dict, evidence_dir: Path) -> dict:
+    """Ordinary (non-STRM) media: native playback, no fingerprint, no versioned commit."""
+    result: dict[str, object] = {"journey": "d04"}
+    item_id = row["item"]["Id"]
+    media_path = item_media_type(auth, item_id)["Path"]
+    obs = play_once(auth, row, "native-play", evidence_dir, relax_console=True)
+    assert_playback(row, obs, counter_validated=True, expected_delta=None,
+                    allow_missing_media_fetch=True, expected_source_url=media_path)
+    key = current_source_key(auth, item_id)
+    observed_fp = fingerprint_row_or_none(item_id, key) if key else None
+    require(observed_fp is None, f"{row['id']}: an ordinary media item carries a fingerprint row.")
+    result["nativePlay"] = {"ffprobe": obs["ffprobe"], "events": obs["pluginEvents"],
+                            "advancedSeconds": obs["playback"].get("advancedSeconds")}
+    second = play_once(auth, row, "second-play", evidence_dir, relax_console=True)
+    assert_playback(row, second, counter_validated=True, expected_delta=None,
+                    allow_missing_media_fetch=True, expected_source_url=media_path)
+    result["secondPlay"] = {"ffprobe": second["ffprobe"], "events": second["pluginEvents"]}
+    d_row_restart(auth, row, evidence_dir, result)
+    result["status"] = "PASS"
+    return result
+
+
+def journey_d05(auth: str, row: dict, evidence_dir: Path) -> dict:
+    """Unversioned legacy STRM: native playback, no supported-version optimization commit."""
+    result: dict[str, object] = {"journey": "d05"}
+    item_id = row["item"]["Id"]
+    obs = play_once(auth, row, "native-play", evidence_dir, relax_console=True)
+    assert_playback(row, obs, counter_validated=True, expected_delta=None)
+    key = current_source_key(auth, item_id)
+    observed_fp = fingerprint_row_or_none(item_id, key) if key else None
+    require(observed_fp is None, f"{row['id']}: an unversioned STRM carries a fingerprint row.")
+    result["nativePlay"] = {"ffprobe": obs["ffprobe"], "events": obs["pluginEvents"],
+                            "advancedSeconds": obs["playback"].get("advancedSeconds")}
+    second = play_once(auth, row, "second-play", evidence_dir, relax_console=True)
+    assert_playback(row, second, counter_validated=True, expected_delta=None)
+    result["secondPlay"] = {"ffprobe": second["ffprobe"], "events": second["pluginEvents"]}
+    d_row_restart(auth, row, evidence_dir, result)
+    result["status"] = "PASS"
+    return result
+
+
+def journey_d06(auth: str, row: dict, evidence_dir: Path) -> dict:
+    """The allowMediaProbe=false native read, then the first Web Play that probes and commits."""
+    result: dict[str, object] = {"journey": "d06"}
+    result["firstTrust"] = trust_play(auth, row, evidence_dir)
+    auth = pkg.api_auth()
+    result["apply"] = apply_matrix_change(row)
+    row["url"] = row["apply"]["url"]
+    probes_before = probe_count(row["url"])
+    static_read = native_static_stream_read(auth, row["item"]["Id"])
+    result["staticRead"] = static_read
+    require(static_read["status"] in (200, 302), f"{row['id']}: the static native read failed ({static_read}).")
+    require(probe_count(row["url"]) == probes_before,
+            f"{row['id']}: the static native read ran an ffprobe call.")
+    require(fp_snapshot(auth, row) == row["trust_fp"],
+            f"{row['id']}: the static native read changed the fingerprint.")
+    obs = play_once(auth, row, "window", evidence_dir)
+    assert_playback(row, obs, counter_validated=True, expected_delta=1, url_for_source=row["fp_url"])
+    failures = fp_expected_failures(auth, row, url=row["fp_url"], sha1_token=row["fp_tokens"][0],
+                                    size_token=row["fp_tokens"][1])
+    require(not failures, f"{row['id']} window: " + "; ".join(failures))
+    result["window"] = {"ffprobe": obs["ffprobe"], "advancedSeconds": obs["playback"].get("advancedSeconds")}
+    second = play_once(auth, row, "second-play", evidence_dir)
+    assert_playback(row, second, counter_validated=True, expected_delta=0, url_for_source=row["fp_url"])
+    result["secondPlay"] = {"ffprobe": second["ffprobe"], "events": second["pluginEvents"]}
+    restart_then_play(auth, row, evidence_dir, result, row["fp_url"])
+    result["status"] = "PASS"
+    return result
+
+
+def prepare_matrix_rows(auth: str, rows: list[dict], evidence_dir: Path) -> dict:
+    """Native preparation with the plugin disabled, bounded P01 surgery, then re-enable.
+
+    Scan everything once, disable the plugin, let Jellyfin itself probe and persist each row's
+    prepared address/stream (the row's own prepared media URL), run the P01 stream removals in the
+    stopped owned copy, and only then re-enable the plugin and hand out a fresh token.
+    """
+    summary: dict[str, object] = {}
+    for row in rows:
+        row["item"] = pkg.scan_and_wait(auth, row["item"], MAX_WAIT)
+        info = item_media_type(auth, row["item"]["Id"])
+        entity_failures = entity_class_failures(info, row["media_type"])
+        require(not entity_failures, f"{row['id']}: " + "; ".join(entity_failures))
+        summary[row["id"] + ".entity"] = str(info.get("Type")).rsplit(".", 1)[-1]
+    require(pkg.plugin_action(auth, False) == 204, "The package-instance plugin disable failed.")
+    pkg.restart()
+    auth = pkg.api_auth()
+    for row in rows:
+        if row["apply_kind"] == "d04":
+            deadline = time.monotonic() + MAX_WAIT
+            saved: list[str] = []
+            while time.monotonic() < deadline:
+                saved = saved_stream_types(auth, row["item"]["Id"])
+                if "Video" in saved:
+                    break
+                time.sleep(1)
+            require("Video" in saved, f"{row['id']}: no native Video stream was prepared.")
+            summary[row["id"] + ".preparedStreams"] = saved
+            continue
+        # Every STRM-backed row is prepared on the URL that currently serves its prepared media,
+        # so the counter, the saved address and the snapshot all belong to the same real input.
+        prep_url = MEDIA_PREFIX + row["media"]
+        deadline = time.monotonic() + MAX_WAIT
+        saved = []
+        while time.monotonic() < deadline:
+            status, _ = pkg.playback_info(auth, row["item"]["Id"])
+            saved = saved_stream_types(auth, row["item"]["Id"])
+            if status == 200 and "Video" in saved:
+                break
+            time.sleep(1)
+        require("Video" in saved, f"{row['id']}: no native Video stream was prepared ({saved}).")
+        count = probe_count(prep_url)
+        summary[row["id"] + ".preparationProbeCount"] = count
+        require(count >= 1, f"{row['id']}: the preparation probe was never observed; counter unusable.")
+        snapshot = native_source_snapshot(auth, row["item"]["Id"])
+        ids = [source["id"] for source in snapshot["sources"] if source.get("id")]
+        require(len(ids) == 1, f"{row['id']}: expected exactly one native source, found {ids}.")
+        row["sourceKey"] = ids[0]
+        summary[row["id"] + ".preparedSource"] = snapshot
+    p01_rows = [row for row in rows if row["journey"] == "p01"]
+    if p01_rows:
+        drop_spec = {row["id"]: row["apply"]["drop"] for row in p01_rows}
+        summary["p01Surgery"] = p01_stream_surgery(p01_rows, drop_spec, evidence_dir, "pre")
+        auth = pkg.api_auth()
+    require(pkg.plugin_action(auth, True) == 204, "The package-instance plugin enable failed.")
+    pkg.restart()
+    return summary
+
+
+def scenario_matrix(package: Path, evidence_dir: Path, selected: list[str],
+                    summary: dict[str, object]) -> None:
+    """Run the fixed video matrix rows in batches, recording every reached stage per row."""
+    matrix = generate_matrix_fixtures()
+    summary["fixtures"] = {"commands": matrix["commands"], "fixtures": matrix["fixtures"],
+                          "derived": matrix["derived"], "aliases": matrix["aliases"],
+                          "durationSeconds": matrix["durationSeconds"]}
+    all_rows = build_matrix_rows(matrix["fixtures"])
+    known = {row["id"] for row in all_rows}
+    rows = [row for row in all_rows if row["id"] in selected]
+    require(len(rows) == len(selected), f"Unknown matrix row ids {sorted(set(selected) - known)}.")
+    summary["rows"] = [{"id": row["id"], "item": row["item"], "url": row["url"], "journey": row["journey"],
+                       "expectProbes": row["expect_probes"], "oldManifest": row["old"],
+                       "applyKind": row["apply_kind"], "fpKind": row["fp_kind"],
+                       "fpUrl": row["fp_url"]} for row in rows]
+    summary["mediaSetup"] = setup_matrix_media(rows)
+    strm_identities = []
+    for row in rows:
+        if row["apply_kind"] == "d05":
+            strm_identities.append(write_matrix_strm(row, unversioned=True))
+        else:
+            strm_identities.append(write_matrix_strm(row))
+    summary["strm"] = [{"id": row["id"], **identity} for row, identity in zip(rows, strm_identities)]
+    summary["instance"] = prepare_instance(package, music_library=False)
+    auth = pkg.api_auth()
+    for row in rows:
+        if row["apply_kind"] == "d04":
+            ext = "mp4" if row["fmt"] == "MP4" else "mkv"
+            add_library(auth, f"Matrix {row['fmt']} Regular Media", "movies", [f"/media/local/regular-{ext}"])
+    summary["preparation"] = prepare_matrix_rows(auth, rows, evidence_dir)
+    auth = pkg.api_auth()
+    results: dict[str, object] = {}
+    dispatch = {"normal": journey_normal, "p01": journey_p01, "f01": journey_f01,
+                "f02": journey_f02, "d02": journey_d02, "d03": journey_d03, "d04": journey_d04,
+                "d05": journey_d05, "d06": journey_d06}
+    for row in rows:
+        try:
+            results[row["id"]] = dispatch[row["journey"]](auth, row, evidence_dir)
+            auth = pkg.api_auth()
+        except (BaselineError, RuntimeError, OSError, subprocess.SubprocessError) as error:
+            results[row["id"]] = {"status": "FAIL", "error": f"{type(error).__name__}: {error}"}
+    summary["rowsResult"] = results
+    failed = [row_id for row_id, result in results.items() if result.get("status") != "PASS"]
+    if failed:
+        raise BaselineError("Matrix rows failed: " + " | ".join(failed))
+
+
+def render_matrix_index(summary: dict) -> str:
+    lines = ["# Slice 5 matrix evidence index", "",
+             f"- Status: **{summary.get('status')}**",
+             f"- Scenario: {summary.get('scenario')}",
+             f"- Rows: {', '.join(summary.get('rows') or [])}",
+             f"- Package: `{summary.get('package')}`",
+             f"- Package SHA-256: `{(summary.get('packageIdentity') or {}).get('archiveSha256')}`",
+             f"- Workspace: `{summary.get('workspace')}`",
+             f"- Elapsed seconds: {summary.get('elapsedSeconds')}", ""]
+    if summary.get("error"):
+        lines += ["## Failure", "", f"```\n{summary['error']}\n```", ""]
+    fixtures = ((summary.get("fixtures") or {}).get("fixtures") or {})
+    if fixtures:
+        lines += ["## Fixtures", "", "| file | SHA-1 | size | probeable |", "|---|---|---|---|"]
+        for name, fixture in fixtures.items():
+            lines.append(f"| `{name}` | `{fixture['sha1']}` | {fixture['size']} | "
+                         f"{fixture['ffprobe'].get('probeable', True)} |")
+        lines.append("")
+    setup = (summary.get("mediaSetup") or {})
+    if setup.get("created"):
+        lines += ["## Media setup", ""]
+        for name, origin in setup["created"].items():
+            lines.append(f"- `{name}`: {origin}")
+        lines += [f"- F01 404 target: {setup.get('missingF01')}", ""]
+    rows = ((summary.get("rowsResult") or {}))
+    if rows:
+        lines += ["## Matrix rows", "", "| row | journey | status | ffprobe deltas | advanced s |",
+                  "|---|---|---|---|---|"]
+        for row_id, result in rows.items():
+            journey = str(result.get("journey", "normal"))
+            status = str(result.get("status", "FAIL"))
+            probes: list[str] = []
+            advanced: list[str] = []
+            for key in ("firstTrust", "prime", "window", "failWindow", "failRetry", "recoveryPlay",
+                        "nativePlay", "secondPlay", "afterRestart"):
+                block = result.get(key)
+                if isinstance(block, dict) and isinstance(block.get("ffprobe"), dict):
+                    probes.append(str(block["ffprobe"].get("delta")))
+                if isinstance(block, dict) and block.get("advancedSeconds") is not None:
+                    advanced.append(str(block["advancedSeconds"]))
+            lines.append(f"| {row_id} | {journey} | {status} | {'/'.join(probes) or '-'} | "
+                         f"{'/'.join(advanced) or '-'} |")
+        lines.append("")
+        for row_id, result in rows.items():
+            if result.get("status") != "PASS":
+                lines += [f"### {row_id} failure", "", f"```\n{result.get('error')}\n```", ""]
+    lines += ["## Evidence files", "",
+              "- `<row-id>/<phase>/observation.json`: ffprobe window, plugin events, media requests, fingerprint, native sources.",
+              "- `<row-id>/<phase>/screenshots/*.png`: start / 5 s progress / failure screenshots; `-playbackinfo-*.json` raw responses.",
+              "- `<row-id>/<phase>/driver-stdout.txt`, `driver-stderr.txt`: raw browser driver output.",
+              "- `db-backups/p01-*`: P01 owned-copy database backups.", ""]
     return "\n".join(lines)
 
 
