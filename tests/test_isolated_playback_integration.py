@@ -338,7 +338,10 @@ class NativeSourceSnapshotTests(unittest.TestCase):
         self.assertEqual(types["Video"]["Codec"], "h264")
         self.assertEqual(types["Video"]["Width"], 320)
         self.assertEqual(types["Video"]["ColorRange"], "tv")
-        self.assertEqual(types["Audio"]["SampleRate"], None)
+        # The snapshot keeps the complete native stream objects: every field the server saved is
+        # present, so a restart comparison cannot miss a change outside a fixed projection list.
+        self.assertEqual(types["Video"], dict(self.payload["MediaSources"][0]["MediaStreams"][0]))
+        self.assertEqual(types["Audio"], {"Type": "Audio", "Index": 1, "Codec": "aac"})
     def test_snapshot_refuses_a_failed_query(self):
         original = playback.pe.request_json
         playback.pe.request_json = lambda *args, **kwargs: (500, {})
@@ -476,6 +479,35 @@ class IndexRenderingTests(unittest.TestCase):
         self.assertIn("B01", text)
         self.assertTrue(json.dumps(summary))
 class MatrixRowIdTests(unittest.TestCase):
+    FIXTURES = {}
+
+    @classmethod
+    def setUpClass(cls):
+        sha = {"a": "a" * 40, "b": "b" * 40, "c": "c" * 40, "d": "d" * 40, "e": "e" * 40,
+               "f": "f" * 40, "s": "1" * 40}
+        for ext in ("mp4", "mkv"):
+            cls.FIXTURES.update({
+                f"baseline-{ext}-a.{ext}": {"sha1": sha["a"], "size": 1000},
+                f"baseline-{ext}-b.{ext}": {"sha1": sha["b"], "size": 1200},
+                f"matrix-{ext}-p4b.{ext}": {"sha1": sha["c"], "size": 700},
+                f"matrix-{ext}-p06up.{ext}": {"sha1": sha["d"], "size": 1400},
+                f"matrix-{ext}-b-padded.{ext}": {"sha1": sha["e"], "size": 1000},
+                f"matrix-{ext}-a-trunc.{ext}": {"sha1": sha["f"], "size": 333},
+                f"baseline-{ext}-limited.{ext}": {"sha1": sha["s"], "size": 900},
+                f"baseline-{ext}-full.{ext}": {"sha1": sha["s"], "size": 900},
+                f"baseline-{ext}-unspecified.{ext}": {"sha1": sha["s"], "size": 900},
+                f"matrix-{ext}-short-limited.{ext}": {"sha1": sha["s"], "size": 800},
+                f"matrix-{ext}-short-full.{ext}": {"sha1": sha["s"], "size": 800},
+                f"matrix-{ext}-short-unspecified.{ext}": {"sha1": sha["s"], "size": 800},
+            })
+        cls.FIXTURES.update({f"matrix-mkv-{tail}.mkv": {"sha1": sha["s"], "size": 900}
+                             for tail in ("limited", "full", "unspecified")})
+
+    @classmethod
+    def rows_by_id(cls):
+        rows = playback.build_matrix_rows(cls.FIXTURES)
+        return {row["id"]: row for row in rows}
+
     def test_the_fixed_expansion_has_exactly_the_contract_rows(self):
         ids = playback.matrix_row_ids()
         self.assertEqual(len(ids), 116)
@@ -505,6 +537,199 @@ class MatrixRowIdTests(unittest.TestCase):
         # 44 P rows + 6 C rows + 2 F rows + 6 D rows per format
         for fmt in ("MP4", "MKV"):
             self.assertEqual(sum(1 for i in ids if i.startswith(fmt + ".")), 58)
+
+class MatrixPreconditionTests(MatrixRowIdTests):
+    """The fixed rows must write the contract's real preconditions, not a degraded variant.
+
+    A manifest rewrite names its new tokens explicitly; a token it does not name keeps the old
+    value, and only the explicit DELETE instruction removes one, so a missing old SHA-1 can
+    never silently degrade back into the old value.
+    """
+
+    def resolved_tokens(self, row):
+        tokens = {}
+        for field in ("sha1", "size"):
+            if field in row["apply"]:
+                if row["apply"][field] is not playback.DELETE:
+                    tokens[field] = row["apply"][field]
+            else:
+                tokens[field] = row["old"][field]
+        return tokens
+
+    def test_a_missing_sha1_is_removed_not_replaced_with_the_old_value(self):
+        rows = self.rows_by_id()
+        # P03.04 must really drop the new size; P05.01 must really drop the new SHA-1.
+        self.assertNotIn("size", self.resolved_tokens(rows["MP4.P03.04"]))
+        self.assertNotIn("sha1", self.resolved_tokens(rows["MP4.P05.01"]))
+        # P03.05 and P07 rows write their invalid values as literal manifest text.
+        self.assertEqual(self.resolved_tokens(rows["MP4.P03.05"])["size"], "-1")
+
+    def test_p03_03_writes_an_uppercase_hash_not_the_old_value(self):
+        rows = self.rows_by_id()
+        for fmt in ("MP4", "MKV"):
+            tokens = self.resolved_tokens(rows[f"{fmt}.P03.03"])
+            self.assertEqual(tokens["sha1"], ("a" * 40).upper())
+            self.assertNotEqual(tokens["sha1"], rows[f"{fmt}.P03.03"]["old"]["sha1"])
+
+    def test_p07_keeps_the_contract_directions(self):
+        rows = self.rows_by_id()
+        # 01: valid old hash, old size absent, new hash dropped, new size valid; 03: neither side
+        # has a hash nor a size.
+        self.assertEqual(rows["MP4.P07.01"]["old"], {"sha1": "a" * 40, "size": None})
+        self.assertEqual(self.resolved_tokens(rows["MP4.P07.01"]), {"size": "1000"})
+        self.assertEqual(rows["MP4.P07.03"]["old"], {"sha1": None, "size": None})
+        # The rewrite keeps both absent tokens (their old values are already None), so the resolved
+        # manifest carries neither hash nor size.
+        tokens = self.resolved_tokens(rows["MP4.P07.03"])
+        self.assertEqual({k: v for k, v in tokens.items() if v is not None}, {})
+        self.assertEqual(tokens, {"sha1": None, "size": None})
+        self.assertEqual(self.resolved_tokens(rows["MP4.P07.02"]), {"sha1": "a" * 40})
+        # 04 turns the old valid hash into the 39-char length form; 05 starts from the 39-char form
+        # and gains a valid hash with a valid size, while the old size stays non-numeric text.
+        for row_id in ("MP4.P07.04", "MKV.P07.04"):
+            row = rows[row_id]
+            self.assertEqual(row["old"]["sha1"], "a" * 40)
+            self.assertEqual(self.resolved_tokens(row)["sha1"], "a" * 39)
+        for row_id in ("MP4.P07.05", "MKV.P07.05"):
+            row = rows[row_id]
+            self.assertEqual(row["old"]["sha1"], "a" * 39)
+            self.assertEqual(row["old"]["size"], "not-a-size")
+            tokens = self.resolved_tokens(row)
+            self.assertEqual(tokens["sha1"], "a" * 40)
+            self.assertEqual(tokens["size"], "1000")
+
+    def test_p06_writes_the_hash_of_the_bytes_the_row_actually_serves(self):
+        rows = self.rows_by_id()
+        for fmt, ext in (("MP4", "mp4"), ("MKV", "mkv")):
+            up = rows[f"{fmt}.P06.02.up"]
+            down = rows[f"{fmt}.P06.02.down"]
+            self.assertEqual(up["apply"]["to"], f"matrix-{ext}-p06up.{ext}")
+            self.assertEqual(down["apply"]["to"], f"matrix-{ext}-p4b.{ext}")
+            up_sha, _ = playback.parsed_tokens(up["apply"]["sha1"], None)
+            down_sha, _ = playback.parsed_tokens(down["apply"]["sha1"], None)
+            self.assertEqual(up_sha, self.FIXTURES[f"matrix-{ext}-p06up.{ext}"]["sha1"])
+            self.assertEqual(down_sha, self.FIXTURES[f"matrix-{ext}-p4b.{ext}"]["sha1"])
+
+    def test_c02_is_a_url_change_not_a_fixed_url_byte_swap(self):
+        rows = self.rows_by_id()
+        for fmt, ext in (("MP4", "mp4"), ("MKV", "mkv")):
+            row = rows[f"{fmt}.C02.limited"]
+            self.assertEqual(row["apply_kind"], "manifest-url")
+            self.assertNotEqual(row["apply"]["url"], playback.MEDIA_PREFIX + f"baseline-{ext}-a.{ext}")
+            self.assertEqual(row["fp_url"], row["apply"]["url"])
+            self.assertEqual(row["watch_media"], row["apply"]["url"].rsplit("/", 1)[-1])
+
+    def test_f01_failure_manifest_keeps_the_prepared_recovery_identity(self):
+        rows = self.rows_by_id()
+        for fmt, ext in (("MP4", "mp4"), ("MKV", "mkv")):
+            apply = rows[f"{fmt}.F01"]["apply"]
+            self.assertEqual(apply["sha1"], self.FIXTURES[f"matrix-{ext}-p4b.{ext}"]["sha1"])
+            self.assertEqual(apply["size"], str(self.FIXTURES[f"matrix-{ext}-p4b.{ext}"]["size"]))
+
+    def test_matrix_rows_use_a_stable_strm_name_not_the_item_dictionary(self):
+        # write_matrix_strm keys the file path on the stable row name; the scanned item dictionary
+        # replaces row["item"] and must never end up in the STRM path.
+        rows = self.rows_by_id()
+        for row in rows.values():
+            self.assertIn("strm_name", row)
+            self.assertEqual(row["strm_name"], row["item"])
+
+class MatrixApplyTests(unittest.TestCase):
+    """apply_matrix_change must switch a fixed URL through a row-owned staging copy so the shared
+    partner files survive for the following rows, and reset_row_media must re-establish the A
+    baseline before each journey."""
+
+    class _FakeError(Exception):
+        pass
+
+    def _row(self, media="switch-x.mp4", partner="matrix-mp4-p4b.mp4"):
+        return {"id": "MP4.X.01", "fmt": "MP4", "strm_name": "Matrix MP4 X 01",
+                "item": "Matrix MP4 X 01", "media": media, "old": {"sha1": "a" * 40, "size": 1000},
+                "apply": {"to": partner, "sha1": "c" * 40, "size": 700}, "apply_kind": "switch",
+                "url": playback.MEDIA_PREFIX + media}
+
+    def test_switch_keeps_the_partner_file_in_place(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            original = playback.pe.WORK
+            playback.pe.WORK = Path(tmp)
+            try:
+                media = Path(tmp) / "media"
+                media.mkdir()
+                (media / "baseline-mp4-a.mp4").write_bytes(b"A-content")
+                (media / "matrix-mp4-p4b.mp4").write_bytes(b"B-content")
+                (media / "switch-x.mp4").write_bytes(b"A-content")
+                row = self._row()
+                record = playback.apply_matrix_change(row)
+                self.assertEqual((media / "switch-x.mp4").read_bytes(), b"B-content")
+                self.assertEqual((media / "matrix-mp4-p4b.mp4").read_bytes(), b"B-content")
+                self.assertEqual(record["switchSha256"], playback.hashlib.sha256(b"B-content").hexdigest())
+            finally:
+                playback.pe.WORK = original
+
+    def test_reset_row_media_restores_the_a_baseline_and_removes_the_404_target(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            original = playback.pe.WORK
+            playback.pe.WORK = Path(tmp)
+            try:
+                media = Path(tmp) / "media"
+                media.mkdir()
+                (media / "baseline-mp4-a.mp4").write_bytes(b"A-content")
+                (media / "matrix-mp4-p4b.mp4").write_bytes(b"B-content")
+                (media / "switch-x.mp4").write_bytes(b"B-content")
+                (media / "missing-f01-mp4.mp4").write_bytes(b"stale")
+                switch_row = self._row()
+                reset = playback.reset_row_media(switch_row)
+                self.assertEqual((media / "switch-x.mp4").read_bytes(), b"A-content")
+                f01_row = self._row(media="baseline-mp4-a.mp4")
+                f01_row["id"] = "MP4.F01"
+                f01_row["apply_kind"] = "f01"
+                f01_row["apply"] = {"url": playback.MEDIA_PREFIX + "missing-f01-mp4.mp4",
+                                    "sha1": "c" * 40, "size": 700,
+                                    "recovery_file": "matrix-mp4-p4b.mp4"}
+                reset = playback.reset_row_media(f01_row)
+                self.assertFalse((media / "missing-f01-mp4.mp4").exists())
+            finally:
+                playback.pe.WORK = original
+
+class ArgRouteTests(unittest.TestCase):
+    def test_the_plugin_configuration_uses_the_documented_route(self):
+        source = (ROOT / "scripts" / "run_isolated_playback_integration.py").read_text(encoding="utf-8")
+        self.assertIn('f"/Plugins/{pkg.PLUGIN_ID}/Configuration"', source)
+        self.assertNotIn("/Plugins/{pkg.PLUGIN_ID}/0.1.0.0/Configuration", source)
+
+class RawScanDiagnosticTests(unittest.TestCase):
+    def test_a_scan_failure_keeps_the_raw_query_attempts_and_log_tail(self):
+        original = playback.pe.request_json
+        original_lines = playback.server_log_lines
+        playback.pe.request_json = lambda *args, **kwargs: (200, {"TotalRecordCount": 0, "Items": []})
+        playback.server_log_lines = lambda: ["native log line 1", "native log line 2"]
+        original_max = playback.MAX_WAIT
+        playback.MAX_WAIT = 0
+        try:
+            with self.assertRaises(playback.BaselineError) as caught:
+                playback.raw_item_query("auth", "Matrix MP4 P02 01")
+        finally:
+            playback.pe.request_json = original
+            playback.server_log_lines = original_lines
+            playback.MAX_WAIT = original_max
+        message = str(caught.exception)
+        self.assertIn("raw query attempts", message)
+        self.assertIn("server log tail", message)
+        self.assertIn("native log line", message)
+
+    def test_a_found_item_returns_the_native_dictionary(self):
+        item = {"Id": "8" * 8 + "-1111-2222-3333-" + "a" * 12, "Name": "Matrix MP4 P02 01"}
+        original_request = playback.pe.request_json
+        original_item = playback.pkg.item_by_name
+        playback.pe.request_json = lambda *args, **kwargs: (200, {"TotalRecordCount": 1, "Items": [item]})
+        playback.pkg.item_by_name = lambda auth, name: item
+        try:
+            result = playback.raw_item_query("auth", "Matrix MP4 P02 01")
+        finally:
+            playback.pe.request_json = original_request
+            playback.pkg.item_by_name = original_item
+        self.assertEqual(result["status"], "FOUND")
+        self.assertEqual(result["item"], item)
 class ParsedTokenTests(unittest.TestCase):
     def test_a_valid_sha1_and_size_parse_to_the_stored_values(self):
         self.assertEqual(playback.parsed_tokens("A" * 40, "4096"), ("a" * 40, 4096))

@@ -492,6 +492,31 @@ def server_log_lines() -> list[str]:
     return lines
 
 
+def archive_evidence(evidence_dir: Path, name: str, content: str) -> str:
+    """Write one original run artifact next to the other evidence (never inside the workspace).
+
+    The evidence directory is run-independent: the workspace cleanup cannot remove it, so a first
+    failure stays available even when the instance is stopped afterwards. Paths are absolute.
+    """
+    target = evidence_dir / name
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(content, encoding="utf-8")
+    return str(target)
+
+
+def archive_media_logs() -> list[dict]:
+    """Return this run's original media-container request/range log lines with their counts."""
+    logs = run(*DOCKER, "logs", pe.container_name("media"), timeout=120)
+    lines = (logs.stdout + logs.stderr).splitlines()
+    counts: dict[str, int] = {}
+    for line in lines:
+        match = re.search(r"MEDIA_REQUEST (\w+) (\S+)", line)
+        if match:
+            key = f"{match.group(1)} {match.group(2)}"
+            counts[key] = counts.get(key, 0) + 1
+    return {"lineCount": len(lines), "requestCounts": counts, "lines": lines}
+
+
 def probe_count(url: str) -> int:
     """Count the pinned server's real ffprobe process starts for exactly this media URL.
 
@@ -563,8 +588,11 @@ def normalize_source_id(value: object) -> str | None:
         return text.lower()
 
 
-SOURCE_SNAPSHOT_FIELDS = ("Type", "Index", "Codec", "Width", "Height", "SampleRate", "Channels",
-                          "BitRate", "ColorRange", "IsDefault", "Language")
+# The complete native stream objects are kept in the snapshot (see native_source_snapshot); this
+# tuple remains only as the documented field of interest for the C-row ColorRange comparison.
+COLOR_FIELDS = ("Type", "Index", "Codec", "Width", "Height", "SampleRate", "Channels",
+                "BitRate", "ColorRange", "ColorSpace", "ColorTransfer", "ColorPrimaries",
+                "IsDefault", "Language", "Profile", "Level", "BitDepth", "RefFrames")
 # Only this run's own synthetic fixture locations are echoed into the evidence; every other path is
 # kept only as a hash so no private library path can leak into a log or an index file.
 SAFE_PATH_PREFIXES = ("http://media:", "/media/strm/", "/media/local/")
@@ -590,8 +618,10 @@ def native_source_snapshot(auth: str, item_id: str) -> dict:
     sources = []
     for source in payload.get("MediaSources") or []:
         path = str(source.get("Path") or "")
-        streams = [{"Type": stream.get("Type"), **({"fields": {key: stream.get(key)
-                                                                for key in SOURCE_SNAPSHOT_FIELDS}})}
+        # The complete native stream objects are kept verbatim (no field projection): a restart
+        # comparison must catch a change in any saved stream field, and the C-row three-stage
+        # evidence needs the full PrimaryStreamIdentity round trip, not an 11-field subset.
+        streams = [{"Type": stream.get("Type"), "fields": dict(stream)}
                    for stream in (source.get("MediaStreams") or [])]
         sources.append({
             "id": normalize_source_id(source.get("Id")),
@@ -635,6 +665,40 @@ def item_media_type(auth: str, item_id: str) -> dict:
             "Name": payload.get("Name")}
 
 
+def raw_item_query(auth: str, name: str) -> dict:
+    """Return the raw native item-search evidence without collapsing the failure into a timeout.
+
+    ``pkg.scan_and_wait`` wraps every ``item_by_name`` failure into the single text "did not scan",
+    so the query status, the item count and the native server log tail around the wait are lost
+    exactly when they are needed to locate the real index/path problem. This probe records them
+    and raises with the actual evidence attached.
+    """
+    started = time.monotonic()
+    attempts: list[dict] = []
+    deadline = started + MAX_WAIT
+    while time.monotonic() < deadline:
+        status, payload = pe.request_json(
+            "GET", "/Items?" + urllib.parse.urlencode(
+                {"Recursive": "true", "Limit": "200", "Fields": "MediaSources,Path", "searchTerm": name}),
+            headers={"Authorization": auth})
+        if status == 200:
+            total = payload.get("TotalRecordCount")
+            matches = [item.get("Id") for item in payload.get("Items", []) if item.get("Name") == name]
+            attempts.append({"status": status, "totalRecordCount": total, "matchingIds": matches})
+            if matches:
+                result = pkg.item_by_name(auth, name)
+                return {"status": "FOUND", "elapsedSeconds": round(time.monotonic() - started, 1),
+                        "attempts": attempts, "item": result}
+        else:
+            attempts.append({"status": status, "body": payload})
+        time.sleep(2)
+    log_tail = server_log_lines()[-80:]
+    raise BaselineError(
+        f"The package instance did not scan the item {name!r} within {MAX_WAIT}s; "
+        f"raw query attempts {json.dumps(attempts, ensure_ascii=False)}; "
+        f"server log tail {json.dumps(log_tail, ensure_ascii=False)}")
+
+
 def add_library(auth_header: str, name: str, collection_type: str, paths: list[str]) -> None:
     """Create a library through the same native endpoint the package environment uses."""
     body = {"LibraryOptions": {"EnableInternetProviders": False, "EnableRealtimeMonitor": False,
@@ -666,29 +730,79 @@ def ffprobe(path_in_container: str) -> dict:
     return json.loads(result.stdout)
 
 
+def fixture_ffmpeg_args(spec: dict[str, object], name: str) -> list[str]:
+    """The real encode arguments for one fixture, chosen for the actual ffprobe color_range output.
+
+    The measured behaviour of the pinned FFmpeg decides the plan, never the generation parameter:
+    a bare MP4 encode drops the h264 VUI range flags (ffprobe color_range None even with
+    ``-color_range tv``), so the limited input needs the full bt709 triple; an MKV muxer labels an
+    unmarked stream "tv" on its own, so an unspecified MKV must be remuxed from a VUI-less MP4
+    encode; "pc" carries through directly in both containers.
+    """
+    duration = int(spec.get("seconds", FIXTURE_SECONDS))
+    args = ["-y", "-f", "lavfi", "-i",
+            f"{spec['pattern']}=duration={duration}:size=320x180:rate=15",
+            "-f", "lavfi", "-i", f"sine=frequency={spec['tone']}:duration={duration}"]
+    filters = (f"drawtext=fontfile={FONT}:text='{spec['marker']}':fontsize=48:fontcolor=white:"
+               "x=(w-text_w)/2:y=(h-text_h)/2:box=1:boxcolor=black@0.5")
+    args += ["-vf", filters, "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p"]
+    if spec["color_range"] == "pc":
+        args += ["-color_range", "pc"]
+    elif spec["color_range"] == "tv":
+        args += ["-color_range", "tv", "-colorspace", "bt709", "-color_primaries", "bt709",
+                 "-color_trc", "bt709"]
+    args += ["-c:a", "aac", "-b:a", "96k", "-shortest", "-t", str(duration)]
+    if spec["container"] == "mp4":
+        # Put moov at the front so the real browser can start decoding without downloading the
+        # rest of the file before its first media request.
+        args += ["-movflags", "+faststart"]
+    args += ["/out/" + name]
+    return args
+
+
+def encode_fixture(spec: dict[str, object], name: str) -> list[list[str]]:
+    """Generate one fixture with the pinned FFmpeg, remuxing when the container cannot stay unmarked."""
+    if spec["container"] == "mkv" and spec["color_range"] is None:
+        # MKV muxing itself marks an unmarked h264 stream "tv"; only a remux from a VUI-less MP4
+        # encode keeps the color_range genuinely absent from the actual output.
+        intermediate = "__enc-" + name + ".mp4"
+        encode = dict(spec, container="mp4")
+        first = fixture_ffmpeg_args(encode, intermediate)
+        result = ffmpeg(first)
+        require(result.returncode == 0, f"Could not generate {intermediate}: {result.stderr.strip()[-300:]}")
+        remux = ["-y", "-i", "/out/" + intermediate, "-c", "copy", "/out/" + name]
+        result = ffmpeg(remux)
+        require(result.returncode == 0, f"Could not remux {name}: {result.stderr.strip()[-300:]}")
+        return [first, remux]
+    args = fixture_ffmpeg_args(spec, name)
+    result = ffmpeg(args)
+    require(result.returncode == 0, f"Could not generate {name}: {result.stderr.strip()[-300:]}")
+    return [args]
+
+
+def require_actual_color_range(name: str, spec: dict[str, object], streams: list[dict]) -> None:
+    """Refuse a fixture whose actual ffprobe color_range does not match the scenario it names.
+
+    The generation parameters prove nothing: an input generated with ``-color_range tv`` can
+    still probe as unspecified, and an MKV muxer can label an unmarked stream "tv". The real
+    output must carry tv/pc/nothing exactly as the C-row contract requires, or the fixture set is
+    wrong and the run stops before any playback is claimed.
+    """
+    videos = [stream for stream in streams if stream.get("codec_type") == "video"]
+    require(videos, f"{name}: no video stream was probeable; the ColorRange input is unusable.")
+    actual = videos[0].get("color_range")
+    expected = {"tv": "tv", "pc": "pc", None: None}[spec["color_range"]]
+    require(actual == expected,
+            f"{name}: the actual ffprobe video color_range is {actual!r}, not the required {expected!r}; "
+            f"the fixture does not match its scenario and no C-row may use it.")
+
+
 def generate_fixtures() -> dict:
     """Generate the baseline media with the pinned Jellyfin FFmpeg and record real identities."""
     pe.workspace()
     commands: dict[str, list[str]] = {}
     for name, spec in VIDEO_FIXTURES.items():
-        duration = int(spec.get("seconds", FIXTURE_SECONDS))
-        args = ["-y", "-f", "lavfi", "-i",
-                f"{spec['pattern']}=duration={duration}:size=320x180:rate=15",
-                "-f", "lavfi", "-i", f"sine=frequency={spec['tone']}:duration={duration}"]
-        filters = (f"drawtext=fontfile={FONT}:text='{spec['marker']}':fontsize=48:fontcolor=white:"
-                   "x=(w-text_w)/2:y=(h-text_h)/2:box=1:boxcolor=black@0.5")
-        args += ["-vf", filters, "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p"]
-        if spec["color_range"]:
-            args += ["-color_range", str(spec["color_range"])]
-        args += ["-c:a", "aac", "-b:a", "96k", "-shortest", "-t", str(duration)]
-        if spec["container"] == "mp4":
-            # Put moov at the front so the real browser can start decoding without downloading the
-            # rest of the file before its first media request.
-            args += ["-movflags", "+faststart"]
-        args += ["/out/" + name]
-        commands[name] = args
-        result = ffmpeg(args)
-        require(result.returncode == 0, f"Could not generate {name}: {result.stderr.strip()[-300:]}")
+        commands[name] = encode_fixture(spec, name)
     aliases: dict[str, str] = {}
     for source, alias in COPY_ALIASES.items():
         target = pe.WORK / "media" / alias
@@ -705,6 +819,9 @@ def generate_fixtures() -> dict:
                     ("index", "codec_type", "codec_name", "width", "height", "pix_fmt", "color_range",
                      "sample_rate", "channels", "duration", "disposition")}
                    for stream in info.get("streams", [])]
+        # The scenario a fixture names is only acceptable when the real output matches it; a
+        # mislabelled ColorRange input must stop the run before any C-row can claim evidence.
+        require_actual_color_range(name, VIDEO_FIXTURES[name], streams)
         fixtures[name] = {
             "sha1": hashlib.sha1(data).hexdigest(),
             "size": len(data),
@@ -1116,6 +1233,23 @@ def main() -> int:
         summary["error"] = f"{type(error).__name__}: {error}"
         exit_code = 1
     finally:
+        # The original Jellyfin and media-service logs are archived before any reconciliation or
+        # cleanup so the real ffprobe lines and the first failure stay independently countable even
+        # when a later teardown step itself fails. The archive lives under the evidence directory,
+        # which cleanup never removes.
+        archived: dict[str, object] = {}
+        try:
+            probe_lines = [line for line in server_log_lines() if FFPROBE_MARKER in line]
+            archived["serverProbeLog"] = archive_evidence(
+                evidence_dir, "server-ffprobe-lines.log", "\n".join(probe_lines) + "\n")
+            archived["serverProbeLineCount"] = len(probe_lines)
+        except (OSError, pe.PackageEnvironmentError, subprocess.SubprocessError) as archive_error:
+            archived["serverLogArchiveError"] = f"{type(archive_error).__name__}: {archive_error}"
+        try:
+            archived["mediaLogs"] = archive_media_logs()
+        except (OSError, pe.PackageEnvironmentError, subprocess.SubprocessError, RuntimeError) as archive_error:
+            archived["mediaLogArchiveError"] = f"{type(archive_error).__name__}: {archive_error}"
+        summary["evidenceArchive"] = archived
         summary["elapsedSeconds"] = round(time.time() - started, 1)
         if before_state is not None:
             try:
@@ -1228,6 +1362,9 @@ def render_index(summary: dict) -> str:
 
 MEDIA_PREFIX = "http://media:8080/"
 INT64_MAX = 9223372036854775807
+# Explicit "remove this manifest token in the rewrite" instruction; a token absent from the
+# apply dict means "keep the old-side value", so removal can never silently degrade to keep.
+DELETE = object()
 
 
 def matrix_row_ids() -> set[str]:
@@ -1321,22 +1458,7 @@ def generate_matrix_fixtures() -> dict:
     specs.update(matrix_extra_specs("MKV"))
     commands = dict(base["commands"])
     for name, spec in specs.items():
-        duration = int(spec["seconds"])
-        args = ["-y", "-f", "lavfi", "-i",
-                f"{spec['pattern']}=duration={duration}:size=320x180:rate=15",
-                "-f", "lavfi", "-i", f"sine=frequency={spec['tone']}:duration={duration}"]
-        filters = (f"drawtext=fontfile={FONT}:text='{spec['marker']}':fontsize=48:fontcolor=white:"
-                   "x=(w-text_w)/2:y=(h-text_h)/2:box=1:boxcolor=black@0.5")
-        args += ["-vf", filters, "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p"]
-        if spec["color_range"]:
-            args += ["-color_range", str(spec["color_range"])]
-        args += ["-c:a", "aac", "-b:a", "96k", "-shortest", "-t", str(duration)]
-        if spec["container"] == "mp4":
-            args += ["-movflags", "+faststart"]
-        args += ["/out/" + name]
-        commands[name] = args
-        result = ffmpeg(args)
-        require(result.returncode == 0, f"Could not generate {name}: {result.stderr.strip()[-300:]}")
+        commands[name] = encode_fixture(spec, name)
     derived: dict[str, dict] = {}
     for ext in ("mp4", "mkv"):
         a_bytes = (pe.WORK / "media" / f"baseline-{ext}-a.{ext}").read_bytes()
@@ -1364,6 +1486,9 @@ def generate_matrix_fixtures() -> dict:
                        for stream in info.get("streams", [])]
         except BaselineError:
             streams = []  # the truncated F02 partner is intentionally not probeable
+        if name in specs:
+            # Extra ColorRange inputs prove their actual output the same way the baseline set does.
+            require_actual_color_range(name, specs[name], streams)
         fixtures[name] = {"sha1": hashlib.sha1(data).hexdigest(), "size": len(data),
                           "sha256": hashlib.sha256(data).hexdigest(),
                           "ffprobe": {"streams": streams, "probeable": bool(streams)}}
@@ -1432,6 +1557,9 @@ def build_matrix_rows(fixture_table: dict) -> list[dict]:
                 fp_url: str | None = None, journey: str = "normal", trust: bool = True,
                 watch_media: str | None = None, item_name: str | None = None) -> None:
             item = item_name or (f"Matrix {fmt} {group} " + tail.replace(".", " ")).strip()
+            # The STRM file name is a stable row property: ``row["item"]`` is replaced by the native
+            # item dictionary once the row has been scanned, so it must never key the STRM path.
+            strm_name = item
             # Fixed-URL families (P04/P06/C/F02) keep the URL constant while the file bytes on it
             # change, so the manifest address is the switch file itself, not the baseline media.
             url = MEDIA_PREFIX + media if media.startswith("switch-") else base_url
@@ -1439,7 +1567,7 @@ def build_matrix_rows(fixture_table: dict) -> list[dict]:
             # watched file defaults to the row's own media file; static-path rows watch their
             # partner file explicitly.
             row = {"id": f"{fmt}.{group}" + (f".{tail}" if tail else ""), "fmt": fmt, "name": item,
-                   "item": item, "media_type": "video", "media": media, "url": url,
+                   "item": item, "strm_name": strm_name, "media_type": "video", "media": media, "url": url,
                    "old": {"sha1": old_sha, "size": old_size}, "apply": apply or {},
                    "apply_kind": apply_kind, "expect_probes": expect, "fp_kind": fp_kind,
                    "fp_tokens": fp_tokens, "fp_url": fp_url or url, "journey": journey,
@@ -1456,9 +1584,9 @@ def build_matrix_rows(fixture_table: dict) -> list[dict]:
         # --- P02: URL changed (old manifest tokens -> new manifest tokens / watch media) ----------
         p02 = [
             ("01", copy_url, va, na, va, na, f"switch-copy-{ext}.{ext}"),
-            ("02", MEDIA_PREFIX + f"media-p02b-{ext}.{ext}", va, na, vb, nb, f"baseline-{ext}-b.{ext}"),
+            ("02", MEDIA_PREFIX + f"media-p02b-{ext}.{ext}", va, na, vb, nb, f"media-p02b-{ext}.{ext}"),
             ("03", copy_url, None, na, None, na, f"switch-copy-{ext}.{ext}"),
-            ("04", MEDIA_PREFIX + f"media-p04b-{ext}.{ext}", None, na, None, n4, f"matrix-{ext}-p4b.{ext}"),
+            ("04", MEDIA_PREFIX + f"media-p04b-{ext}.{ext}", None, na, None, n4, f"media-p04b-{ext}.{ext}"),
             ("05", copy_url, None, None, None, None, f"switch-copy-{ext}.{ext}"),
             ("06", copy_url, va, na, None, na, f"switch-copy-{ext}.{ext}"),
             ("07", copy_url, None, na, va, na, f"switch-copy-{ext}.{ext}"),
@@ -1470,24 +1598,28 @@ def build_matrix_rows(fixture_table: dict) -> list[dict]:
                 expect=1, fp_kind="new", fp_tokens=(new_sha, new_size), fp_url=new_url, watch_media=watch)
 
         # --- P03: URL unchanged, same valid SHA-1 (Size/case/missing variants) --------------------
+        # None keeps the manifest token absent; the special value DELETE marks an existing token for
+        # removal so a manifest rewrite cannot silently keep the old value behind.
         for tail, new_sha, new_size in (("01", None, None), ("02", va, str(int(na) + 1)),
-                                        ("03", None, na), ("04", va, None), ("05", va, "-1")):
-            old_sha = va.upper() if tail == "03" else va
+                                        ("03", va.upper(), na), ("04", va, DELETE),
+                                        ("05", va, "-1")):
             apply = {k: v for k, v in (("sha1", new_sha), ("size", new_size)) if v is not None}
-            add("P03", tail, media=base_media, old_sha=old_sha, old_size=na, apply_kind="manifest",
+            add("P03", tail, media=base_media, old_sha=va, old_size=na, apply_kind="manifest",
                 apply=apply, expect=0, fp_kind="same")
 
         # --- P04: URL unchanged, different valid SHA-1, atomic A -> partner on the fixed URL ------
         for tail, new_sha, new_size, partner in (
                 ("01", vp, na, f"matrix-{ext}-b-padded.{ext}"),
                 ("02", v4, n4, f"matrix-{ext}-p4b.{ext}"),
-                ("03", v4, None, f"matrix-{ext}-p4b.{ext}")):
+                ("03", v4, DELETE, f"matrix-{ext}-p4b.{ext}")):
             add("P04", tail, media=f"switch-p04-{ext}.{ext}", old_sha=va, old_size=na, apply_kind="switch",
                 apply={"to": partner, "sha1": new_sha, "size": new_size}, expect=1, fp_kind="new",
                 fp_tokens=(new_sha, new_size), fp_url=MEDIA_PREFIX + f"switch-p04-{ext}.{ext}")
 
         # --- P05: URL unchanged, incomparable SHA-1, valid equal sizes ---------------------------
-        for tail, old_sha, new_sha in (("01", va, None), ("02", None, va), ("03", None, None),
+        # The direction is literal: 01 removes the old SHA-1, 02 writes the old-side value on the
+        # new side, 04/05 swap the valid old hash for the invalid L/X form. Sizes stay equal at N.
+        for tail, old_sha, new_sha in (("01", va, DELETE), ("02", None, va), ("03", None, None),
                                        ("04", va, l39), ("05", x40, va)):
             apply = {"size": na}
             if new_sha is not None:
@@ -1496,27 +1628,36 @@ def build_matrix_rows(fixture_table: dict) -> list[dict]:
                 apply=apply, expect=0, fp_kind="same")
 
         # --- P06: URL unchanged, incomparable SHA-1, valid different sizes ------------------------
-        p06 = [("01", "up", va, None), ("01", "down", va, None),
-               ("02", "up", None, vu), ("02", "down", None, vu),
-               ("03", "up", None, None), ("03", "down", None, None),
-               ("04", "up", va, l39), ("04", "down", va, l39),
-               ("05", "up", x40, vu), ("05", "down", x40, vu)]
-        for tail, direction, old_sha, new_sha in p06:
-            media = f"switch-p06{'up' if direction == 'up' else 'down'}-{ext}.{ext}"
-            new_size = nu if direction == "up" else n4
-            partner = f"matrix-{ext}-{'p06up' if direction == 'up' else 'p4b'}.{ext}"
-            add("P06", f"{tail}.{direction}", media=media, old_sha=old_sha, old_size=na, apply_kind="switch",
-                apply={"to": partner, "sha1": new_sha, "size": new_size}, expect=1, fp_kind="new",
-                fp_tokens=(new_sha, new_size), fp_url=MEDIA_PREFIX + media)
+        # old SHA-1 per P05 direction; the new valid hash always belongs to the bytes the row's
+        # own direction really serves (up serves p06up, down serves p4b), never the other file's.
+        p06 = {"01": (va, None, None), "02": (None, vu, v4), "03": (None, None, None),
+               "04": (va, l39, l39), "05": (x40, vu, v4)}
+        for tail, (old_sha, sha_up, sha_down) in p06.items():
+            for direction, new_sha in (("up", sha_up), ("down", sha_down)):
+                media = f"switch-p06{direction}-{ext}.{ext}"
+                new_size = nu if direction == "up" else n4
+                partner = f"matrix-{ext}-{'p06up' if direction == 'up' else 'p4b'}.{ext}"
+                add("P06", f"{tail}.{direction}", media=media, old_sha=old_sha, old_size=na,
+                    apply_kind="switch",
+                    apply={"to": partner, "sha1": new_sha, "size": new_size}, expect=1, fp_kind="new",
+                    fp_tokens=(new_sha, new_size), fp_url=MEDIA_PREFIX + media)
 
         # --- P07: URL unchanged, SHA-1 and Size both incomparable ---------------------------------
-        p07 = [("01", va, None, None, na), ("02", None, va, na, None),
-               ("03", None, None, na, na), ("04", va, l39, na, "-1"),
+        # Both sides are missing/invalid in the direction the contract fixes: 01 loses the old
+        # SHA-1 (V->none) with no old size and a valid new size; 02 has no old SHA-1, gains a new
+        # valid one and loses the old size; 03 has neither side and keeps neither size;
+        # 04 turns the old hash invalid and the old size into the negative text -1;
+        # 05 starts from the invalid hash/size pair and gains a valid hash and size;
+        # 06 has neither side and moves the old size to the Int64 overflow text.
+        p07 = [("01", va, DELETE, None, na), ("02", None, va, na, DELETE),
+               ("03", None, None, None, None), ("04", va, l39, na, "-1"),
                ("05", l39, va, "not-a-size", na), ("06", None, None, na, "9223372036854775808")]
         for tail, old_sha, new_sha, old_size, new_size in p07:
-            apply: dict = {"size": new_size}
+            apply: dict = {}
             if new_sha is not None:
                 apply["sha1"] = new_sha
+            if new_size is not None:
+                apply["size"] = new_size
             add("P07", tail, media=base_media, old_sha=old_sha, old_size=old_size, apply_kind="manifest",
                 apply=apply, expect=0, fp_kind="same")
 
@@ -1529,13 +1670,16 @@ def build_matrix_rows(fixture_table: dict) -> list[dict]:
             fp_kind="same")
 
         # --- C: ColorRange three-stage regression -------------------------------------------------
+        # C02 is a URL A→B change (new path to the real B bytes); C06 keeps the URL and switches
+        # the bytes to a genuinely shorter side with the new SHA-1 absent.
         for tail in ("limited", "full", "unspecified"):
             target = c02_targets[tail]
             t = fx(target)
-            add("C02", tail, media=f"switch-c02-{tail}-{ext}.{ext}", old_sha=va, old_size=na,
-                apply_kind="switch", apply={"to": target, "sha1": t["sha1"], "size": str(t["size"])},
-                expect=1, fp_kind="new", fp_tokens=(t["sha1"], str(t["size"])),
-                fp_url=MEDIA_PREFIX + f"switch-c02-{tail}-{ext}.{ext}")
+            c02_url = MEDIA_PREFIX + target
+            add("C02", tail, media=base_media, old_sha=va, old_size=na, apply_kind="manifest-url",
+                apply={"url": c02_url, "sha1": t["sha1"], "size": str(t["size"])},
+                expect=1, fp_kind="new", fp_tokens=(t["sha1"], str(t["size"])), fp_url=c02_url,
+                watch_media=target)
             short = fx(f"matrix-{ext}-short-{tail}.{ext}")
             add("C06", tail, media=f"switch-c06-{tail}-{ext}.{ext}", old_sha=va, old_size=na,
                 apply_kind="switch", apply={"to": f"matrix-{ext}-short-{tail}.{ext}", "sha1": None,
@@ -1544,7 +1688,7 @@ def build_matrix_rows(fixture_table: dict) -> list[dict]:
 
         # --- F: failure, old-baseline protection and same-target recovery -------------------------
         add("F01", "", media=base_media, old_sha=va, old_size=na, apply_kind="f01",
-            apply={"url": MEDIA_PREFIX + f"missing-f01-{ext}.{ext}", "sha1": None, "size": None,
+            apply={"url": MEDIA_PREFIX + f"missing-f01-{ext}.{ext}", "sha1": v4, "size": n4,
                    "recovery_file": f"matrix-{ext}-p4b.{ext}"},
             expect=1, fp_kind="new", fp_tokens=(v4, n4),
             fp_url=MEDIA_PREFIX + f"missing-f01-{ext}.{ext}", journey="f01", trust=True)
@@ -1573,6 +1717,45 @@ def build_matrix_rows(fixture_table: dict) -> list[dict]:
 
 def matrix_media_dir() -> Path:
     return pe.WORK / "media"
+
+
+def reset_row_media(row: dict) -> dict:
+    """Re-establish this row's own A bytes on its media files before the journey starts.
+
+    Switch rows share a fixed URL per family but must never inherit or consume a previous row's
+    partner bytes: the row's switch target is reset to a byte-identical copy of the row's A
+    fixture, and a failing row's recovery target gets a fresh copy of its recovery bytes. Rows
+    whose media is the shared fixture itself (never mutated) and the 404 target (never created
+    until its recovery stage) are left untouched. The partner files stay in place so later rows
+    still find their own sources.
+    """
+    ext = "mp4" if row["fmt"] == "MP4" else "mkv"
+    media = matrix_media_dir()
+    a_source = media / f"baseline-{ext}-a.{ext}"
+    reset: dict[str, object] = {}
+    row_media = row["media"]
+    if row_media.startswith("switch-"):
+        require("/" not in row_media, f"{row['id']}: unexpected nested media path {row_media!r}")
+        target = media / row_media
+        require(not target.is_symlink() and target.resolve().is_relative_to(media.resolve()),
+                f"{row['id']}: the switch target must stay inside this run's media directory.")
+        pe.copy_owned(a_source, target, label=f"row A baseline reset {row['id']}")
+        reset[row_media] = "reset to A content"
+    if row["apply_kind"] == "f01":
+        # The 404 target stays missing until its recovery stage; a previous row's recovery bytes
+        # (or a leftover from an earlier batch) must not leak into this row's failure window.
+        missing = matrix_media_dir() / row["apply"]["url"].rsplit("/", 1)[-1]
+        if missing.is_file():
+            require(not missing.is_symlink(), f"{row['id']}: the 404 target must not be a symbolic link.")
+            missing.unlink()
+            reset[missing.name] = "removed (404 target must stay missing)"
+    if row["apply_kind"] == "f01":
+        recovery = media / row["apply"]["recovery_file"].rsplit("/", 1)[-1]
+        if not recovery.is_file():
+            pe.copy_owned(media / f"matrix-{ext}-p4b.{ext}", recovery,
+                          label=f"recovery source restore {row['id']}")
+            reset[recovery.name] = "restored recovery source"
+    return reset
 
 
 def setup_matrix_media(rows: list[dict]) -> dict:
@@ -1639,7 +1822,7 @@ def write_matrix_strm(row: dict, tokens: dict | None = None, url: str | None = N
         if extra:
             lines.append(extra)
         lines.append(base_url)
-    target = pe.WORK / "strm" / (row["item"] + ".strm")
+    target = pe.WORK / "strm" / (row["strm_name"] + ".strm")
     pe.write_owned_bytes(target, ("\n".join(lines) + "\n").encode("utf-8"), label=f"STRM {row['id']}")
     return {"path": str(target), "url": base_url, "sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
             "lines": lines, "mediaExtension": media}
@@ -1658,7 +1841,15 @@ def apply_matrix_change(row: dict) -> dict:
         elif kind == "comment":
             tokens = dict(row["old"])
         else:
-            tokens = {"sha1": apply.get("sha1", row["old"]["sha1"]), "size": apply.get("size", row["old"]["size"])}
+            # A token named in the rewrite is written (DELETE removes it); a token absent from the
+            # rewrite keeps the old-side value, so a kept value is always an explicit decision.
+            tokens = {}
+            for field in ("sha1", "size"):
+                if field in apply:
+                    if apply[field] is not DELETE:
+                        tokens[field] = apply[field]
+                else:
+                    tokens[field] = row["old"][field]
         if kind in ("manifest-url", "d06"):
             record["strm"] = write_matrix_strm(row, tokens=tokens, url=apply["url"])
         elif kind == "comment":
@@ -1666,34 +1857,51 @@ def apply_matrix_change(row: dict) -> dict:
         else:
             record["strm"] = write_matrix_strm(row, tokens=tokens)
     elif kind == "mtime":
-        target = pe.WORK / "strm" / (row["item"] + ".strm")
+        target = pe.WORK / "strm" / (row["strm_name"] + ".strm")
         stamp = time.time() + 3600
         os.utime(target, (stamp, stamp))
         record["newMtime"] = stamp
     elif kind == "rewrite":
-        current = (pe.WORK / "strm" / (row["item"] + ".strm")).read_bytes()
+        current = (pe.WORK / "strm" / (row["strm_name"] + ".strm")).read_bytes()
         staging = pe.WORK / "strm" / ("." + row["item"] + ".rewritten.strm")
         pe.write_owned_bytes(staging, current, label=f"rewritten STRM bytes {row['id']}")
-        os.replace(staging, pe.WORK / "strm" / (row["item"] + ".strm"))
+        os.replace(staging, pe.WORK / "strm" / (row["strm_name"] + ".strm"))
         record["contentSha256Unchanged"] = True
         return record
     elif kind == "switch":
         source = media / apply["to"]
         destination = media / row["media"]
         require(source.is_file(), f"The switch source {source.name} for {row['id']} does not exist.")
-        os.replace(source, destination)  # atomic: the fixed URL serves new bytes only after this
+        # Shared partners must survive for the following rows in the same batch, so the fixed URL
+        # is moved to the partner bytes through a row-owned staging copy; the partner file itself
+        # is never consumed. The destination file exists (created by setup_matrix_media) and stays
+        # owned by this run, so an atomic replace on it never recreates a run path.
+        require(destination.is_file(), f"The switch destination {destination.name} for {row['id']} is missing.")
+        staging = media / (".staging-" + uuid.uuid4().hex[:12] + "-" + destination.name)
+        pe.copy_owned(source, staging, label=f"staging switch copy for {row['id']}")
+        os.replace(staging, destination)  # atomic: the fixed URL serves new bytes only after this
         record["switchedFrom"] = row["media"]
         record["switchedTo"] = apply["to"]
         record["switchSha256"] = hashlib.sha256(destination.read_bytes()).hexdigest()
-        tokens = {"sha1": apply.get("sha1", row["old"]["sha1"]), "size": apply.get("size", row["old"]["size"])}
+        tokens = {}
+        for field in ("sha1", "size"):
+            value = apply.get(field, row["old"][field])
+            if value is not DELETE:
+                tokens[field] = value
         record["strm"] = write_matrix_strm(row, tokens=tokens)
     elif kind == "f01":
-        record["strm"] = write_matrix_strm(row, tokens={"sha1": None, "size": None}, url=apply["url"])
+        # The failing window's manifest documents the real prepared B identity behind the missing
+        # URL; it must not wipe the identity fields.
+        record["strm"] = write_matrix_strm(row, tokens={"sha1": apply.get("sha1"), "size": apply.get("size")},
+                                           url=apply["url"])
         record["missingUrl"] = apply["url"]
     elif kind == "f02":
         source = media / apply["corrupt_to"]
         destination = media / row["media"]
-        os.replace(source, destination)
+        require(destination.is_file(), f"The corrupt destination {destination.name} for {row['id']} is missing.")
+        staging = media / (".staging-" + uuid.uuid4().hex[:12] + "-" + destination.name)
+        pe.copy_owned(source, staging, label=f"staging corrupt copy for {row['id']}")
+        os.replace(staging, destination)
         record["switchedTo"] = apply["corrupt_to"]
         record["switchSha256"] = hashlib.sha256(destination.read_bytes()).hexdigest()
         record["strm"] = write_matrix_strm(row, tokens={"sha1": apply["corrupt_sha1"],
@@ -1723,7 +1931,10 @@ def recovery_stage(row: dict) -> dict:
     else:  # f02: the fixed URL already holds the corrupted bytes; replace them atomically.
         source = media / apply["recovery_file"]
         destination = media / row["media"]
-        os.replace(source, destination)
+        require(destination.is_file(), f"The recovery destination {destination.name} for {row['id']} is missing.")
+        staging = media / (".staging-" + uuid.uuid4().hex[:12] + "-" + destination.name)
+        pe.copy_owned(source, staging, label=f"staging recovery copy for {row['id']}")
+        os.replace(staging, destination)
         target = destination
         record["target"] = destination.name
         record["strm"] = write_matrix_strm(row, tokens={"sha1": row["fp_tokens"][0],
@@ -1733,7 +1944,9 @@ def recovery_stage(row: dict) -> dict:
 
 
 def plugin_configuration(auth: str) -> dict:
-    status, body = pe.request_json("GET", f"/Plugins/{pkg.PLUGIN_ID}/0.1.0.0/Configuration",
+    # The existing verified entry (package/scan/configuration tooling) addresses the plugin
+    # configuration without a version segment; a guessed /0.1.0.0/ route is not part of that contract.
+    status, body = pe.request_json("GET", f"/Plugins/{pkg.PLUGIN_ID}/Configuration",
                                   headers={"Authorization": auth})
     require(status == 200, "The plugin configuration read failed.")
     return body
@@ -1742,7 +1955,7 @@ def plugin_configuration(auth: str) -> dict:
 def set_plugin_configuration(auth: str, changes: dict) -> int:
     body = plugin_configuration(auth)
     body.update(changes)
-    status, _ = pe.request_json("POST", f"/Plugins/{pkg.PLUGIN_ID}/0.1.0.0/Configuration", body=body,
+    status, _ = pe.request_json("POST", f"/Plugins/{pkg.PLUGIN_ID}/Configuration", body=body,
                                 headers={"Authorization": auth})
     return status
 
@@ -1756,11 +1969,11 @@ def native_static_stream_read(auth: str, item_id: str, head_bytes: int = 256 * 1
         with pe.urllib.request.urlopen(request, timeout=120) as response:
             head = response.read(head_bytes)
             status = response.status
-            content_type = response.headers.get("Content-Type")
+            contentType = response.headers.get("Content-Type")
     except pe.urllib.error.HTTPError as error:
         head = error.read(head_bytes)
         status = error.code
-        content_type = error.headers.get("Content-Type") if error.headers else None
+        contentType = error.headers.get("Content-Type") if error.headers else None
     return {"status": status, "contentType": contentType, "headSha256": hashlib.sha256(head).hexdigest(),
             "headLength": len(head)}
 
@@ -1782,7 +1995,11 @@ def p01_stream_surgery(rows: list[dict], drop_spec: dict, evidence_dir: Path, st
     backup_dir = evidence_dir / "db-backups"
     backup_dir.mkdir(parents=True, exist_ok=True)
     backup = backup_dir / f"p01-{stage}-{uuid.uuid4().hex[:8]}.sqlite3"
-    pe.copy_owned(database, backup, label="P01 database backup")
+    # The evidence directory sits outside the owned workspace (so cleanup keeps it); the backup is
+    # therefore written with plain file IO under the same non-symlink guarantees, not through the
+    # workspace-scoped pe.copy_owned guard, which must keep refusing foreign destinations.
+    require(not backup.is_symlink(), "The P01 backup path must not be a symbolic link.")
+    shutil.copy2(database, backup)
     record["backup"] = str(backup)
     side_files = {name: (database.parent / name).is_file()
                   for name in ("db.sqlite3-wal", "db.sqlite3-shm")}
@@ -2230,7 +2447,11 @@ def prepare_matrix_rows(auth: str, rows: list[dict], evidence_dir: Path) -> dict
     """
     summary: dict[str, object] = {}
     for row in rows:
-        row["item"] = pkg.scan_and_wait(auth, row["item"], MAX_WAIT)
+        item = raw_item_query(auth, row["item"])
+        summary[row["id"] + ".scan"] = {"status": item["status"],
+                                        "elapsedSeconds": item["elapsedSeconds"],
+                                        "attempts": item["attempts"]}
+        row["item"] = item["item"]
         info = item_media_type(auth, row["item"]["Id"])
         entity_failures = entity_class_failures(info, row["media_type"])
         require(not entity_failures, f"{row['id']}: " + "; ".join(entity_failures))
@@ -2317,7 +2538,15 @@ def scenario_matrix(package: Path, evidence_dir: Path, selected: list[str],
                 "d05": journey_d05, "d06": journey_d06}
     for row in rows:
         try:
-            results[row["id"]] = dispatch[row["journey"]](auth, row, evidence_dir)
+            # The switch URL belongs to this row: a shared partner file must survive the previous
+            # row in the batch, so every fixed-URL row re-establishes its own A baseline bytes
+            # before its journey starts and the window switches them to the partner through a
+            # row-owned staging copy.
+            reset = reset_row_media(row)
+            results[row["id"]] = {"mediaReset": reset}
+            journey_result = dispatch[row["journey"]](auth, row, evidence_dir)
+            journey_result["mediaReset"] = reset
+            results[row["id"]] = journey_result
             auth = pkg.api_auth()
         except (BaselineError, RuntimeError, OSError, subprocess.SubprocessError) as error:
             results[row["id"]] = {"status": "FAIL", "error": f"{type(error).__name__}: {error}"}
