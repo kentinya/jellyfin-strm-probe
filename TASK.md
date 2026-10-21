@@ -1,3 +1,7 @@
+# NO ACTIVE IMPLEMENTATION TASK
+
+Task 5.1 已经 B 审查 PASS；以下保留完整合同、报告与决定，下一步由 B 在当前 Slice 内规划 Task 5.2。本检查点无活动实施 Task。
+
 # Task 5.1 — 干净检出的 Python 3.11 质量回归与 CI 修复
 
 受已提交的 [Slice 5](SLICE.md) 约束，以 [开发流程](docs/development-workflow.md) 为准。实施前阅读 [Developer 经验](docs/agent-experience/developer-implementation-role.md)。
@@ -5,7 +9,7 @@
 ```text
 Task ID: 5.1
 Parent Slice: 5
-Status: FIX REQUIRED
+Status: PASS
 Task Base: 2111e20488ba5afbf46cfe8af8782cf4a63379fb
 Contract Checkpoint: 2111e20488ba5afbf46cfe8af8782cf4a63379fb
 Difficulty: Medium
@@ -36,7 +40,7 @@ Planner / Reviewer: B
 - [x] 干净候选完整 Python discovery 无 error／failure，记录发现数、执行数及所有 skip 原因；两个现有发布归档缺失 skip 单列、不计 PASS，不新增 skip 掩盖失败。（B 独立新跑：264 项、262 通过、2 个既有发布归档缺失 skip，无失败／错误；skip 不计 PASS。）
 - [x] 全 scripts／tests Python 语法、治理、差异检查通过；完整 C# 门槛由 B 承担或核验匹配证据，不交回 Developer。（B 已完成 Python 静态检查及 C# locked restore／Release build／202 项测试／format；首次 format 预算中止与补跑通过分别保留。）
 - [x] 不需要启动 Jellyfin／容器／数据库、拉镜像或读取本地凭据，原生锁及隔离保护仍有效。（B 全量含 Compose CLI config 解析，无需 Docker 服务／容器／镜像拉取／凭据；Developer 关于未运行 CLI 子检查的说法见下方纠正。）
-- [ ] 匹配候选远端 Repository quality 必要步骤全部成功；未获发布授权或没有远端结果时记 BLOCKED／NOT RUN，不能签 Task PASS。（BLOCKED / NOT RUN：本轮未推送、未触发 workflow。）
+- [x] 匹配候选远端 Repository quality 必要步骤全部成功。（用户授权后已普通推送 `0d7162c`；run `39521097113`／job `118964842819` 全步骤 success，CPython 3.11.17，264 项含 2 个既有 skip，详见 B 补审。）
 - [x] Developer 提交真实实现 SHA、聚焦证据及省略项；B 审查完整 Task Base..Head，不修改 Slice 合同或插件成功判定。（B 已审查完整 Base..`2291ee2` 与报告后继 `a23037c`。）
 
 ## 必要测试
@@ -76,7 +80,7 @@ bash scripts/dotnet-local format Jellyfin.Plugin.StrmProbeOptimizer.sln --verify
 
 C# 使用 SDK 10.0.401；B 可在固定候选主检出执行四项或核验匹配的完整原始证据，不能改为 Developer 必跑。完整 Python 已含聚焦模块，通过后不机械重跑。现有 `test_real_compose_config_is_isolated` 只调用 Docker Compose CLI 的 config 解析，不启动服务；记录 CLI 版本，不为测试拉镜像或启动服务。实际发现其他运行服务依赖时保留失败，在同 Task 修复隔离，不跳过模块。
 
-远端步骤前先完成可审阅候选、本地门槛及索引。当前未授权新推送，本计划不自动 push、触发 workflow 或改远端；到该步骤再呈交准确候选和动作。授权后核验 push／PR 原生触发的 Repository quality 的 head SHA、工作流、Python 版本和每步日志，不能借其他提交绿灯。远端欠项留在本 Task，不另造补 CI Task。
+远端步骤前先完成可审阅候选、本地门槛及索引。初次规划未授权新推送；2026-10-21 用户明确授权普通推送已审查的 `0d7162c` 到现有 origin 并核验原生触发的 workflow，该动作已执行。本计划不自动发布后续候选。授权后核验 push／PR 原生触发的 Repository quality 的 head SHA、工作流、Python 版本和每步日志，不能借其他提交绿灯。远端欠项留在本 Task，不另造补 CI Task。
 
 ### B 独立验证
 
@@ -110,13 +114,13 @@ C# 使用 SDK 10.0.401；B 可在固定候选主检出执行四项或核验匹�
 
 ```text
 Reviewed: 2111e20488ba5afbf46cfe8af8782cf4a63379fb..2291ee21a989cc5c905fc945bd8936aaa23a2673
-Report Checkpoint Reviewed: a23037cba585d14fde77d4a6dd5623ff81b25382
-Decision: FIX REQUIRED
+Report Checkpoint Reviewed: 0d7162c56c3a2ea9a4fa7ffbdfc0e5c9e49bf482
+Decision: PASS
 Slice Required Outcomes all satisfied: NO
-Next: COMPLETE THE REMOTE REPOSITORY QUALITY GATE IN TASK 5.1 AFTER EXPLICIT PUBLICATION AUTHORIZATION
+Next: B PLANS TASK 5.2 FOR THE REMAINING SLICE OUTCOMES
 ```
 
-B 于 2026-10-21 独立审查完整 Task Base..实现候选及其报告后继；三个测试修复未发现需改代码的阻塞，插件、工具、依赖、工作流与成功判定未改。**当前阻塞 B5.1-1：缺少匹配候选的远端 Repository quality 成功结果（BLOCKED / NOT RUN）**。GitHub 只读查询实现 SHA 返回 422／No commit found，未推送或触发远端运行；本地通过不能代替 AC-5。保留同一 Task ID／Base／Goal／Scope，未获授权不推送、不开始下一 Task。
+B 于 2026-10-21 独立审查完整 Task Base..实现候选及其报告后继；三个测试修复未发现需改代码的阻塞，插件、工具、依赖、工作流与成功判定未改。**首轮阻塞 B5.1-1（现已闭合）：当时缺少匹配候选的远端 Repository quality 成功结果（BLOCKED / NOT RUN）**。GitHub 只读查询实现 SHA 返回 422／No commit found，未推送或触发远端运行；本地通过不能代替 AC-5。保留同一 Task ID／Base／Goal／Scope，首次决定未获授权时未推送、未开始下一 Task；后续授权与闭合结果如下。
 
 - B 新跑：独立干净 Base 通过既有 unittest 入口复现 F1／F2／F3 原失败；独立干净候选 Python 3.11.10 完整 discovery 共 264 项，262 通过、2 个既有发布归档缺失 skip（不计 PASS），无失败／错误；完整套件包含全部聚焦用例及真实 Compose CLI config，无需重复跑聚焦模块。compileall、治理、差异和提交空白检查通过。
 - B 承担 C# 完整门禁：SDK 10.0.401 locked restore／Release build／202 项 C# 测试通过；format 首次因本轮测试预算中止（19.08 秒、EXIT=124），保留首次记录；相同命令补跑 27.30 秒、EXIT=0。未将全量交回 Developer。
@@ -124,4 +128,16 @@ B 于 2026-10-21 独立审查完整 Task Base..实现候选及其报告后继；
 - B 证据：`.git/validation-evidence/2291ee21a989cc5c905fc945bd8936aaa23a2673/b-review-20261021T0015Z/INDEX.md`，包含准确命令、退出码、耗时、首败、跳过、输入摘要、远端只读结果和收尾；只在本机可读，不上传原始资料。
 - 时间：截至 00:20:26Z，本轮实际 307.13 秒、保守累计测试 88.15 秒（含 Base 失败、首次 format 中止、补跑及静态门槛），占 28.70%，低于 50%；无空等补时。两个本轮自建 worktree 已核验后移除，日志持续保留。
 - 后续只补本 Task 的远端欠项：授权后普通推送可审阅 main 检查点到现有 origin，核验原生 push 触发的同 head workflow／Python／逐步骤日志。纯报告后继比较可执行输入并重跑治理后复用匹配全量，不机械重跑 Final。若远端失败，修正仍留在 Task 5.1。
-- 全部 RO 尚未满足：RO-1～RO-3 真实播放矩阵／ColorRange 仍 NOT RUN，RO-4 尚缺远端门槛；不生成 Closure Packet，不返回 SLICE READY FOR A REVIEW，不自行关闭 Slice。本 Task 不操作现存 Jellyfin 或全部 1004 项准备库。
+- 首轮重判：当时 RO-1～RO-3 真实播放矩阵／ColorRange 均 NOT RUN，RO-4 尚缺远端门槛；未生成 Closure Packet、未返回 SLICE READY FOR A REVIEW、未自行关闭 Slice。本 Task 不操作现存 Jellyfin 或全部 1004 项准备库。
+
+
+### B 授权后补审与最终决定（2026-10-21）
+
+用户回复“给予授权”后，B 将准确候选 `0d7162c56c3a2ea9a4fa7ffbdfc0e5c9e49bf482` 普通快进发布到现有 GitHub `main`，从原远端 `323a3f3` 前进，无强推或历史改写。HTTPS 因本机无凭据失败；已有 SSH 认证只读核验成功后，直接向同一仓库 SSH URL 普通推送成功，保留失败日志，origin 配置不变。没有用 API 重建提交或替换其 SHA。
+
+- 远端：[Repository quality run 39521097113](https://github.com/kentinya/jellyfin-strm-probe/actions/runs/39521097113)；head 为上述完整发布 SHA，event=`push`，workflow=`.github/workflows/quality.yml`，run／唯一 governance job `118964842819`／全部必要与收尾步骤均 `completed / success`，无重跑。checkout 原始日志确认同一 SHA；setup-python 为 CPython 3.11.17，完整 discovery 264 项，262 通过、2 个既有发布归档缺失 skip，无失败／错误；治理、语法、提交空白检查全部成功。三处原失败对应函数及新增锁拒绝均有逐项 `ok`，不借用旧提交绿灯。
+- 输入复用：`2291ee2..0d7162c` 仅 TASK.md 改变；再次核验原 B 输入清单的 69 个非 Markdown 跟踪文件摘要均匹配。采用首轮 B 的独立 Base 复现、干净 Python 3.11.10 全量／compileall、C# 四项门禁及原始日志；新增远端 3.11.17 完整结果闭合补丁版本差异。没有机械重跑本地全量、Final 或现存实例。
+- 原始补审索引：`.git/validation-evidence/2291ee21a989cc5c905fc945bd8936aaa23a2673/b-remote-20261021T0022Z/INDEX.md`。含准确推送命令／退出码、run／job／逐步骤原始日志、源码／tree、摘要、测试与等待时间。原始资料留本机，不随源码上传。
+- **Task 5.1：PASS；B5.1-1 CLOSED；无当前 Task 阻塞。** ID、Task Base、Goal、Scope、Slice 合同均保持。
+- 全部 RO 重判：RO-4／本 Task AC-5 已满足；RO-1 隔离自备输入及 ZIP 环境、RO-2 八类真实播放矩阵、RO-3 ColorRange／失败恢复仍未完成。下一步规划一个完整的自备隔离安装与视频／音频原生 Web 基线行为，确认输入可达与证据能力后再固定完整矩阵，不虚构尚不存在的命令或音频支持。
+- Slice 5 仍 ACTIVE，不具备 Closure Packet／SLICE READY FOR A REVIEW 条件，B 不关闭。后续规划只改本地文档，不包含产品实施或再次发布授权。
