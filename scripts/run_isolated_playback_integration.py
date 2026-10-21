@@ -686,7 +686,14 @@ def raw_item_query(auth: str, name: str) -> dict:
             matches = [item.get("Id") for item in payload.get("Items", []) if item.get("Name") == name]
             attempts.append({"status": status, "totalRecordCount": total, "matchingIds": matches})
             if matches:
-                result = pkg.item_by_name(auth, name)
+                # A native item query can transiently return zero while the library scan settles;
+                # the found path is therefore re-read through the exact single-match lookup and a
+                # transient duplicate/zero answer keeps polling instead of aborting the row.
+                try:
+                    result = pkg.item_by_name(auth, name)
+                except RuntimeError:
+                    time.sleep(1)
+                    continue
                 return {"status": "FOUND", "elapsedSeconds": round(time.monotonic() - started, 1),
                         "attempts": attempts, "item": result}
         else:
