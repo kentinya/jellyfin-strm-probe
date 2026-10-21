@@ -677,6 +677,7 @@ def raw_item_query(auth: str, name: str) -> dict:
     attempts: list[dict] = []
     deadline = started + MAX_WAIT
     while time.monotonic() < deadline:
+        stamp = round(time.monotonic() - started, 1)
         status, payload = pe.request_json(
             "GET", "/Items?" + urllib.parse.urlencode(
                 {"Recursive": "true", "Limit": "200", "Fields": "MediaSources,Path", "searchTerm": name}),
@@ -684,22 +685,36 @@ def raw_item_query(auth: str, name: str) -> dict:
         if status == 200:
             total = payload.get("TotalRecordCount")
             matches = [item for item in payload.get("Items", []) if item.get("Name") == name]
-            attempts.append({"status": status, "totalRecordCount": total,
-                             "matchingIds": [item.get("Id") for item in matches]})
+            attempt: dict = {"at": stamp, "status": status, "totalRecordCount": total,
+                             "matchingIds": [item.get("Id") for item in matches]}
             # Resolve the item directly from this raw response: the previous indirect lookup ran a
             # second query that swallowed its own errors, so a persistently found item could never
-            # be resolved and the real reason stayed invisible. More than one match is a real
-            # duplicate and fails with the full evidence instead of polling forever.
+            # be resolved and the real reason stayed visible only as a timeout. More than one match
+            # is a real duplicate and fails with the full evidence instead of polling forever.
             if len(matches) == 1:
+                attempts.append(attempt)
                 return {"status": "FOUND", "elapsedSeconds": round(time.monotonic() - started, 1),
                         "attempts": attempts, "item": matches[0]}
             if len(matches) > 1:
+                attempts.append(attempt)
                 raise BaselineError(
                     f"The native query returned {len(matches)} items named {name!r} "
                     f"(ids {[item.get('Id') for item in matches]}); refusing to guess the row's item. "
                     f"Raw query attempts {json.dumps(attempts, ensure_ascii=False)}")
+            # A zero-match answer is not trustworthy on its own: record what the library really
+            # contains (the same full listing the accepted lookup uses) so a search-index gap is
+            # distinguishable from a scan that never created the item.
+            list_status, listing = pe.request_json(
+                "GET", "/Items?" + urllib.parse.urlencode(
+                    {"Recursive": "true", "Limit": "200", "Fields": "MediaSources,Path"}),
+                headers={"Authorization": auth})
+            attempt["listingStatus"] = list_status
+            attempt["listedItems"] = [
+                {"id": item.get("Id"), "name": item.get("Name"), "type": item.get("Type")}
+                for item in (listing.get("Items", []) if list_status == 200 else [])][:20]
+            attempts.append(attempt)
         else:
-            attempts.append({"status": status, "body": payload})
+            attempts.append({"at": stamp, "status": status, "body": payload})
         time.sleep(2)
     log_tail = server_log_lines()[-80:]
     raise BaselineError(
