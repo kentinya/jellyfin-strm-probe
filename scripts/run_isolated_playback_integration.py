@@ -881,7 +881,10 @@ def play_once(auth: str, row: dict, phase: str, evidence_dir: Path, relax_consol
     phase_dir.mkdir(parents=True, exist_ok=True)
     item = row["item"]
     url = row["url"]
-    filename = row.get("watch_media") or row.get("file") or row.get("media")
+    # The media-request counter must watch the file the phase's own URL serves: a URL-change row
+    # reads its old file during trust and its new file after the manifest switched, so the phase
+    # URL (query stripped) is the only correct per-phase key.
+    filename = urllib.parse.urlsplit(url).path.rsplit("/", 1)[-1]
     before_probes = probe_count(url)
     before_events = plugin_event_lines()
     before_media = media_server_requests()
