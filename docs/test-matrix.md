@@ -6,6 +6,8 @@
 
 ## 新增真实播放验证计划
 
+2026-10-21 用户明确撤出音频 STRM 专属验收，当前视频执行范围见 [范围说明](scope.md#2026-10-21-用户明确排除音频-strm)。历史音频 FAIL／BLOCKED／NOT RUN 与通用单元用例保留，不转为 PASS；视频 P01～P08、ColorRange、失败恢复及完整门禁保持。
+
 用户要求在下一 Slice 逐项执行八类播放决策，自备媒体／STRM、部署固定 Jellyfin 并安装插件，同时修复 GitHub Actions 失败。新增 P01～P08、ColorRange 返回主流误判、失败恢复／重启及 CI-F1～CI-F3 的完整输入和证据要求统一见 [Slice 5 执行设计](slice-5-playback-test-plan.md)，状态与放行条件见 [当前合同](../SLICE.md)。合同激活不代表实施或验收通过，新增真实用例与修复后 CI 均 NOT RUN；下方既往 PASS／NOT RUN 不升级为新增矩阵结果。
 
 ## 核心播放与指纹

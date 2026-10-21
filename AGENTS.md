@@ -22,6 +22,8 @@
 
 2026-10-20 用户明确授权不验证 JellyfinProxy，作为 Material Contract Change 撤出 Slice 4 的 RO-4／AC-7 和代理专属构建、缓存、302、代理客户端读取验收；记录为按用户授权不执行、历史 NOT RUN，不计 PASS、不承诺代理兼容。RO-1～RO-3、非代理完整回归、最终安装包／扫描／现存全部 1004 项大库、原生播放／选源／恢复／重启义务不变。Slice／Task Base、Task 4.1～4.3 的 B PASS 和旧 4.4 计划均保留；合同修订、B 重判及最终审查的已完成记录见 [Slice 最终证据](docs/progress.md#slice-4-closed) 与 [A 最终决定](docs/progress.md#slice-4-closed)，不再作为待执行计划。
 
+2026-10-21 用户明确音频不在考虑范围内，后续不采用 STRM 形式，并授权 A 调整合同。当前及后续开发不纳入音频 STRM 专属播放、缺 Audio 主流、变化矩阵及专属库／夹具验收；历史 FAIL／BLOCKED／NOT RUN 保留，不计 PASS、不承诺音频 STRM 支持。视频 STRM 及其音轨、MP4／MKV 八类决策、缺 Video 主流、ColorRange、失败恢复、重启及 B 完整门禁保持；不因撤出验收删除插件通用规则或既有单元测试。Slice／Task ID、Base、已提交实现与审查历史不变，具体合同与执行入口见 SLICE.md／TASK.md。
+
 ## 文档职责
 
 1. 本文件维护长期业务、架构和范围约束。

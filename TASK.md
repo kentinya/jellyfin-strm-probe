@@ -217,10 +217,14 @@ Range: 4c75761982bc16dd1c6bae09bee1c3561da2c178..38c1184c488baf1e6bd1c3b2ff4b126
 Reviewed: 4c75761982bc16dd1c6bae09bee1c3561da2c178..e8fa3f8ca87e2fb92b6453fe2a0301656581ea00
 Decision: FIX REQUIRED
 Slice Required Outcomes all satisfied: NO
-Next: A RECORDS USER-DIRECTED AUDIO STRM EXCLUSION; B REASSESSES SAME TASK AND RETAINS VIDEO FINAL GATES
+Next: B REASSESSES SAME TASK AFTER THE COMMITTED A CONTRACT CHANGE; VIDEO FINAL GATES REMAIN
 ```
 
-### 用户明确范围决定后的 B 交接（2026-10-21）
+### A 合同修订交接（2026-10-21）
+
+用户本轮授予 A 权限，A 在本检查点正式提交音频 STRM 撤出合同及同步文档，保留 Slice 5／Task 5.2 的 ID、Base、实现与历史审查。音频 B03 不再是必须补齐的结果，历史 FAIL／BLOCKED 保留，不计 PASS。原三行 Task 计划待 B 在此提交之后重核并调整为 B01／B02；Contract Checkpoint 由 B 填写已存在的真实合同 SHA，本次不自填自身 SHA。Task 保持 FIX REQUIRED、Slice 保持 ACTIVE，未执行产品／全量验收或关闭。
+
+### 用户明确范围决定后的 B 交接（历史，A 已在本检查点提交合同）
 
 用户已决定排除音频 STRM，**无需再调查其可行性，也无需再次询问是否撤出**。此决定改变 Slice RO-2／Required Surfaces／AC-2、AC-3 及 Task B03 的必要义务，按开发流程由 A 提交实质合同变更，再由 B 重核同一 Task。现保留 FIX REQUIRED 表示尚未完成正式合同同步及 B 最终门槛，不再以音频缺少成功播放作为后续修正要求。
 
