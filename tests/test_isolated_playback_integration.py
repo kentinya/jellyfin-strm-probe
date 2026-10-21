@@ -360,18 +360,17 @@ class NativeSourceSnapshotTests(unittest.TestCase):
         self.assertEqual(snapshot["sources"][0]["pathHash"],
                          playback.hashlib.sha256(b"/media/private/user/library/movie.mp4").hexdigest())
 class ScenarioDefinitionTests(unittest.TestCase):
-    def test_baseline_rows_cover_mp4_mkv_and_real_audio(self):
+    def test_baseline_rows_cover_only_video_strm_formats(self):
         rows = {row["id"]: row for row in playback.ROWS}
-        self.assertEqual(sorted(rows), ["B01", "B02", "B03"])
+        self.assertEqual(sorted(rows), ["B01", "B02"])
+        self.assertEqual(playback.BASELINE_ROW_IDS, ("B01", "B02"))
         self.assertEqual(rows["B01"]["file"], "baseline-mp4-a.mp4")
         self.assertEqual(rows["B02"]["file"], "baseline-mkv-a.mkv")
-        self.assertEqual(rows["B03"]["media_type"], "audio")
-        self.assertEqual(rows["B03"]["library"], playback.MUSIC_LIBRARY)
-        self.assertTrue(rows["B03"]["file"].endswith(".m4a"))
+        self.assertTrue(all(row["media_type"] == "video" for row in rows.values()))
         self.assertGreaterEqual(playback.MINIMUM_PROGRESS_SECONDS, 5)
         self.assertGreaterEqual(playback.FIXTURE_SECONDS, 20)
     def test_every_fixture_has_a_distinct_name_and_a_drawn_marker(self):
-        names = [*playback.VIDEO_FIXTURES, *playback.AUDIO_FIXTURES]
+        names = list(playback.VIDEO_FIXTURES)
         self.assertEqual(len(names), len(set(names)))
         for name, spec in playback.VIDEO_FIXTURES.items():
             self.assertTrue(spec["marker"], name)
@@ -387,7 +386,7 @@ class ScenarioDefinitionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaises(playback.BaselineError):
                 # --rows validation happens before any workspace or container work.
-                args = ["--package", str(Path(tmp) / "missing.zip"), "--evidence-dir", tmp, "--rows", "B99"]
+                args = ["--package", str(Path(tmp) / "missing.zip"), "--evidence-dir", tmp, "--rows", "B03"]
                 original = sys.argv
                 sys.argv = ["run_isolated_playback_integration.py", *args]
                 try:

@@ -6,20 +6,20 @@ browser driver (``package_playback_driver.mjs`` in strict mode) and the existing
 integration helpers instead of introducing a framework, environment manager, scenario DSL or
 evidence system. It only adds the sequential orchestration the Slice 5 baseline needs:
 
-  * generate the baseline fixtures with the pinned Jellyfin FFmpeg (24 s MP4/MKV H.264+AAC and
-    a real AAC/M4A audio file, A/B content plus byte-identical copies/aliases), record the real
+  * generate the baseline fixtures with the pinned Jellyfin FFmpeg (24 s MP4/MKV H.264+AAC,
+    A/B content plus byte-identical copies/aliases), record the real
     content SHA-1, byte size and ffprobe streams, and prepare limited/full/unspecified
     ColorRange videos whose actual ffprobe output is reported;
-  * write version-1 STRM files pointing at the local media server and let Jellyfin natively
-    index them as Video (movies library) and Audio (music library) items;
+  * write version-1 video STRM files pointing at the local media server and let Jellyfin
+    natively index them in its movie library;
   * with the plugin disabled, let Jellyfin itself probe and persist the necessary primary
     stream, then enable the plugin so no fingerprint exists yet;
-  * per row (B01 MP4, B02 MKV, B03 Audio) perform first trust, a second playback and a
+  * per row (B01 MP4, B02 MKV) perform first trust, a second playback and a
     playback after restart, all started by a real Play click in the native web client, and
     refuse PASS unless the actual ffprobe count for the target source is zero inside each
     measurement window, both screenshots exist and are non-trivial, media time advanced by at
-    least the required seconds, video reports decoded frames (audio reports native audio
-    progress), the media request and the PlaybackInfo source/URL/primary stream match, and the
+    least the required seconds, video reports decoded frames, the media request and the PlaybackInfo
+    source/URL/primary stream match, and the
     five fingerprint fields match the fixture;
   * freeze the native URL/streams and the fingerprint before a restart and compare them
     read-only before any PlaybackInfo or playback.
@@ -56,8 +56,6 @@ DOCKER = pe.DOCKER
 MINIMUM_PROGRESS_SECONDS = 5.0
 FIXTURE_SECONDS = 24
 MOVIE_LIBRARY = pe.STRM_LIBRARY
-MUSIC_LIBRARY = "Package Audio Fixtures"
-MUSIC_LIBRARY_PATH = "/media/local/music"
 FFPROBE_MARKER = 'Starting "/usr/lib/jellyfin-ffmpeg/ffprobe" with args'
 FINGERPRINT_FIELDS = {"item_id", "source_key", "url_hash", "sha1", "file_size"}
 FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
@@ -81,15 +79,10 @@ VIDEO_FIXTURES: dict[str, dict[str, object]] = {
     "baseline-mkv-b.mkv": {"container": "mkv", "pattern": "smptebars", "marker": "MKV B", "tone": 880,
                            "color_range": "tv"},
 }
-AUDIO_FIXTURES: dict[str, dict[str, object]] = {
-    "audio/audio-a.m4a": {"tone": 440, "title": "Audio A"},
-    "audio/audio-b.m4a": {"tone": 880, "title": "Audio B"},
-}
 # Byte-identical copies/aliases of the A fixtures, written next to the originals.
 COPY_ALIASES = {
     "baseline-mp4-a.mp4": "baseline-mp4-a-copy.mp4",
     "baseline-mkv-a.mkv": "baseline-mkv-a-copy.mkv",
-    "audio/audio-a.m4a": "audio/audio-a-copy.m4a",
 }
 
 ROWS = (
@@ -97,9 +90,8 @@ ROWS = (
      "library": MOVIE_LIBRARY, "strm_name": "Baseline MP4"},
     {"id": "B02", "name": "Baseline MKV", "media_type": "video", "file": "baseline-mkv-a.mkv",
      "library": MOVIE_LIBRARY, "strm_name": "Baseline MKV"},
-    {"id": "B03", "name": "Baseline Audio", "media_type": "audio", "file": "audio/audio-a.m4a",
-     "library": MUSIC_LIBRARY, "strm_name": "Baseline Audio"},
 )
+BASELINE_ROW_IDS = tuple(row["id"] for row in ROWS)
 
 
 class BaselineError(RuntimeError):
@@ -674,14 +666,9 @@ def ffprobe(path_in_container: str) -> dict:
     return json.loads(result.stdout)
 
 
-def generate_fixtures(with_audio: bool = True) -> dict:
+def generate_fixtures() -> dict:
     """Generate the baseline media with the pinned Jellyfin FFmpeg and record real identities."""
     pe.workspace()
-    # The FFmpeg container writes into the mounted media directory, so the audio subdirectory must
-    # exist before the first render. The music library holds only the audio STRM; the audio fixture
-    # itself stays outside every library path so no regular (non-STRM) audio item is indexed.
-    for name in ("audio", "music"):
-        (pe.WORK / "media" / name).mkdir(parents=True, exist_ok=True)
     commands: dict[str, list[str]] = {}
     for name, spec in VIDEO_FIXTURES.items():
         duration = int(spec.get("seconds", FIXTURE_SECONDS))
@@ -695,8 +682,8 @@ def generate_fixtures(with_audio: bool = True) -> dict:
             args += ["-color_range", str(spec["color_range"])]
         args += ["-c:a", "aac", "-b:a", "96k", "-shortest", "-t", str(duration)]
         if spec["container"] == "mp4":
-            # The local media service has no Range support yet (RO-1 Range is a later Task), so the
-            # MP4 moov atom must be at the front for a real client to fetch and decode the file.
+            # Put moov at the front so the real browser can start decoding without downloading the
+            # rest of the file before its first media request.
             args += ["-movflags", "+faststart"]
         args += ["/out/" + name]
         commands[name] = args
@@ -704,22 +691,11 @@ def generate_fixtures(with_audio: bool = True) -> dict:
         require(result.returncode == 0, f"Could not generate {name}: {result.stderr.strip()[-300:]}")
     aliases: dict[str, str] = {}
     for source, alias in COPY_ALIASES.items():
-        if not with_audio and source.startswith("audio/"):
-            continue
         target = pe.WORK / "media" / alias
         target.parent.mkdir(parents=True, exist_ok=True)
         pe.copy_owned(pe.WORK / "media" / source, target, label=f"byte-identical copy {alias}")
         aliases[alias] = source
-    fixture_names = [*VIDEO_FIXTURES, *([*AUDIO_FIXTURES] if with_audio else []), *aliases]
-    if with_audio:
-        for name, spec in AUDIO_FIXTURES.items():
-            args = ["-y", "-f", "lavfi", "-i", f"sine=frequency={spec['tone']}:duration={FIXTURE_SECONDS}",
-                    "-c:a", "aac", "-b:a", "128k", "-metadata", f"title={spec['title']}",
-                    "-t", str(FIXTURE_SECONDS), "/out/" + name]
-            commands[name] = args
-            result = ffmpeg(args)
-            require(result.returncode == 0, f"Could not generate {name}: {result.stderr.strip()[-300:]}")
-
+    fixture_names = [*VIDEO_FIXTURES, *aliases]
     fixtures: dict[str, dict] = {}
     for name in fixture_names:
         path = pe.WORK / "media" / name
@@ -747,11 +723,9 @@ def generate_fixtures(with_audio: bool = True) -> dict:
 
 def write_row_strm(row: dict, fixture: dict) -> dict:
     """Write the version-1 STRM for one row and return its identity."""
+    require(row["media_type"] == "video", "Audio STRM rows are outside the current Slice 5 contract.")
     url = f"http://media:8080/{row['file']}"
-    if row["media_type"] == "audio":
-        target = pe.WORK / "media" / "music" / (row["strm_name"] + ".strm")
-    else:
-        target = pe.WORK / "strm" / (row["strm_name"] + ".strm")
+    target = pe.WORK / "strm" / (row["strm_name"] + ".strm")
     lines = ["# strm-probe-version:1", f"# strm-probe-sha1:{fixture['sha1']}",
              f"# strm-probe-size:{fixture['size']}", url]
     pe.write_owned_bytes(target, ("\n".join(lines) + "\n").encode("utf-8"), label=f"STRM {row['id']}")
@@ -918,7 +892,7 @@ def entity_class_failures(info: dict, media_type: str) -> list[str]:
     return failures
 
 
-def prepare_instance(package: Path, music_library: bool = True) -> dict:
+def prepare_instance(package: Path) -> dict:
     summary: dict[str, object] = {}
     summary["networkAdaptation"] = install_explicit_subnets()
     pe.prepare_clean_instance()
@@ -927,10 +901,9 @@ def prepare_instance(package: Path, music_library: bool = True) -> dict:
     pe.compose("up")
     pe.wait_healthy()
     auth = pkg.api_auth()
-    add_library(auth, MOVIE_LIBRARY, "movies", ["/media/strm"])
-    if music_library:
-        add_library(auth, MUSIC_LIBRARY, "music", [MUSIC_LIBRARY_PATH])
-    summary["libraries"] = {"movies": MOVIE_LIBRARY, **({"music": MUSIC_LIBRARY} if music_library else {})}
+    # The wizard already registered the movie STRM library; adding it again would index the same
+    # files twice and break the exactly-one-item scan lookups.
+    summary["libraries"] = {"movies": MOVIE_LIBRARY}
     summary["deployment"] = pe.deploy_archive(package)
     pkg.restart()
     auth = pkg.api_auth()
@@ -948,54 +921,12 @@ def prepare_instance(package: Path, music_library: bool = True) -> dict:
     return summary
 
 
-def native_audio_strm_response(auth_header: str, item_id: str) -> dict:
-    """Record what the fixed Jellyfin build itself returns for an Audio STRM item.
-
-    Called only while the plugin is disabled, so the observation is purely native, and it reuses
-    the run's existing token (a second login would invalidate that token and make the following
-    reads fail with 401). The universal audio endpoint is the native web client's own audio route.
-    A fixed-version limitation is reported, never hidden: the actual saved native source path is
-    recorded next to the response body, so whether the audio source kept the local ``.strm`` path
-    is real evidence rather than an assumption.
-    """
-    credentials_value = credentials()
-    query = urllib.parse.urlencode({"DeviceId": "strm-probe-baseline", "audioCodec": "aac",
-                                    "container": "opus,mp3,aac,m4a,m4b,flac,wav,ogg",
-                                    "transcodingContainer": "ts", "transcodingProtocol": "hls"})
-    target = f"{credentials_value['base_url']}/Audio/{item_id}/universal?{query}"
-    native = pe.urllib.request.Request(target, method="GET", headers={"Authorization": auth_header})
-    try:
-        with pe.urllib.request.urlopen(native, timeout=90) as response:
-            head = response.read(64)
-            status = response.status
-            content_type = response.headers.get("Content-Type")
-    except pe.urllib.error.HTTPError as error:
-        head = error.read(64)
-        status = error.code
-        content_type = error.headers.get("Content-Type") if error.headers else None
-    saved_paths = server_media_source_paths(auth_header, item_id)
-    return {"status": status, "contentType": content_type,
-            "firstBytesSha256": hashlib.sha256(head).hexdigest(),
-            "returnsStrmManifestText": head.startswith(b"# strm-probe-version:1"),
-            "savedMediaSourcePaths": saved_paths,
-            "mediaSourcePathIsLocalStrm": bool(saved_paths) and all(
-                str(path).lower().endswith(".strm") for path in saved_paths)}
-
-
-def server_media_source_paths(auth: str, item_id: str) -> list[str]:
-    """Read the saved user-visible media source paths straight from the native item record."""
-    status, payload = pe.request_json(
-        "GET", f"/Items/{item_id}?Fields=MediaSources",
-        headers={"Authorization": auth})
-    require(status == 200, "The native media-source read for the audio observation failed.")
-    return [str(source.get("Path") or "") for source in payload.get("MediaSources") or []]
-
-
 def prepare_rows(auth: str, rows: list[dict]) -> dict:
     """Scan the STRM rows, then let Jellyfin probe/persist the primary stream with the plugin off."""
     summary: dict[str, object] = {}
     pe.request_json("POST", "/Library/Refresh", headers={"Authorization": auth})
     for row in rows:
+        require(row["media_type"] == "video", "Audio STRM rows are outside the current Slice 5 contract.")
         row["item"] = pkg.scan_and_wait(auth, row["strm_name"], MAX_WAIT)
         info = item_media_type(auth, row["item"]["Id"])
         summary[row["id"] + ".item"] = info
@@ -1007,9 +938,7 @@ def prepare_rows(auth: str, rows: list[dict]) -> dict:
     auth = pkg.api_auth()
     require(str(pkg.plugin_status(auth)).lower() not in {"active", "0"}, "The plugin remained active after disable.")
     for row in rows:
-        if row["media_type"] == "audio":
-            row["nativeAudioResponse"] = native_audio_strm_response(auth, row["item"]["Id"])
-        required = "Video" if row["media_type"] == "video" else "Audio"
+        required = "Video"
         deadline = time.monotonic() + MAX_WAIT
         saved: list[str] = []
         while time.monotonic() < deadline:
@@ -1069,28 +998,9 @@ def scenario_baseline(package: Path, evidence_dir: Path, selected: list[str],
 
     results: dict[str, object] = {}
     failures: list[str] = []
-    blocked: list[str] = []
     for row in rows:
         row_result: dict[str, object] = {}
         try:
-            if row["media_type"] == "audio" and row.get("nativeAudioResponse", {}).get("returnsStrmManifestText"):
-                # The fixed Jellyfin build indexes the audio STRM as a real Audio item and natively
-                # probes it, but the saved media source keeps the local .strm path (only Video items
-                # substitute ShortcutPath), so the native audio route returns the STRM text rather
-                # than audio. That is a fixed-version capability limit, not something this tool may
-                # pass off as audio playback, and the contract hands it back to A.
-                native = row["nativeAudioResponse"]
-                row_result["nativeAudioResponse"] = native
-                row_result["preparedSource"] = row.get("preparedSource")
-                row_result["status"] = "BLOCKED"
-                row_result["error"] = (
-                    "the fixed Jellyfin 12.2.0 build returns the STRM text for the native Audio route "
-                    f"(saved media source paths {native.get('savedMediaSourcePaths')}, "
-                    f"local-STRM-only {native.get('mediaSourcePathIsLocalStrm')}), so real native audio "
-                    "playback of an audio STRM is not achievable on this version; audio row left BLOCKED for A")
-                blocked.append(row["id"])
-                results[row["id"]] = row_result
-                continue
             require(row.get("preparedAddressMatchesUrl") is True,
                     f"{row['id']}: the prepared native source address is not the STRM URL.")
             # 1) first trust
@@ -1147,16 +1057,8 @@ def scenario_baseline(package: Path, evidence_dir: Path, selected: list[str],
             failures.append(f"{row['id']}: {row_result['error']}")
         results[row["id"]] = row_result
     summary["rowsResult"] = results
-    if blocked:
-        summary["blocked"] = blocked
     if failures:
         raise BaselineError("Baseline rows failed: " + " | ".join(failures))
-    if blocked:
-        # Blocked rows are never a pass: the run reports BLOCKED so no reader can treat the
-        # missing audio row as accepted evidence.
-        raise BaselineError(
-            "Baseline rows blocked (not passed): " + ", ".join(blocked)
-            + "; see rowsResult for the recorded native evidence")
     summary["status"] = "PASS"
 
 
@@ -1166,8 +1068,8 @@ def main() -> int:
     parser.add_argument("--package", type=Path, required=True)
     parser.add_argument("--scenario", default="baseline", choices=["baseline", "matrix"])
     parser.add_argument("--evidence-dir", type=Path, required=True)
-    parser.add_argument("--rows", default="B01,B02,B03",
-                        help="Comma-separated row ids to run (default: all baseline rows; "
+    parser.add_argument("--rows", default=",".join(BASELINE_ROW_IDS),
+                        help="Comma-separated row ids to run (default: both video baseline rows; "
                              "matrix ids are MP4.P02.01, MKV.C02.limited, MP4.F01, MKV.D06, ...).")
     parser.add_argument("--workspace", type=Path,
                         help="Fresh run-owned workspace under artifacts/package-env (default: auto-created).")
@@ -1180,7 +1082,7 @@ def main() -> int:
         known = matrix_row_ids()
         require(set(selected) <= known, f"Unknown matrix row ids {sorted(set(selected) - known)}.")
     else:
-        known = {row["id"] for row in ROWS}
+        known = set(BASELINE_ROW_IDS)
         require(set(selected) <= known, f"Unknown row ids {sorted(set(selected) - known)}; known rows are {sorted(known)}.")
     package = args.package.resolve()
     evidence_dir = args.evidence_dir.resolve()
@@ -1413,7 +1315,7 @@ def pad_mp4_to(data: bytes, target: int) -> bytes:
 
 def generate_matrix_fixtures() -> dict:
     """Generate the matrix media with the pinned FFmpeg and derive the padded/truncated partners."""
-    base = generate_fixtures(with_audio=False)
+    base = generate_fixtures()
     specs: dict[str, dict[str, object]] = {}
     specs.update(matrix_extra_specs("MP4"))
     specs.update(matrix_extra_specs("MKV"))
@@ -2401,7 +2303,7 @@ def scenario_matrix(package: Path, evidence_dir: Path, selected: list[str],
         else:
             strm_identities.append(write_matrix_strm(row))
     summary["strm"] = [{"id": row["id"], **identity} for row, identity in zip(rows, strm_identities)]
-    summary["instance"] = prepare_instance(package, music_library=False)
+    summary["instance"] = prepare_instance(package)
     auth = pkg.api_auth()
     for row in rows:
         if row["apply_kind"] == "d04":
