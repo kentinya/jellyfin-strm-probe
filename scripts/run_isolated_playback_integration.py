@@ -821,7 +821,9 @@ def generate_fixtures() -> dict:
                    for stream in info.get("streams", [])]
         # The scenario a fixture names is only acceptable when the real output matches it; a
         # mislabelled ColorRange input must stop the run before any C-row can claim evidence.
-        require_actual_color_range(name, VIDEO_FIXTURES[name], streams)
+        # Byte-identical aliases keep the source fixture's spec; they have no entry of their own.
+        require_actual_color_range(name, VIDEO_FIXTURES.get(name, VIDEO_FIXTURES[aliases.get(name, name)]),
+                                   streams)
         fixtures[name] = {
             "sha1": hashlib.sha1(data).hexdigest(),
             "size": len(data),
