@@ -836,28 +836,35 @@ class PreparedLibraryReuseTests(unittest.TestCase):
         seen = {}
         def assign(fx, it, ids, recorder):
             fx.update(url_group=["u"], content_group=["c"], size_group=["s"])
-        with patch.object(large, "resolve_prepared_items", return_value=items), \
-             patch.object(large, "prepared_selected_library", return_value="library"), \
-             patch.object(large.pe, "media_sha1", return_value=("a" * 40, 25179)), \
-             patch.object(large, "capture_candidates", return_value=candidates), \
-             patch.object(large, "assign_increment_controls", side_effect=assign), \
-             patch.object(large, "wait_native_task_idle"), \
-             patch.object(large.scan, "run_native_scan_completed", return_value=({}, ("a", "b"))), \
-             patch.object(large, "poll_fixture_items", return_value={}), \
-             patch.object(large, "prepare_reuse_increment_baselines") as prepare, \
-             patch.object(large.scan, "plugin_action", return_value=204), \
-             patch.object(large, "sampled_restart"), \
-             patch.object(large, "wait_items_by_name", return_value=items), \
-             patch.object(large, "reconcile_candidate_identities", return_value={}), \
-             patch.object(large, "expected_all_rows", return_value=expected), \
-             patch.object(large, "assert_native_sources"), \
-             patch.object(large, "fingerprint_map", return_value={}), \
-             patch.object(large, "capture_state", return_value={"source": "stable"}), \
-             patch.object(large, "container_identity", return_value={"id": "owned"}), \
-             patch.object(large.pe, "container_name", return_value="owned"), \
-             patch.object(large.scan, "api_auth", return_value="auth"), \
-             patch.object(large, "run_full_behavior",
-                    side_effect=lambda *a, **kw: seen.update(args=a, kwargs=kw)):
+        # One ExitStack keeps exactly the same patches (and lifetimes) as the previous nested with;
+        # 21 statically nested blocks exceed CPython 3.11's limit even though newer versions accept them.
+        stack = contextlib.ExitStack()
+        with stack:
+            for args, kwargs in (
+                    (("resolve_prepared_items",), {"return_value": items}),
+                    (("prepared_selected_library",), {"return_value": "library"}),
+                    (("capture_candidates",), {"return_value": candidates}),
+                    (("wait_native_task_idle",), {}),
+                    (("poll_fixture_items",), {"return_value": {}}),
+                    (("sampled_restart",), {}),
+                    (("wait_items_by_name",), {"return_value": items}),
+                    (("reconcile_candidate_identities",), {"return_value": {}}),
+                    (("expected_all_rows",), {"return_value": expected}),
+                    (("assert_native_sources",), {}),
+                    (("fingerprint_map",), {"return_value": {}}),
+                    (("capture_state",), {"return_value": {"source": "stable"}}),
+                    (("container_identity",), {"return_value": {"id": "owned"}}),
+            ):
+                stack.enter_context(patch.object(large, *args, **kwargs))
+            stack.enter_context(patch.object(large.pe, "media_sha1", return_value=("a" * 40, 25179)))
+            stack.enter_context(patch.object(large, "assign_increment_controls", side_effect=assign))
+            stack.enter_context(patch.object(large.scan, "run_native_scan_completed", return_value=({}, ("a", "b"))))
+            prepare = stack.enter_context(patch.object(large, "prepare_reuse_increment_baselines"))
+            stack.enter_context(patch.object(large.scan, "plugin_action", return_value=204))
+            stack.enter_context(patch.object(large.pe, "container_name", return_value="owned"))
+            stack.enter_context(patch.object(large.scan, "api_auth", return_value="auth"))
+            stack.enter_context(patch.object(large, "run_full_behavior",
+                                             side_effect=lambda *a, **kw: seen.update(args=a, kwargs=kw)))
             large.run_reuse_full_scenario("auth", fixture, 1000, MagicMock(), large.ScenarioState(),
                                           {}, 120, {"deployment": "zip"})
         prepare.assert_called_once()
@@ -867,26 +874,31 @@ class PreparedLibraryReuseTests(unittest.TestCase):
     def test_reuse_full_scenario_refuses_nonempty_fingerprints_without_reset(self):
         fixture = {"names": ["one"], "paths": {"one": Path("/tmp/one.strm")}, "controls": {"out_of_scope": "external"}, "urls": {}}
         items = {"one": {"Id": "1" * 32}, "external": {"Id": "f" * 32}}
-        with patch.object(large, "resolve_prepared_items", return_value=items), \
-             patch.object(large, "prepared_selected_library", return_value="library"), \
-             patch.object(large.pe, "media_sha1", return_value=("a" * 40, 25179)), \
-             patch.object(large, "capture_candidates", return_value={"supported_ids": ["1" * 32],
-                    "ids": ["1" * 32], "control_ids": {}, "count": 1, "supported_count": 1}), \
-             patch.object(large, "assign_increment_controls",
-                    side_effect=lambda fx, *a: fx.update(url_group=[], content_group=[], size_group=[])), \
-             patch.object(large, "wait_native_task_idle"), \
-             patch.object(large.scan, "run_native_scan_completed", return_value=({}, ("a", "b"))), \
-             patch.object(large, "poll_fixture_items", return_value={}), \
-             patch.object(large, "prepare_reuse_increment_baselines"), \
-             patch.object(large.scan, "plugin_action", return_value=204), \
-             patch.object(large, "sampled_restart"), \
-             patch.object(large, "wait_items_by_name", return_value=items), \
-             patch.object(large, "reconcile_candidate_identities", return_value={}), \
-             patch.object(large, "expected_all_rows", return_value={("1" * 32, "2" * 32): {}}), \
-             patch.object(large, "assert_native_sources"), \
-             patch.object(large, "fingerprint_map", return_value={("1" * 32, "2" * 32): {}}), \
-             patch.object(large.scan, "api_auth", return_value="auth"), \
-             patch.object(large, "run_full_behavior") as behavior:
+        stack = contextlib.ExitStack()
+        with stack:
+            for args, kwargs in (
+                    (("resolve_prepared_items",), {"return_value": items}),
+                    (("prepared_selected_library",), {"return_value": "library"}),
+                    (("capture_candidates",), {"return_value": {"supported_ids": ["1" * 32],
+                        "ids": ["1" * 32], "control_ids": {}, "count": 1, "supported_count": 1}}),
+                    (("wait_native_task_idle",), {}),
+                    (("poll_fixture_items",), {"return_value": {}}),
+                    (("prepare_reuse_increment_baselines",), {}),
+                    (("sampled_restart",), {}),
+                    (("wait_items_by_name",), {"return_value": items}),
+                    (("reconcile_candidate_identities",), {"return_value": {}}),
+                    (("expected_all_rows",), {"return_value": {("1" * 32, "2" * 32): {}}}),
+                    (("assert_native_sources",), {}),
+                    (("fingerprint_map",), {"return_value": {("1" * 32, "2" * 32): {}}}),
+            ):
+                stack.enter_context(patch.object(large, *args, **kwargs))
+            stack.enter_context(patch.object(large.pe, "media_sha1", return_value=("a" * 40, 25179)))
+            stack.enter_context(patch.object(large, "assign_increment_controls",
+                    side_effect=lambda fx, *a: fx.update(url_group=[], content_group=[], size_group=[])))
+            stack.enter_context(patch.object(large.scan, "run_native_scan_completed", return_value=({}, ("a", "b"))))
+            stack.enter_context(patch.object(large.scan, "plugin_action", return_value=204))
+            stack.enter_context(patch.object(large.scan, "api_auth", return_value="auth"))
+            behavior = stack.enter_context(patch.object(large, "run_full_behavior"))
             with self.assertRaisesRegex(RuntimeError, "empty copied fingerprint"):
                 large.run_reuse_full_scenario("auth", fixture, 1, MagicMock(), large.ScenarioState(), {}, 120, {})
             behavior.assert_not_called()

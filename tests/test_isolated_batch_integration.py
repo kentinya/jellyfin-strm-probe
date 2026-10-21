@@ -30,19 +30,34 @@ class BatchScriptGuardTests(unittest.TestCase):
 
     def test_temporary_fixture_refuses_to_overwrite_and_writes_a_versioned_manifest(self):
         name = "Batch Guard Test"
-        path = ROOT / "artifacts" / "dev-env" / "strm" / (name + ".strm")
-        path.unlink(missing_ok=True)
-        try:
-            written = batch.temporary_fixture(name, "http://media:8080/fixture.mp4", "a" * 40, 10)
-            self.assertEqual(written, path)
-            text = path.read_text(encoding="utf-8")
-            self.assertIn("# strm-probe-version:1", text)
-            self.assertIn("http://media:8080/fixture.mp4", text)
-            # A second write must fail rather than silently clobber an existing fixture.
-            with self.assertRaises(FileExistsError):
-                batch.temporary_fixture(name, "http://media:8080/other.mp4", "b" * 40, 11)
-        finally:
-            path.unlink(missing_ok=True)
+        # The guard test keeps exercising the real temporary_fixture writer, but roots it in a
+        # temporary directory: it must never create or unlink files under the shared artifacts/.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "artifacts" / "dev-env" / "strm" / "Environment Fixture.strm"
+            source.parent.mkdir(parents=True)
+            source.write_text(
+                "# strm-probe-version:1\n# strm-probe-sha1:" + "c" * 40 +
+                "\n# strm-probe-size:7\nhttp://media:8080/source.mp4\n",
+                encoding="utf-8",
+            )
+            with patch.object(batch, "ROOT", root), patch.object(batch, "FIXTURE", source):
+                path = root / "artifacts" / "dev-env" / "strm" / (name + ".strm")
+                written = batch.temporary_fixture(name, "http://media:8080/fixture.mp4", "a" * 40, 10)
+                self.assertEqual(written, path)
+                text = path.read_text(encoding="utf-8")
+                self.assertIn("# strm-probe-version:1", text)
+                self.assertIn("# strm-probe-sha1:" + "a" * 40, text)
+                self.assertIn("# strm-probe-size:10", text)
+                self.assertIn("http://media:8080/fixture.mp4", text)
+                self.assertNotIn("http://media:8080/source.mp4", text)
+                # A second write must fail rather than silently clobber an existing fixture.
+                with self.assertRaises(FileExistsError):
+                    batch.temporary_fixture(name, "http://media:8080/other.mp4", "b" * 40, 11)
+                self.assertIn("http://media:8080/fixture.mp4", path.read_text(encoding="utf-8"))
+            # The test's own input STRM is unchanged and nothing was written to the repository fixtures.
+            self.assertIn("http://media:8080/source.mp4", source.read_text(encoding="utf-8"))
+        self.assertFalse((ROOT / "artifacts" / "dev-env" / "strm" / (name + ".strm")).exists())
 
     def test_fingerprint_row_reads_only_the_minimal_five_fields(self):
         import sqlite3

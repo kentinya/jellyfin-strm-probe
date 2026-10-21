@@ -39,17 +39,56 @@ package_plugin = load("package_plugin", "scripts/package_plugin.py")
 
 class PackageEnvironmentTests(unittest.TestCase):
     def test_compose_uses_a_separate_project_port_and_no_source_mount(self):
-        with patch.object(package_environment, "PORT", 18099):
-            with tempfile.TemporaryDirectory() as tmp:
-                work = Path(tmp)
-                with patch.object(package_environment, "WORK", work):
-                    path = package_environment.write_compose()
-                text = path.read_text(encoding="utf-8")
+        # The lock is injected from a temporary directory so the guard test never depends on the
+        # ignored artifacts/dev-env/images.lock.json of a provisioned host.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            lock = {"spec": package_environment.SPEC, "images": {
+                "server": "jellyfin/jellyfin@sha256:" + "a" * 64,
+                "media": "python@sha256:" + "b" * 64}}
+            lock_path = root / "artifacts" / "dev-env" / "images.lock.json"
+            lock_path.parent.mkdir(parents=True)
+            lock_path.write_text(json.dumps(lock), encoding="utf-8")
+            with patch.object(package_environment, "ROOT", root), \
+                    patch.object(package_environment, "PORT", 18099):
+                with tempfile.TemporaryDirectory() as work_tmp:
+                    work = Path(work_tmp)
+                    with patch.object(package_environment, "WORK", work):
+                        path = package_environment.write_compose()
+                    text = path.read_text(encoding="utf-8")
         self.assertIn("127.0.0.1:18099:8096", text)
+        self.assertIn("jellyfin/jellyfin@sha256:" + "a" * 64, text)
         # The server must never see source, SDK, NuGet or build output.
         for forbidden in ("/src", "/tests", "/scripts", "sdk", "nuget", "bin", "obj"):
             self.assertNotIn(forbidden, text, f"the package compose must not mount {forbidden!r}")
         self.assertIn("internal: true", text)
+
+    def test_compose_refuses_a_missing_mutable_or_foreign_image_lock(self):
+        # The injected-lock path above must not weaken the real lock rules.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with patch.object(package_environment, "ROOT", root):
+                with self.assertRaisesRegex(package_environment.PackageEnvironmentError,
+                                            "immutable image lock is missing"):
+                    package_environment.load_image_lock()
+                lock_path = root / "artifacts" / "dev-env" / "images.lock.json"
+                lock_path.parent.mkdir(parents=True, exist_ok=True)
+                cases = {
+                    "mutable tag": {"spec": package_environment.SPEC, "images": {
+                        "server": "jellyfin/jellyfin:12.2",
+                        "media": "python@sha256:" + "b" * 64}},
+                    "foreign specification": {"spec": {"server": {"version": "other"}}, "images": {
+                        "server": "jellyfin/jellyfin@sha256:" + "a" * 64,
+                        "media": "python@sha256:" + "b" * 64}},
+                    "wrong repository": {"spec": package_environment.SPEC, "images": {
+                        "server": "python@sha256:" + "a" * 64,
+                        "media": "python@sha256:" + "b" * 64}},
+                }
+                for label, data in cases.items():
+                    with self.subTest(label), self.assertRaises(
+                            package_environment.PackageEnvironmentError):
+                        lock_path.write_text(json.dumps(data), encoding="utf-8")
+                        package_environment.load_image_lock()
 
     def test_inspect_owned_container_states_rejects_forced_exit(self):
         listed = subprocess.CompletedProcess([], 0, stdout="container-id\n", stderr="")
