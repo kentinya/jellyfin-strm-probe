@@ -5,7 +5,7 @@
 ```text
 Task ID: 5.3
 Parent Slice: 5
-Status: IN PROGRESS
+Status: READY FOR B REVIEW
 Task Base: f17fb1fc90dda242eeff9fac7b4f21576b5e6f94
 Contract Checkpoint: 68e7bf01e7796fe9972838dfc0d8ed8283aacedd
 Difficulty: High
@@ -328,6 +328,8 @@ Developer 每真实轮初始总上限 60 分钟／测试 15 分钟；B 为 90 �
 
 ## B Review Result
 
+以下保留上一固定候选的独立 B **FIX REQUIRED**，未因下方 Developer 修正报告变为 PASS。最新修正候选与未完成门槛见文末；下一步由独立 B 审查。
+
 ```text
 Reviewed: f17fb1fc90dda242eeff9fac7b4f21576b5e6f94..f7ee96539f81c0a80640482b7d2d959f2a8feb69
 Implementation Candidate: 4e235f569dbe050f818bb206d1273e762940250f
@@ -382,3 +384,16 @@ B 已打开 Developer fix11 的完整原始服务器日志、矩阵 JSON、原�
 - Developer 可在现授权内修正上列必要入口问题，运行修改／直接影响的反馈及少量完整旅程，明确省略项。产品修改和扩大诊断构建须先有 A／用户授权；不盲跑其余昂贵矩阵。若需要三阶段观察，仍按现合同从实际 Web Play 触发并使用已授权标准只读调试方案，不能猜构造入口或调用内部探测函数。
 - RO-1 部分交付，RO-2／RO-3 存在上述真实 FAIL 与证据缺口，RO-4 保留 Task 5.1 既有决定。保持同一 Task 5.3／Slice 5／Base；本轮不规划新 Task、不出 Closure Packet、不返回 SLICE READY FOR A REVIEW、不关闭。待全部 RO 真正满足后才提交 A 最终审查。
 - 每轮测试墙钟并集须严格小于本轮实际总时间 50%；本轮未人工等待凑分母，账务见本机 timing-ledger.json。仅 Task 审查文档形成普通本地提交，提交后再核验治理与干净状态；不推送、不改历史、不操作生产或准备库。
+
+## Developer Repair Report（A 授权后的同 Task 修正，2026-10-21）
+
+- **交接状态：READY FOR B REVIEW。** 当前代理按已提交 B 计划实施，不能签发自己的独立 B PASS；Task／Slice ID、Base、合同检查点及历史 FAIL 不变。最终实施候选为 `316e7ebd756ce2cb685ab44fd453a03c6c777b8f`，报告后继仅修改 Markdown。
+- **修改范围：** `ProbeExecutionContext.cs`、`StrmPlaybackOptimizer.cs`、对应 `ProbeExecutionContextTests.cs`、既有 `run_isolated_playback_integration.py` 与其测试。必要字段诊断受既有 DetailedLog 控制，默认不开启；只记录 33 个身份字段及项目／源／URL 哈希。修正失败时先存 observation 再断言、P07.04／05 恢复 40 位非十六进制输入、D04 按真实普通文件路径和源定位／重启核验、移除返回对象中的 auth；未修改本轮共享驱动、媒体服务、依赖、镜像锁或工作流。
+- **原因及有界产品修正：** 诊断提交 `b94618464408dbdb89f72b5594587c9b7e2313e9` 从现有 `MP4.C02.limited` 原生 Web Play 取得同一次编码器／成功保存入参／返回主流的完整 33 字段。①与②完全相同，③仅 `ColorRange` 从 `tv` 变成 null；固定原生源码 `ca0f16eb7c195f720a1493ed469a27c4657db0c6` 的 `MediaStreamRepository.Map` 双向均未映射该字段。产品修复提交 `82551cf2278535c4daac8e02cbe49ec85d60db3a` 仅允许已精确成功保存后读回缺失此字段，其他 32 字段仍相等；非空异值、宽度／索引变化、无精确保存及错误项目均不放行。保留原地址／保存／Manifest 稳定和条件提交门槛，无额外探测或成功旁路。
+- **聚焦反馈：** SDK 10.0.401 锁定 restore、Release build（0 warning／error）、format verify 通过；直接受影响 C# context／playback 49 项通过；实际 `/opt/py311/python/bin/python3.11` 为 Python 3.11.10，最终 playback 工具 77 项通过，修改文件 py_compile、治理与差异检查通过。未用聚焦结果代表完整套件。
+- **诊断运行的限制：** b946184 的 C02 因 300 秒预算发 SIGINT，退出 -2，含收尾 301.67 秒；三阶段字段已取得，但旅程未完成，原 matrix-result 的空状态／缺行结果保留，归类 BLOCKED／不计 PASS。仅首次信任的两张截图可用并已打开；不补写未完成的失败 observation／截图。
+- **修复后真实反馈（82551cf）：** 同一既有入口只选 `MP4.C02.limited`，234.64 秒、退出 1。首次信任／URL 变化窗口／再播的目标 ffprobe 分别 0／1／0，实际播放推进 5.403／5.352／5.360 秒，无控制台或状态读取错误。三阶段再次只有上述字段差异，本次原生探测被接受；当前 URL、Video＋Audio 已保存，新五字段为目标真实 SHA-1／Size，随后再播保持相同。全部 6 张原图已实际打开：首次为 MP4 A，后两阶段为 MP4 LIM，每对画面时间推进至少 5 秒；服务器另有 3 次原生转码启动，不混入 ffprobe 数。
+- **该次整体仍为 FAIL：** 再播后、重启前 `freeze_state` 使用被浏览器登录撤销的旧 token，原生只读查询被拒绝；没有完成重启先读／重启后播放，因此该 C02 行仍未通过。最终提交 316e7eb 在既有冻结方法内重新认证后读取，补充新 token 使用和读取失败仍拒绝的控制测试；不把 token 写入结果。该入口修正的真实重跑为 **NOT RUN**：本轮剩余测试余额不足以再做完整准备／播放／重启，不预借未来时间。B 在固定最终候选首先复核该完整行，再完成其余门禁。
+- **固定交接包：** 从干净 316e7eb 构建 `candidate-package/Jellyfin.Plugin.StrmProbeOptimizer_linux-x64.zip`，SourceRevision 为上述完整 SHA，ZIP SHA-256 `a34b73957118a29c177ec4e3d06886690ff6b3b634b6d7f4fcdea8617ac77c97`，buildInputs SHA-256 `f394eabc06a7e5423adefeed0aed34b18078be80d0a7ac9143f46340bb8d98ef`。它尚无真实安装／播放验收；82551cf 的原始实播仅作对应输入反馈，不升级为最终包完整结果。
+- **证据：** 本机 `.git/validation-evidence/43b9ff9/developer-20261021T152940Z/INDEX.md`，含 commands／环境、两个原始实机结果、服务器日志／ffprobe 原文、完整三阶段字段、33 字段差异及固定源码摘要、五字段／完整原生状态、截图逐张查看记录、三个独立包与 sidecar、资源对账及时间账本。两次新归属容器均正常退出 0、无 OOM、CLEANED，对账 CLEAN；生产实例和现存全部 1004 项准备库未操作、未重建。
+- **B 保留的完整责任：** 当前无完整矩阵 PASS；其余 115 个规范 ID 及 baseline B01／B02 本轮 NOT RUN。最终候选完整 C#／Python、baseline／全部 P／C／D／F、package／scan／现存全部 1004 项 large、plugin／batch／configuration、独立关键复现、全部截图核验及完整 `f17fb1fc90dda242eeff9fac7b4f21576b5e6f94..Head` 审查均由独立 B 承担。匹配证据按实际输入复用；本轮未运行这些全量，不交回 Developer，不签发 Task PASS／Slice Closure／A 最终决定。
