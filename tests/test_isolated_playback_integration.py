@@ -698,6 +698,11 @@ class ArgRouteTests(unittest.TestCase):
         self.assertNotIn("/Plugins/{pkg.PLUGIN_ID}/0.1.0.0/Configuration", source)
 
 class RawScanDiagnosticTests(unittest.TestCase):
+    ITEM_ID = "8" * 8 + "-1111-2222-3333-" + "a" * 12
+
+    def _item(self, path, name="Matrix MP4 C02"):
+        return {"Id": self.ITEM_ID, "Name": name, "Type": "Movie", "Path": path}
+
     def test_a_scan_failure_keeps_the_raw_query_attempts_and_log_tail(self):
         original = playback.pe.request_json
         original_lines = playback.server_log_lines
@@ -716,27 +721,32 @@ class RawScanDiagnosticTests(unittest.TestCase):
         self.assertIn("raw query attempts", message)
         self.assertIn("server log tail", message)
         self.assertIn("native log line", message)
+        # The row is addressed by its STRM path, not the item name.
+        self.assertIn("/media/strm/Matrix MP4 P02 01.strm", message)
 
-    def test_a_found_item_returns_the_native_dictionary(self):
-        item = {"Id": "8" * 8 + "-1111-2222-3333-" + "a" * 12, "Name": "Matrix MP4 P02 01"}
+    def test_a_found_item_is_matched_by_its_strm_path_not_its_name(self):
+        # The native naming stripped the row suffix word ("... limited" became "... C02"); the
+        # lookup must still resolve the row through its unique STRM path.
+        item = self._item("/media/strm/Matrix MP4 C02 limited.strm", name="Matrix MP4 C02")
+        other = self._item("/media/strm/Matrix MP4 P02 01.strm", name="Matrix MP4 P02 01")
         original_request = playback.pe.request_json
         playback.pe.request_json = lambda *args, **kwargs: (
-            200, {"TotalRecordCount": 1, "Items": [dict(item)]})
+            200, {"TotalRecordCount": 2, "Items": [dict(other), dict(item)]})
         try:
-            result = playback.raw_item_query("auth", "Matrix MP4 P02 01")
+            result = playback.raw_item_query("auth", "Matrix MP4 C02 limited")
         finally:
             playback.pe.request_json = original_request
         self.assertEqual(result["status"], "FOUND")
         self.assertEqual(result["item"], item)
 
-    def test_a_duplicate_item_name_is_refused_with_the_raw_evidence(self):
-        item = {"Id": "8" * 8 + "-1111-2222-3333-" + "a" * 12, "Name": "Matrix MP4 P02 01"}
+    def test_a_duplicate_strm_path_is_refused_with_the_raw_evidence(self):
+        item = self._item("/media/strm/Matrix MP4 C02 limited.strm", name="Matrix MP4 C02")
         original_request = playback.pe.request_json
         playback.pe.request_json = lambda *args, **kwargs: (
             200, {"TotalRecordCount": 2, "Items": [dict(item), dict(item)]})
         try:
             with self.assertRaises(playback.BaselineError) as caught:
-                playback.raw_item_query("auth", "Matrix MP4 P02 01")
+                playback.raw_item_query("auth", "Matrix MP4 C02 limited")
         finally:
             playback.pe.request_json = original_request
         self.assertIn("refusing to guess", str(caught.exception))

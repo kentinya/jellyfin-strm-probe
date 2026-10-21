@@ -668,29 +668,31 @@ def item_media_type(auth: str, item_id: str) -> dict:
 def raw_item_query(auth: str, name: str) -> dict:
     """Return the raw native item-search evidence without collapsing the failure into a timeout.
 
-    ``pkg.scan_and_wait`` wraps every ``item_by_name`` failure into the single text "did not scan",
-    so the query status, the item count and the native server log tail around the wait are lost
-    exactly when they are needed to locate the real index/path problem. This probe records them
-    and raises with the actual evidence attached.
+    The row is located by its unique STRM path; ``name`` is the row's STRM file name (without
+    extension). Every query answer — status, the listing, the match and its native server log tail
+    — is recorded and raised with the actual evidence attached, never collapsed into a timeout.
     """
     started = time.monotonic()
     attempts: list[dict] = []
     deadline = started + MAX_WAIT
+    strm_path = "/media/strm/" + name + ".strm"
     while time.monotonic() < deadline:
         stamp = round(time.monotonic() - started, 1)
+        # The row is identified by its STRM path, never by the item name: the native library naming
+        # strips suffix words ("... limited" became "Matrix MP4 C02") so a name-based lookup cannot
+        # address every row. The path is unique per row and survives every naming rule.
         status, payload = pe.request_json(
             "GET", "/Items?" + urllib.parse.urlencode(
-                {"Recursive": "true", "Limit": "200", "Fields": "MediaSources,Path", "searchTerm": name}),
+                {"Recursive": "true", "Limit": "200", "Fields": "MediaSources,Path"}),
             headers={"Authorization": auth})
         if status == 200:
-            total = payload.get("TotalRecordCount")
-            matches = [item for item in payload.get("Items", []) if item.get("Name") == name]
-            attempt: dict = {"at": stamp, "status": status, "totalRecordCount": total,
+            items = payload.get("Items", [])
+            matches = [item for item in items if item.get("Path") == strm_path]
+            attempt: dict = {"at": stamp, "status": status,
+                             "listedItems": [{"id": item.get("Id"), "name": item.get("Name"),
+                                              "type": item.get("Type"),
+                                              "path": safe_path(item.get("Path"))} for item in items][:20],
                              "matchingIds": [item.get("Id") for item in matches]}
-            # Resolve the item directly from this raw response: the previous indirect lookup ran a
-            # second query that swallowed its own errors, so a persistently found item could never
-            # be resolved and the real reason stayed visible only as a timeout. More than one match
-            # is a real duplicate and fails with the full evidence instead of polling forever.
             if len(matches) == 1:
                 attempts.append(attempt)
                 return {"status": "FOUND", "elapsedSeconds": round(time.monotonic() - started, 1),
@@ -698,27 +700,16 @@ def raw_item_query(auth: str, name: str) -> dict:
             if len(matches) > 1:
                 attempts.append(attempt)
                 raise BaselineError(
-                    f"The native query returned {len(matches)} items named {name!r} "
+                    f"The native library returned {len(matches)} items for {strm_path!r} "
                     f"(ids {[item.get('Id') for item in matches]}); refusing to guess the row's item. "
                     f"Raw query attempts {json.dumps(attempts, ensure_ascii=False)}")
-            # A zero-match answer is not trustworthy on its own: record what the library really
-            # contains (the same full listing the accepted lookup uses) so a search-index gap is
-            # distinguishable from a scan that never created the item.
-            list_status, listing = pe.request_json(
-                "GET", "/Items?" + urllib.parse.urlencode(
-                    {"Recursive": "true", "Limit": "200", "Fields": "MediaSources,Path"}),
-                headers={"Authorization": auth})
-            attempt["listingStatus"] = list_status
-            attempt["listedItems"] = [
-                {"id": item.get("Id"), "name": item.get("Name"), "type": item.get("Type")}
-                for item in (listing.get("Items", []) if list_status == 200 else [])][:20]
             attempts.append(attempt)
         else:
             attempts.append({"at": stamp, "status": status, "body": payload})
         time.sleep(2)
     log_tail = server_log_lines()[-80:]
     raise BaselineError(
-        f"The package instance did not scan the item {name!r} within {MAX_WAIT}s; "
+        f"The package instance did not scan the row STRM {strm_path!r} within {MAX_WAIT}s; "
         f"raw query attempts {json.dumps(attempts, ensure_ascii=False)}; "
         f"server log tail {json.dumps(log_tail, ensure_ascii=False)}")
 
