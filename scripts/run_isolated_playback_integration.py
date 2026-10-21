@@ -170,6 +170,25 @@ def picture_evidence_failures(entry: dict | None, media_type: str) -> list[str]:
     return []
 
 
+def playback_request_failures(entry: dict | None, item_id: str) -> list[str]:
+    """Return the reasons the real media requests cannot be attributed to this item.
+
+    The native web client requests its media under the item identity (``/videos/<id>/...``,
+    ``/audio/<id>/...``), so the recorded requests must carry this row's item id; otherwise the
+    requests belong to another item and cannot be used as evidence for this playback.
+    """
+    normalized = normalize_source_id(item_id)
+    if not normalized:
+        return ["the item id needed to attribute the media requests was not recorded"]
+    forms = {normalized, normalized.replace("-", "")}
+    for request in (entry or {}).get("mediaRequests") or []:
+        status = request.get("status")
+        path = str(request.get("path") or "").lower()
+        if isinstance(status, int) and status in (200, 206) and any(form in path for form in forms):
+            return []
+    return [f"no successful media request was attributable to item {normalized}"]
+
+
 def playback_failures(entry: dict | None, *, expected_url: str, media_type: str,
                       expected_source_id: str | None = None,
                       minimum_seconds: float = MINIMUM_PROGRESS_SECONDS) -> list[str]:
@@ -235,6 +254,8 @@ def playback_failures(entry: dict | None, *, expected_url: str, media_type: str,
     requests = entry.get("mediaRequests") or []
     if not any(isinstance(item.get("status"), int) and item["status"] in (200, 206) for item in requests):
         failures.append("no successful media request was observed")
+    elif entry.get("itemId"):
+        failures += playback_request_failures(entry, entry["itemId"])
     failures += picture_evidence_failures(entry, media_type)
     required_stream = "Video" if media_type == "video" else "Audio"
     expected_hash = hashlib.sha256(expected_url.encode()).hexdigest()

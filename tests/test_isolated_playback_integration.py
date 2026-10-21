@@ -36,6 +36,7 @@ playback = load("run_isolated_playback_integration", "scripts/run_isolated_playb
 URL = "http://media:8080/baseline-mp4-a.mp4"
 SHA1 = "0123456789abcdef0123456789abcdef01234567"
 SIZE = 4096
+ITEM_ID = "8" * 8 + "-1111-2222-3333-" + "a" * 12
 SOURCE_ID = "b" * 8 + "-1111-2222-3333-" + "c" * 12
 OTHER_SOURCE_ID = "d" * 8 + "-4444-5555-6666-" + "e" * 12
 
@@ -101,7 +102,7 @@ class PlaybackObservationTests(unittest.TestCase):
         start.write_bytes(b"\x89PNG" + b"0" * 4000)
         progress.write_bytes(b"\x89PNG" + b"0" * 4000)
         entry = {
-            "name": "Baseline MP4", "itemId": "a" * 32, "mediaType": "video", "advanced": True,
+            "name": "Baseline MP4", "itemId": ITEM_ID, "mediaType": "video", "advanced": True,
             "currentTime": 6.4, "startCurrentTime": 0.4, "advancedSeconds": 6.0,
             "duration": 24.0, "element": "video", "videoWidth": 320,
             "videoHeight": 180, "decodedFrames": 92, "readyState": 4, "paused": False,
@@ -116,7 +117,7 @@ class PlaybackObservationTests(unittest.TestCase):
                  "picture": {"grid": [((index * 37) % 200) for index in range(64)], "distinctColors": 44,
                              "meanLuma": 101.2, "width": 320, "height": 180}},
             ],
-            "mediaRequests": [{"status": 200, "path": "/baseline-mp4-a.mp4", "kind": "media"}],
+            "mediaRequests": [{"status": 200, "path": "/videos/" + ITEM_ID + "/master.m3u8", "kind": "media"}],
             "playbackInfo": [{"status": 200, "method": "GET", "urlPath": "/Items/x/PlaybackInfo",
                               "body": {"playbackInfo": None, "mediaSources": [
                                   {"id": SOURCE_ID,
@@ -182,6 +183,14 @@ class PlaybackObservationTests(unittest.TestCase):
         self.assertIn("decoded picture width", joined)
         self.assertIn("successful media request", joined)
         self.assertIn("PlaybackInfo", joined)
+
+    def test_media_requests_of_another_item_are_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            entry = self._entry(Path(tmp), mediaRequests=[
+                {"status": 200, "path": "/videos/" + OTHER_SOURCE_ID + "/master.m3u8", "kind": "media"}])
+            failures = playback.playback_failures(entry, expected_url=URL, media_type="video",
+                                                  expected_source_id=SOURCE_ID)
+        self.assertTrue(any("attributable to item" in failure for failure in failures), failures)
 
     def test_missing_or_tiny_screenshots_are_refused(self):
         with tempfile.TemporaryDirectory() as tmp:
