@@ -5,7 +5,7 @@
 ```text
 Task ID: 5.3
 Parent Slice: 5
-Status: IN PROGRESS
+Status: READY FOR B REVIEW
 Task Base: f17fb1fc90dda242eeff9fac7b4f21576b5e6f94
 Contract Checkpoint: 108735e72f0028ae7763c36cc0cb143adb5cd6a9
 Difficulty: High
@@ -21,13 +21,13 @@ Planner / Reviewer: B
 
 本 Task 仅规划测试／必要采集与受控媒体准备，不授权修改插件成功判定或新增插件诊断。若现有产品缺陷阻塞，保留证据与未完成项，由 B 给 FIX REQUIRED、交 A／用户决定产品修正；修正继续同一 Task，不删场景、不另建“工具完善 Task”。全部 RO 满足后停止造 Task，另做 Slice Final／Closure Packet 交 A，不自行关闭。
 
-## 已接受检查点与规划事实
+## 已接受检查点与实施事实
 
 - 规划前工作区干净，main 超前 origin/main 25 提交；`python3 scripts/check_governance.py` 通过。Task Base 是真实 Task 5.2 B PASS 检查点，Slice Base 不移动。
 - Task 5.1 的 CI 修复／匹配远端结果、Task 5.2 的完整合同／报告／B PASS 分别保存在 `4c75761982bc16dd1c6bae09bee1c3561da2c178:TASK.md`、`f17fb1fc90dda242eeff9fac7b4f21576b5e6f94:TASK.md`。5.2 接受两行视频首次信任／再播／只读重启后实播，不证明 P01～P08、ColorRange 探测或整个 Slice PASS。
 - 已核对当前 Slice、[执行设计](docs/slice-5-playback-test-plan.md)、必读文档和真实源码。以下展开是对合同的细化，未改变 Required Outcomes、授权或历史决定；音频 STRM 按用户授权不执行，视频音轨及“缺 Video 仍有 Audio”保留。
-- 当前 `run_isolated_playback_integration.py` 仅有 `--scenario baseline` 与 B01～B03；严格 Web 驱动已有真实 Play、至少 5 秒差值、解码帧、截图、源 ID／URL hash 和媒体请求采集。完整原生读回／探测原文在 5.2 由 B 本机观察补足，正式顺序入口仍只选取部分流字段。
-- `isolated_media_server.py` 委托 Python 3.11 SimpleHTTPRequestHandler，尚无仓库显式 Range 实现／验收；查询参数会去除后按文件提供字节，缺失文件已有真实 404。固定 URL 可通过本轮拥有文件的原子替换控制；无需控制面 API／路由管理器。
+- 规划时播放入口只有 `--scenario baseline` 与 B01～B03；本 Task 已在同一入口实现固定 `--scenario matrix` 行注册。当前 baseline 只有 B01 MP4／B02 MKV，默认行集合由这两行生成，B03 音频 STRM 在创建工作区前拒绝；音频 STRM 专属夹具、库及读取路径已随用户范围决定撤出。严格 Web 驱动保留真实 Play、至少 5 秒差值、视频解码帧、截图、源 ID／URL hash 和媒体请求采集。完整原生读回／探测原文仍需 RO-3 三阶段取证。
+- 规划时 `isolated_media_server.py` 尚无显式 Range 实现；当前实现已覆盖 GET／HEAD 单区间、206／416 及相应响应头，并保留查询参数、404 和既有路径。固定 URL 可通过本轮拥有文件的原子替换控制；没有新增控制面 API／路由管理器。
 - `ProbeExecutionContext.RecordResult`、`RecordPersistedMediaStreams`、`IsPersistedProbeResult` 已存在；保存代理在原生 SaveMediaStreams 成功返回后才记录保存信号。当前警告只记录布尔结果；PrimaryStreamIdentity 包含 ColorRange 等字段，尚无本次三阶段字段取证，不能预填根因。
 
 ## 实施范围与最小准备
@@ -215,13 +215,13 @@ git diff --check
 
 提交可审阅实现后，用现有 `python3 scripts/package_plugin.py --configuration Release --output-dir <本轮包目录>` 生成候选 ZIP，记录完整实现 SHA／tree、SourceRevision、build inputs、锁和负载摘要。不得将脏脚本或不同 ZIP 的结果合成最终通过。
 
-**入口事实与拟实施 CLI：** 当前已有基线命令为：
+**已实现入口与执行命令：** 当前基线命令为：
 
 ```bash
 python3.11 scripts/run_isolated_playback_integration.py --package <指定ZIP绝对路径> --scenario baseline --rows B01,B02 --evidence-dir <新基线证据目录>
 ```
 
-`--scenario matrix` **当前尚不存在，本 Task 在同一入口内实现后才能执行**。拟固定调用为 `python3.11 scripts/run_isolated_playback_integration.py --package <同ZIP> --scenario matrix --rows <上表完整ID逗号清单> --evidence-dir <本批新证据目录>`；保留已有 `--workspace`／`--keep-workspace` 与 `JF_PROBE_PACKAGE_PORT` 的归属规则。实现后先保存真实 `--help`，核对与此命令一致；行选择仅固定列表，不增加外部场景配置／DSL。补充原生只读／诊断命令保存精确 argv，不能把计划示例写为已运行。
+`--scenario matrix` 已实现固定行集合，并保留 `--workspace`／`--keep-workspace` 与 `JF_PROBE_PACKAGE_PORT` 的归属规则。B 的完整矩阵命令仍使用 `python3.11 scripts/run_isolated_playback_integration.py --package <同ZIP> --scenario matrix --rows <上表完整ID逗号清单> --evidence-dir <新证据目录>`；行选择只接受固定 ID，不增加外部场景配置／DSL。本 Developer 轮实际只尝试了 MP4.C02.limited 与 MP4.C02.unspecified，因隔离 Jellyfin 未扫描首个项目在播放前退出，未覆盖任何 C02 测量行；精确 argv 与首败见本报告证据目录。主机没有 `python3.11` 可执行文件，该实机编排使用 Python 3.13.5；单元测试仍使用锁定 Python 3.11.17。此环境差异留给 B 审查，不能写成完成了三阶段取证。
 
 ### 最终检查点门槛（B）
 
@@ -280,13 +280,15 @@ Developer 每真实轮初始总上限 60 分钟／测试 15 分钟；B 为 90 �
 
 ## Developer Completion Report
 
-- Changed Files：NOT STARTED。
-- Implemented：NOT STARTED；本检查点只规划，未新增矩阵入口或修改媒体服务／插件。
-- Tests and Results：本轮仅规划治理／Markdown／diff 检查；产品构建／实播／全量／诊断均 NOT RUN。后续按规范 ID 报全部必要行，列出精确命令、候选、首败／恢复、实际看图、聚焦反馈及留给 B 的全量。
-- Decisions：范围和正确性条件沿用 Slice；发现需要产品改动交 A／用户，不自行修改。
-- Remaining In-Slice Work：本 Task 的 RO-1 余项、RO-2／RO-3；全部满足后的独立 Slice Final／A 审查。RO-4 保留既有决定。
-- Risks / Deviations：原生返回主流可能因持久化字段差异误拒绝；根因尚待三阶段实证，可能阻塞本 Task。完整取证目前无现成命令，按上方边界处理，不伪称能力已就绪。
-- Head SHA：NOT SET。
+- Changed Files：`scripts/run_isolated_playback_integration.py`（固定矩阵入口与视频专属 baseline；保留并纳入原工作区已有的电影库去重改动）、`scripts/isolated_media_server.py`、`scripts/package_playback_driver.mjs`、`tests/test_isolated_playback_integration.py`、`tests/test_isolated_media_server.py`、`TASK.md`。Task Base 至候选还包含先前同 Task 提交 `ef48e19d00310d2c8cdf1e3013a8ae0439ef596a`、`0a0342fbb22543c9083e91f6d299118a6af247f8`、`c134f0cfea1d627a8f3f45b9b5fea6e778eae732` 的矩阵／Range／驱动采集、D06／F01 账务和等长 MP4 合法 padding 实现；本报告不将 Slice 合同修订归为 Developer 改动。
+- Implemented：baseline 仅保留 MP4／MKV 视频 STRM，默认 B01／B02；音频 STRM 专属夹具、音乐库、原生读取与 B03 接受路径退出当前合同，未知 B03 在任何工作区／容器副作用前拒绝。已实现固定视频决策矩阵、媒体 Range、浏览器原始观测及相关回归测试。未改 C# 成功条件、指纹算法或诊断，也未修改 Slice 合同。
+- Tests and Results：实施前及交接文档更新后 `python3 scripts/check_governance.py` 均通过；Python 3.11.17 下 7 个受影响模块共 264 项通过（playback 59、media server 9、package 31、scan 74、large library 58、batch 24、configuration 9）；CI-F1／F2／F3 已知失败的聚焦回归通过。受影响 Python 文件 `compileall`、`node --check scripts/package_playback_driver.mjs`、入口 `--help` 与 `git diff --check` 通过。候选 Release ZIP 构建成功并经 `package_plugin.py --verify` 验证，SHA-256 `351d164753858ce39777e7e5d7c56f10f19e140d6de980706c4856ed435d99b4`。
+- Tests and Results（真实反馈）：对候选 `f55c2d0d9b9e5489790b48c380908d3ef0460086` 运行 `MP4.C02.limited,MP4.C02.unspecified`，运行器退出码 1、耗时 291.9 秒；在 `prepare_matrix_rows` 扫描首个 STRM 项目阶段报 `The package instance did not scan the item 'Matrix MP4 C02 limited'.`，未进入 C02 实际测量／Web Play。两行均未测，不能算产品 PASS 或产品 FAIL；没有该轮实播截图，未进行看图。摘要保留于 `.git/validation-evidence/f55c2d0d9b9e5489790b48c380908d3ef0460086/run-20261021-01/matrix-c02/`；矩阵 JSON 未包含逐行结果，容器与本轮工作区正常退出／清理。未重试同一失败前提。
+- Decisions：遵守用户撤出音频 STRM 与代理验收的授权；保留视频音轨和既有通用音频观察／播放代码。首败先交 B 判断，不把隔离扫描失败推断成插件行为，不放宽验收或自行扩展到产品修复。
+- Remaining In-Slice Work：B 审查并处理首个真实矩阵前提失败；后续取得 C02 有效媒体实际播放、截图／逐张查看与三阶段①②③字段证据，再按合同完成其余 P／C／D／F 必需行。B 负责完整 C#／Python／部署／扫描／大库／批量／配置回归及独立验收；Developer 不自行 PASS。全部 RO 满足后才进入独立 Slice Final／A 审查；RO-4 继续按既有决定处理。
+- Risks / Deviations：本机无 `python3.11`／LLDB／GDB／vsdbg／netcoredbg／dotnet-sos；矩阵编排用 Python 3.13.5，单元测试用 Python 3.11.17。当前 `scan_and_wait` 将项目查询的具体异常收敛为超时文案；本次 cleanup 前未保留 Jellyfin 原始日志，因此原因未定位。失败发生在播放前，不能据此验证 ColorRange 或 RO-3；完整矩阵、C# 全量、B 独立复现与远端 CI 均 NOT RUN，交 B 按合同处理。
+- Candidate Package Source SHA：`f55c2d0d9b9e5489790b48c380908d3ef0460086`；Git tree `40cdea8e7230daa974d150102eda44d015a5c140`；ZIP SHA-256 `351d164753858ce39777e7e5d7c56f10f19e140d6de980706c4856ed435d99b4`。此处是实际构建／测试的完整候选，不代表 Task 或 Slice PASS。
+- Head SHA：候选源码提交 `f55c2d0d9b9e5489790b48c380908d3ef0460086`（本报告随后以单独文档提交更新）。
 
 ## B Review Result
 
@@ -294,7 +296,7 @@ Developer 每真实轮初始总上限 60 分钟／测试 15 分钟；B 为 90 �
 Reviewed: NOT SET
 Decision: PENDING
 Slice Required Outcomes all satisfied: NO
-Next: DEVELOPER IMPLEMENTS TASK 5.3 WITHIN THE COMMITTED CONTRACT
+Next: B REVIEWS THE DEVELOPER HANDOFF FOR TASK 5.3; ANY FIX REQUIRED CONTINUES THIS TASK
 ```
 
 本检查点是 B 计划，不是产品 PASS 或 Slice Ready。实施后 B 只给 PASS／FIX REQUIRED；修正继续同一 Task，范围问题交 A。
