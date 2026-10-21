@@ -35,7 +35,6 @@ import hashlib
 import json
 import re
 import shutil
-import sqlite3
 import subprocess
 import sys
 import time
@@ -115,13 +114,19 @@ def require(condition: bool, message: str) -> None:
 # ---------------------------------------------------------------------------------------------------------------------
 
 
-def fingerprint_fields_match(row: dict | None, *, expected_url: str, sha1: str, size: int) -> list[str]:
+def fingerprint_fields_match(row: dict | None, *, expected_url: str, sha1: str, size: int,
+                            expected_item_id: str | None = None,
+                            expected_source_id: str | None = None) -> list[str]:
     """Return the reasons a fingerprint row does not match the fixture (empty means it matches)."""
     if row is None:
         return ["no fingerprint row was stored"]
     failures: list[str] = []
     if set(row) != FINGERPRINT_FIELDS:
         failures.append(f"fingerprint row fields are {sorted(row)} instead of {sorted(FINGERPRINT_FIELDS)}")
+    if expected_item_id is not None and str(row.get("item_id")).lower() != _guid_hex(expected_item_id):
+        failures.append("the fingerprint item id is not the item this playback belongs to")
+    if expected_source_id is not None and str(row.get("source_key")).lower() != _guid_hex(expected_source_id):
+        failures.append("the fingerprint source key is not the native media source of this row")
     if row.get("url_hash") != hashlib.sha256(expected_url.encode()).hexdigest():
         failures.append("the fingerprint URL hash does not match the STRM URL")
     if str(row.get("sha1") or "").lower() != sha1.lower():
@@ -129,6 +134,15 @@ def fingerprint_fields_match(row: dict | None, *, expected_url: str, sha1: str, 
     if row.get("file_size") != size:
         failures.append("the fingerprint size does not match the fixture size")
     return failures
+
+
+def _guid_hex(value: str) -> str:
+    """Return the GUID in the 32-character form the fingerprint table stores."""
+    normalized = normalize_source_id(value)
+    try:
+        return uuid.UUID(str(normalized)).hex
+    except (ValueError, TypeError):
+        return str(normalized or "").lower()
 
 
 def picture_evidence_failures(entry: dict | None, media_type: str) -> list[str]:
@@ -157,6 +171,7 @@ def picture_evidence_failures(entry: dict | None, media_type: str) -> list[str]:
 
 
 def playback_failures(entry: dict | None, *, expected_url: str, media_type: str,
+                      expected_source_id: str | None = None,
                       minimum_seconds: float = MINIMUM_PROGRESS_SECONDS) -> list[str]:
     """Return the reasons a strict playback observation is not acceptable (empty means accepted)."""
     if not isinstance(entry, dict) or not entry:
@@ -164,9 +179,30 @@ def playback_failures(entry: dict | None, *, expected_url: str, media_type: str,
     failures: list[str] = []
     if entry.get("advanced") is not True:
         failures.append("the driver did not report advanced playback")
+    # The contract requires the media clock to advance by at least ``minimum_seconds`` between the
+    # start observation and the later one; an absolute position says nothing about how long the
+    # playback actually played.
+    advanced_seconds = entry.get("advancedSeconds")
+    if not isinstance(advanced_seconds, (int, float)) or isinstance(advanced_seconds, bool):
+        failures.append(f"media time advance {advanced_seconds!r} was not recorded")
+    elif advanced_seconds < minimum_seconds:
+        failures.append(f"media time advanced {advanced_seconds} s, less than {minimum_seconds} s")
+    start_time = entry.get("startCurrentTime")
+    if not isinstance(start_time, (int, float)) or isinstance(start_time, bool):
+        failures.append(f"the start media time {start_time!r} was not recorded")
     current = entry.get("currentTime")
-    if not isinstance(current, (int, float)) or current < minimum_seconds:
-        failures.append(f"media time {current!r} did not advance by {minimum_seconds} s")
+    if not isinstance(current, (int, float)) or isinstance(current, bool):
+        failures.append(f"media time {current!r} was not recorded")
+    elif isinstance(start_time, (int, float)) and not isinstance(start_time, bool) \
+            and not isinstance(advanced_seconds, bool) \
+            and abs((current - start_time) - (advanced_seconds if isinstance(advanced_seconds, (int, float)) else 0)) > 0.05:
+        failures.append(f"media time {current!r} - start {start_time!r} does not equal the reported advance "
+                        f"{advanced_seconds!r}")
+    phases = {item.get("phase"): item for item in entry.get("strictObservations") or []}
+    if "start" not in phases:
+        failures.append("no start observation was recorded before the progress observation")
+    if "progress" not in phases:
+        failures.append("no progress observation was recorded")
     if entry.get("mediaErrorCode") is not None:
         failures.append(f"the media element reported error code {entry['mediaErrorCode']}")
     if entry.get("paused") is True:
@@ -202,16 +238,30 @@ def playback_failures(entry: dict | None, *, expected_url: str, media_type: str,
     failures += picture_evidence_failures(entry, media_type)
     required_stream = "Video" if media_type == "video" else "Audio"
     expected_hash = hashlib.sha256(expected_url.encode()).hexdigest()
+    require_source_id = None if expected_source_id is None else normalize_source_id(expected_source_id)
+    if expected_source_id is None:
+        failures.append("the expected native media source id was not recorded")
     matched_source = False
+    seen_source_ids: list[str] = []
     for info in entry.get("playbackInfo") or []:
         if info.get("status") != 200:
             continue
         for source in (info.get("body") or {}).get("mediaSources") or []:
+            source_id = normalize_source_id(source.get("id"))
+            if source_id:
+                seen_source_ids.append(source_id)
+            if require_source_id is not None and source_id != require_source_id:
+                continue
             if source.get("pathHash") == expected_hash and required_stream in (source.get("streamTypes") or []):
                 matched_source = True
     if not matched_source:
-        failures.append(
-            f"no successful PlaybackInfo response carried the expected URL and a {required_stream} stream")
+        if require_source_id is None:
+            failures.append(
+                f"no successful PlaybackInfo response carried the expected URL and a {required_stream} stream")
+        else:
+            failures.append(
+                f"no successful PlaybackInfo response carried source id {require_source_id!r} with the "
+                f"expected URL and a {required_stream} stream (seen source ids {sorted(set(seen_source_ids))})")
     return failures
 
 
@@ -236,8 +286,17 @@ def restart_readback_failures(frozen: dict, observed: dict) -> list[str]:
         return failures
     if observed.get("fingerprint") != frozen.get("fingerprint"):
         failures.append("the stored fingerprint changed across the restart")
-    if observed.get("streams") != frozen.get("streams"):
-        failures.append("the natively saved media streams changed across the restart")
+    if observed.get("fingerprint") is None:
+        failures.append("no fingerprint was readable before or after the restart")
+    # The saved media source must be compared in full: the address, the source id and every saved
+    # stream field. Comparing only the set of stream types (e.g. ["Audio", "Video"]) accepted a
+    # restart that changed the address, the codecs, the dimensions or the source identity.
+    frozen_sources = frozen.get("nativeSources")
+    observed_sources = observed.get("nativeSources")
+    if not frozen_sources or not frozen_sources.get("sources"):
+        failures.append("the pre-restart native media sources were not frozen")
+    elif observed_sources != frozen_sources:
+        failures.append("the natively saved media sources (id/address/streams) changed across the restart")
     if observed.get("strm_sha256") != frozen.get("strm_sha256"):
         failures.append("the STRM file changed across the restart")
     if observed.get("probe_count") != frozen.get("probe_count"):
@@ -438,25 +497,94 @@ def media_request_delta(before: dict[str, int], after: dict[str, int], filename:
     return after.get(key, 0) - before.get(key, 0)
 
 
+def fingerprint_row_for_item(auth: str, item_id: str, source_id: str | None = None) -> dict | None:
+    """Read the stored fingerprint for this item and its currently saved native source key.
+
+    The physical source id can change (a native scan re-keys it), so the source key is resolved
+    from the current native source set and the row is read for that exact (item, source) pair;
+    the item id is never reused as a stand-in source id.
+    """
+    key = source_id or current_source_key(auth, item_id)
+    if key is None:
+        return None
+    return fingerprint_row_or_none(item_id, key)
+
+
 def fingerprint_row_or_none(item_id: str, source_id: str) -> dict | None:
     if not pkg.fingerprint_database().is_file():
         return None
     return pkg.fingerprint_row(item_id, source_id)
 
 
-def read_fingerprint_snapshot(item_id: str, source_id: str) -> dict | None:
-    database = pkg.fingerprint_database()
-    if not database.is_file():
+def normalize_source_id(value: object) -> str | None:
+    """Normalize a native MediaSource id to the dashed GUID form the plugin stores."""
+    if value is None:
         return None
-    uri = database.as_posix() + "?mode=ro"
-    with sqlite3.connect("file:" + uri, uri=True, timeout=10) as connection:
-        connection.row_factory = sqlite3.Row
-        row = connection.execute(
-            "SELECT item_id, source_key, url_hash, sha1, file_size FROM strm_fingerprint "
-            "WHERE item_id = ? AND source_key = ?",
-            (uuid.UUID(item_id).hex, uuid.UUID(source_id).hex),
-        ).fetchone()
-    return dict(row) if row is not None else None
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        return str(uuid.UUID(text))
+    except ValueError:
+        return text.lower()
+
+
+SOURCE_SNAPSHOT_FIELDS = ("Type", "Index", "Codec", "Width", "Height", "SampleRate", "Channels",
+                          "BitRate", "ColorRange", "IsDefault", "Language")
+# Only this run's own synthetic fixture locations are echoed into the evidence; every other path is
+# kept only as a hash so no private library path can leak into a log or an index file.
+SAFE_PATH_PREFIXES = ("http://media:", "/media/strm/", "/media/local/")
+
+
+def safe_path(value: object) -> str | None:
+    text = str(value or "")
+    return text if text.startswith(SAFE_PATH_PREFIXES) else None
+
+
+def native_source_snapshot(auth: str, item_id: str) -> dict:
+    """Read the saved native sources and the item address through a read-only native query.
+
+    ``GET /Items/{id}?Fields=MediaSources,MediaStreams,Path`` is the same read-only item query the
+    accepted scan/large tooling already uses; it performs no probing and no refresh. The complete
+    per-source identity, address and stream fields are kept so a restart comparison is not limited
+    to the set of stream types.
+    """
+    status, payload = pe.request_json(
+        "GET", f"/Items/{item_id}?Fields=MediaSources,MediaStreams,Path",
+        headers={"Authorization": auth})
+    require(status == 200, "The read-only native media-source query failed.")
+    sources = []
+    for source in payload.get("MediaSources") or []:
+        path = str(source.get("Path") or "")
+        streams = [{"Type": stream.get("Type"), **({"fields": {key: stream.get(key)
+                                                                for key in SOURCE_SNAPSHOT_FIELDS}})}
+                   for stream in (source.get("MediaStreams") or [])]
+        sources.append({
+            "id": normalize_source_id(source.get("Id")),
+            "pathHash": hashlib.sha256(path.encode()).hexdigest(),
+            "path": safe_path(path),
+            "protocol": source.get("Protocol"),
+            "container": source.get("Container"),
+            "runTimeTicks": source.get("RunTimeTicks"),
+            "size": source.get("Size"),
+            "streams": sorted(streams, key=lambda item: (str(item.get("Type")), item["fields"].get("Index") or 0)),
+        })
+    sources.sort(key=lambda source: str(source.get("id")))
+    return {"itemId": normalize_source_id(payload.get("Id")), "itemPath": safe_path(payload.get("Path")),
+            "itemPathHash": hashlib.sha256(str(payload.get("Path") or "").encode()).hexdigest(),
+            "sources": sources}
+
+
+def current_source_key(auth: str, item_id: str) -> str | None:
+    """Return the single stored native source id of an item (resolved without any PlaybackInfo)."""
+    status, payload = pe.request_json(
+        "GET", f"/Items/{item_id}?Fields=MediaSources",
+        headers={"Authorization": auth})
+    require(status == 200, "The read-only native source-id query failed.")
+    ids = [normalize_source_id(source.get("Id")) for source in payload.get("MediaSources") or []]
+    ids = [value for value in ids if value]
+    require(len(ids) == 1, f"Expected exactly one native media source, found {ids}.")
+    return ids[0]
 
 
 def saved_stream_types(auth: str, item_id: str) -> list[str]:
@@ -627,7 +755,8 @@ def play_once(auth: str, row: dict, phase: str, evidence_dir: Path) -> dict:
     after_media = media_server_requests()
     events = plugin_event_delta(before_events)
     observation = {
-        "row": row["id"], "phase": phase, "itemId": item["Id"], "url": url,
+        "row": row["id"], "phase": phase, "itemId": item["Id"], "expectedSourceId": row["sourceKey"],
+        "url": url,
         "playback": entry, "consoleErrors": console_errors,
         "pluginEvents": events,
         "pluginProbeCalls": [pkg.probe_calls(event) for event in events],
@@ -635,8 +764,8 @@ def play_once(auth: str, row: dict, phase: str, evidence_dir: Path) -> dict:
         "mediaServerRequests": {"before": before_media.get("GET " + filename, 0),
                                 "after": after_media.get("GET " + filename, 0),
                                 "delta": media_request_delta(before_media, after_media, filename)},
-        "fingerprint": fingerprint_row_or_none(item["Id"], item["Id"]),
-        "savedStreams": saved_stream_types(auth, item["Id"]),
+        "fingerprint": fingerprint_row_for_item(auth, item["Id"], row["sourceKey"]),
+        "nativeSources": native_source_snapshot(auth, item["Id"]),
     }
     (phase_dir / "observation.json").write_text(json.dumps(observation, ensure_ascii=False, indent=2),
                                                 encoding="utf-8")
@@ -646,21 +775,41 @@ def play_once(auth: str, row: dict, phase: str, evidence_dir: Path) -> dict:
 def assert_playback(row: dict, observation: dict, *, counter_validated: bool) -> None:
     phase = observation["phase"]
     failures = playback_failures(observation["playback"], expected_url=observation["url"],
-                                 media_type=row["media_type"])
+                                 media_type=row["media_type"],
+                                 expected_source_id=observation.get("expectedSourceId"))
     failures += measurement_failures(phase=f"{row['id']} {phase}",
                                      probes_before=observation["ffprobe"]["before"],
                                      probes_after=observation["ffprobe"]["after"],
                                      counter_validated=counter_validated)
     if observation["mediaServerRequests"]["delta"] < 1:
         failures.append(f"{row['id']} {phase}: the server never fetched the fixture from the media service")
+    # The saved source set after the playback must still carry the expected source id, the expected
+    # address and the required stream; a playback that silently resolved another source is refused.
+    sources = (observation.get("nativeSources") or {}).get("sources") or []
+    expected_id = normalize_source_id(observation.get("expectedSourceId"))
+    expected_hash = hashlib.sha256(observation["url"].encode()).hexdigest()
+    required = "Video" if row["media_type"] == "video" else "Audio"
+    matched = [source for source in sources if source.get("id") == expected_id]
+    if expected_id is None:
+        failures.append(f"{row['id']} {phase}: the expected native source id was not recorded")
+    elif not matched:
+        failures.append(f"{row['id']} {phase}: the saved native sources {[s.get('id') for s in sources]} "
+                        f"do not contain the expected source {expected_id}")
+    else:
+        source = matched[0]
+        if source.get("pathHash") != expected_hash:
+            failures.append(f"{row['id']} {phase}: the saved source address is not the STRM URL")
+        stream_types = {stream.get("Type") for stream in source.get("streams") or []}
+        if required not in stream_types:
+            failures.append(f"{row['id']} {phase}: the saved source has no {required} stream ({sorted(stream_types)})")
     require(not failures, "; ".join(failures))
 
 
 def freeze_state(auth: str, row: dict) -> dict:
     item = row["item"]
     return {
-        "fingerprint": read_fingerprint_snapshot(item["Id"], item["Id"]),
-        "streams": saved_stream_types(auth, item["Id"]),
+        "fingerprint": fingerprint_row_for_item(auth, item["Id"], row["sourceKey"]),
+        "nativeSources": native_source_snapshot(auth, item["Id"]),
         "strm_sha256": hashlib.sha256(Path(row["path"]).read_bytes()).hexdigest(),
         "probe_count": probe_count(row["url"]),
     }
@@ -669,8 +818,8 @@ def freeze_state(auth: str, row: dict) -> dict:
 def read_only_state(auth: str, row: dict) -> dict:
     item = row["item"]
     return {
-        "fingerprint": read_fingerprint_snapshot(item["Id"], item["Id"]),
-        "streams": saved_stream_types(auth, item["Id"]),
+        "fingerprint": fingerprint_row_for_item(auth, item["Id"], row["sourceKey"]),
+        "nativeSources": native_source_snapshot(auth, item["Id"]),
         "strm_sha256": hashlib.sha256(Path(row["path"]).read_bytes()).hexdigest(),
         "probe_count": probe_count(row["url"]),
     }
@@ -738,11 +887,11 @@ def native_audio_strm_response(auth_header: str, item_id: str) -> dict:
     Called only while the plugin is disabled, so the observation is purely native, and it reuses
     the run's existing token (a second login would invalidate that token and make the following
     reads fail with 401). The universal audio endpoint is the native web client's own audio route.
-    A fixed-version limitation is reported, never hidden: the audio STRM item keeps its local
-    ``.strm`` path as the media source, so the response body is the STRM text, not audio bytes.
+    A fixed-version limitation is reported, never hidden: the actual saved native source path is
+    recorded next to the response body, so whether the audio source kept the local ``.strm`` path
+    is real evidence rather than an assumption.
     """
     credentials_value = credentials()
-    token = auth_header.split('Token="', 1)[1].rstrip('"')
     query = urllib.parse.urlencode({"DeviceId": "strm-probe-baseline", "audioCodec": "aac",
                                     "container": "opus,mp3,aac,m4a,m4b,flac,wav,ogg",
                                     "transcodingContainer": "ts", "transcodingProtocol": "hls"})
@@ -757,10 +906,22 @@ def native_audio_strm_response(auth_header: str, item_id: str) -> dict:
         head = error.read(64)
         status = error.code
         content_type = error.headers.get("Content-Type") if error.headers else None
+    saved_paths = server_media_source_paths(auth_header, item_id)
     return {"status": status, "contentType": content_type,
             "firstBytesSha256": hashlib.sha256(head).hexdigest(),
             "returnsStrmManifestText": head.startswith(b"# strm-probe-version:1"),
-            "mediaSourcePathIsLocalStrm": True}
+            "savedMediaSourcePaths": saved_paths,
+            "mediaSourcePathIsLocalStrm": bool(saved_paths) and all(
+                str(path).lower().endswith(".strm") for path in saved_paths)}
+
+
+def server_media_source_paths(auth: str, item_id: str) -> list[str]:
+    """Read the saved user-visible media source paths straight from the native item record."""
+    status, payload = pe.request_json(
+        "GET", f"/Items/{item_id}?Fields=MediaSources",
+        headers={"Authorization": auth})
+    require(status == 200, "The native media-source read for the audio observation failed.")
+    return [str(source.get("Path") or "") for source in payload.get("MediaSources") or []]
 
 
 def prepare_rows(auth: str, rows: list[dict]) -> dict:
@@ -797,6 +958,16 @@ def prepare_rows(auth: str, rows: list[dict]) -> dict:
         summary[row["id"] + ".preparationProbeCount"] = probe_count(row["url"])
         require(probe_count(row["url"]) >= 1,
                 f"{row['id']}: no ffprobe line was observed for the preparation probe; the counter is not usable.")
+        # Fix the expected native source identity and the prepared address/streams for this row, so
+        # every later phase is compared against the source this row really owns.
+        snapshot = native_source_snapshot(auth, row["item"]["Id"])
+        source_ids = [source["id"] for source in snapshot["sources"] if source.get("id")]
+        require(len(source_ids) == 1,
+                f"{row['id']}: expected exactly one native media source during preparation, found {source_ids}.")
+        row["sourceKey"] = source_ids[0]
+        summary[row["id"] + ".preparedSource"] = snapshot
+        require(snapshot["sources"][0].get("pathHash") == hashlib.sha256(row["url"].encode()).hexdigest(),
+                f"{row['id']}: the prepared native source address is not the STRM URL.")
     require(pkg.plugin_action(auth, True) == 204, "The package-instance plugin enable failed.")
     pkg.restart()
     return summary
@@ -823,8 +994,9 @@ def scenario_baseline(package: Path, evidence_dir: Path, selected: list[str],
                        for row in rows]
     summary["preparation"] = prepare_rows(auth, rows)
     auth = pkg.api_auth()
-    require(fingerprint_row_or_none(rows[0]["item"]["Id"], rows[0]["item"]["Id"]) is None,
-            "A fingerprint already existed before the first trust playback.")
+    for row in rows:
+        require(fingerprint_row_for_item(auth, row["item"]["Id"], row["sourceKey"]) is None,
+                f"{row['id']}: a fingerprint already existed before the first trust playback.")
 
     results: dict[str, object] = {}
     failures: list[str] = []
@@ -851,7 +1023,9 @@ def scenario_baseline(package: Path, evidence_dir: Path, selected: list[str],
             first = play_once(auth, row, "first-trust", evidence_dir)
             assert_playback(row, first, counter_validated=True)
             row_failures = fingerprint_fields_match(first["fingerprint"], expected_url=row["url"],
-                                                    sha1=row["fixture"]["sha1"], size=row["fixture"]["size"])
+                                                    sha1=row["fixture"]["sha1"], size=row["fixture"]["size"],
+                                                    expected_item_id=row["item"]["Id"],
+                                                    expected_source_id=row["sourceKey"])
             if first["fingerprint"] is not None:
                 require(any("FirstTrust" in event for event in first["pluginEvents"]),
                         f"{row['id']}: the existing stream was not accepted through first trust "
@@ -860,7 +1034,9 @@ def scenario_baseline(package: Path, evidence_dir: Path, selected: list[str],
                         f"{row['id']}: first trust reported a plugin probe {first['pluginEvents']}.")
             require(not row_failures, f"{row['id']}: " + "; ".join(row_failures))
             row_result["firstTrust"] = {"fingerprint": first["fingerprint"], "events": first["pluginEvents"],
-                                        "ffprobe": first["ffprobe"], "playbackTime": first["playback"]["currentTime"],
+                                        "ffprobe": first["ffprobe"],
+                                        "startTime": first["playback"].get("startCurrentTime"),
+                                        "advancedSeconds": first["playback"].get("advancedSeconds"),
                                         "mediaRequests": first["mediaServerRequests"]}
             # 2) second playback reuses the trusted baseline
             second = play_once(auth, row, "second-play", evidence_dir)
@@ -870,7 +1046,8 @@ def scenario_baseline(package: Path, evidence_dir: Path, selected: list[str],
             require(all(call in (0, None) for call in second["pluginProbeCalls"]),
                     f"{row['id']}: the second playback reported a plugin probe {second['pluginEvents']}.")
             row_result["secondPlay"] = {"ffprobe": second["ffprobe"], "events": second["pluginEvents"],
-                                        "playbackTime": second["playback"]["currentTime"]}
+                                        "startTime": second["playback"].get("startCurrentTime"),
+                                        "advancedSeconds": second["playback"].get("advancedSeconds")}
             # 3) restart: freeze, restart, compare read-only before any PlaybackInfo or playback
             frozen = freeze_state(auth, row)
             row_result["frozenBeforeRestart"] = frozen
@@ -885,7 +1062,8 @@ def scenario_baseline(package: Path, evidence_dir: Path, selected: list[str],
             require(after["fingerprint"] == frozen["fingerprint"],
                     f"{row['id']}: the post-restart playback changed the trusted fingerprint.")
             row_result["afterRestart"] = {"ffprobe": after["ffprobe"], "events": after["pluginEvents"],
-                                          "playbackTime": after["playback"]["currentTime"]}
+                                          "startTime": after["playback"].get("startCurrentTime"),
+                                          "advancedSeconds": after["playback"].get("advancedSeconds")}
             row_result["status"] = "PASS"
         except (BaselineError, RuntimeError, OSError, subprocess.SubprocessError) as error:
             # A row failure never stops the remaining rows: every row keeps its own evidence so B can
@@ -1000,20 +1178,42 @@ def render_index(summary: dict) -> str:
     rows = (summary.get("baseline") or {}).get("rowsResult", {})
     if rows:
         lines += ["## Baseline rows", "",
-                  "| row | status | ffprobe (first/second/restart) | playback seconds |", "|---|---|---|---|"]
+                  "| row | status | ffprobe (first/second/restart) | advanced seconds (first/second/restart) "
+                  "| source id |", "|---|---|---|---|---|"]
         for row_id, result in rows.items():
+            prepared = ((summary.get("baseline") or {}).get("preparation") or {}).get(row_id + ".preparedSource") or {}
+            source_ids = [source.get("id") for source in prepared.get("sources") or []]
             if result.get("status") != "PASS":
-                lines.append(f"| {row_id} | {result.get('status')} | - | - |")
+                lines.append(f"| {row_id} | {result.get('status')} | - | - | {', '.join(str(s) for s in source_ids)} |")
                 continue
             probes = "/".join(str(result[key]["ffprobe"]["delta"])
                               for key in ("firstTrust", "secondPlay", "afterRestart"))
-            times = "/".join(str(result[key]["playbackTime"])
-                             for key in ("firstTrust", "secondPlay", "afterRestart"))
-            lines.append(f"| {row_id} | PASS | {probes} | {times} |")
+            advances = "/".join(str(result[key].get("advancedSeconds"))
+                                 for key in ("firstTrust", "secondPlay", "afterRestart"))
+            lines.append(f"| {row_id} | PASS | {probes} | {advances} | {', '.join(str(s) for s in source_ids)} |")
         lines.append("")
         for row_id, result in rows.items():
             if result.get("status") not in ("PASS", "BLOCKED"):
                 lines += [f"### {row_id} failure", "", f"```\n{result.get('error')}\n```", ""]
+        for row_id, result in rows.items():
+            if result.get("status") != "PASS":
+                continue
+            frozen = result.get("frozenBeforeRestart") or {}
+            lines += [f"### {row_id} restart read-back (read-only, before any playback)", "",
+                      f"- fingerprint: `{json.dumps(frozen.get('fingerprint'), sort_keys=True)}`",
+                      f"- fingerprint matched after restart: "
+                      f"{frozen.get('fingerprint') == (result.get('readOnlyAfterRestart') or {}).get('fingerprint')}",
+                      f"- native sources matched after restart: "
+                      f"{frozen.get('nativeSources') == (result.get('readOnlyAfterRestart') or {}).get('nativeSources')}",
+                      f"- probe count before/after: {frozen.get('probe_count')}/"
+                      f"{(result.get('readOnlyAfterRestart') or {}).get('probe_count')}", ""]
+            for source in (frozen.get("nativeSources") or {}).get("sources") or []:
+                streams = ", ".join(f"{stream.get('Type')}#{stream['fields'].get('Index')}"
+                                    f":{stream['fields'].get('Codec')}"
+                                    for stream in source.get("streams") or [])
+                lines.append(f"  - source `{source.get('id')}` address `{source.get('path')}` "
+                             f"pathHash `{source.get('pathHash')}` streams {streams}")
+            lines.append("")
     blocked = (summary.get("baseline") or {}).get("blocked") or []
     if blocked:
         lines += ["## Blocked rows (not passed)", ""]

@@ -12,6 +12,7 @@ import json
 import sys
 import tempfile
 import unittest
+import uuid
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -35,6 +36,8 @@ playback = load("run_isolated_playback_integration", "scripts/run_isolated_playb
 URL = "http://media:8080/baseline-mp4-a.mp4"
 SHA1 = "0123456789abcdef0123456789abcdef01234567"
 SIZE = 4096
+SOURCE_ID = "b" * 8 + "-1111-2222-3333-" + "c" * 12
+OTHER_SOURCE_ID = "d" * 8 + "-4444-5555-6666-" + "e" * 12
 
 
 def fingerprint(**overrides) -> dict:
@@ -73,6 +76,23 @@ class FingerprintFieldTests(unittest.TestCase):
         del missing["sha1"]
         self.assertTrue(playback.fingerprint_fields_match(missing, expected_url=URL, sha1=SHA1, size=SIZE))
 
+    def test_a_row_for_another_item_or_source_is_refused(self):
+        # The baseline compares the stored row with the item and the native source this playback
+        # actually owns, not just with "some" row for the item.
+        row = fingerprint(item_id=uuid.UUID(int=1).hex, source_key=uuid.UUID(int=2).hex)
+        matches = playback.fingerprint_fields_match(
+            row, expected_url=URL, sha1=SHA1, size=SIZE,
+            expected_item_id=str(uuid.UUID(int=1)), expected_source_id=str(uuid.UUID(int=2)))
+        self.assertEqual(matches, [])
+        wrong_source = playback.fingerprint_fields_match(
+            row, expected_url=URL, sha1=SHA1, size=SIZE,
+            expected_item_id=str(uuid.UUID(int=1)), expected_source_id=str(uuid.UUID(int=3)))
+        self.assertTrue(any("source key" in failure for failure in wrong_source), wrong_source)
+        wrong_item = playback.fingerprint_fields_match(
+            row, expected_url=URL, sha1=SHA1, size=SIZE,
+            expected_item_id=str(uuid.UUID(int=3)), expected_source_id=str(uuid.UUID(int=2)))
+        self.assertTrue(any("item id" in failure for failure in wrong_item), wrong_item)
+
 
 class PlaybackObservationTests(unittest.TestCase):
     def _entry(self, tmp: Path, **overrides) -> dict:
@@ -82,7 +102,8 @@ class PlaybackObservationTests(unittest.TestCase):
         progress.write_bytes(b"\x89PNG" + b"0" * 4000)
         entry = {
             "name": "Baseline MP4", "itemId": "a" * 32, "mediaType": "video", "advanced": True,
-            "currentTime": 6.4, "duration": 24.0, "element": "video", "videoWidth": 320,
+            "currentTime": 6.4, "startCurrentTime": 0.4, "advancedSeconds": 6.0,
+            "duration": 24.0, "element": "video", "videoWidth": 320,
             "videoHeight": 180, "decodedFrames": 92, "readyState": 4, "paused": False,
             "mediaErrorCode": None, "playerVisible": True,
             "startScreenshot": str(start), "progressScreenshot": str(progress), "incompleteScreenshot": None,
@@ -91,13 +112,15 @@ class PlaybackObservationTests(unittest.TestCase):
                  "picture": {"grid": list(range(0, 64)), "distinctColors": 40, "meanLuma": 96.5,
                              "width": 320, "height": 180}},
                 {"phase": "progress", "currentTime": 6.4, "element": "video", "decodedFrames": 92,
+                 "advancedSeconds": 6.0,
                  "picture": {"grid": [((index * 37) % 200) for index in range(64)], "distinctColors": 44,
                              "meanLuma": 101.2, "width": 320, "height": 180}},
             ],
             "mediaRequests": [{"status": 200, "path": "/baseline-mp4-a.mp4", "kind": "media"}],
             "playbackInfo": [{"status": 200, "method": "GET", "urlPath": "/Items/x/PlaybackInfo",
                               "body": {"playbackInfo": None, "mediaSources": [
-                                  {"pathHash": playback.hashlib.sha256(URL.encode()).hexdigest(),
+                                  {"id": SOURCE_ID,
+                                   "pathHash": playback.hashlib.sha256(URL.encode()).hexdigest(),
                                    "pathValue": URL, "streamTypes": ["Audio", "Video"]}]}}],
         }
         entry.update(overrides)
@@ -106,22 +129,55 @@ class PlaybackObservationTests(unittest.TestCase):
     def test_complete_video_observation_is_accepted(self):
         with tempfile.TemporaryDirectory() as tmp:
             self.assertEqual(playback.playback_failures(self._entry(Path(tmp)), expected_url=URL,
-                                                        media_type="video"), [])
+                                                        media_type="video",
+                                                        expected_source_id=SOURCE_ID), [])
 
     def test_short_progress_is_refused(self):
+        # run-9 accepted ~4.85 s of real advance because the check compared the absolute media
+        # position with 5 s; the advance between start and progress is what the contract requires.
         with tempfile.TemporaryDirectory() as tmp:
-            failures = playback.playback_failures(self._entry(Path(tmp), currentTime=1.2),
-                                                  expected_url=URL, media_type="video")
-        self.assertTrue(any("did not advance" in failure for failure in failures), failures)
+            entry = self._entry(Path(tmp), currentTime=5.148011, startCurrentTime=0.295978,
+                                advancedSeconds=4.852033)
+            failures = playback.playback_failures(entry, expected_url=URL, media_type="video",
+                                                  expected_source_id=SOURCE_ID)
+        self.assertTrue(any("less than 5.0 s" in failure for failure in failures), failures)
+
+    def test_absolute_position_above_the_threshold_is_not_enough(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            entry = self._entry(Path(tmp), currentTime=12.0, startCurrentTime=8.0, advancedSeconds=4.0)
+            failures = playback.playback_failures(entry, expected_url=URL, media_type="video",
+                                                  expected_source_id=SOURCE_ID)
+        self.assertTrue(any("less than 5.0 s" in failure for failure in failures), failures)
+
+    def test_missing_or_inconsistent_advance_evidence_is_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cases = {
+                "no advance": {"advancedSeconds": None},
+                "no start time": {"startCurrentTime": None},
+                "inconsistent": {"advancedSeconds": 9.0},
+                "missing start observation": {"strictObservations": [
+                    {"phase": "progress", "currentTime": 6.4,
+                     "picture": {"grid": [((index * 37) % 200) for index in range(64)],
+                                 "distinctColors": 44}}]},
+                "missing progress observation": {"strictObservations": [
+                    {"phase": "start", "currentTime": 0.4,
+                     "picture": {"grid": list(range(64)), "distinctColors": 40}}]},
+            }
+            for label, overrides in cases.items():
+                failures = playback.playback_failures(self._entry(root, **overrides), expected_url=URL,
+                                                      media_type="video", expected_source_id=SOURCE_ID)
+                self.assertTrue(failures, label)
 
     def test_automation_flag_alone_is_refused(self):
         with tempfile.TemporaryDirectory() as tmp:
             failures = playback.playback_failures(
-                self._entry(Path(tmp), advanced=True, currentTime=0.3, decodedFrames=0, videoWidth=0,
+                self._entry(Path(tmp), advanced=True, currentTime=0.3, startCurrentTime=0.2,
+                            advancedSeconds=0.1, decodedFrames=0, videoWidth=0,
                             playbackInfo=[], mediaRequests=[]),
-                expected_url=URL, media_type="video")
+                expected_url=URL, media_type="video", expected_source_id=SOURCE_ID)
         joined = "; ".join(failures)
-        self.assertIn("did not advance", joined)
+        self.assertIn("less than 5.0 s", joined)
         self.assertIn("decoded video frames", joined)
         self.assertIn("decoded picture width", joined)
         self.assertIn("successful media request", joined)
@@ -135,13 +191,14 @@ class PlaybackObservationTests(unittest.TestCase):
             for overrides in ({"progressScreenshot": None}, {"progressScreenshot": str(root / "absent.png")},
                               {"progressScreenshot": str(small)}):
                 failures = playback.playback_failures(self._entry(root, **overrides), expected_url=URL,
-                                                      media_type="video")
+                                                      media_type="video", expected_source_id=SOURCE_ID)
                 self.assertTrue(any("screenshot" in failure for failure in failures), failures)
 
     def test_media_error_is_refused(self):
         with tempfile.TemporaryDirectory() as tmp:
             failures = playback.playback_failures(self._entry(Path(tmp), mediaErrorCode=4),
-                                                  expected_url=URL, media_type="video")
+                                                  expected_url=URL, media_type="video",
+                                                  expected_source_id=SOURCE_ID)
         self.assertTrue(any("error code 4" in failure for failure in failures), failures)
 
     def test_audio_playback_refuses_a_decoded_picture_or_a_missing_element(self):
@@ -150,14 +207,18 @@ class PlaybackObservationTests(unittest.TestCase):
                                       decodedFrames=None,
                                       playbackInfo=[{"status": 200, "method": "GET", "urlPath": "/x",
                                                      "body": {"mediaSources": [
-                                                         {"pathHash": playback.hashlib.sha256(URL.encode()).hexdigest(),
+                                                         {"id": SOURCE_ID,
+                                                          "pathHash": playback.hashlib.sha256(URL.encode()).hexdigest(),
                                                           "streamTypes": ["Audio"]}]}}])
-            self.assertEqual(playback.playback_failures(audio_entry, expected_url=URL, media_type="audio"), [])
+            self.assertEqual(playback.playback_failures(audio_entry, expected_url=URL, media_type="audio",
+                                                        expected_source_id=SOURCE_ID), [])
             picture = dict(audio_entry, videoWidth=320)
-            failures = playback.playback_failures(picture, expected_url=URL, media_type="audio")
+            failures = playback.playback_failures(picture, expected_url=URL, media_type="audio",
+                                                  expected_source_id=SOURCE_ID)
             self.assertTrue(any("decoded a video picture" in failure for failure in failures), failures)
             absent = dict(audio_entry, element=None)
-            failures = playback.playback_failures(absent, expected_url=URL, media_type="audio")
+            failures = playback.playback_failures(absent, expected_url=URL, media_type="audio",
+                                                  expected_source_id=SOURCE_ID)
         self.assertTrue(any("no native media element" in failure for failure in failures), failures)
 
     def test_source_url_or_primary_stream_mismatch_is_refused(self):
@@ -165,16 +226,37 @@ class PlaybackObservationTests(unittest.TestCase):
             entry = self._entry(Path(tmp))
             entry["playbackInfo"] = [{"status": 200, "method": "GET", "urlPath": "/x",
                                       "body": {"mediaSources": [
-                                          {"pathHash": playback.hashlib.sha256(b"http://media:8080/other.mp4").hexdigest(),
+                                          {"id": SOURCE_ID,
+                                           "pathHash": playback.hashlib.sha256(b"http://media:8080/other.mp4").hexdigest(),
                                            "streamTypes": ["Audio", "Video"]}]}}]
-            failures = playback.playback_failures(entry, expected_url=URL, media_type="video")
+            failures = playback.playback_failures(entry, expected_url=URL, media_type="video",
+                                                  expected_source_id=SOURCE_ID)
             self.assertTrue(any("PlaybackInfo" in failure for failure in failures), failures)
             entry["playbackInfo"] = [{"status": 200, "method": "GET", "urlPath": "/x",
                                       "body": {"mediaSources": [
-                                          {"pathHash": playback.hashlib.sha256(URL.encode()).hexdigest(),
+                                          {"id": SOURCE_ID,
+                                           "pathHash": playback.hashlib.sha256(URL.encode()).hexdigest(),
                                            "streamTypes": ["Audio"]}]}}]
-            failures = playback.playback_failures(entry, expected_url=URL, media_type="video")
+            failures = playback.playback_failures(entry, expected_url=URL, media_type="video",
+                                                  expected_source_id=SOURCE_ID)
         self.assertTrue(any("Video stream" in failure for failure in failures), failures)
+
+    def test_a_playback_info_from_another_source_id_is_refused(self):
+        # The accepted URL/stream pair must belong to the source this row owns: a response for a
+        # different media source GUID is a different source even when the address hash matches.
+        with tempfile.TemporaryDirectory() as tmp:
+            entry = self._entry(Path(tmp))
+            entry["playbackInfo"][0]["body"]["mediaSources"][0]["id"] = OTHER_SOURCE_ID
+            failures = playback.playback_failures(entry, expected_url=URL, media_type="video",
+                                                  expected_source_id=SOURCE_ID)
+            self.assertTrue(any("source id" in failure for failure in failures), failures)
+
+    def test_a_missing_expected_source_id_is_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            failures = playback.playback_failures(self._entry(Path(tmp)), expected_url=URL,
+                                                  media_type="video", expected_source_id=None)
+        self.assertTrue(any("expected native media source id was not recorded" in failure
+                            for failure in failures), failures)
 
 
 class PictureEvidenceTests(unittest.TestCase):
@@ -224,25 +306,105 @@ class MeasurementWindowTests(unittest.TestCase):
 
 
 class RestartReadbackTests(unittest.TestCase):
+    sources = [{"id": SOURCE_ID, "path": URL, "pathHash": "8c5bb2d1" + "0" * 56, "protocol": "Http",
+                "container": "mp4", "runTimeTicks": 240000000, "size": SIZE,
+                "streams": [{"Type": "Audio", "fields": {"Index": 1, "Codec": "aac", "ColorRange": None}},
+                            {"Type": "Video", "fields": {"Index": 0, "Codec": "h264", "Width": 320,
+                                                         "Height": 180, "ColorRange": "tv"}}]}]
     frozen = {"fingerprint": {"url_hash": "a" * 64, "sha1": SHA1, "file_size": SIZE},
-              "streams": ["Audio", "Video"], "strm_sha256": "c" * 64, "probe_count": 5}
+              "nativeSources": {"itemId": "a" * 32, "itemPath": "/media/strm/Baseline MP4.strm",
+                                "sources": sources},
+              "strm_sha256": "c" * 64, "probe_count": 5}
 
     def test_matching_read_only_state_is_accepted(self):
-        self.assertEqual(playback.restart_readback_failures(self.frozen, dict(self.frozen)), [])
+        self.assertEqual(playback.restart_readback_failures(self.frozen, json.loads(json.dumps(self.frozen))), [])
 
     def test_missing_freeze_is_refused(self):
-        self.assertTrue(playback.restart_readback_failures({}, dict(self.frozen)))
+        self.assertTrue(playback.restart_readback_failures({}, json.loads(json.dumps(self.frozen))))
 
     def test_lost_fingerprint_stream_or_probe_free_read_is_refused(self):
         cases = {
             "fingerprint": {"fingerprint": None},
-            "streams": {"streams": ["Audio"]},
             "strm": {"strm_sha256": "d" * 64},
             "probe": {"probe_count": 6},
         }
         for label, override in cases.items():
-            observed = {**self.frozen, **override}
+            observed = {**json.loads(json.dumps(self.frozen)), **override}
             self.assertTrue(playback.restart_readback_failures(self.frozen, observed), label)
+
+    def test_changed_address_codec_dimensions_or_source_id_is_refused(self):
+        # run-9 only compared the set of stream types (["Audio", "Video"]), so an address change or
+        # a completely different saved stream still compared equal; the full source must be compared.
+        mutations = {
+            "address": lambda sources: sources[0].__setitem__("path", "http://media:8080/baseline-mp4-b.mp4"),
+            "path hash": lambda sources: sources[0].__setitem__("pathHash", "f" * 64),
+            "source id": lambda sources: sources[0].__setitem__("id", OTHER_SOURCE_ID),
+            "codec": lambda sources: sources[0]["streams"][1]["fields"].__setitem__("Codec", "hevc"),
+            "width": lambda sources: sources[0]["streams"][1]["fields"].__setitem__("Width", 1920),
+            "color range": lambda sources: sources[0]["streams"][1]["fields"].__setitem__("ColorRange", "pc"),
+        }
+        for label, mutate in mutations.items():
+            observed = json.loads(json.dumps(self.frozen))
+            mutate(observed["nativeSources"]["sources"])
+            self.assertTrue(playback.restart_readback_failures(self.frozen, observed), label)
+
+    def test_a_dropped_saved_source_is_refused(self):
+        observed = json.loads(json.dumps(self.frozen))
+        observed["nativeSources"]["sources"] = []
+        self.assertTrue(playback.restart_readback_failures(self.frozen, observed))
+
+    def test_a_freeze_without_native_sources_is_refused(self):
+        frozen = {key: value for key, value in self.frozen.items() if key != "nativeSources"}
+        self.assertTrue(playback.restart_readback_failures(frozen, json.loads(json.dumps(self.frozen))))
+
+
+class NativeSourceSnapshotTests(unittest.TestCase):
+    payload = {"Id": "b" * 8 + "-1111-2222-3333-" + "c" * 12, "Path": "/media/strm/Baseline MP4.strm",
+               "MediaSources": [{"Id": "B" * 8 + "-1111-2222-3333-" + "C" * 12, "Path": URL, "Protocol": "Http",
+                                  "Container": "mp4", "RunTimeTicks": 240000000, "Size": SIZE,
+                                  "MediaStreams": [{"Type": "Video", "Index": 0, "Codec": "h264", "Width": 320,
+                                                     "Height": 180, "ColorRange": "tv"},
+                                                    {"Type": "Audio", "Index": 1, "Codec": "aac"}]}]}
+
+    def test_snapshot_keeps_source_identity_address_and_stream_fields(self):
+        original = playback.pe.request_json
+        playback.pe.request_json = lambda *args, **kwargs: (200, json.loads(json.dumps(self.payload)))
+        try:
+            snapshot = playback.native_source_snapshot("auth", self.payload["Id"])
+        finally:
+            playback.pe.request_json = original
+        self.assertEqual(len(snapshot["sources"]), 1)
+        source = snapshot["sources"][0]
+        self.assertEqual(source["id"], SOURCE_ID)
+        self.assertEqual(source["path"], URL)
+        self.assertEqual(source["pathHash"], playback.hashlib.sha256(URL.encode()).hexdigest())
+        types = {stream["Type"]: stream["fields"] for stream in source["streams"]}
+        self.assertEqual(types["Video"]["Codec"], "h264")
+        self.assertEqual(types["Video"]["Width"], 320)
+        self.assertEqual(types["Video"]["ColorRange"], "tv")
+        self.assertEqual(types["Audio"]["SampleRate"], None)
+
+    def test_snapshot_refuses_a_failed_query(self):
+        original = playback.pe.request_json
+        playback.pe.request_json = lambda *args, **kwargs: (500, {})
+        try:
+            with self.assertRaises(playback.BaselineError):
+                playback.native_source_snapshot("auth", self.payload["Id"])
+        finally:
+            playback.pe.request_json = original
+
+    def test_a_private_path_is_not_copied_into_the_evidence(self):
+        payload = json.loads(json.dumps(self.payload))
+        payload["MediaSources"][0]["Path"] = "/media/private/user/library/movie.mp4"
+        original = playback.pe.request_json
+        playback.pe.request_json = lambda *args, **kwargs: (200, payload)
+        try:
+            snapshot = playback.native_source_snapshot("auth", self.payload["Id"])
+        finally:
+            playback.pe.request_json = original
+        self.assertIsNone(snapshot["sources"][0]["path"])
+        self.assertEqual(snapshot["sources"][0]["pathHash"],
+                         playback.hashlib.sha256(b"/media/private/user/library/movie.mp4").hexdigest())
 
 
 class ScenarioDefinitionTests(unittest.TestCase):

@@ -199,7 +199,8 @@ async function strictPlay(page, item, strict) {
   let progressShot = null;
   let incompleteShot = null;
   let observation = null;
-  const deadline = Date.now() + 90000;
+  let startObservation = null;
+  const deadline = Date.now() + 120000;
   while (Date.now() < deadline) {
     const state = await observeMedia(page);
     if (state.present) {
@@ -207,14 +208,21 @@ async function strictPlay(page, item, strict) {
       if (!startShot && state.currentTime > 0.2) {
         startShot = join(strict.screenshotDir, `${slug}-start.png`);
         await page.screenshot({ path: startShot });
-        observations.push({ phase: 'start', currentTime: state.currentTime, element: state.element,
-          decodedFrames: state.decodedFrames, picture: await pictureSample(page, state.element) });
+        startObservation = { phase: 'start', currentTime: state.currentTime, element: state.element,
+          decodedFrames: state.decodedFrames, picture: await pictureSample(page, state.element) };
+        observations.push(startObservation);
       }
-      if (state.currentTime >= strict.minimumSeconds && !progressShot) {
+      // The contract is a real advance of the media clock between the start observation and the
+      // progress observation, so the threshold is measured from the start sample. Measuring an
+      // absolute media time let a playback that only advanced ~4.9 s pass as "at least 5 s".
+      if (startObservation && !progressShot
+          && state.currentTime - startObservation.currentTime >= strict.minimumSeconds) {
         progressShot = join(strict.screenshotDir, `${slug}-progress.png`);
         await page.screenshot({ path: progressShot });
         observations.push({ phase: 'progress', currentTime: state.currentTime, element: state.element,
-          decodedFrames: state.decodedFrames, picture: await pictureSample(page, state.element) });
+          decodedFrames: state.decodedFrames,
+          advancedSeconds: state.currentTime - startObservation.currentTime,
+          picture: await pictureSample(page, state.element) });
         break;
       }
     }
@@ -224,7 +232,12 @@ async function strictPlay(page, item, strict) {
     incompleteShot = join(strict.screenshotDir, `${slug}-incomplete.png`);
     await page.screenshot({ path: incompleteShot }).catch(() => {});
   }
-  return { observation, observations, startShot, progressShot, incompleteShot };
+  const advancedSeconds = startObservation && observation
+    ? observation.currentTime - startObservation.currentTime
+    : null;
+  return { observation, observations, startShot, progressShot, incompleteShot,
+    startCurrentTime: startObservation ? startObservation.currentTime : null,
+    advancedSeconds };
 }
 
 async function playItem(page, item, strict) {
@@ -253,7 +266,8 @@ async function playItem(page, item, strict) {
       const strictResult = await strictPlay(page, item, strict);
       const observed = strictResult.observation;
       const advanced = !!(observed && observed.present
-        && observed.currentTime >= strict.minimumSeconds
+        && typeof strictResult.advancedSeconds === 'number'
+        && strictResult.advancedSeconds >= strict.minimumSeconds
         && (observed.element === 'audio' || (observed.videoWidth || 0) > 0));
       for (let index = 0; index < 10 && playbackInfo.length === 0; index += 1) {
         await page.waitForTimeout(200);
@@ -275,6 +289,8 @@ async function playItem(page, item, strict) {
         playerVisible: observed ? observed.playerVisible : null,
         videoSrcPath: observed && observed.srcPath ? redactUrl(observed.srcPath) : null,
         progressSeconds: strict.minimumSeconds,
+        startCurrentTime: strictResult.startCurrentTime,
+        advancedSeconds: strictResult.advancedSeconds,
         startScreenshot: strictResult.startShot,
         progressScreenshot: strictResult.progressShot,
         incompleteScreenshot: strictResult.incompleteShot,
