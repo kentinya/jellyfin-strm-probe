@@ -5,7 +5,7 @@
 ```text
 Task ID: 5.2
 Parent Slice: 5
-Status: PLANNED
+Status: READY FOR B REVIEW
 Task Base: 4c75761982bc16dd1c6bae09bee1c3561da2c178
 Contract Checkpoint: 2111e20488ba5afbf46cfe8af8782cf4a63379fb
 Difficulty: High
@@ -120,13 +120,45 @@ Developer 每轮初始总上限 60 分钟、测试 15 分钟；B 每轮初始总
 
 ## Developer Completion Report
 
-- Changed Files：NOT SET。
-- Implemented：NOT RUN。
-- Tests and Results：NOT RUN；提交时补聚焦／完整基线证据、候选、计数、首败、实际图片查看和省略的 B 全量项目。
-- Decisions：NOT SET。
-- Remaining In-Slice Work：RO-1、RO-2／RO-3 真实矩阵与误判／失败恢复；RO-4 已由 Task 5.1 完成。
-- Risks / Deviations：真实 Audio STRM 支持尚待本 Task 核验；不能写成已支持。新 baseline 入口尚未实现。产品修复仍未授权。
-- Head SHA：NOT SET。
+```text
+Implementation Head: 38c1184c488baf1e6bd1c3b2ff4b1264c9e08e93
+Range: 4c75761982bc16dd1c6bae09bee1c3561da2c178..38c1184c488baf1e6bd1c3b2ff4b1264c9e08e93
+```
+
+- Changed Files：`scripts/run_isolated_playback_integration.py`（新增 1039 行）、`scripts/package_playback_driver.mjs`（+277/-? 行，新增 opt-in strict 模式）、`tests/test_isolated_playback_integration.py`（新增 384 行）。`src/`、C# 测试、依赖、成功判定、诊断、`package_environment.py`、`run_isolated_package_integration.py` 均未修改。
+- Implemented：
+  1. 新入口 `scripts/run_isolated_playback_integration.py --package <ZIP> --scenario baseline --evidence-dir <dir> [--rows B01,B02,B03] [--keep-workspace]`，复用 `pe.select_workspace`／锁与归属检查／ZIP 部署与摘要／原生 API／现有媒体服务／现有浏览器驱动，未另建框架、环境管理器、场景 DSL 或证据系统。
+  2. 用锁定 Jellyfin 镜像自带 FFmpeg 生成 24 秒夹具：MP4 A/B、MKV A/B、真实 AAC/M4A 音频 A/B，A 的逐字节副本（`*-copy`），以及 limited(`tv`)／full(`pc`)／未指定 ColorRange 三支，逐项记录真实 SHA-1／Size／ffprobe 流信息；MP4 使用 `+faststart`（本机媒体服务尚无 Range，RO-1 Range 属后续 Task）。
+  3. 独立归属实例：新工作区、新随机凭据、`Package STRM Fixtures`(movies)＋`Package Audio Fixtures`(music) 两库、仅从 ZIP 安装、Active、载荷与归档一致、原生任务默认无触发；启用服务端 ffprobe Debug 日志（仅日志配置）以获得真实 ffprobe 计数。
+  4. 准备阶段：插件禁用时由 Jellyfin 自身扫描并探测／持久化必要主流（单列 `preparationProbeCount`），再启用插件并重启，确认无旧指纹后开始测量。
+  5. 每行 B01/B02/B03 依次执行 first-trust → second-play → 重启（先冻结、重启、只读比对，再播放），全部由原生 Web 真实 Play 点击触发；每次播放校验测量窗口 ffprobe 增量=0、插件 `calls 0`、媒体服务真实 GET、PlaybackInfo 源 URL＋必要主流、≥5 秒进度、解码帧、8×8 亮度网格、截图存在且非空。
+  6. 严格模式在 `package_playback_driver.mjs` 中显式 opt-in：缺 `strict.minimumSeconds`／`screenshotDir`／`item.mediaType` 直接以退出码 2 拒绝；旧 2 秒夹具的默认行为不变。
+- Tests and Results（Developer 开发反馈，均来自真实运行）：
+  - `python3.11 -m unittest discover -s tests -p test_isolated_playback_integration.py`：**34 tests OK**（新增模块；含指纹五字段、播放观察、截图／解码帧／亮度网格、测量窗口、重启只读、实体类型、ffprobe 计数、子网适配、索引渲染的拒绝控制）。
+  - `python3.11 -m unittest discover -s tests -p test_isolated_package_integration.py`：**31 tests OK**（改动直接影响共享浏览器驱动的既有包入口；首跑 1 failure＋1 error 因上一轮保留实例仍在运行，停止本轮实例后复跑通过，两次结果均保留）。
+  - `node --check scripts/package_playback_driver.mjs`：PASS。
+  - `python3.11 -m compileall -q`（两个改动的 Python 文件）：PASS。
+  - `python3 scripts/check_governance.py`：`PASS: committed Slice/Task governance`。
+  - `git diff --check`：PASS。
+  - **未运行（留给 B）**：`dotnet restore/build/test/format` 全套、Python 3.11 完整 discovery、`run_isolated_package_integration.py --scenario all` 既有包回归、扫描／大库／批量／配置实机回归、远端 CI。本 Task 未改 C# 与共享环境模块，但 B 仍须按 Task 计划执行完整门槛。
+- 真实基线结果（证据目录 `.git/validation-evidence/9826976dedcc742d00ff5601ac9c2094beef0662/run-20261021-020605/`，最终候选 run-9，索引 `run-9/INDEX.md`）：
+  - 候选 ZIP：`artifacts/releases/dev-e0b2abe/Jellyfin.Plugin.StrmProbeOptimizer_linux-x64.zip`，SHA-256 `cb195638971da1a69e5cfa2d9966f9b3db94ddae2c54ef33a03641bb3ceba9ae`（源码 9826976 构建；后续 38c1184 仅改索引渲染，B 应重建同 Head ZIP 后复跑）。
+  - **B01 MP4：PASS** — first-trust/second-play/after-restart 的 ffprobe 增量 0/0/0，播放进度 5.148/5.032/5.011 秒，首次信任 `reason FirstTrust, plugin probe calls 0`，五字段指纹 `sha1 03565d5d…`／`file_size 1697410`／`url_hash 8c5bb2d1…`，重启前后冻结与只读读回完全一致。
+  - **B02 MKV：PASS** — ffprobe 增量 0/0/0，进度 5.388/5.052/5.428 秒，指纹 `sha1 df96e05d…`／`file_size 1705546`，重启只读一致。
+  - **B03 真实 Audio：BLOCKED（不计 PASS）** — 音频 STRM 被原生索引为真实 `Audio` 实体并成功原生探测／持久化 Audio 主流，但固定 Jellyfin 12.2.0 的音频媒体源路径保持本地 `.strm`（只有 Video 走 `ShortcutPath` 替换），原生 universal 音频路由返回 STRM 文本（HTTP 200，`application/octet-stream`，首字节匹配 `# strm-probe-version:1`，`firstBytesSha256 3cdb71ed…`）。插件在音频行也会因返回源不匹配而拒绝（`The current Jellyfin source is not usable …`）。工具据实记录并令整轮非零退出，不写 PASS。
+- Decisions：
+  1. 不改插件产品代码、成功判定或诊断（未授权）；音频能力问题按 Task 合同交 A 裁定。
+  2. 本机 Docker 默认地址池已被历史遗留的 44 个 bridge 网络占满（`all predefined address pools have been fully subnetted`），按开发流程既有做法只给本轮两条 Compose 网络注入显式 /28 子网（`acceptance` 仍 internal），不 prune／删除保留网络、不改共享环境模块。
+  3. ffprobe 计数取自固定版本服务端自身 `Starting "<ffprobe>" with args … -i "<url>"` 行，要求闭合引号（避免把 `…-copy` 前缀计入），且只计 ffprobe（不计 ffmpeg 转码与 ffmpeg 能力探测）；准备期先验证计数非零，缺失一律不算 0。
+  4. 严格模式新增 8×8 亮度网格与颜色数作为解码画面证据，并拒绝均匀／未采样画面；**截图仍须由审查者逐张打开检查**。
+- Remaining In-Slice Work：P01～P08 变化矩阵、ColorRange 返回主流三阶段差异（RO-3）、失败／恢复回归；RO-1 的 Range、固定 URL 原子切换与失败路由；B 对音频行的合同裁定。
+- Risks / Deviations：
+  1. **音频行 BLOCKED**：固定版本原生不支持音频 STRM 真实播放，Task 的 B03 与「音频项目缺 Audio 主流」子场景在此版本无法取得实机 PASS，需 A 决定合同处理方式。
+  2. **我无法查看图片**（当前模型不支持图像输入）：截图已保存并由工具做存在性／尺寸与解码画面校验，但「执行者逐张打开查看画面标记」这一步**未由我完成**，B 或后续审查者必须实际打开 `run-9/B0*/*/screenshots/*.png` 检查；不得把自动化校验当作已看图。
+  3. 预算：本轮非测试工作（真实运行与排障）远超 60 分钟上限，测试用时约 10 分钟，占比约 3%（严格小于 50%）；实际发生 9 次真实基线运行（含首败与重跑），全部首败与日志保留在证据目录。
+  4. MP4 依赖 `+faststart` 补偿无 Range 的本地媒体服务；RO-1 Range 实现后该补偿可评估移除。
+  5. B01/B02 的播放经原生 HLS 转码（vp9/opus 或等价），ffprobe 计数只统计目标源探测，不混入转码 FFmpeg。
+- Head SHA：`38c1184c488baf1e6bd1c3b2ff4b1264c9e08e93`
 
 ## B Review Result
 
@@ -134,7 +166,7 @@ Developer 每轮初始总上限 60 分钟、测试 15 分钟；B 每轮初始总
 Reviewed: NOT SET
 Decision: PENDING
 Slice Required Outcomes all satisfied: NO
-Next: DEVELOPER IMPLEMENTS TASK 5.2
+Next: B REVIEWS 4c75761982bc16dd1c6bae09bee1c3561da2c178..38c1184c488baf1e6bd1c3b2ff4b1264c9e08e93
 ```
 
-本文件是活动计划，不是产品 PASS。B 未运行本 Task 的播放、包安装或独立实机验收。Task 5.1 B PASS 以其固定 Git 快照保留；Slice 5 仍 ACTIVE。
+本文件是活动计划，不是产品 PASS。Developer 交 READY FOR B REVIEW，不自判 PASS。B 未运行本 Task 的完整全量回归或独立实机验收；音频行 BLOCKED 与截图的逐张查看仍需 B／A 处理。Task 5.1 B PASS 以其固定 Git 快照保留；Slice 5 仍 ACTIVE。
