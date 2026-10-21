@@ -739,6 +739,15 @@ class RawScanDiagnosticTests(unittest.TestCase):
         self.assertEqual(result["status"], "FOUND")
         self.assertEqual(result["item"], item)
 
+    def test_ordinary_media_is_located_by_its_real_file_path(self):
+        from unittest.mock import patch
+        path = "/media/local/regular-mp4/Matrix Regular MP4.mp4"
+        ordinary = self._item(path, name="Matrix Regular MP4")
+        stray_strm = self._item("/media/strm/Matrix Regular MP4.strm", name="Matrix Regular MP4")
+        with patch.object(playback.pe, "request_json", return_value=(200, {"Items": [stray_strm, ordinary]})):
+            found = playback.raw_item_query("auth", "Matrix Regular MP4", path)
+        self.assertEqual(found["item"]["Path"], path)
+
     def test_a_duplicate_strm_path_is_refused_with_the_raw_evidence(self):
         item = self._item("/media/strm/Matrix MP4 C02 limited.strm", name="Matrix MP4 C02")
         original_request = playback.pe.request_json
@@ -773,6 +782,12 @@ class FailureObservationTests(unittest.TestCase):
                 stack.enter_context(patch.object(owner, name, replacement))
             with self.assertRaises(playback.BaselineError):
                 playback.play_once("old-auth", row, "window", Path(tmp))
+            # Console-free capture returns the same redacted observation; the return value must
+            # not carry credentials that a successful matrix journey would serialize later.
+            stack.enter_context(patch.object(playback.pkg, "unexpected_console_errors", lambda result: []))
+            returned = playback.play_once("old-auth", row, "capture", Path(tmp))
+            self.assertNotIn("auth", returned)
+            self.assertNotIn("private-test-token", json.dumps(returned))
             result = (Path(tmp) / row["id"] / "window" / "observation.json").read_text()
             saved = json.loads(result)
             self.assertEqual(saved["fingerprint"], fingerprint())

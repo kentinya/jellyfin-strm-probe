@@ -14,6 +14,40 @@ namespace Jellyfin.Plugin.StrmProbeOptimizer.Tests;
 public sealed class ProbeExecutionContextTests
 {
     [TestMethod]
+    public void VerifiedNativeReadbackMayOmitColorRangeButNotChangeOtherIdentityFields()
+    {
+        var itemId = Guid.NewGuid();
+        const string url = "https://media.example.invalid/video.mp4";
+        using var context = ProbeExecutionContext.Begin(itemId, url, MediaStreamType.Video);
+        var encoded = new MediaStream { Type = MediaStreamType.Video, Index = 0, Codec = "h264", Width = 320, ColorRange = "tv" };
+        context.RecordResult(url, new MediaInfo { MediaStreams = [encoded] });
+        context.RecordPersistedMediaStreams(itemId, [encoded]);
+
+        Assert.IsTrue(context.IsPersistedProbeResult(new MediaStream { Type = MediaStreamType.Video, Index = 0, Codec = "h264", Width = 320 }));
+        Assert.IsFalse(context.IsPersistedProbeResult(new MediaStream { Type = MediaStreamType.Video, Index = 0, Codec = "h264", Width = 640 }));
+        Assert.IsFalse(context.IsPersistedProbeResult(new MediaStream { Type = MediaStreamType.Video, Index = 1, Codec = "h264", Width = 320 }));
+        Assert.IsFalse(context.IsPersistedProbeResult(new MediaStream { Type = MediaStreamType.Video, Index = 0, Codec = "h264", Width = 320, ColorRange = "pc" }));
+    }
+
+    [TestMethod]
+    public void MissingReadbackColorRangeDoesNotBypassTheExactSuccessfulSaveSignal()
+    {
+        var itemId = Guid.NewGuid();
+        const string url = "https://media.example.invalid/video.mp4";
+        using var context = ProbeExecutionContext.Begin(itemId, url, MediaStreamType.Video);
+        var encoded = new MediaStream { Type = MediaStreamType.Video, Codec = "h264", ColorRange = "tv" };
+        var readback = new MediaStream { Type = MediaStreamType.Video, Codec = "h264" };
+        context.RecordResult(url, new MediaInfo { MediaStreams = [encoded] });
+
+        Assert.IsFalse(context.IsPersistedProbeResult(readback));
+        context.RecordPersistedMediaStreams(itemId, [readback]);
+        Assert.IsFalse(context.HasPersistedPrimaryResult);
+        Assert.IsFalse(context.IsPersistedProbeResult(readback));
+        context.RecordPersistedMediaStreams(Guid.NewGuid(), [encoded]);
+        Assert.IsFalse(context.HasPersistedPrimaryResult);
+    }
+
+    [TestMethod]
     public void DiagnosticSnapshotsDescribeTheThreeNativeStagesWithoutRequestSecrets()
     {
         var itemId = Guid.NewGuid();

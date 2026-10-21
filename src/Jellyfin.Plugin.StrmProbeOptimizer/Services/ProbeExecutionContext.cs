@@ -148,7 +148,13 @@ public sealed class ProbeExecutionContext : IDisposable
         ObservePrimaryStream("returned", identity);
         lock (_sync)
         {
-            return _persistedPrimaryResults.Contains(identity);
+            // Jellyfin 12.2.0 ca0f16e MediaStreamRepository.Map omits ColorRange in both
+            // directions. Same-call encoder/save/readback evidence confirms that only this field
+            // is lost. Keep the encoder-to-successful-save comparison exact; permit a missing
+            // readback value only after that save, preserving every other identity field.
+            return _persistedPrimaryResults.Contains(identity)
+                || (identity.ColorRange is null
+                    && _persistedPrimaryResults.Any(saved => (saved with { ColorRange = null }) == identity));
         }
     }
 
