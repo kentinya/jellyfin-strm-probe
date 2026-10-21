@@ -2460,6 +2460,10 @@ def prepare_matrix_rows(auth: str, rows: list[dict], evidence_dir: Path) -> dict
     stopped owned copy, and only then re-enable the plugin and hand out a fresh token.
     """
     summary: dict[str, object] = {}
+    # The same explicit refresh the baseline preparation uses: the wizard's add-library scan is not
+    # a guaranteed completed scan, so a row's item may not exist yet; one native refresh before the
+    # item lookups makes the per-row waits start from a real scan trigger.
+    pe.request_json("POST", "/Library/Refresh", headers={"Authorization": auth})
     for row in rows:
         item = raw_item_query(auth, row["item"])
         summary[row["id"] + ".scan"] = {"status": item["status"],
