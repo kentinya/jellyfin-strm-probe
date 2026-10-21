@@ -1585,7 +1585,11 @@ def build_matrix_rows(fixture_table: dict) -> list[dict]:
                 fp_kind: str = "same", fp_tokens: tuple[object, object] | None = None,
                 fp_url: str | None = None, journey: str = "normal", trust: bool = True,
                 watch_media: str | None = None, item_name: str | None = None) -> None:
+            # Jellyfin derives the item name from the STRM file name's first extension boundary:
+            # a dot in the name makes "... C02.limited" become the item "... C02", so every row
+            # item name spells its tail with spaces and never contains a dot.
             item = item_name or (f"Matrix {fmt} {group} " + tail.replace(".", " ")).strip()
+            item = item.replace(".", " ").strip()
             # The STRM file name is a stable row property: ``row["item"]`` is replaced by the native
             # item dictionary once the row has been scanned, so it must never key the STRM path.
             strm_name = item
