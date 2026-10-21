@@ -5,7 +5,7 @@
 ```text
 Task ID: 5.3
 Parent Slice: 5
-Status: READY FOR B REVIEW
+Status: FIX REQUIRED
 Task Base: f17fb1fc90dda242eeff9fac7b4f21576b5e6f94
 Contract Checkpoint: 68e7bf01e7796fe9972838dfc0d8ed8283aacedd
 Difficulty: High
@@ -397,3 +397,29 @@ B 已打开 Developer fix11 的完整原始服务器日志、矩阵 JSON、原�
 - **固定交接包：** 从干净 316e7eb 构建 `candidate-package/Jellyfin.Plugin.StrmProbeOptimizer_linux-x64.zip`，SourceRevision 为上述完整 SHA，ZIP SHA-256 `a34b73957118a29c177ec4e3d06886690ff6b3b634b6d7f4fcdea8617ac77c97`，buildInputs SHA-256 `f394eabc06a7e5423adefeed0aed34b18078be80d0a7ac9143f46340bb8d98ef`。它尚无真实安装／播放验收；82551cf 的原始实播仅作对应输入反馈，不升级为最终包完整结果。
 - **证据：** 本机 `.git/validation-evidence/43b9ff9/developer-20261021T152940Z/INDEX.md`，含 commands／环境、两个原始实机结果、服务器日志／ffprobe 原文、完整三阶段字段、33 字段差异及固定源码摘要、五字段／完整原生状态、截图逐张查看记录、三个独立包与 sidecar、资源对账及时间账本。两次新归属容器均正常退出 0、无 OOM、CLEANED，对账 CLEAN；生产实例和现存全部 1004 项准备库未操作、未重建。
 - **B 保留的完整责任：** 当前无完整矩阵 PASS；其余 115 个规范 ID 及 baseline B01／B02 本轮 NOT RUN。最终候选完整 C#／Python、baseline／全部 P／C／D／F、package／scan／现存全部 1004 项 large、plugin／batch／configuration、独立关键复现、全部截图核验及完整 `f17fb1fc90dda242eeff9fac7b4f21576b5e6f94..Head` 审查均由独立 B 承担。匹配证据按实际输入复用；本轮未运行这些全量，不交回 Developer，不签发 Task PASS／Slice Closure／A 最终决定。
+
+## 交付复核决定（2026-10-21，FIX REQUIRED）
+
+用户要求开始审核后，核对真实干净仓库、必读文档、已提交合同、完整 Task Base..Head 差异和原始交接资料。**本轮由上一轮实现者做交付复核，不能冒充独立 B 审查或签发独立 B PASS**；上一独立 B 的 FIX REQUIRED 保留，独立 B 完整门禁与关键复现仍待完成。已发现确定的必需场景阻塞，当前 Task 改为 FIX REQUIRED，修正继续同一 Task／Base，不新建 Task。
+
+```text
+Reviewed Range: f17fb1fc90dda242eeff9fac7b4f21576b5e6f94..ed56eaf94bf6cee39bcad9c2588158e485790a58
+Implementation Candidate: 316e7ebd756ce2cb685ab44fd453a03c6c777b8f
+Decision: FIX REQUIRED (delivery self-review; independent B decision still pending)
+```
+
+### 当前阻塞项
+
+| ID／级别 | 真实入口与原因 | 是否满足当前需求／修正边界 |
+|---|---|---|
+| DR53-1／P1 | 已注册的 MP4／MKV.P08.03 经 `prepare_matrix_rows` 第 2525 行将 `row["item"]` 替换为原生项目字典；`apply_matrix_change` 第 1931 行仍用字符串加该字典构造 staging 路径，必然抛 TypeError。该分支由正常扫描、首次信任后进入，不是假造内部调用。 | 不满足原字节重写／重放不触发探测的完整旅程。沿用已有稳定 `strm_name` 等真实路径身份，补覆盖扫描后实际 row 形态的直接控制，不另造工具框架。当前为源码确定错误，未声称本轮实机复现。 |
+| DR53-2／P1 | D02 在第 2400 行重新启用插件、D03 在第 2428 行恢复 PlaybackAutoCheck=true 后，才调用 `d_row_restart`；两者也没有禁用状态下的 second-play。MP4／MKV 都受影响。 | 即使修正鉴权后显示 PASS，也不能证明合同要求的禁用／关闭检查状态下再播和重启后播放。保留该行前提直到要求的再播、冻结、重启先读及实播结束，再按既有范围恢复配置并核验。 |
+| DR53-3／P1 | `play_once` 第 926 行只更新自身局部 auth；D04／D05 随后第 2445／2465 行仍把外层旧 auth 传给 `current_source_key`，D02／D03 的恢复请求同样使用旧 auth。最终提交只补了 `freeze_state` 的认证，未覆盖这些已注册路径。 | 不满足委托行的后续只读核验／完整旅程。既有原始 C02 日志已证明浏览器登录撤销旧会话；本项是沿相同登录链的源码审查，不冒充新 D 行实机结论。修正必要请求边界并覆盖成功读取和真正读取失败仍拒绝，不把凭据加回结果。 |
+
+### 已核验结果与保留门禁
+
+- 固定 ZIP 实际 SHA-256 与 sidecar／报告一致：`a34b73957118a29c177ec4e3d06886690ff6b3b634b6d7f4fcdea8617ac77c97`；316e7eb 到审查 Head 只改 SLICE.md／TASK.md。核对了原诊断服务器日志及固定原生源码摘要；同次 33 字段仅 ColorRange 丢失的依据成立，窄范围产品修正未见本次新增的确定错误，但不据此宣称 RO-3 全部通过。
+- **本轮实际完整回归：** C# 205 passed／0 failed／0 skipped；Python 3.11.10 在独立干净 Git archive 候选检出下发现 349 项，347 passed、2 SKIPPED（`test_assembly_version_mismatch_is_rejected`、`test_read_assembly_version_reads_a_real_assembly`：发布归档不存在），跳过不计 PASS。未复制忽略的 artifacts／数据库／凭据。clean compileall、Node 语法与差异检查通过；治理在审查前及报告提交后核验。没有新增测试或修改实现。
+- 原 Developer 诊断中断仍为 BLOCKED／未完成，82551cf 的 C02 整体仍为 FAIL；旧截图与字段资料只用于其匹配输入的历史反馈，不合并成最终包 PASS。本轮没有新实机播放／截图，不声称独立关键复现已完成。
+- 按合同“已有明确阻塞可先拒绝”停止昂贵门禁；最终候选 C02 完整重启、baseline／全部 116 行、package／scan／现存全部 1004 项 large、plugin／batch／configuration、独立关键复现和 Slice Final 均 **NOT RUN**。这些最终责任仍属 B；修正后 Developer 仅提交改动直接影响的控制与选定完整旅程，B 在固定最终候选完成／核验复用全部门槛，不把全量交回 Developer。
+- 本机索引：`.git/validation-evidence/ed56eaf94bf6cee39bcad9c2588158e485790a58/delivery-review-20261021T231318Z/INDEX.md`；精确命令、源码可达路径、原始测试输出／跳过原因、候选和历史结果核验及时间账务均保留。未启动或操作任何容器、生产实例或现存 1004 项准备库；不推送、不改历史。当前仍有 RO-2／RO-3 阻塞，不提交 Closure Packet、不返回 SLICE READY FOR A REVIEW、不关闭 Slice。
