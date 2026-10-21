@@ -504,6 +504,18 @@ def archive_evidence(evidence_dir: Path, name: str, content: str) -> str:
     return str(target)
 
 
+def archive_server_logs(evidence_dir: Path) -> list[str]:
+    """Copy this run's complete original Jellyfin server logs next to the other evidence."""
+    log_dir = pe.WORK / "config" / "log"
+    written: list[str] = []
+    for path in sorted(log_dir.glob("log_*.log")):
+        target = evidence_dir / "server-logs" / path.name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(path, target)
+        written.append(str(target))
+    return written
+
+
 def archive_media_logs() -> list[dict]:
     """Return this run's original media-container request/range log lines with their counts."""
     logs = run(*DOCKER, "logs", pe.container_name("media"), timeout=120)
@@ -1263,6 +1275,9 @@ def main() -> int:
             archived["serverProbeLog"] = archive_evidence(
                 evidence_dir, "server-ffprobe-lines.log", "\n".join(probe_lines) + "\n")
             archived["serverProbeLineCount"] = len(probe_lines)
+            # The complete original server log is archived as well: the ffprobe lines alone cannot
+            # explain a native 500 or a first failure that never reached a probe.
+            archived["serverLogFiles"] = archive_server_logs(evidence_dir)
         except (OSError, pe.PackageEnvironmentError, subprocess.SubprocessError) as archive_error:
             archived["serverLogArchiveError"] = f"{type(archive_error).__name__}: {archive_error}"
         try:
