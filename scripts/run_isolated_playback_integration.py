@@ -356,6 +356,11 @@ def ffprobe(path_in_container: str) -> dict:
 def generate_fixtures() -> dict:
     """Generate the baseline media with the pinned Jellyfin FFmpeg and record real identities."""
     pe.workspace()
+    # The FFmpeg container writes into the mounted media directory, so the audio subdirectory must
+    # exist before the first render. The music library holds only the audio STRM; the audio fixture
+    # itself stays outside every library path so no regular (non-STRM) audio item is indexed.
+    for name in ("audio", "music"):
+        (pe.WORK / "media" / name).mkdir(parents=True, exist_ok=True)
     commands: dict[str, list[str]] = {}
     for name, spec in VIDEO_FIXTURES.items():
         args = ["-y", "-f", "lavfi", "-i",
@@ -380,7 +385,6 @@ def generate_fixtures() -> dict:
         require(result.returncode == 0, f"Could not generate {name}: {result.stderr.strip()[-300:]}")
     # The music library holds only the audio STRM; the audio fixture itself stays outside every
     # library path so no regular (non-STRM) audio item is indexed alongside it.
-    (pe.WORK / "media" / "music").mkdir(parents=True, exist_ok=True)
     aliases: dict[str, str] = {}
     for source, alias in COPY_ALIASES.items():
         target = pe.WORK / "media" / alias
