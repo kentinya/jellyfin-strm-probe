@@ -1377,74 +1377,36 @@ def matrix_extra_specs(fmt: str) -> dict[str, dict[str, object]]:
     return specs
 
 
-def _ebml_varint(value: int) -> bytes:
-    """The canonical EBML size varint.
-
-    Values 0..254 are one byte; a 1-byte 0xFF is the unknown-size marker, so 255 or more uses
-    ``n + 1`` bytes with ``n`` leading-zero bits in the first byte (the leading zero count, not a
-    marker table, is what a Matroska reader decodes): the first byte then carries ``7 - n`` value
-    bits followed by ``n`` full payload bytes.
-    """
-    if value < 0xFF:
-        return bytes([value])
-    n = 1
-    while value >= (1 << (7 * n + 7)):
-        n += 1
-    out = bytearray(n + 1)
-    out[0] = (1 << (7 - n)) | (value >> (8 * n))
-    for i in range(1, n + 1):
-        out[i] = (value >> (8 * (n - i))) & 0xFF
-    return bytes(out)
-
-
 def pad_mkv_to(data: bytes, target: int) -> bytes:
-    """Rewrap an MKV with one legal Empty Element so the file is exactly ``target`` bytes.
+    """Grow an MKV to exactly ``target`` bytes with a legal trailing Empty Element.
 
-    The EBML header stays byte-for-byte; a spec-compliant Empty Element (id 0x1549, whose payload
-    bytes are ignored by matroska readers) supplies the legal padding between header and
-    SeekHead. The caller must verify the result is still natively probeable/decodable.
+    The original document stays byte-for-byte at the front; a matroska Empty Element
+    (id 0x1549) with the unknown-size marker (0xFF, which consumes to end of file) plus zero
+    padding bytes is appended so readers skip the padding entirely. The caller must still
+    verify the result is natively probeable/decodable.
     """
     require(len(data) < target, "Legal padding can only grow a file, not shrink it.")
     require(len(data) > 4 and data[:4] == b"\x1a\x45\xdf\xa3", "Not an EBML Matroska document.")
-    size_byte = data[4]
-    if size_byte == 0xFF:
-        raise BaselineError("The EBML header uses an unknown size; refusing to rewrap it.")
-    if size_byte & 0x80:
-        size_value = size_byte & 0x7F
-        header_end = 5 + size_value
-    else:
-        width = 9 - size_byte.bit_length()
-        value_mask = (1 << (8 - width)) - 1
-        rest_value = int.from_bytes(data[5:4 + width], "big") if width > 1 else 0
-        size_value = ((size_byte & value_mask) << (8 * (width - 1))) | rest_value
-        header_end = 4 + width + size_value
-    require(len(data) >= header_end, "The EBML header extends past the document bytes.")
-    header = data[:header_end]
-    rest = data[header_end:]
-    fixed = len(header) + len(rest) + 2  # header, the element id, everything after it
-    for n in (0, 1, 2, 3, 4, 7):
-        pad = target - fixed - (n + 1)
-        if pad < 0:
-            continue
-        encoding = _ebml_varint(pad)
-        if len(encoding) != n + 1:
-            continue
-        result = header + b"\x15\x49" + encoding + bytes(pad) + rest
-        require(len(result) == target, f"MKV padding produced {len(result)} bytes instead of {target}.")
-        return result
-    raise BaselineError(f"No legal Empty Element layout reaches {target} bytes.")
+    need = target - len(data)
+    require(need >= 4, "The target size leaves no room for the Empty Element header.")
+    result = data + b"\x15\x49\xff" + b"\x00" * (need - 3)
+    require(len(result) == target, f"MKV padding produced {len(result)} bytes instead of {target}.")
+    return result
 
 
 def pad_mp4_to(data: bytes, target: int) -> bytes:
-    """Insert one legal ``free`` atom after the ftyp box so the MP4 is exactly ``target`` bytes."""
+    """Grow an MP4 to exactly ``target`` bytes by appending one legal ``free`` atom.
+
+    The original bytes stay byte-for-byte at the front, so the moov/mdat chunk offsets stay
+    valid; readers skip a trailing free atom. The caller must still verify that the padded
+    file remains natively probeable and decodable.
+    """
     require(len(data) < target, "Legal padding can only grow a file, not shrink it.")
     require(len(data) > 8 and data[4:8] == b"ftyp", "Not an MP4 (missing ftyp box).")
-    ftyp_length = int.from_bytes(data[0:4], "big")
-    require(ftyp_length >= 8, "The ftyp box header is shorter than itself.")
-    pad = target - len(data) - 8  # the free atom header consumes 8 of the padding bytes
-    require(pad >= 0, "The target size leaves no room for the free atom header.")
-    free_box = b"free" + pad.to_bytes(4, "big") + b"\x00" * pad
-    result = data[:ftyp_length] + free_box + data[ftyp_length:]
+    free_size = target - len(data)
+    require(free_size >= 8, "The target size leaves no room for a free atom header.")
+    free_box = free_size.to_bytes(4, "big") + b"free" + b"\x00" * (free_size - 8)
+    result = data + free_box
     require(len(result) == target, f"MP4 padding produced {len(result)} bytes instead of {target}.")
     return result
 

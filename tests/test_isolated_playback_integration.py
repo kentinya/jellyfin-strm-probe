@@ -541,35 +541,31 @@ class MeasurementDeltaTests(unittest.TestCase):
                                                        counter_validated=True, expected_delta=None), [])
 class PaddingTests(unittest.TestCase):
     def test_the_mp4_partner_grows_exactly_to_the_target_with_a_free_atom(self):
-        ftyp = b"\x00\x00\x00\x10ftypisom\x00\x00\x02\x00"  # a 16-byte ftyp box
-        mdat = b"mdat" + b"\x00" * 100
-        document = ftyp + mdat
+        # A minimal MP4 document: the padding is a trailing free atom, so the original bytes (and
+        # therefore the moov/mdat chunk offsets) stay in place and the atom is simply skipped.
+        document = bytes([0, 0, 0, 16]) + b"ftypisom" + bytes([0, 0, 2, 0]) + b"mdat" + b"\x00" * 100
         result = playback.pad_mp4_to(document, 500)
         self.assertEqual(len(result), 500)
-        self.assertEqual(result[:16], ftyp)
-        self.assertEqual(result[16:20], b"free")
-        self.assertEqual(int.from_bytes(result[20:24], "big"), 500 - len(document) - 8)
+        self.assertEqual(result[:len(document)], document)  # the original bytes stay intact
+        free_size = 500 - len(document)
+        self.assertEqual(int.from_bytes(result[len(document):len(document) + 4], "big"), free_size)
+        self.assertEqual(result[len(document) + 4:len(document) + 8], b"free")
+        self.assertEqual(result[len(document) + 8:], b"\x00" * (free_size - 8))
     def test_the_mkv_partner_grows_exactly_to_the_target_with_an_empty_element(self):
-        # A minimal legal EBML header: the 0x84 size byte means a one-byte size of 4, so the
-        # header element ends after those 4 payload bytes, not at the document start.
-        header = b"\x1a\x45\xdf\xa3" + bytes([0x84]) + b"\x80\x42\x82\x08"
-        document = header + b"\x15\x4a" + b"\x00" * 200
+        # A minimal legal EBML document; the padding is a trailing Empty Element (id 0x1549 with
+        # the unknown-size marker 0xFF, which matroska readers skip to end of file).
+        document = b"\x1a\x45\xdf\xa3" + bytes([0x84]) + b"\x80\x42\x82\x08" + b"\x15\x4a" + b"\x00" * 200
         for target in (len(document) + 7, len(document) + 300, len(document) + 400_000):
             result = playback.pad_mkv_to(document, target)
             self.assertEqual(len(result), target)
-            self.assertEqual(result[:len(header)], header)
-            self.assertEqual(result[len(header):len(header) + 2], b"\x15\x49")
-    def test_the_ebml_varint_matches_the_size_field_semantics(self):
-        def decode(payload: bytes) -> int:
-            first = payload[0]
-            if len(payload) == 1:
-                return first  # one-byte size values 0..254 (0xFF is the unknown-size marker)
-            zeros = 8 - first.bit_length()
-            top = first & ((1 << (7 - zeros)) - 1)
-            return (top << (8 * zeros)) | int.from_bytes(payload[1:], "big")
-        for value in (0, 1, 254, 255, 300, 16384, 1_000_000, 100_000_000):
-            encoded = playback._ebml_varint(value)
-            self.assertEqual(decode(encoded), value, value)
+            self.assertEqual(result[:len(document)], document)  # the original bytes stay intact
+            self.assertEqual(result[len(document):len(document) + 3], b"\x15\x49\xff")
+
+    def test_padding_refuses_to_shrink_or_misidentify_documents(self):
+        with self.assertRaises(playback.BaselineError):
+            playback.pad_mkv_to(b"\x1a\x45\xdf\xa3" + bytes([0x84]) + b"\x80", 4)
+        with self.assertRaises(playback.BaselineError):
+            playback.pad_mp4_to(b"\x00" * 64, 128)
 class DriverContractTests(unittest.TestCase):
     def test_the_strict_driver_records_raw_responses_and_failure_screenshots(self):
         driver = (ROOT / "scripts" / "package_playback_driver.mjs").read_text(encoding="utf-8")
