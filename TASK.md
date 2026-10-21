@@ -5,7 +5,7 @@
 ```text
 Task ID: 5.2
 Parent Slice: 5
-Status: READY FOR B REVIEW
+Status: FIX REQUIRED
 Task Base: 4c75761982bc16dd1c6bae09bee1c3561da2c178
 Contract Checkpoint: 2111e20488ba5afbf46cfe8af8782cf4a63379fb
 Difficulty: High
@@ -163,10 +163,36 @@ Range: 4c75761982bc16dd1c6bae09bee1c3561da2c178..38c1184c488baf1e6bd1c3b2ff4b126
 ## B Review Result
 
 ```text
-Reviewed: NOT SET
-Decision: PENDING
+Reviewed: 4c75761982bc16dd1c6bae09bee1c3561da2c178..38c1184c488baf1e6bd1c3b2ff4b1264c9e08e93
+Decision: FIX REQUIRED
 Slice Required Outcomes all satisfied: NO
-Next: B REVIEWS 4c75761982bc16dd1c6bae09bee1c3561da2c178..38c1184c488baf1e6bd1c3b2ff4b1264c9e08e93
+Next: DEVELOPER CORRECTS TASK 5.2 TOOLING; A RESOLVES REQUIRED AUDIO CAPABILITY / CONTRACT
 ```
 
-本文件是活动计划，不是产品 PASS。Developer 交 READY FOR B REVIEW，不自判 PASS。B 未运行本 Task 的完整全量回归或独立实机验收；音频行 BLOCKED 与截图的逐张查看仍需 B／A 处理。Task 5.1 B PASS 以其固定 Git 快照保留；Slice 5 仍 ACTIVE。
+### B 独立审查（2026-10-21）
+
+入口 checkout 为 `2abbecf4c47d263cb5fa7e10bc254adba365f7cf`，tree 为 `f89c27802cc316f381440b566812a79bbb58cfa6`；初始 `git status --short --branch` 干净、main 比 origin/main 超前 14 个提交。已读必读文档、B 经验及真实全范围差异（含合同入口／计划、浏览器驱动、新顺序入口及全部新增测试）。治理检查 PASS；`38c1184..2abbecf` 只有报告变化，可执行输入一致。未修改产品、合同、Base 或历史决定，未推送、未启动／接管／停止任何 Jellyfin 实例或改动现存全部 1004 项库。
+
+**阻塞项（均为 P1，修正保留 Task 5.2）：**
+
+1. **BR-1：重启对账未采集完整原生 URL／媒体流。** `saved_stream_types`、`freeze_state`、`read_only_state`（`scripts/run_isolated_playback_integration.py:462,659,669`）只保存类型集合，如 `["Audio", "Video"]`，没有持久化源地址及流的完整字段。run-9 的冻结／读回证据也只有该集合；后续 PlaybackInfo 不能补作播放前只读证明。B 用假 API 输入独立复现：地址 A→B、Video Codec h264→hevc、Width 320→1920，冻结与读回仍相等且检查返回空错误。须通过经确认不触发探测的原生只读入口取得并核对实际源 ID、URL 和完整保存流，保留五字段与 STRM 对账；字段／地址缺失或变化必须拒绝。不能用 PlaybackInfo 准备或修复重启后的状态。
+2. **BR-2：5 秒推进被误写为绝对 currentTime ≥5。** `strictPlay`（`scripts/package_playback_driver.mjs:207,213`）与 `playback_failures`（Python 入口 `:167`）未检查起止差值。run-9 的 B01 三阶段实际差值为 **4.852033／4.372954／4.393480 秒**，B02 为 **4.854063／4.358460／4.862894 秒**，六项均被当前验证器接受。须从开始观测及对应截图计时，后截图与开始之间推进至少 5 秒，并拒绝缺起点、未推进、缺失／非法数值与缺观察等情况；不能通过修改报告数字或降低门槛解决。修正后重新取得相应实播截图。
+3. **BR-3：没有验证 MediaSourceId 的关联。** `playback_failures`（Python 入口 `:203–211`）只匹配任一源的 URL hash／类型，忽略已采集的 `source.id`；下游指纹读取直接使用 item ID 作 source ID，未核对实际返回源。B 将真实 B01 响应的源 ID 改为另一 GUID，其余保留，验证器仍返回空错误。须在本基线显式固定并核验当前项目／期望源 ID，绑定对应 PlaybackInfo、实际播放请求与五字段；错误／缺失源 ID 不得接受。不要求扩展本 Task 为多版本矩阵。
+4. **BR-4：必需 B03 音频旅程未完成，交 A。** B 核对 run-6 的浏览器 500 与报错截图、run-8／9 的 `Audio` 实体／已存 Audio 主流／原生 universal 路由返回 STRM 文本的记录，确认现有输入未能完成真实音频播放。run-9 在音频浏览器播放前短路为 BLOCKED；没有首次信任／再播／重启实播的成功证据，不能计 PASS。该观测不证明所有原生音频 STRM 组合均不可行；`mediaSourcePathIsLocalStrm` 在工具中为常量，不能代替实际路径取证。请 A 裁定固定版本的音频能力与必要合同处理；B 不撤出 B03、不换成视频音轨／普通音频、不授权产品成功判定修复。A 提交实质变更时，B 再重判同一 Task 的合法调整。
+
+### 证据核验与复用决定
+
+- 本机索引：`.git/validation-evidence/38c1184c488baf1e6bd1c3b2ff4b1264c9e08e93/b-review-20261021T031059Z/INDEX.md`。独立控制脚本、准确 argv／cwd／退出码／计时、原始输出、来源与截图摘要均在该目录，未上传。
+- 已逐张打开 run-9 **12 张**视频截图：B01 三对均见 `MP4 A`，B02 三对均见 `MKV A`，开始图见原生播放控制，后图见解码测试图、无可见报错；图像时间标记有推进。另打开 run-6 B03 的 incomplete 图，见“播放错误／播放失败，因为客户端不支持该媒体”。这是 B 实际看图，不追认 Developer 已看，也不据此补足 BR-1／BR-2 或音频成功。
+- 核对六阶段原始 driver／observation、FirstTrust→Sha1Matches 日志、目标 ffprobe 窗口 0／0／0、媒体 GET、五字段和运行收尾记录。它们保留为开发反馈及失败定位资料，**不复用为本 Task 全量／实机 PASS**。独立控制是工具拒绝性验证，不是产品或真实重启故障注入。
+- 核验 run-9 ZIP SHA-256 为 `cb195638971da1a69e5cfa2d9966f9b3db94ddae2c54ef33a03641bb3ceba9ae`，报告后另存 `2abbecf` ZIP 为 `93d0fc33496ee2cde658de497e46a141af1fd14428976d718599920da21520fb`。两者不同；run-9 使用期间有多次可执行工具修正，不能仅凭不变的产品源码或“只改报告”把其结果升级为最终候选通过。保留首次失败和原始归属工作区，不为本轮拒绝重建包／准备库。
+
+### 本轮门禁及修正分工
+
+- **已运行：** 当前治理 PASS；Python 3.11 独立控制（退出 0，重现六项短推进误接受、源 ID 错配误接受及原生 URL／流变化误接受）；文档检查与计时见本机索引。控制成功表示缺陷复现，不能写成产品 PASS。
+- **NOT RUN：** 本候选完整 C# restore／build／test／format、干净候选完整 Python／compileall、Node 语法、最终同 ZIP 的完整三行 baseline、B 新归属实例独立实播、既有 package all 及 Slice Final。按开发流程“已有明确阻塞可先拒绝”停止昂贵门禁；这些仍由 **B** 在修正候选承担，未交回 Developer，也不削减原计划。
+- **Developer：** 只修 BR-1～BR-3 及必要证据采集，沿用原范围；跑修改模块和直接受影响测试、Node 语法／对应 Python 编译／治理／diff 检查，新增能拒绝上述反例的控制。浏览器驱动受影响则跑既有 package 工具单元模块；不承担 B 的完整套件。音频范围等 A 决定，不能为求全绿绕过。修正提交后仍交 READY FOR B REVIEW，完整结果与遗漏如实报告。
+- **B：** 固定修正实现 SHA／tree／同 ZIP，按原计划执行完整 C#、干净 Python 3.11、静态／治理及 package all；核验匹配完整 baseline、在新归属实例独立复现合同保留的必需媒体旅程，实际打开全部截图。可执行输入修正后按 T4 重取指定证据；后续纯报告变化按输入匹配规则复用，不机械重跑 Final。
+- 本轮测试只运行短控制及治理／文档检查，保守合计上限 5 秒，严格小于本轮实际总耗时的 50%；精确控制耗时及总时间见索引。未空等凑分母，未启动昂贵验收。Developer 报告的“真实运行与排障”为非测试的记账不能直接采用：夹具生成、健康／扫描／播放等待和失败重试均须按流程计入测试区间，后续报告需依原始时间重算。
+
+RO 重核：RO-4 维持 Task 5.1 固定检查点的已接受决定，本轮不重判或扩张远端 CI 结果；RO-1 仍有媒体服务余项，RO-2 基线及 P01～P08 未满足，RO-3 尚未完成。**不新造 Task、不提交 Closure Packet、不返回 SLICE READY FOR A REVIEW、不关闭 Slice。** Slice 5 保持 ACTIVE；下一步为本 Task 工具修正和 A 的音频范围裁定。
