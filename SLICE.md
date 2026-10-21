@@ -99,7 +99,7 @@ Python 完整回归另在 Python 3.11 干净检出执行。新播放矩阵入口
 
 ## Closure Packet
 
-NOT RUN。完整视频矩阵及 B 最终门槛尚未完成，不具备最终审查条件；已有 Task 候选／CI 的分层结果见 TASK.md 与固定 Git 快照，本次范围修订不构成产品验收。
+NOT RUN。完整视频矩阵及 Slice Final 尚未完成，不具备最终审查条件；已有 Task 候选／CI 的分层结果见 TASK.md 与固定 Git 快照，本次范围修订不构成产品验收。
 
 ## A Final Review
 
@@ -107,4 +107,4 @@ NOT RUN。完整视频矩阵及 B 最终门槛尚未完成，不具备最终审�
     Decision: PENDING
     P0/P1 Blockers: NOT ASSESSED
 
-NEXT ACTION: B RUNS TASK 5.2 RETAINED VIDEO FINAL GATES (SEE TASK.md)
+NEXT ACTION: B PLANS THE NEXT COMPLETE VIDEO MATRIX TASK (SEE TASK.md)
