@@ -965,9 +965,11 @@ def prepare_rows(auth: str, rows: list[dict]) -> dict:
         require(len(source_ids) == 1,
                 f"{row['id']}: expected exactly one native media source during preparation, found {source_ids}.")
         row["sourceKey"] = source_ids[0]
+        row["preparedSource"] = snapshot
+        row["preparedAddressMatchesUrl"] = (
+            snapshot["sources"][0].get("pathHash") == hashlib.sha256(row["url"].encode()).hexdigest())
         summary[row["id"] + ".preparedSource"] = snapshot
-        require(snapshot["sources"][0].get("pathHash") == hashlib.sha256(row["url"].encode()).hexdigest(),
-                f"{row['id']}: the prepared native source address is not the STRM URL.")
+        summary[row["id"] + ".preparedAddressMatchesStrmUrl"] = row["preparedAddressMatchesUrl"]
     require(pkg.plugin_action(auth, True) == 204, "The package-instance plugin enable failed.")
     pkg.restart()
     return summary
@@ -1006,19 +1008,24 @@ def scenario_baseline(package: Path, evidence_dir: Path, selected: list[str],
         try:
             if row["media_type"] == "audio" and row.get("nativeAudioResponse", {}).get("returnsStrmManifestText"):
                 # The fixed Jellyfin build indexes the audio STRM as a real Audio item and natively
-                # probes it, but its media source keeps the local .strm path (only Video items
-                # substitute ShortcutPath), so native playback returns the STRM text rather than
-                # audio. That is a fixed-version capability limit, not something this tool may pass
-                # off as audio playback, and the contract hands it back to A.
-                row_result["nativeAudioResponse"] = row["nativeAudioResponse"]
+                # probes it, but the saved media source keeps the local .strm path (only Video items
+                # substitute ShortcutPath), so the native audio route returns the STRM text rather
+                # than audio. That is a fixed-version capability limit, not something this tool may
+                # pass off as audio playback, and the contract hands it back to A.
+                native = row["nativeAudioResponse"]
+                row_result["nativeAudioResponse"] = native
+                row_result["preparedSource"] = row.get("preparedSource")
                 row_result["status"] = "BLOCKED"
                 row_result["error"] = (
                     "the fixed Jellyfin 12.2.0 build returns the STRM text for the native Audio route "
-                    "(media source path stays the local .strm), so real native audio playback of an "
-                    "audio STRM is not achievable on this version; audio row left BLOCKED for A")
+                    f"(saved media source paths {native.get('savedMediaSourcePaths')}, "
+                    f"local-STRM-only {native.get('mediaSourcePathIsLocalStrm')}), so real native audio "
+                    "playback of an audio STRM is not achievable on this version; audio row left BLOCKED for A")
                 blocked.append(row["id"])
                 results[row["id"]] = row_result
                 continue
+            require(row.get("preparedAddressMatchesUrl") is True,
+                    f"{row['id']}: the prepared native source address is not the STRM URL.")
             # 1) first trust
             first = play_once(auth, row, "first-trust", evidence_dir)
             assert_playback(row, first, counter_validated=True)
