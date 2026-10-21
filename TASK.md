@@ -5,7 +5,7 @@
 ```text
 Task ID: 5.1
 Parent Slice: 5
-Status: PLANNED
+Status: READY FOR B REVIEW
 Task Base: 2111e20488ba5afbf46cfe8af8782cf4a63379fb
 Contract Checkpoint: 2111e20488ba5afbf46cfe8af8782cf4a63379fb
 Difficulty: Medium
@@ -31,13 +31,13 @@ Planner / Reviewer: B
 
 ## 验收条件
 
-- [ ] 在独立干净 Base 检出和真实 Python 3.11 下保留三处原失败，区分历史远端 FAIL 与本轮复现；未复现则报告差异，不虚填。
-- [ ] 修复保持原行为和拒绝条件，输入／清理仅限测试自备临时目录，不触碰现存 artifacts、1004 项准备库或用户文件。
-- [ ] 干净候选完整 Python discovery 无 error／failure，记录发现数、执行数及所有 skip 原因；两个现有发布归档缺失 skip 单列、不计 PASS，不新增 skip 掩盖失败。
-- [ ] 全 scripts／tests Python 语法、治理、差异检查通过；完整 C# 门槛由 B 承担或核验匹配证据，不交回 Developer。
-- [ ] 不需要启动 Jellyfin／容器／数据库、拉镜像或读取本地凭据，原生锁及隔离保护仍有效。
-- [ ] 匹配候选远端 Repository quality 必要步骤全部成功；未获发布授权或没有远端结果时记 BLOCKED／NOT RUN，不能签 Task PASS。
-- [ ] Developer 提交真实实现 SHA、聚焦证据及省略项；B 审查完整 Task Base..Head，不修改 Slice 合同或插件成功判定。
+- [x] 在独立干净 Base 检出和真实 Python 3.11 下保留三处原失败，区分历史远端 FAIL 与本轮复现；未复现则报告差异，不虚填。（Developer 已复现三处，见完成报告与证据索引；仅 Developer 事实，不计 B 验收。）
+- [x] 修复保持原行为和拒绝条件，输入／清理仅限测试自备临时目录，不触碰现存 artifacts、1004 项准备库或用户文件。（Developer 已实现；B 独立核验待审。）
+- [x] 干净候选完整 Python discovery 无 error／failure，记录发现数、执行数及所有 skip 原因；两个现有发布归档缺失 skip 单列、不计 PASS，不新增 skip 掩盖失败。（Developer：264 项 OK、2 个既有 skip；B 需独立重跑。）
+- [x] 全 scripts／tests Python 语法、治理、差异检查通过；完整 C# 门槛由 B 承担或核验匹配证据，不交回 Developer。（Developer 侧已通过；C# 仍属 B。）
+- [x] 不需要启动 Jellyfin／容器／数据库、拉镜像或读取本地凭据，原生锁及隔离保护仍有效。（Developer 未使用 Docker／容器；B 待独立核验。）
+- [ ] 匹配候选远端 Repository quality 必要步骤全部成功；未获发布授权或没有远端结果时记 BLOCKED／NOT RUN，不能签 Task PASS。（BLOCKED / NOT RUN：本轮未推送、未触发 workflow。）
+- [x] Developer 提交真实实现 SHA、聚焦证据及省略项；B 审查完整 Task Base..Head，不修改 Slice 合同或插件成功判定。（Developer 已提交 `2291ee2`；B 审查待进行。）
 
 ## 必要测试
 
@@ -97,13 +97,14 @@ C# 使用 SDK 10.0.401；B 可在固定候选主检出执行四项或核验匹�
 
 ## Developer Completion Report
 
-- Changed Files：NOT SET。
-- Implemented：NOT RUN。
-- Tests and Results：NOT RUN；交接时补聚焦证据、首败／重跑、实际时间比例及省略项。
-- Decisions：NOT SET。
-- Remaining In-Slice Work：RO-1～RO-3 全部；RO-4 待本 Task 验收，远端须届时授权。
-- Risks / Deviations：需准备 Python 3.11；远端未授权；产品误判不能借本 Task 修改。
-- Head SHA：NOT SET。
+- Changed Files：`tests/test_isolated_batch_integration.py`、`tests/test_isolated_package_integration.py`、`tests/test_isolated_large_library_integration.py`（仅此三个；插件源码、`scripts/`、依赖、工作流与成功判定未改）。
+- Implemented：CI-F1 改为在测试自备临时目录中写版本化 STRM 并注入 `ROOT`／`FIXTURE`，仍调用真实 `temporary_fixture`，保留版本／URL／字段及二次写入 `FileExistsError` 拒绝，并断言未在仓库 `artifacts/` 留下文件；CI-F2 从临时根目录注入确定性不可变镜像锁后调用 `write_compose`，保留专用端口／项目、内部网络与无源码挂载断言，新增 `test_compose_refuses_a_missing_mutable_or_foreign_image_lock` 保留缺锁／可变 tag／错误 spec／错误仓库的真实拒绝；CI-F3 将 21 项 patch 链与相邻非空指纹拒绝用例改为单个 `ExitStack`，patch 集合、顺序、生命周期与全部断言不变。`.github/workflows/quality.yml` 经评估后未改（改动会被既有治理测试拒绝，且非必需）。
+- Tests and Results：真实 Python 3.11.10（`/opt/py311/python/bin/python3.11`，python-build-standalone 20241016 归档，自备解包；主机默认 3.13.5 未用于门槛）。干净 Base `2111e20` 复现三处原始失败（206 tests，3 errors，2 skips；F1 缺 `artifacts/dev-env/strm/Environment Fixture.strm`，F2 缺不可变镜像锁，F3 导入期 `SyntaxError: too many statically nested blocks`）。干净候选 `2291ee2`（无 `artifacts/`）：完整 discovery 264 tests `OK (skipped=2)` EXIT=0；聚焦三模块 24／31／58 全 OK；`py_compile`、`compileall scripts tests`、`check_governance.py` PASS、`git diff --check`、`git show --format= --check HEAD` 全部 EXIT=0。两个 skip 均为 `'the published release archive is not present'`（`test_package_plugin.PackageIntegrityTests` 两项），单列且不计 PASS，未新增 skip。证据：`.git/validation-evidence/2291ee21a989cc5c905fc945bd8936aaa23a2673/dev-implementation-20261021T0008Z/INDEX.md`。
+- Decisions：F1 保留对真实写入函数的覆盖而非改测 `temporary_fixture_in`；F2 选择在测试侧注入临时 `ROOT` 与合法锁，未改 `load_image_lock`／`write_compose` 的产品边界，从而不触碰锁验证语义；F3 用 `ExitStack` 而非拆用例或升级解释器。未使用 Docker、容器、镜像拉取、数据库或本地凭据。
+- Remaining In-Slice Work：RO-1～RO-3 全部（P01～P08 真实播放矩阵、ColorRange 返回主流误判回归）；RO-4 的远端 Repository quality 成功结果仍未取得。
+- Risks / Deviations：Python 3.11 为自备 standalone 解释器（3.11.10），与 CI 的 `setup-python 3.11` 具体补丁版本可能不同，B 若要求精确对齐须自行确认；远端 workflow 未推送、未触发，记 BLOCKED / NOT RUN，不据此签 PASS；两个发布归档缺失 skip 未消除；未运行完整 C# 门禁、Docker Compose CLI `config` 子检查、任何 Jellyfin／容器／1004 项实机回归（按分工交 B）；本 Task 未改播放链与 `returnedPrimaryMatchesProbe`，产品误判仍待用户决定。
+- Head SHA：`2291ee21a989cc5c905fc945bd8936aaa23a2673`（tree `1b9df66b8678753c1cf6d8faedf32011e16676df`）。
+- Timing：本轮从 00:03:50Z 开始实现，候选提交 00:07:39Z，证据收尾至 00:08:34Z；测试累计约 60 秒（聚焦三模块 ≈1.7s、完整 discovery 主工作区 ≈10.5s、干净候选 ≈6.7s、Base 复现 ≈6.7s 及各模块），占本轮实际用时远低于 30%。
 
 ## B Review Result
 
@@ -111,7 +112,7 @@ C# 使用 SDK 10.0.401；B 可在固定候选主检出执行四项或核验匹�
 Reviewed: NOT SET
 Decision: PENDING
 Slice Required Outcomes all satisfied: NO
-Next: DEVELOPER IMPLEMENTS TASK 5.1
+Next: B REVIEWS TASK 5.1 AT 2291ee21a989cc5c905fc945bd8936aaa23a2673
 ```
 
-当前仅规划，尚无实现候选，不签发产品 PASS／FIX REQUIRED。交回后 B 只给 PASS 或 FIX REQUIRED，修正沿用同一 Task；每次 PASS 重查所有 RO，全部满足后提交 Closure Packet 并返回 SLICE READY FOR A REVIEW，由 A 最终审查，B 不自行关闭。
+Developer 已提交实现候选 `2291ee2` 并交回（READY FOR B REVIEW），此处不代签产品 PASS／FIX REQUIRED。交回后 B 只给 PASS 或 FIX REQUIRED，修正沿用同一 Task；每次 PASS 重查所有 RO，全部满足后提交 Closure Packet 并返回 SLICE READY FOR A REVIEW，由 A 最终审查，B 不自行关闭。
