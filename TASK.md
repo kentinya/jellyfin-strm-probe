@@ -290,6 +290,21 @@ Developer 每真实轮初始总上限 60 分钟／测试 15 分钟；B 为 90 �
 - Candidate Package Source SHA：`f55c2d0d9b9e5489790b48c380908d3ef0460086`；Git tree `40cdea8e7230daa974d150102eda44d015a5c140`；ZIP SHA-256 `351d164753858ce39777e7e5d7c56f10f19e140d6de980706c4856ed435d99b4`。此处是实际构建／测试的完整候选，不代表 Task 或 Slice PASS。
 - Head SHA：候选源码提交 `f55c2d0d9b9e5489790b48c380908d3ef0460086`（本报告随后以单独文档提交更新）。
 
+## Developer Correction Report（FIX REQUIRED 轮，2026-10-21）
+
+- Changed Files：仅 `scripts/run_isolated_playback_integration.py` 与 `tests/test_isolated_playback_integration.py`（8 个实现提交：`41d55bf3ac2026a96b7f30055900cc935d8a8ee4`、`287b5736ee7dcc782848290d41b34d93b5071b23`、`62e7fa724e3491ce789bd30cdd5c99c8422c7417`、`cb324cb8bdc225c2fce7d5c777d4b906b72d5bc3`、`56945291e747f90bbb4ab4820b96a30908cc886b`、`ecf7865ea6dd8f668ef50963e9742f2a3238a0fe`、`12b6ef5555244a5498b27985b6ade09b6460ae36`、`772f1be6c2ea642473bdb8fb02eca1cf0769d6f7`、`1864cdcc7e33d7a8c582c0d941ff4a38d159480c`、`a5cc0a49ffc2f218edada99a46cac3fe16c12d34`、`4e235f569dbe050f818bb206d1273e762940250f`）。未改任何 C#、插件成功判定、依赖、镜像锁或工作流。
+- B53-1：新增 `raw_item_query` 保留每次原始查询响应／条目列表／匹配与服务器日志尾，替换把失败收敛为超时文案的 `pkg.scan_and_wait`；D06 `native_static_stream_read` 未定义的 `contentType` 已修；插件配置改回既有已验证的无版本段 `/Plugins/{id}/Configuration` 路由；每次驱动运行后重新登录，消除浏览器登录撤销 API token 导致的观察查询 500。
+- B53-2：manifest 重写改用显式 token 语义（`DELETE` 明确删除、缺席保留旧值），修正 P03.03 大小写变化、P03.04／P05.01／P07 的真实删除方向、P04.03 尺寸删除、P06 每方向写入其实际服务的伙伴字节哈希、C02 改为 URL A→B（`manifest-url`，观察新 URL 文件）、F01 失败窗口保留预备真实 B 身份、P02.02／02.04 观察各自新 URL 的文件。
+- B53-3：固定 URL 的 switch／F02 换字节改为经本行拥有的 staging 副本原子替换，共享 partner 文件不再被消耗；每行旅程前 `reset_row_media` 重建该行 A 基线并移除 404 目标残留。
+- B53-4：以固定镜像 FFmpeg 实测确定生成方案（MP4 tv 需完整 bt709 VUI 三元组；unspecified MKV 必须经 VUI-less MP4 编码 remux），新增 `require_actual_color_range` 在生成后核验实际 ffprobe 输出，错配夹具直接终止运行；fix11 实测 limited 输出 `color_range: tv`、unspecified 输出为 null。
+- B53-5：`finally` 收尾先于 reconciliation／cleanup 归档原始 ffprobe 行、完整 Jellyfin 服务器日志与媒体容器日志到证据目录；重启对账快照保留完整原生流对象（不再 11 字段投影）；P01 数据库备份改为直接写入证据目录（归属保护保持不变）。
+- 行定位：原生库命名剥离行名尾词（"… C02 limited" 索引为 "Matrix MP4 C02"），行定位改为按每行唯一 STRM 路径匹配，不依赖条目名；矩阵准备前显式触发一次原生库刷新。
+- Tests and Results：`python3 scripts/check_governance.py` 每次提交前通过；Python 3.13.5（宿主无 python3.11）`unittest test_isolated_playback_integration` 73 项通过（含 14 项新增矩阵前提／staging／诊断／路由用例），`test_isolated_media_server` 9 项通过；`compileall`、`node --check`、`git diff --check` 通过。未运行其他模块、C# 全量与完整矩阵，交 B。
+- 真实反馈（候选 `4e235f569dbe050f818bb206d1273e762940250f`，ZIP SHA-256 `10b789a97537080c6bc5514db5fdd99d566b00f26231446896515779349e0347`）：`--rows MP4.P02.01,MP4.C02.limited` 退出码 1、462.3 秒。两行首次信任均成功（ffprobe delta 0、推进 5.39／5.38 秒、FirstTrust 事件、五字段指纹与 A 身份一致，截图执行者逐张打开：MP4 A 标记、时间码 00:00:05.667）。测量窗口触发产品阻塞：插件 1 次原生探测成功（ffprobe 原文、媒体服务 206 全区间）、encoder primary True、persisted primary True、address persisted True，但 `returned primary matches probe False`，插件拒绝有效结果并使 PlaybackInfo 返回 500（`Jellyfin did not save a usable media source for the current STRM version`），Web 客户端弹出原生播放错误对话框；两行失败截图已逐张打开核对（原生「播放错误／处理请求时发生错误」）。即 Slice 5 已知返回主流误判在真实有效媒体上复现。证据与完整原始日志保留于 `.git/validation-evidence/4e235f569dbe050f818bb206d1273e762940250f/run-20261021-fix11/`（含 `DEVELOPER-FINDING.md` 与完整 `server-logs/`）；fix1～fix10 诊断轮各目录附 `DEVELOPER-RUN-NOTE.md`。
+- Decisions：按合同停止昂贵矩阵（有效媒体误拒绝属 RO-3／AC-4 领域，产品修正须 A／用户授权）；不修改 C#，不放宽断言，不把产品 FAIL 写成工具问题。矩阵前提修正与真实复现证据一起交 B。
+- Remaining In-Slice Work：B／A／用户决定产品误判的处置；处置前其余 P／C／D／F 行 NOT RUN。B 负责完整回归与独立验收；Developer 不自行 PASS。
+- Head SHA：修正候选源码提交 `4e235f569dbe050f818bb206d1273e762940250f`（本报告随后以单独文档提交更新）。
+
 ## B Review Result
 
 ```text
