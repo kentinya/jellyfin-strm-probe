@@ -7,19 +7,19 @@ Task ID: 5.3
 Parent Slice: 5
 Status: FIX REQUIRED
 Task Base: f17fb1fc90dda242eeff9fac7b4f21576b5e6f94
-Contract Checkpoint: 108735e72f0028ae7763c36cc0cb143adb5cd6a9
+Contract Checkpoint: 68e7bf01e7796fe9972838dfc0d8ed8283aacedd
 Difficulty: High
 Test Level: T4
 Planner / Reviewer: B
 ```
 
-## A 合同修订交接（2026-10-21）
+## B 合同重判与继续决定（2026-10-21）
 
-用户已授予 A 权限处理 B 提交的产品阻塞；A 在 [Slice 的产品修正合同](SLICE.md) 中纳入同次三阶段字段取证、基于证据的产品修正和必要最小诊断。A 已复核原 B 证据身份；原 FIX REQUIRED、全部阻塞、失败与未运行项保留，不签发 Task PASS。
+B 已检查真实干净仓库、运行治理检查，并核对 A 已提交合同 `68e7bf01e7796fe9972838dfc0d8ed8283aacedd`。决定 **CONTINUE WITH ADJUSTED SCOPE**：继续同一 Task 5.3／Base，保留 B FIX REQUIRED 及全部未完成行，按下方更新范围实施；不是产品 PASS。原 A 交接和 B 审查历史保留于上述合同及 `76adf423b70649624a75d6830482fc3f1ca70bba:TASK.md`。
 
-**当前下一步：B 在 A 合同提交后重判同一 Task 5.3 的继续／调整，更新真实 Contract Checkpoint、范围和受影响开发验证／完整门禁，再交 Developer。** Task ID／Base 不移动，状态仍为 FIX REQUIRED；上方 Contract Checkpoint 与下方“仅测试、不改产品”范围是上一份 B 计划，尚未重判，不能据此直接开始新的产品实施。A 本轮不代 B 填写继续决定或代 Developer 改源码。
+实施先补最小同次字段诊断与必要入口修正，通过现有矩阵／原生 Web Play 取得真实字段后再修正已证实原因。不得直接删除 ColorRange 或其他字段来换取通过。先做 MP4.P02.01／MP4.C02.limited 的可达取证及修正反馈，必要时按真实预算分批；旧 FAIL、字段差异和每次重跑均保留，完整 116 行与所有最终门禁仍由 B 承担。
 
-原 B 审查检查点为 `76adf423b70649624a75d6830482fc3f1ca70bba`；本文件下方 B Review Result 描述该检查点的事实与当时授权边界。A 已通过新合同解决产品修正是否纳入的范围决定，后续合法实施入口以上述 B 重判为准。B 的失败状态采集、P07／D04 和凭据问题均仍属同一 Task 必要修正，不另建工具 Task。
+用户本轮要求开始执行，B 计划检查点提交并治理通过后由当前代理转 Developer 实施。实现者不得签发自己的独立 B PASS；交接真实实现 SHA／聚焦结果为 READY FOR B REVIEW，由独立 B 完成余下全量及审查。
 
 ## Goal
 
@@ -27,7 +27,7 @@ Planner / Reviewer: B
 
 不把“同地址内容换了”概括为总能识别：没有可比 SHA-1 且大小相同／不足时按合同跳过并记录限制。大小改变也不是总跳过：有效 SHA-1 相同才忽略大小，SHA-1 不可比且双侧有效大小不同时必须探测。有效视频被误拒绝仍为 FAIL；查明问题不等于产品行为通过。
 
-本 Task 仅规划测试／必要采集与受控媒体准备，不授权修改插件成功判定或新增插件诊断。若现有产品缺陷阻塞，保留证据与未完成项，由 B 给 FIX REQUIRED、交 A／用户决定产品修正；修正继续同一 Task，不删场景、不另建“工具完善 Task”。全部 RO 满足后停止造 Task，另做 Slice Final／Closure Packet 交 A，不自行关闭。
+本 Task 按 A 修订合同纳入同次字段取证、基于证据的有界产品匹配修正、必要最小脱敏诊断和已列入口修正；保留所有失败与未完成项，修正继续同一 Task，不删场景、不另建“工具完善 Task”。全部 RO 满足后停止造 Task，另做 Slice Final／Closure Packet 交 A，不自行关闭。
 
 ## 已接受检查点与实施事实
 
@@ -47,9 +47,11 @@ Planner / Reviewer: B
 | `scripts/run_isolated_playback_integration.py` | 在现有顺序入口加入下方固定视频行；准备／切换前提，串行调用原生 Web Play，保存完整原生状态、指纹、原始日志及逐行结果；保留 baseline 行为。 |
 | `scripts/package_playback_driver.mjs` | 仅补现有响应的必要原文／失败截图采集；正常视频始终至少推进 5 秒；保持旧 2 秒包回归模式。 |
 | `scripts/isolated_media_server.py` | 为真实媒体读取补必要的 GET／HEAD 单区间 Range，明确 206／416、Content-Range／Length；保留旧文件、slow／delay／independent 路径和原计数格式。不给测试增加控制 API。 |
+| `Services/ProbeExecutionContext.cs`、`Services/StrmPlaybackOptimizer.cs` 及直接必要的既有接入／保存代理 | DetailedLog 默认关闭；对同次编码器／保存成功入参／原生返回记录完整 PrimaryStreamIdentity，按确证的固定版本往返差异修正匹配；保留源、实际成功和保存／Manifest／条件提交保护。 |
+| 对应现有 C# 测试 | 新增真实差异的回归；保持相同元数据保存失败、错误源／主流、权限、失败／取消／变化及恢复控制。 |
 | 对应现有 Python 测试模块 | 按实际修改验证 Range 字节及响应头、旧路径兼容和真实证据缺失拒绝；假对象只证明采集控制，不冒充产品故障。 |
 
-`package_environment.py`、旧 package／scan／large／plugin／batch／configuration 入口原则上保持；确需修改先由 B 记录实际原因、调用影响和回归追加，沿用本 Task。不为泛化、整理历史音频辅助代码或扩大工具测试覆盖而修改。`src/`、C# 测试、依赖、镜像锁、工作流、治理工具及产品诊断均不在实施授权内。
+`package_environment.py`、旧 package／scan／large／plugin／batch／configuration 入口原则上保持；确需修改先由 B 记录实际原因、调用影响和回归追加，沿用本 Task。不为泛化、整理历史音频辅助代码或扩大工具测试覆盖而修改。上述有界产品接入与对应 C# 测试已纳入；依赖、镜像锁、工作流、治理工具、并发／指纹算法重构和通用诊断系统仍不在范围。
 
 准备要求：
 
@@ -182,11 +184,11 @@ D02～D05 的正常播放同样有至少 5 秒截图、再播和重启，计数�
 
 同一次 C 行实际播放中，需要对应项目／源／探测调用的：①原生编码器返回 Video；②SaveMediaStreams 成功返回时的完整流入参；③原生重读／返回 Video。包含 PrimaryStreamIdentity 的全部字段，逐字段列明保留、缺失和规范化，关联当次 ffprobe、原生地址及旧／新指纹。
 
-优先使用固定版本现有原文日志和原生只读响应。当前源码没有完整①②日志，现有布尔值及另跑一次独立 ffprobe 均不能代替①②。允许在本轮独立诊断实例使用一个标准 .NET 外部调试器只读观察现有方法参数：`RecordResult(requestedPath, result)`、原生保存成功后调用的 `RecordPersistedMediaStreams(itemId, streams)`、`IsPersistedProbeResult(stream)`；关联当前 ProbeExecutionContext 的项目／源／URL。不能改对象、求值有副作用函数、调用探测方法、跳过异常、改变返回值或安装另一插件。
+使用固定版本原文日志、原生只读响应及新授权的既有方法字段诊断；只在 DetailedLog 开启时记录必要字段和脱敏关联，不写完整 URL／凭据／私有路径，不增加探测。现有布尔值及另跑一次独立 ffprobe 均不能代替①②。允许在本轮独立诊断实例使用一个标准 .NET 外部调试器只读观察现有方法参数：`RecordResult(requestedPath, result)`、原生保存成功后调用的 `RecordPersistedMediaStreams(itemId, streams)`、`IsPersistedProbeResult(stream)`；关联当前 ProbeExecutionContext 的项目／源／URL。不能改对象、求值有副作用函数、调用探测方法、跳过异常、改变返回值或安装另一插件。
 
-规划时主机尚无上述调试器；不编造安装／附加命令为现成能力。首个聚焦取证前记录实际工具来源／版本、按其真实帮助固定命令、PID／容器归属及只读参数清单。调试暂停的时序单列；诊断运行只用于字段定位，不能充当未附加调试器的正式播放／成本门槛。主验收仍为固定原始 ZIP／镜像，额外调试资料只存本机忽略目录。
+规划时主机尚无上述调试器；不编造安装／附加命令为现成能力。首个聚焦取证前记录实际工具来源／版本、按其真实帮助固定命令、PID／容器归属及只读参数清单。调试暂停的时序单列；诊断运行只用于字段定位，不能充当未附加调试器的正式播放／成本门槛。主验收固定本次真实提交生成的正式 ZIP／镜像，必要诊断包含在同一正式候选中按既有配置开关，旧失败 ZIP 保留；额外调试资料只存本机忽略目录。
 
-若现有观察加标准只读调试仍无法取得①②，记录缺失并交 B／A；不得用重新探测的相似结果补写，不自动授权插件或 Jellyfin 诊断构建，不为采集建设框架。发现有效媒体误拒绝时保留 FAIL、五项判定和完整实际保存状态，交 A／用户决定产品修改；范围／授权未落定前不盲跑整个昂贵矩阵和 Final。
+同次资料必须在现有方法内捕获；不能用重新探测的相似结果补写或另建诊断框架。保留真实 FAIL、五项判定及可读取的失败状态，取得实际差异并对照固定源码后才有界修正；超出 A 授权的需求交 A。未解决阻塞前不盲跑整个昂贵矩阵和 Final。
 
 ## 验收条件
 
@@ -220,6 +222,17 @@ git diff --check
 ```
 
 改顺序入口跑 playback；改共享驱动加 package 和 Node；改共用 HTTP 服务则跑 media_server、playback 及其直接消费者上述 package／scan／large／batch／configuration 工具控制。Python 编译限实际修改／直接导入文件，列表全覆盖不是要求每次编辑都全跑。没有 C# 改动不要求 Developer 跑 C# 或无关全量；报告未运行全量，B 承担最终真实回归。
+
+C# 接入改变时使用 SDK 10.0.401，Developer 执行：
+
+```bash
+bash scripts/dotnet-local restore Jellyfin.Plugin.StrmProbeOptimizer.sln --locked-mode
+bash scripts/dotnet-local build Jellyfin.Plugin.StrmProbeOptimizer.sln --configuration Release --no-restore
+bash scripts/dotnet-local test Jellyfin.Plugin.StrmProbeOptimizer.sln --configuration Release --no-restore --filter 'FullyQualifiedName~ProbeExecutionContextTests|FullyQualifiedName~PlaybackOptimizerTests'
+bash scripts/dotnet-local format Jellyfin.Plugin.StrmProbeOptimizer.sln --verify-no-changes --no-restore
+```
+
+若改到代理则加其直接影响的现有测试类；聚焦回归覆盖新增诊断脱敏／开关、实际往返差异及旧失败保护，不用假对象宣称实机通过。本机 Python 3.11 可用绝对路径 `/opt/py311/python/bin/python3.11`，记录真实补丁版本；示例 python3.11 可替换为该实际解释器，不虚报 PATH 缺失为不可用。
 
 提交可审阅实现后，用现有 `python3 scripts/package_plugin.py --configuration Release --output-dir <本轮包目录>` 生成候选 ZIP，记录完整实现 SHA／tree、SourceRevision、build inputs、锁和负载摘要。不得将脏脚本或不同 ZIP 的结果合成最终通过。
 
@@ -264,7 +277,7 @@ python3.11 scripts/run_isolated_configuration_integration.py --scenario all
 
 大库使用既有复用入口：源库已停止／归属与前后摘要核验，保留全部 1004 项、不截取、不使用 `--fresh`；只在新副本归档／重置其指纹以形成首次信任前提，受影响项目局部修复，不重建原库或全库准备。默认保留复用副本和适用基线，不因 Task PASS 清理。`--count 1000` 是最低门槛，不是只测 1000 项。
 
-镜像／源码／包及运行配置身份匹配才能复用；5.2 的旧输入不能自动证明新 HTTP／矩阵行为。Task 5.1 的远端 CI 决定保留，本 Task 不新增远端成功门槛、不自动推送。若触及插件共用链，先停止越界交 A／用户；后续保留以上完整原生播放／批量／扫描／安装及全部 1004 项，不借工具范围削减门槛。
+镜像／源码／包及运行配置身份匹配才能复用；5.2 的旧输入不能自动证明新 HTTP／矩阵行为。Task 5.1 的远端 CI 决定保留，本 Task 不新增远端成功门槛、不自动推送。本次已经 A 授权并触及插件共用链，以上完整原生播放／批量／配置／扫描／安装及全部 1004 项成为必需门槛，不借工具范围削减；新的正式候选按 T4 核验，不能自动沿用旧实现结果。
 
 ### B 独立验证
 
@@ -284,7 +297,7 @@ Developer 每真实轮初始总上限 60 分钟／测试 15 分钟；B 为 90 �
 
 ## 非目标
 
-不修改插件成功条件／诊断／并发／指纹算法，不创建管理框架、独立调度器／运行按钮、通用场景引擎或新的验收生命周期；不扩大到音频 STRM、生产、JellyfinProxy／OpenList、跨版本／全格式／全客户端兼容、远端发布或重写历史。不把合法媒体误拒绝降为预期失败，不恢复旧 URL 冒充同目标恢复，不为非阻塞工具润色延长 Task。
+不修改已授权匹配修正之外的成功不变量、并发／指纹算法，不创建通用诊断／管理框架、独立调度器／运行按钮、通用场景引擎或新的验收生命周期；不扩大到音频 STRM、生产、JellyfinProxy／OpenList、跨版本／全格式／全客户端兼容、远端发布或重写历史。不把合法媒体误拒绝降为预期失败，不恢复旧 URL 冒充同目标恢复，不为非阻塞工具润色延长 Task。
 
 ## Developer Completion Report
 
