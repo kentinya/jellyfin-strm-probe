@@ -5,7 +5,7 @@
 ```text
 Task ID: 5.2
 Parent Slice: 5
-Status: FIX REQUIRED
+Status: READY FOR B REVIEW
 Task Base: 4c75761982bc16dd1c6bae09bee1c3561da2c178
 Contract Checkpoint: 2111e20488ba5afbf46cfe8af8782cf4a63379fb
 Difficulty: High
@@ -127,6 +127,45 @@ Developer 每轮初始总上限 60 分钟、测试 15 分钟；B 每轮初始总
 不实施 P01～P08 的变化矩阵、ColorRange 返回主流判定修复、插件诊断或产品成功旁路；不增加新客户端取消语义，不猜测接口；不改生成程序／OpenList／JellyfinProxy，不接管现存实例／1004 项库，不建框架、改工作流、改依赖、移动 Base、自动发布或关闭 Slice。
 
 ## Developer Completion Report
+
+### 修正轮（针对 B 的 FIX REQUIRED，2026-10-21）
+
+```text
+Base (unchanged):    4c75761982bc16dd1c6bae09bee1c3561da2c178
+Previous reviewed:    38c1184c488baf1e6bd1c3b2ff4b1264c9e08e93
+Implementation Head:  e8fa3f8ca87e2fb92b6453fe2a0301656581ea00
+Range:                4c75761982bc16dd1c6bae09bee1c3561da2c178..e8fa3f8ca87e2fb92b6453fe2a0301656581ea00
+```
+
+本轮只补 BR-1～BR-3 要求的实播结果与误报修正，未改产品代码、成功判定、诊断、依赖、共享环境模块、Slice／Task Base 或后续 Task 规划；B03 音频能力按合同交 A，不自行扩范围。证据索引：`.git/validation-evidence/e8fa3f8ca87e2fb92b6453fe2a0301656581ea00/ROUND-SUMMARY.md`。
+
+- Changed Files：`scripts/package_playback_driver.mjs`、`scripts/run_isolated_playback_integration.py`、`tests/test_isolated_playback_integration.py`（三个修正提交 `cd4ace9`、`9a7fc65`、`e8fa3f8`）。`src/`、C# 测试、`package_environment.py`、`run_isolated_package_integration.py` 未改。
+- 逐项修正：
+  1. **BR-2（5 秒推进）**：驱动以 start 观测到 progress 观测的媒体时钟差值判定，记录 `startCurrentTime`／`advancedSeconds`；入口拒绝缺起点、缺差值、差值 <5 s、差值与前後 `currentTime` 不一致、缺 start／progress 观测。用 run-9 原始数据核对：六次实际差值 4.852033／4.372954／4.393480／4.854063／4.358460／4.862894 秒，全部不再被接受。
+  2. **BR-1（重启前后完整原生状态）**：冻结与只读读回改为保存完整原生源快照（source id、地址 hash、协议、容器、时长、每条流的 Type／Index／Codec／Width／Height／SampleRate／Channels／BitRate／ColorRange／IsDefault／Language），不再只比流类型集合；只读读回仍用 `GET /Items/{id}?Fields=MediaSources,MediaStreams,Path`（已接受 scan／large 工具同一只读查询，无探测无刷新），并在比较前先取指纹，不得以 PlaybackInfo 补证。
+  3. **BR-3（源对应）**：每行在准备阶段固定自己的原生 source id；PlaybackInfo 校验要求「该 source id + 该 URL hash + 必要主流」同时成立；保存源检查要求同一 source id；五字段指纹按 (item id, source id) 读取并核对两列；媒体请求必须带本项目的 item id。B 的独立反例（源 ID 改为另一 GUID）现在被拒绝。
+  4. 附带：音频行的 `mediaSourcePathIsLocalStrm` 不再写死，改由真实 `GET /Items/{id}?Fields=MediaSources` 保存路径判定；证据里只回显本轮合成路径（`http://media:`、`/media/strm/`、`/media/local/`），其余路径仅保留 hash。
+- 首败与修正（均保留）：`run-20261021T033747Z`（源码 `cd4ace9`，ZIP `05c11a94…`）FAIL 115.3 s——prepared-address 断言在行循环外，使 B03 中止整轮；改为逐行保存判定结果后，只在可播放行断言，音频行保持自己的 BLOCKED 结论（提交 `9a7fc65`）。
+- 真实基线结果（`artifacts/releases/dev-e8fa3f8/Jellyfin.Plugin.StrmProbeOptimizer_linux-x64.zip`，SHA-256 `8a44d13236c0a9c8f6f60ddd7cea4252f6cf73a4b64cace7dd51350ab79b247f`，sourceRevision `e8fa3f8…`；证据 `run-20261021T034335Z/`，311.7 s）：
+  - **B01 MP4：PASS** — item／source `84494acd-30e0-fc74-9734-da902f0f0007`；ffprobe 增量 0／0／0；实际推进 5.359111／5.346066／5.342764 秒；解码帧 88／93／90；插件事件 `FirstTrust`→`Sha1Matches`，`plugin probe calls 0`；PlaybackInfo 返回同源 id＋`http://media:8080/baseline-mp4-a.mp4`＋`[Audio, Video]`；五字段 `sha1 03565d5d…`／`file_size 1697410`／`url_hash 8c5bb2d1…`。
+  - **B02 MKV：PASS** — item／source `cf7436b5-603c-13fc-d836-74c0087b445b`；ffprobe 0／0／0；推进 5.385592／5.364783／5.409932 秒；解码帧 90／94／95；指纹 `sha1 24234110…`／`file_size 1705546`／`url_hash 03510a70…`。
+  - **重启只读对账（两行）**：重启前冻结与重启后（任何 PlaybackInfo／播放之前）读回的指纹、完整原生源快照、STRM SHA-256 完全相同，读回期间 ffprobe 计数 1→1（未探测）。
+  - **B03 真实 Audio：BLOCKED（不计 PASS）** — 原生索引为 `Audio` 实体并已持久化 Audio 主流；本轮实测保存路径为 `['/media/local/music/Baseline Audio.strm']`，原生 universal 音频路由返回 STRM 文本（HTTP 200、`application/octet-stream`、首字节 `3cdb71ed…` 匹配 `# strm-probe-version:1`）。交 A 裁定固定版本能力与合同处理；没有绕过工具或改用视频音轨。整轮因 BLOCKED 以退出码 1 结束，不写 PASS。
+  - **截图实际查看**：本轮执行者逐张打开 12 张视频截图——B01 三对均为 `MP4 A` 测试图案＋原生播放控制（开始 0.28–0.62 s，后图 5.64–5.93 s），B02 三对均为 `MKV A`（开始 0.40–0.73 s，后图 6.00–6.07 s），无可见错误。B 仍须独立打开原图，不以此代替 B 自己的审阅。
+- Tests and Results（均真实运行）：
+  - `python3.11 -m unittest discover -s tests -p test_isolated_playback_integration.py`：**46 tests OK**（新增推进差值、绝对位置、缺观测、源 ID 错配、fingerprint item／source 错配、重启源字段变化、媒体请求归属、音频保存路径等拒绝控制）。
+  - `python3.11 -m unittest discover -s tests -p test_isolated_package_integration.py`：**31 tests OK**（共享浏览器驱动改动的既有入口回归；其中 `invalid` 场景按设计输出非零 JSON）。
+  - `node --check scripts/package_playback_driver.mjs`：PASS；`python3.11 -m compileall -q scripts tests`：PASS；`python3 scripts/check_governance.py`：PASS；`git diff --check`：PASS。
+  - **未运行（留给 B）**：C# restore／build／test／format、干净检出完整 Python 3.11 discovery、`run_isolated_package_integration.py --scenario all`、scan／large／batch／configuration 实机、远端 CI。
+- Decisions：只修取证与误报断言，不扩展工具功能；不把工具测试当旅程结果；音频范围交 A；不启动后续 Task。
+- Remaining In-Slice Work：A 对 B03／音频原生能力与合同的处理；其后 P01～P08 矩阵、ColorRange 三阶段差异（RO-3）、失败／恢复回归、RO-1 的 Range／固定 URL 切换／失败路由。
+- Risks / Deviations：
+  1. **B03 仍 BLOCKED**，Task 全三行旅程未完成，不能据此宣称基线 PASS；本报告只声明 B01／B02 的视频旅程已取得满足修正后判定的实播结果。
+  2. B01／B02 的播放经原生 HLS 转码；ffprobe 计数只统计目标源探测，不含转码 FFmpeg。
+  3. MP4 仍依赖 `+faststart` 补偿本机媒体服务无 Range（RO-1 Range 属后续 Task）。
+  4. 本轮总墙钟约 27 分钟，其中计入测试的实跑与聚焦检查约 7.5 分钟（约 28%），严格小于 30%；未空等凑时间。
+
+### 首轮报告（实现 `38c1184`，保留原文）
 
 以下保留实现 `38c1184` 的原始报告，包含当时的工具输出与自报 PASS；当前接受状态以下方 B Review Result 为准。本次调整不追认其中未满足的实播／重启结论。
 
