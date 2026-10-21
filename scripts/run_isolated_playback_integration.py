@@ -496,8 +496,12 @@ def generate_fixtures() -> dict:
         args += ["-vf", filters, "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p"]
         if spec["color_range"]:
             args += ["-color_range", str(spec["color_range"])]
-        args += ["-c:a", "aac", "-b:a", "96k", "-shortest", "-t", str(FIXTURE_SECONDS),
-                 "/out/" + name]
+        args += ["-c:a", "aac", "-b:a", "96k", "-shortest", "-t", str(FIXTURE_SECONDS)]
+        if spec["container"] == "mp4":
+            # The local media service has no Range support yet (RO-1 Range is a later Task), so the
+            # MP4 moov atom must be at the front for a real client to fetch and decode the file.
+            args += ["-movflags", "+faststart"]
+        args += ["/out/" + name]
         commands[name] = args
         result = ffmpeg(args)
         require(result.returncode == 0, f"Could not generate {name}: {result.stderr.strip()[-300:]}")
