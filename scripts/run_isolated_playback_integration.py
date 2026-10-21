@@ -706,6 +706,44 @@ def prepare_instance(package: Path) -> dict:
     return summary
 
 
+def native_audio_strm_response(item_id: str) -> dict:
+    """Record what the fixed Jellyfin build itself returns for an Audio STRM item.
+
+    Called only while the plugin is disabled, so the observation is purely native. The universal
+    audio endpoint is the native web client's own audio route. A fixed-version limitation is
+    reported (never hidden): the audio STRM item keeps its local ``.strm`` path as the media
+    source, so the response body is the STRM text instead of the remote audio bytes.
+    """
+    credentials_value = credentials()
+    identity = ('MediaBrowser Client="STRM Probe Optimizer package acceptance", Device="local-test", '
+                'DeviceId="strm-probe-package", Version="0.1.0"')
+    body = json.dumps({"Username": credentials_value["username"], "Pw": credentials_value["password"]}).encode()
+    request = pe.urllib.request.Request(
+        f"{credentials_value['base_url']}/Users/AuthenticateByName", data=body, method="POST",
+        headers={"Content-Type": "application/json", "Authorization": identity})
+    with pe.urllib.request.urlopen(request, timeout=20) as response:
+        token = json.load(response)["AccessToken"]
+    query = urllib.parse.urlencode({"DeviceId": "strm-probe-baseline", "audioCodec": "aac",
+                                    "container": "opus,mp3,aac,m4a,m4b,flac,wav,ogg",
+                                    "transcodingContainer": "ts", "transcodingProtocol": "hls"})
+    target = f"{credentials_value['base_url']}/Audio/{item_id}/universal?{query}"
+    native = pe.urllib.request.Request(
+        target, method="GET", headers={"Authorization": identity + f', Token="{token}"'})
+    try:
+        with pe.urllib.request.urlopen(native, timeout=90) as response:
+            head = response.read(64)
+            status = response.status
+            content_type = response.headers.get("Content-Type")
+    except pe.urllib.error.HTTPError as error:
+        head = error.read(64)
+        status = error.code
+        content_type = error.headers.get("Content-Type") if error.headers else None
+    return {"status": status, "contentType": content_type,
+            "firstBytesSha256": hashlib.sha256(head).hexdigest(),
+            "returnsStrmManifestText": head.startswith(b"# strm-probe-version:1"),
+            "mediaSourcePathIsLocalStrm": True}
+
+
 def prepare_rows(auth: str, rows: list[dict]) -> dict:
     """Scan the STRM rows, then let Jellyfin probe/persist the primary stream with the plugin off."""
     summary: dict[str, object] = {}
@@ -722,6 +760,8 @@ def prepare_rows(auth: str, rows: list[dict]) -> dict:
     auth = pkg.api_auth()
     require(str(pkg.plugin_status(auth)).lower() not in {"active", "0"}, "The plugin remained active after disable.")
     for row in rows:
+        if row["media_type"] == "audio":
+            row["nativeAudioResponse"] = native_audio_strm_response(row["item"]["Id"])
         required = "Video" if row["media_type"] == "video" else "Audio"
         deadline = time.monotonic() + MAX_WAIT
         saved: list[str] = []
@@ -769,9 +809,25 @@ def scenario_baseline(package: Path, evidence_dir: Path, selected: list[str],
 
     results: dict[str, object] = {}
     failures: list[str] = []
+    blocked: list[str] = []
     for row in rows:
         row_result: dict[str, object] = {}
         try:
+            if row["media_type"] == "audio" and row.get("nativeAudioResponse", {}).get("returnsStrmManifestText"):
+                # The fixed Jellyfin build indexes the audio STRM as a real Audio item and natively
+                # probes it, but its media source keeps the local .strm path (only Video items
+                # substitute ShortcutPath), so native playback returns the STRM text rather than
+                # audio. That is a fixed-version capability limit, not something this tool may pass
+                # off as audio playback, and the contract hands it back to A.
+                row_result["nativeAudioResponse"] = row["nativeAudioResponse"]
+                row_result["status"] = "BLOCKED"
+                row_result["error"] = (
+                    "the fixed Jellyfin 12.2.0 build returns the STRM text for the native Audio route "
+                    "(media source path stays the local .strm), so real native audio playback of an "
+                    "audio STRM is not achievable on this version; audio row left BLOCKED for A")
+                blocked.append(row["id"])
+                results[row["id"]] = row_result
+                continue
             # 1) first trust
             first = play_once(auth, row, "first-trust", evidence_dir)
             assert_playback(row, first, counter_validated=True)
@@ -820,8 +876,16 @@ def scenario_baseline(package: Path, evidence_dir: Path, selected: list[str],
             failures.append(f"{row['id']}: {row_result['error']}")
         results[row["id"]] = row_result
     summary["rowsResult"] = results
+    if blocked:
+        summary["blocked"] = blocked
     if failures:
         raise BaselineError("Baseline rows failed: " + " | ".join(failures))
+    if blocked:
+        # Blocked rows are never a pass: the run reports BLOCKED so no reader can treat the
+        # missing audio row as accepted evidence.
+        raise BaselineError(
+            "Baseline rows blocked (not passed): " + ", ".join(blocked)
+            + "; see rowsResult for the recorded native evidence")
     summary["status"] = "PASS"
 
 
@@ -931,6 +995,14 @@ def render_index(summary: dict) -> str:
         for row_id, result in rows.items():
             if result.get("status") != "PASS":
                 lines += [f"### {row_id} failure", "", f"```\n{result.get('error')}\n```", ""]
+    blocked = (summary.get("baseline") or {}).get("blocked") or []
+    if blocked:
+        lines += ["## Blocked rows (not passed)", ""]
+        for row_id in blocked:
+            lines += [f"### {row_id}", "",
+                      f"```\n{(rows.get(row_id) or {}).get('error')}\n```",
+                      "", f"native response: `{json.dumps((rows.get(row_id) or {}).get('nativeAudioResponse'))}`",
+                      ""]
     lines += ["## Evidence files", "",
               "- `baseline-result.json`: complete machine-readable result (fixtures, per-row observations).",
               "- `<row>/<phase>/observation.json`: ffprobe window, plugin events, media requests, fingerprint.",
