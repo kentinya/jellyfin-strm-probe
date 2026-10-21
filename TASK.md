@@ -5,7 +5,7 @@
 ```text
 Task ID: 5.1
 Parent Slice: 5
-Status: READY FOR B REVIEW
+Status: FIX REQUIRED
 Task Base: 2111e20488ba5afbf46cfe8af8782cf4a63379fb
 Contract Checkpoint: 2111e20488ba5afbf46cfe8af8782cf4a63379fb
 Difficulty: Medium
@@ -31,13 +31,13 @@ Planner / Reviewer: B
 
 ## 验收条件
 
-- [x] 在独立干净 Base 检出和真实 Python 3.11 下保留三处原失败，区分历史远端 FAIL 与本轮复现；未复现则报告差异，不虚填。（Developer 已复现三处，见完成报告与证据索引；仅 Developer 事实，不计 B 验收。）
-- [x] 修复保持原行为和拒绝条件，输入／清理仅限测试自备临时目录，不触碰现存 artifacts、1004 项准备库或用户文件。（Developer 已实现；B 独立核验待审。）
-- [x] 干净候选完整 Python discovery 无 error／failure，记录发现数、执行数及所有 skip 原因；两个现有发布归档缺失 skip 单列、不计 PASS，不新增 skip 掩盖失败。（Developer：264 项 OK、2 个既有 skip；B 需独立重跑。）
-- [x] 全 scripts／tests Python 语法、治理、差异检查通过；完整 C# 门槛由 B 承担或核验匹配证据，不交回 Developer。（Developer 侧已通过；C# 仍属 B。）
-- [x] 不需要启动 Jellyfin／容器／数据库、拉镜像或读取本地凭据，原生锁及隔离保护仍有效。（Developer 未使用 Docker／容器；B 待独立核验。）
+- [x] 在独立干净 Base 检出和真实 Python 3.11 下保留三处原失败，区分历史远端 FAIL 与本轮复现；未复现则报告差异，不虚填。（Developer 原始日志保留；B 另在独立干净 Base 经既有入口复现全部三处。）
+- [x] 修复保持原行为和拒绝条件，输入／清理仅限测试自备临时目录，不触碰现存 artifacts、1004 项准备库或用户文件。（B 已审查真实差异并通过干净候选全量核验，现存准备库未操作。）
+- [x] 干净候选完整 Python discovery 无 error／failure，记录发现数、执行数及所有 skip 原因；两个现有发布归档缺失 skip 单列、不计 PASS，不新增 skip 掩盖失败。（B 独立新跑：264 项、262 通过、2 个既有发布归档缺失 skip，无失败／错误；skip 不计 PASS。）
+- [x] 全 scripts／tests Python 语法、治理、差异检查通过；完整 C# 门槛由 B 承担或核验匹配证据，不交回 Developer。（B 已完成 Python 静态检查及 C# locked restore／Release build／202 项测试／format；首次 format 预算中止与补跑通过分别保留。）
+- [x] 不需要启动 Jellyfin／容器／数据库、拉镜像或读取本地凭据，原生锁及隔离保护仍有效。（B 全量含 Compose CLI config 解析，无需 Docker 服务／容器／镜像拉取／凭据；Developer 关于未运行 CLI 子检查的说法见下方纠正。）
 - [ ] 匹配候选远端 Repository quality 必要步骤全部成功；未获发布授权或没有远端结果时记 BLOCKED／NOT RUN，不能签 Task PASS。（BLOCKED / NOT RUN：本轮未推送、未触发 workflow。）
-- [x] Developer 提交真实实现 SHA、聚焦证据及省略项；B 审查完整 Task Base..Head，不修改 Slice 合同或插件成功判定。（Developer 已提交 `2291ee2`；B 审查待进行。）
+- [x] Developer 提交真实实现 SHA、聚焦证据及省略项；B 审查完整 Task Base..Head，不修改 Slice 合同或插件成功判定。（B 已审查完整 Base..`2291ee2` 与报告后继 `a23037c`。）
 
 ## 必要测试
 
@@ -109,10 +109,19 @@ C# 使用 SDK 10.0.401；B 可在固定候选主检出执行四项或核验匹�
 ## B Review Result
 
 ```text
-Reviewed: NOT SET
-Decision: PENDING
+Reviewed: 2111e20488ba5afbf46cfe8af8782cf4a63379fb..2291ee21a989cc5c905fc945bd8936aaa23a2673
+Report Checkpoint Reviewed: a23037cba585d14fde77d4a6dd5623ff81b25382
+Decision: FIX REQUIRED
 Slice Required Outcomes all satisfied: NO
-Next: B REVIEWS TASK 5.1 AT 2291ee21a989cc5c905fc945bd8936aaa23a2673
+Next: COMPLETE THE REMOTE REPOSITORY QUALITY GATE IN TASK 5.1 AFTER EXPLICIT PUBLICATION AUTHORIZATION
 ```
 
-Developer 已提交实现候选 `2291ee2` 并交回（READY FOR B REVIEW），此处不代签产品 PASS／FIX REQUIRED。交回后 B 只给 PASS 或 FIX REQUIRED，修正沿用同一 Task；每次 PASS 重查所有 RO，全部满足后提交 Closure Packet 并返回 SLICE READY FOR A REVIEW，由 A 最终审查，B 不自行关闭。
+B 于 2026-10-21 独立审查完整 Task Base..实现候选及其报告后继；三个测试修复未发现需改代码的阻塞，插件、工具、依赖、工作流与成功判定未改。**当前阻塞 B5.1-1：缺少匹配候选的远端 Repository quality 成功结果（BLOCKED / NOT RUN）**。GitHub 只读查询实现 SHA 返回 422／No commit found，未推送或触发远端运行；本地通过不能代替 AC-5。保留同一 Task ID／Base／Goal／Scope，未获授权不推送、不开始下一 Task。
+
+- B 新跑：独立干净 Base 通过既有 unittest 入口复现 F1／F2／F3 原失败；独立干净候选 Python 3.11.10 完整 discovery 共 264 项，262 通过、2 个既有发布归档缺失 skip（不计 PASS），无失败／错误；完整套件包含全部聚焦用例及真实 Compose CLI config，无需重复跑聚焦模块。compileall、治理、差异和提交空白检查通过。
+- B 承担 C# 完整门禁：SDK 10.0.401 locked restore／Release build／202 项 C# 测试通过；format 首次因本轮测试预算中止（19.08 秒、EXIT=124），保留首次记录；相同命令补跑 27.30 秒、EXIT=0。未将全量交回 Developer。
+- 归属：Python 干净候选为 `2291ee21a989cc5c905fc945bd8936aaa23a2673`；C# 在主检出 `a23037cba585d14fde77d4a6dd5623ff81b25382` 执行，已逐字节核对全部 69 个非 Markdown 跟踪输入与候选一致，后继仅改 Task 报告。Developer 原始证据仅作佐证，本轮全量和关键复现由 B 独立执行。Developer 报告所称未运行 Compose CLI 子检查需纠正：完整 discovery 实际已执行 `test_real_compose_config_is_isolated`；它仅解析配置，不启动服务。
+- B 证据：`.git/validation-evidence/2291ee21a989cc5c905fc945bd8936aaa23a2673/b-review-20261021T0015Z/INDEX.md`，包含准确命令、退出码、耗时、首败、跳过、输入摘要、远端只读结果和收尾；只在本机可读，不上传原始资料。
+- 时间：截至 00:20:26Z，本轮实际 307.13 秒、保守累计测试 88.15 秒（含 Base 失败、首次 format 中止、补跑及静态门槛），占 28.70%，低于 50%；无空等补时。两个本轮自建 worktree 已核验后移除，日志持续保留。
+- 后续只补本 Task 的远端欠项：授权后普通推送可审阅 main 检查点到现有 origin，核验原生 push 触发的同 head workflow／Python／逐步骤日志。纯报告后继比较可执行输入并重跑治理后复用匹配全量，不机械重跑 Final。若远端失败，修正仍留在 Task 5.1。
+- 全部 RO 尚未满足：RO-1～RO-3 真实播放矩阵／ColorRange 仍 NOT RUN，RO-4 尚缺远端门槛；不生成 Closure Packet，不返回 SLICE READY FOR A REVIEW，不自行关闭 Slice。本 Task 不操作现存 Jellyfin 或全部 1004 项准备库。
