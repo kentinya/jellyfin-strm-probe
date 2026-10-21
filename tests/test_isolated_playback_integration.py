@@ -719,6 +719,146 @@ class ArgRouteTests(unittest.TestCase):
         self.assertIn('f"/Plugins/{pkg.PLUGIN_ID}/Configuration"', source)
         self.assertNotIn("/Plugins/{pkg.PLUGIN_ID}/0.1.0.0/Configuration", source)
 
+
+class RewriteApplyTests(unittest.TestCase):
+    """DR53-1: the P08.03 byte-identical rewrite must work on the scanned row shape.
+
+    ``prepare_matrix_rows`` replaces ``row["item"]`` with the native item dictionary, so a rewrite
+    that keyed its staging path on ``row["item"]`` raised a TypeError on the real journey. The
+    rewrite must key on the stable ``strm_name`` and keep the bytes identical.
+    """
+
+    def _scanned_row(self, tmp: Path) -> dict:
+        return {"id": "MP4.P08.03", "fmt": "MP4", "strm_name": "Matrix MP4 P08 03",
+                # The post-scan shape: the item is the native dictionary, not the name string.
+                "item": {"Id": "8" * 8 + "-1111-2222-3333-" + "a" * 12, "Name": "Matrix MP4 P08"},
+                "media": "baseline-mp4-a.mp4", "url": playback.MEDIA_PREFIX + "baseline-mp4-a.mp4",
+                "old": {"sha1": "a" * 40, "size": "1000"}, "apply": {},
+                "apply_kind": "rewrite"}
+
+    def test_the_byte_identical_rewrite_accepts_the_scanned_item_dictionary(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            original = playback.pe.WORK
+            playback.pe.WORK = Path(tmp)
+            try:
+                strm_dir = Path(tmp) / "strm"
+                strm_dir.mkdir()
+                target = strm_dir / "Matrix MP4 P08 03.strm"
+                content = ("# strm-probe-version:1\n# strm-probe-sha1:" + "a" * 40 +
+                           "\n# strm-probe-size:1000\n" + playback.MEDIA_PREFIX + "baseline-mp4-a.mp4\n")
+                target.write_text(content, encoding="utf-8")
+                record = playback.apply_matrix_change(self._scanned_row(Path(tmp)))
+                self.assertEqual(target.read_text(encoding="utf-8"), content)
+                self.assertIs(record["contentSha256Unchanged"], True)
+                self.assertEqual(record["strm"]["sha256"],
+                                 playback.hashlib.sha256(content.encode()).hexdigest())
+                # Only this row's own STRM is rewritten; no stray file is created.
+                self.assertEqual(sorted(p.name for p in strm_dir.iterdir()), [target.name])
+            finally:
+                playback.pe.WORK = original
+
+    def test_an_mtime_only_change_keeps_the_bytes_and_reports_their_identity(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            original = playback.pe.WORK
+            playback.pe.WORK = Path(tmp)
+            try:
+                strm_dir = Path(tmp) / "strm"
+                strm_dir.mkdir()
+                target = strm_dir / "Matrix MP4 P08 01.strm"
+                content = "# strm-probe-version:1\nhttp://media:8080/baseline-mp4-a.mp4\n"
+                target.write_text(content, encoding="utf-8")
+                row = self._scanned_row(Path(tmp))
+                row.update({"id": "MP4.P08.01", "strm_name": "Matrix MP4 P08 01", "apply_kind": "mtime"})
+                record = playback.apply_matrix_change(row)
+                self.assertEqual(target.read_text(encoding="utf-8"), content)
+                self.assertEqual(record["strm"]["sha256"],
+                                 playback.hashlib.sha256(content.encode()).hexdigest())
+                self.assertGreater(target.stat().st_mtime, playback.time.time() + 1800)
+            finally:
+                playback.pe.WORK = original
+
+
+class DelegationJourneyAuthTests(unittest.TestCase):
+    """DR53-3: the delegation journeys must re-authenticate after a real Web Play.
+
+    The browser driver logs in with its own session, which revokes the API token the journey held
+    before the playback. The source review found D02/D03 restoring the plugin or auto-check and
+    D04/D05 reading the native source with that revoked token. These controls prove the read
+    boundary now asks for a new token, that the new token is really used, and that a genuinely
+    failing read still fails (the new token is not a pass-through).
+    """
+
+    def _row(self):
+        return {"id": "MP4.D04", "fmt": "MP4", "strm_name": "Matrix Regular MP4",
+                "item": {"Id": ITEM_ID}, "media_type": "video",
+                "apply_kind": "d04", "url": playback.MEDIA_PREFIX + "regular-mp4/Matrix Regular MP4.mp4"}
+
+    def test_the_refresh_returns_a_new_local_token(self):
+        from unittest.mock import patch
+        calls: list[str] = []
+
+        def fake_login():
+            calls.append("login")
+            return "fresh-token"
+
+        with patch.object(playback.pkg, "api_auth", fake_login):
+            self.assertEqual(playback.refresh_auth(), "fresh-token")
+        self.assertEqual(calls, ["login"])
+
+    def test_a_follow_up_read_uses_the_refreshed_token_and_never_returns_it(self):
+        from unittest.mock import patch
+        seen: list[str] = []
+
+        def fake_sources(auth, item_id):
+            seen.append(auth)
+            return {"itemId": item_id, "sources": []}
+
+        with patch.object(playback.pkg, "api_auth", lambda: "fresh-token"), \
+                patch.object(playback, "native_source_snapshot", fake_sources), \
+                patch.object(playback, "fingerprint_row_for_item", lambda *a: None), \
+                patch.object(playback, "probe_count", lambda url: 0), \
+                patch.object(playback, "_strm_sha256", lambda row: None):
+            state = playback.freeze_state("stale-token", self._row())
+        self.assertEqual(seen, ["fresh-token"])
+        self.assertNotIn("stale-token", json.dumps(state))
+        self.assertNotIn("fresh-token", json.dumps(state))
+
+    def test_a_read_that_really_fails_is_still_refused_after_the_refresh(self):
+        from unittest.mock import patch
+
+        def failing_sources(auth, item_id):
+            raise RuntimeError("The read-only native media-source query failed.")
+
+        with patch.object(playback.pkg, "api_auth", lambda: "fresh-token"), \
+                patch.object(playback, "native_source_snapshot", failing_sources), \
+                patch.object(playback, "fingerprint_row_for_item", lambda *a: None), \
+                patch.object(playback, "probe_count", lambda url: 0), \
+                patch.object(playback, "_strm_sha256", lambda row: None):
+            with self.assertRaises(RuntimeError):
+                playback.freeze_state("stale-token", self._row())
+
+    def test_the_delegation_journeys_read_after_the_playback_boundary(self):
+        source = (ROOT / "scripts" / "run_isolated_playback_integration.py").read_text(encoding="utf-8")
+        for journey in ("journey_d02", "journey_d03", "journey_d04", "journey_d05"):
+            start = source.index(f"def {journey}(")
+            end = source.index("\ndef ", start + 10)
+            body = source[start:end]
+            # A second native play is required before the restart journey.
+            self.assertTrue("native-play-second" in body or '"second-play"' in body, journey)
+            self.assertIn("d_row_restart", body, journey)
+            # The journey must not use the stale pre-playback token for a later request.
+            self.assertNotIn("pkg.api_auth()", body, journey)
+
+    def test_d02_and_d03_restore_the_configuration_only_after_the_restart_journey(self):
+        source = (ROOT / "scripts" / "run_isolated_playback_integration.py").read_text(encoding="utf-8")
+        for journey, restore in (("journey_d02", 'plugin_action(auth, True)'),
+                                 ("journey_d03", '"PlaybackAutoCheck": True')):
+            start = source.index(f"def {journey}(")
+            end = source.index("\ndef ", start + 10)
+            body = source[start:end]
+            self.assertLess(body.index("d_row_restart"), body.index(restore),
+                            f"{journey}: the configuration was restored before the restart journey")
+
 class RawScanDiagnosticTests(unittest.TestCase):
     ITEM_ID = "8" * 8 + "-1111-2222-3333-" + "a" * 12
 

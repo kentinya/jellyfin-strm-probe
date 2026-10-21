@@ -923,7 +923,7 @@ def play_once(auth: str, row: dict, phase: str, evidence_dir: Path, relax_consol
     # The driver's own login invalidates the API token this run handed out before the playback
     # (a fresh AuthenticateByName revokes the previous access token), so the read-only observation
     # queries authenticate again instead of failing with an unrelated HTTP 500/401.
-    auth = pkg.api_auth()
+    auth = refresh_auth()
     after_probes = probe_count(url)
     after_media = media_server_requests()
     events = plugin_event_delta(before_events)
@@ -1013,7 +1013,7 @@ def _strm_sha256(row: dict):
 def freeze_state(auth: str, row: dict) -> dict:
     # Web Play logs in independently and revokes the journey's older API token. Freeze
     # through a fresh login, as play_once already does for its read-only observations.
-    auth = pkg.api_auth()
+    auth = refresh_auth()
     item = row["item"]
     return {
         "fingerprint": fingerprint_row_for_item(auth, item["Id"], row.get("sourceKey")),
@@ -1021,6 +1021,17 @@ def freeze_state(auth: str, row: dict) -> dict:
         "strm_sha256": _strm_sha256(row),
         "probe_count": probe_count(row["url"]),
     }
+
+
+def refresh_auth() -> str:
+    """Re-authenticate for the next native request boundary and return the token locally.
+
+    The browser driver logs in with its own session and revokes the API token the run handed out
+    before the playback, so every native request that follows a real Web Play must authenticate
+    again instead of reusing the revoked token. The token stays a local value: it is never placed
+    into an evidence or result object, and a request that still fails keeps failing.
+    """
+    return pkg.api_auth()
 
 
 def read_only_state(auth: str, row: dict) -> dict:
@@ -1069,13 +1080,13 @@ def prepare_instance(package: Path) -> dict:
     pe.compose("stop")
     pe.compose("up")
     pe.wait_healthy()
-    auth = pkg.api_auth()
+    auth = refresh_auth()
     # The wizard already registered the movie STRM library; adding it again would index the same
     # files twice and break the exactly-one-item scan lookups.
     summary["libraries"] = {"movies": MOVIE_LIBRARY}
     summary["deployment"] = pe.deploy_archive(package)
     pkg.restart()
-    auth = pkg.api_auth()
+    auth = refresh_auth()
     require(pe.public_info().get("Version") == "12.2.0", "The package instance is not Jellyfin 12.2.0.")
     summary["pluginStatus"] = pkg.plugin_status(auth)
     require(str(summary["pluginStatus"]).lower() in {"active", "0"},
@@ -1104,7 +1115,7 @@ def prepare_rows(auth: str, rows: list[dict]) -> dict:
         summary[row["id"] + ".entity"] = str(info.get("Type")).rsplit(".", 1)[-1]
     require(pkg.plugin_action(auth, False) == 204, "The package-instance plugin disable failed.")
     pkg.restart()
-    auth = pkg.api_auth()
+    auth = refresh_auth()
     require(str(pkg.plugin_status(auth)).lower() not in {"active", "0"}, "The plugin remained active after disable.")
     for row in rows:
         required = "Video"
@@ -1145,7 +1156,7 @@ def scenario_baseline(package: Path, evidence_dir: Path, selected: list[str],
     """Run the baseline, recording every reached stage into ``summary`` even when a stage fails."""
     summary["fixtures"] = generate_fixtures()
     summary["instance"] = prepare_instance(package)
-    auth = pkg.api_auth()
+    auth = refresh_auth()
     rows = []
     for row in ROWS:
         if row["id"] not in selected:
@@ -1160,7 +1171,7 @@ def scenario_baseline(package: Path, evidence_dir: Path, selected: list[str],
                         "url": row["url"], "strm": row["path"], "strmContentSha256": row["contentSha256"]}
                        for row in rows]
     summary["preparation"] = prepare_rows(auth, rows)
-    auth = pkg.api_auth()
+    auth = refresh_auth()
     for row in rows:
         require(fingerprint_row_for_item(auth, row["item"]["Id"], row["sourceKey"]) is None,
                 f"{row['id']}: a fingerprint already existed before the first trust playback.")
@@ -1205,7 +1216,7 @@ def scenario_baseline(package: Path, evidence_dir: Path, selected: list[str],
             frozen = freeze_state(auth, row)
             row_result["frozenBeforeRestart"] = frozen
             pkg.restart()
-            auth = pkg.api_auth()
+            auth = refresh_auth()
             observed = read_only_state(auth, row)
             row_result["readOnlyAfterRestart"] = observed
             restart_failures = restart_readback_failures(frozen, observed)
@@ -1900,7 +1911,7 @@ def apply_matrix_change(row: dict) -> dict:
     apply = row["apply"]
     kind = row["apply_kind"]
     record: dict[str, object] = {"kind": kind}
-    if kind in ("manifest", "manifest-url", "comment", "rewrite", "d06"):
+    if kind in ("manifest", "manifest-url", "comment", "d06"):
         if kind in ("manifest-url", "d06"):
             tokens = {"sha1": apply.get("sha1"), "size": apply.get("size")}
         elif kind == "comment":
@@ -1926,12 +1937,21 @@ def apply_matrix_change(row: dict) -> dict:
         stamp = time.time() + 3600
         os.utime(target, (stamp, stamp))
         record["newMtime"] = stamp
+        record["strm"] = {"path": str(target), "url": row["url"],
+                          "sha256": hashlib.sha256(target.read_bytes()).hexdigest()}
     elif kind == "rewrite":
-        current = (pe.WORK / "strm" / (row["strm_name"] + ".strm")).read_bytes()
-        staging = pe.WORK / "strm" / ("." + row["item"] + ".rewritten.strm")
+        # The row's STRM identity is its stable ``strm_name``: ``row["item"]`` is replaced by the
+        # native item dictionary once the row has been scanned, so it can never key a path.
+        target = pe.WORK / "strm" / (row["strm_name"] + ".strm")
+        current = target.read_bytes()
+        before = hashlib.sha256(current).hexdigest()
+        staging = pe.WORK / "strm" / ("." + row["strm_name"] + ".rewritten.strm")
         pe.write_owned_bytes(staging, current, label=f"rewritten STRM bytes {row['id']}")
-        os.replace(staging, pe.WORK / "strm" / (row["strm_name"] + ".strm"))
+        os.replace(staging, target)  # same bytes, same path, new inode/mtime
+        after = hashlib.sha256(target.read_bytes()).hexdigest()
+        require(before == after, f"{row['id']}: the byte-identical STRM rewrite changed the content.")
         record["contentSha256Unchanged"] = True
+        record["strm"] = {"path": str(target), "url": row["url"], "sha256": after}
         return record
     elif kind == "switch":
         source = media / apply["to"]
@@ -2109,7 +2129,7 @@ def p01_stream_surgery(rows: list[dict], drop_spec: dict, evidence_dir: Path, st
                                     for name in ("db.sqlite3-wal", "db.sqlite3-shm")}
     pe.compose("up")
     pe.wait_healthy()
-    auth = pkg.api_auth()
+    auth = refresh_auth()
     for row in rows:
         saved = saved_stream_types(auth, row["item"]["Id"])
         expected = [] if drop_spec[row["id"]] == "all" else ["Audio"]
@@ -2146,6 +2166,9 @@ def trust_play(auth: str, row: dict, evidence_dir: Path) -> dict:
             f"{row['id']}: the existing stream was not accepted through first trust ({obs['pluginEvents']}).")
     require(all(call in (0, None) for call in obs["pluginProbeCalls"]),
             f"{row['id']}: first trust reported a plugin probe {obs['pluginEvents']}.")
+    # The Web Play revoked the token the playback was started with; every read-only request after
+    # it authenticates again.
+    auth = refresh_auth()
     failures = fp_expected_failures(auth, row, url=row["url"], sha1_token=row["old"]["sha1"],
                                     size_token=row["old"]["size"])
     require(not failures, f"{row['id']} first-trust: " + "; ".join(failures))
@@ -2181,7 +2204,7 @@ def restart_then_play(auth: str, row: dict, evidence_dir: Path, result: dict,
     frozen = freeze_state(auth, row)
     result["frozenBeforeRestart"] = frozen
     pkg.restart()
-    auth = pkg.api_auth()
+    auth = refresh_auth()
     observed_state = read_only_state(auth, row)
     if record_only:
         if observed_state["nativeSources"] != frozen["nativeSources"]:
@@ -2203,6 +2226,9 @@ def restart_then_play(auth: str, row: dict, evidence_dir: Path, result: dict,
     assert_playback(row, after, counter_validated=not record_only,
                     expected_delta=expected_delta, url_for_source=url_for_source,
                     allow_missing_media_fetch=row["apply_kind"] == "d04")
+    # The post-restart playback revoked the token it was started with; the follow-up fingerprint
+    # read authenticates again instead of reusing it.
+    auth = refresh_auth()
     fp_final = fp_snapshot(auth, row)
     if not record_only:
         require(fp_final == observed_state["fingerprint"],
@@ -2222,7 +2248,7 @@ def journey_normal(auth: str, row: dict, evidence_dir: Path) -> dict:
     result: dict[str, object] = {}
     if row["trust"]:
         result["firstTrust"] = trust_play(auth, row, evidence_dir)
-        auth = pkg.api_auth()
+        auth = refresh_auth()
     result["apply"] = apply_matrix_change(row) if row["apply_kind"] != "none" else {"kind": "none"}
     if row["apply_kind"] == "manifest-url":
         # From here on the measurement windows, the probes and the saved source all belong to the
@@ -2235,6 +2261,7 @@ def journey_normal(auth: str, row: dict, evidence_dir: Path) -> dict:
     if row["expect_probes"]:
         require(any(call == 1 for call in obs["pluginProbeCalls"]),
                 f"{row['id']}: the plugin reported no successful probe call ({obs['pluginEvents']}).")
+    auth = refresh_auth()
     fp_failures = post_window_fp_failures(auth, row)
     require(not fp_failures, "; ".join(fp_failures))
     result["window"] = {"ffprobe": obs["ffprobe"], "events": obs["pluginEvents"],
@@ -2255,7 +2282,7 @@ def journey_p01(auth: str, row: dict, evidence_dir: Path) -> dict:
     result: dict[str, object] = {"journey": "p01", "drop": drop, "prime": prime}
     drop_spec = {row["id"]: drop}
     result["surgery"] = p01_stream_surgery([row], drop_spec, evidence_dir, "pre")
-    auth = pkg.api_auth()
+    auth = refresh_auth()
     require(fp_snapshot(auth, row) is None, f"{row['id']}: a fingerprint existed before the window.")
     if prime:
         # The "with fingerprint" P01 rows prime once: the probe succeeds and commits the fingerprint,
@@ -2264,17 +2291,19 @@ def journey_p01(auth: str, row: dict, evidence_dir: Path) -> dict:
         assert_playback(row, obs, counter_validated=True, expected_delta=1)
         require(any(call == 1 for call in obs["pluginProbeCalls"]),
                 f"{row['id']}: the prime probe was not reported {obs['pluginEvents']}.")
+        auth = refresh_auth()
         failures = fp_expected_failures(auth, row, url=row["url"], sha1_token=row["fp_tokens"][0],
                                         size_token=row["fp_tokens"][1])
         require(not failures, f"{row['id']} prime: " + "; ".join(failures))
         row["trust_fp"] = fp_snapshot(auth, row)
         result["prime"] = {"ffprobe": obs["ffprobe"], "fingerprint": row["trust_fp"]}
         result["surgery2"] = p01_stream_surgery([row], drop_spec, evidence_dir, "prime-after")
-        auth = pkg.api_auth()
+        auth = refresh_auth()
     obs = play_once(auth, row, "window", evidence_dir)
     assert_playback(row, obs, counter_validated=True, expected_delta=1)
     require(any(call == 1 for call in obs["pluginProbeCalls"]),
             f"{row['id']}: the window probe was not reported {obs['pluginEvents']}.")
+    auth = refresh_auth()
     failures = fp_expected_failures(auth, row, url=row["url"], sha1_token=row["fp_tokens"][0],
                                     size_token=row["fp_tokens"][1])
     require(not failures, f"{row['id']} window: " + "; ".join(failures))
@@ -2291,7 +2320,7 @@ def journey_p01(auth: str, row: dict, evidence_dir: Path) -> dict:
 def journey_f01(auth: str, row: dict, evidence_dir: Path) -> dict:
     result: dict[str, object] = {"journey": "f01"}
     result["firstTrust"] = trust_play(auth, row, evidence_dir)
-    auth = pkg.api_auth()
+    auth = refresh_auth()
     result["apply"] = apply_matrix_change(row)  # manifest now points at the real 404 target
     row["url"] = row["apply"]["url"]
     # From here the requested (and recovered) media is served from the missing target's own file
@@ -2317,7 +2346,7 @@ def journey_f01(auth: str, row: dict, evidence_dir: Path) -> dict:
     frozen = freeze_state(auth, row)
     result["frozenBeforeRestart"] = frozen
     pkg.restart()
-    auth = pkg.api_auth()
+    auth = refresh_auth()
     observed_state = read_only_state(auth, row)
     restart_failures = restart_readback_failures(frozen, observed_state)
     require(not restart_failures, f"{row['id']}: " + "; ".join(restart_failures))
@@ -2327,6 +2356,7 @@ def journey_f01(auth: str, row: dict, evidence_dir: Path) -> dict:
     recovered = play_once(auth, row, "recovery-play", evidence_dir)
     url_for_source = row["fp_url"]
     assert_playback(row, recovered, counter_validated=True, expected_delta=1, url_for_source=url_for_source)
+    auth = refresh_auth()
     failures = fp_expected_failures(auth, row, url=row["fp_url"], sha1_token=row["fp_tokens"][0],
                                     size_token=row["fp_tokens"][1])
     require(not failures, f"{row['id']} recovery: " + "; ".join(failures))
@@ -2343,7 +2373,7 @@ def journey_f01(auth: str, row: dict, evidence_dir: Path) -> dict:
 def journey_f02(auth: str, row: dict, evidence_dir: Path) -> dict:
     result: dict[str, object] = {"journey": "f02"}
     result["firstTrust"] = trust_play(auth, row, evidence_dir)
-    auth = pkg.api_auth()
+    auth = refresh_auth()
     result["apply"] = apply_matrix_change(row)  # the fixed URL now serves the corrupted bytes
     failed = play_once(auth, row, "fail-window", evidence_dir, relax_console=True)
     require(failed["playback"].get("advanced") is not True,
@@ -2358,7 +2388,7 @@ def journey_f02(auth: str, row: dict, evidence_dir: Path) -> dict:
     frozen = freeze_state(auth, row)
     result["frozenBeforeRestart"] = frozen
     pkg.restart()
-    auth = pkg.api_auth()
+    auth = refresh_auth()
     observed_state = read_only_state(auth, row)
     restart_failures = restart_readback_failures(frozen, observed_state)
     require(not restart_failures, f"{row['id']}: " + "; ".join(restart_failures))
@@ -2366,6 +2396,7 @@ def journey_f02(auth: str, row: dict, evidence_dir: Path) -> dict:
     recovered = play_once(auth, row, "recovery-play", evidence_dir)
     url_for_source = row["fp_url"]
     assert_playback(row, recovered, counter_validated=True, expected_delta=1, url_for_source=url_for_source)
+    auth = refresh_auth()
     failures = fp_expected_failures(auth, row, url=row["fp_url"], sha1_token=row["fp_tokens"][0],
                                     size_token=row["fp_tokens"][1])
     require(not failures, f"{row['id']} recovery: " + "; ".join(failures))
@@ -2380,14 +2411,20 @@ def journey_f02(auth: str, row: dict, evidence_dir: Path) -> dict:
 
 
 def journey_d02(auth: str, row: dict, evidence_dir: Path) -> dict:
-    """Whole plugin disabled: native playback of the versioned STRM, fingerprint preserved."""
+    """Whole plugin disabled: native playback of the versioned STRM, fingerprint preserved.
+
+    The whole required journey — first native play, second play, freeze, restart, read-only
+    comparison and the post-restart play — runs with the plugin still disabled. The configuration
+    is restored only after that journey, so the evidence really proves native delegation instead of
+    a re-enabled plugin.
+    """
     result: dict[str, object] = {"journey": "d02"}
     result["firstTrust"] = trust_play(auth, row, evidence_dir)
-    auth = pkg.api_auth()
+    auth = refresh_auth()
     result["configBefore"] = plugin_configuration(auth)
     require(pkg.plugin_action(auth, False) == 204, f"{row['id']}: the plugin disable failed.")
     pkg.restart()
-    auth = pkg.api_auth()
+    auth = refresh_auth()
     status = str(pkg.plugin_status(auth)).lower()
     require(status not in {"active", "0"}, f"{row['id']}: the plugin remained active after disable.")
     obs = play_once(auth, row, "native-play", evidence_dir, relax_console=True)
@@ -2397,23 +2434,43 @@ def journey_d02(auth: str, row: dict, evidence_dir: Path) -> dict:
     result["nativePlay"] = {"ffprobe": obs["ffprobe"], "events": obs["pluginEvents"],
                             "advancedSeconds": obs["playback"].get("advancedSeconds"),
                             "note": "the native probe count is the real value; zero is not required"}
+    auth = refresh_auth()
+    second = play_once(auth, row, "native-play-second", evidence_dir, relax_console=True)
+    assert_playback(row, second, counter_validated=True, expected_delta=None)
+    require(second["fingerprint"] == row["trust_fp"],
+            f"{row['id']}: the second native playback with the plugin disabled changed the fingerprint.")
+    result["nativePlaySecond"] = {"ffprobe": second["ffprobe"], "events": second["pluginEvents"],
+                                  "advancedSeconds": second["playback"].get("advancedSeconds")}
+    auth = refresh_auth()
+    d_row_restart(auth, row, evidence_dir, result)
+    auth = refresh_auth()
+    status = str(pkg.plugin_status(auth)).lower()
+    require(status not in {"active", "0"},
+            f"{row['id']}: the plugin was active before the restart playback finished.")
     require(pkg.plugin_action(auth, True) == 204, f"{row['id']}: the plugin re-enable failed.")
     pkg.restart()
-    auth = pkg.api_auth()
-    d_row_restart(auth, row, evidence_dir, result)
+    auth = refresh_auth()
+    require(str(pkg.plugin_status(auth)).lower() not in {"disabled"},
+            f"{row['id']}: the plugin was not active again after the restore.")
+    result["configAfter"] = plugin_configuration(auth)
     result["status"] = "PASS"
     return result
 
 
 def journey_d03(auth: str, row: dict, evidence_dir: Path) -> dict:
-    """Only the playback auto-check is off: native playback, no optimization commit."""
+    """Only the playback auto-check is off: native playback, no optimization commit.
+
+    As with D02 the second play, the freeze, the restart, the read-only comparison and the
+    post-restart play all run while the auto-check is still off; the configuration is restored
+    afterwards.
+    """
     result: dict[str, object] = {"journey": "d03"}
     result["firstTrust"] = trust_play(auth, row, evidence_dir)
-    auth = pkg.api_auth()
+    auth = refresh_auth()
     require(set_plugin_configuration(auth, {"PlaybackAutoCheck": False}) == 200,
             f"{row['id']}: the playback-auto-check toggle failed.")
     pkg.restart()
-    auth = pkg.api_auth()
+    auth = refresh_auth()
     require(plugin_configuration(auth).get("PlaybackAutoCheck") is False,
             f"{row['id']}: the playback auto-check was not off after the restart.")
     before_events = plugin_event_lines()
@@ -2425,11 +2482,28 @@ def journey_d03(auth: str, row: dict, evidence_dir: Path) -> dict:
             f"{row['id']}: the disabled auto-check changed the fingerprint.")
     result["nativePlay"] = {"ffprobe": obs["ffprobe"],
                             "advancedSeconds": obs["playback"].get("advancedSeconds")}
+    auth = refresh_auth()
+    before_events = plugin_event_lines()
+    second = play_once(auth, row, "native-play-second", evidence_dir, relax_console=True)
+    assert_playback(row, second, counter_validated=True, expected_delta=None)
+    require(plugin_event_delta(before_events) == [],
+            f"{row['id']}: plugin events were emitted on the second play while the auto-check was off.")
+    require(second["fingerprint"] == row["trust_fp"],
+            f"{row['id']}: the second native playback changed the fingerprint.")
+    result["nativePlaySecond"] = {"ffprobe": second["ffprobe"],
+                                  "advancedSeconds": second["playback"].get("advancedSeconds")}
+    auth = refresh_auth()
+    d_row_restart(auth, row, evidence_dir, result)
+    auth = refresh_auth()
+    require(plugin_configuration(auth).get("PlaybackAutoCheck") is False,
+            f"{row['id']}: the auto-check was restored before the restart playback finished.")
     require(set_plugin_configuration(auth, {"PlaybackAutoCheck": True}) == 200,
             f"{row['id']}: the configuration restore failed.")
     pkg.restart()
-    auth = pkg.api_auth()
-    d_row_restart(auth, row, evidence_dir, result)
+    auth = refresh_auth()
+    require(plugin_configuration(auth).get("PlaybackAutoCheck") is True,
+            f"{row['id']}: the playback auto-check was not restored.")
+    result["configAfter"] = plugin_configuration(auth)
     result["status"] = "PASS"
     return result
 
@@ -2442,6 +2516,8 @@ def journey_d04(auth: str, row: dict, evidence_dir: Path) -> dict:
     obs = play_once(auth, row, "native-play", evidence_dir, relax_console=True)
     assert_playback(row, obs, counter_validated=True, expected_delta=None,
                     allow_missing_media_fetch=True, expected_source_url=media_path)
+    # The browser login revoked the pre-playback token; the follow-up read authenticates again.
+    auth = refresh_auth()
     key = current_source_key(auth, item_id)
     observed_fp = fingerprint_row_or_none(item_id, key) if key else None
     require(observed_fp is None, f"{row['id']}: an ordinary media item carries a fingerprint row.")
@@ -2451,6 +2527,7 @@ def journey_d04(auth: str, row: dict, evidence_dir: Path) -> dict:
     assert_playback(row, second, counter_validated=True, expected_delta=None,
                     allow_missing_media_fetch=True, expected_source_url=media_path)
     result["secondPlay"] = {"ffprobe": second["ffprobe"], "events": second["pluginEvents"]}
+    auth = refresh_auth()
     d_row_restart(auth, row, evidence_dir, result)
     result["status"] = "PASS"
     return result
@@ -2462,6 +2539,7 @@ def journey_d05(auth: str, row: dict, evidence_dir: Path) -> dict:
     item_id = row["item"]["Id"]
     obs = play_once(auth, row, "native-play", evidence_dir, relax_console=True)
     assert_playback(row, obs, counter_validated=True, expected_delta=None)
+    auth = refresh_auth()
     key = current_source_key(auth, item_id)
     observed_fp = fingerprint_row_or_none(item_id, key) if key else None
     require(observed_fp is None, f"{row['id']}: an unversioned STRM carries a fingerprint row.")
@@ -2470,6 +2548,7 @@ def journey_d05(auth: str, row: dict, evidence_dir: Path) -> dict:
     second = play_once(auth, row, "second-play", evidence_dir, relax_console=True)
     assert_playback(row, second, counter_validated=True, expected_delta=None)
     result["secondPlay"] = {"ffprobe": second["ffprobe"], "events": second["pluginEvents"]}
+    auth = refresh_auth()
     d_row_restart(auth, row, evidence_dir, result)
     result["status"] = "PASS"
     return result
@@ -2479,7 +2558,7 @@ def journey_d06(auth: str, row: dict, evidence_dir: Path) -> dict:
     """The allowMediaProbe=false native read, then the first Web Play that probes and commits."""
     result: dict[str, object] = {"journey": "d06"}
     result["firstTrust"] = trust_play(auth, row, evidence_dir)
-    auth = pkg.api_auth()
+    auth = refresh_auth()
     result["apply"] = apply_matrix_change(row)
     row["url"] = row["apply"]["url"]
     probes_before = probe_count(row["url"])
@@ -2492,6 +2571,7 @@ def journey_d06(auth: str, row: dict, evidence_dir: Path) -> dict:
             f"{row['id']}: the static native read changed the fingerprint.")
     obs = play_once(auth, row, "window", evidence_dir)
     assert_playback(row, obs, counter_validated=True, expected_delta=1, url_for_source=row["fp_url"])
+    auth = refresh_auth()
     failures = fp_expected_failures(auth, row, url=row["fp_url"], sha1_token=row["fp_tokens"][0],
                                     size_token=row["fp_tokens"][1])
     require(not failures, f"{row['id']} window: " + "; ".join(failures))
@@ -2529,7 +2609,7 @@ def prepare_matrix_rows(auth: str, rows: list[dict], evidence_dir: Path) -> dict
         summary[row["id"] + ".entity"] = str(info.get("Type")).rsplit(".", 1)[-1]
     require(pkg.plugin_action(auth, False) == 204, "The package-instance plugin disable failed.")
     pkg.restart()
-    auth = pkg.api_auth()
+    auth = refresh_auth()
     for row in rows:
         if row["apply_kind"] == "d04":
             deadline = time.monotonic() + MAX_WAIT
@@ -2572,10 +2652,10 @@ def prepare_matrix_rows(auth: str, rows: list[dict], evidence_dir: Path) -> dict
     if p01_rows:
         drop_spec = {row["id"]: row["apply"]["drop"] for row in p01_rows}
         summary["p01Surgery"] = p01_stream_surgery(p01_rows, drop_spec, evidence_dir, "pre")
-        auth = pkg.api_auth()
+        auth = refresh_auth()
     require(pkg.plugin_action(auth, True) == 204, "The package-instance plugin enable failed.")
     pkg.restart()
-    auth = pkg.api_auth()
+    auth = refresh_auth()
     require(set_plugin_configuration(auth, {"DetailedLog": True}) in (200, 204),
             "The diagnostic logging configuration could not be saved.")
     return summary
@@ -2607,13 +2687,13 @@ def scenario_matrix(package: Path, evidence_dir: Path, selected: list[str],
         strm_identities.append(identity)
     summary["strm"] = [{"id": row["id"], **identity} for row, identity in zip(rows, strm_identities)]
     summary["instance"] = prepare_instance(package)
-    auth = pkg.api_auth()
+    auth = refresh_auth()
     for row in rows:
         if row["apply_kind"] == "d04":
             ext = "mp4" if row["fmt"] == "MP4" else "mkv"
             add_library(auth, f"Matrix {row['fmt']} Regular Media", "movies", [f"/media/local/regular-{ext}"])
     summary["preparation"] = prepare_matrix_rows(auth, rows, evidence_dir)
-    auth = pkg.api_auth()
+    auth = refresh_auth()
     results: dict[str, object] = {}
     dispatch = {"normal": journey_normal, "p01": journey_p01, "f01": journey_f01,
                 "f02": journey_f02, "d02": journey_d02, "d03": journey_d03, "d04": journey_d04,
@@ -2629,7 +2709,7 @@ def scenario_matrix(package: Path, evidence_dir: Path, selected: list[str],
             journey_result = dispatch[row["journey"]](auth, row, evidence_dir)
             journey_result["mediaReset"] = reset
             results[row["id"]] = journey_result
-            auth = pkg.api_auth()
+            auth = refresh_auth()
         except (BaselineError, RuntimeError, OSError, subprocess.SubprocessError) as error:
             results[row["id"]] = {"status": "FAIL", "error": f"{type(error).__name__}: {error}"}
     summary["rowsResult"] = results
