@@ -631,7 +631,7 @@ def freeze_state(auth: str, row: dict) -> dict:
     return {
         "fingerprint": read_fingerprint_snapshot(item["Id"], item["Id"]),
         "streams": saved_stream_types(auth, item["Id"]),
-        "strm_sha256": hashlib.sha256(Path(row["strm_path"]).read_bytes()).hexdigest(),
+        "strm_sha256": hashlib.sha256(Path(row["path"]).read_bytes()).hexdigest(),
         "probe_count": probe_count(row["url"]),
     }
 
@@ -641,7 +641,7 @@ def read_only_state(auth: str, row: dict) -> dict:
     return {
         "fingerprint": read_fingerprint_snapshot(item["Id"], item["Id"]),
         "streams": saved_stream_types(auth, item["Id"]),
-        "strm_sha256": hashlib.sha256(Path(row["strm_path"]).read_bytes()).hexdigest(),
+        "strm_sha256": hashlib.sha256(Path(row["path"]).read_bytes()).hexdigest(),
         "probe_count": probe_count(row["url"]),
     }
 
@@ -739,8 +739,9 @@ def prepare_rows(auth: str, rows: list[dict]) -> dict:
     return summary
 
 
-def scenario_baseline(package: Path, evidence_dir: Path, selected: list[str]) -> dict:
-    summary: dict[str, object] = {}
+def scenario_baseline(package: Path, evidence_dir: Path, selected: list[str],
+                      summary: dict[str, object]) -> None:
+    """Run the baseline, recording every reached stage into ``summary`` even when a stage fails."""
     summary["fixtures"] = generate_fixtures()
     summary["instance"] = prepare_instance(package)
     auth = pkg.api_auth()
@@ -807,16 +808,17 @@ def scenario_baseline(package: Path, evidence_dir: Path, selected: list[str]) ->
             row_result["afterRestart"] = {"ffprobe": after["ffprobe"], "events": after["pluginEvents"],
                                           "playbackTime": after["playback"]["currentTime"]}
             row_result["status"] = "PASS"
-        except BaselineError as error:
+        except (BaselineError, RuntimeError, OSError, subprocess.SubprocessError) as error:
+            # A row failure never stops the remaining rows: every row keeps its own evidence so B can
+            # see the real per-row result instead of a single aborted run.
             row_result["status"] = "FAIL"
-            row_result["error"] = str(error)
-            failures.append(f"{row['id']}: {error}")
+            row_result["error"] = f"{type(error).__name__}: {error}"
+            failures.append(f"{row['id']}: {row_result['error']}")
         results[row["id"]] = row_result
     summary["rowsResult"] = results
     if failures:
         raise BaselineError("Baseline rows failed: " + " | ".join(failures))
     summary["status"] = "PASS"
-    return summary
 
 
 def main() -> int:
@@ -854,7 +856,9 @@ def main() -> int:
         workspace = pe.select_workspace(args.workspace)
         summary["workspace"] = str(workspace)
         before_state = pe.capture_instance_state()
-        summary["baseline"] = scenario_baseline(package, evidence_dir, selected)
+        baseline: dict[str, object] = {}
+        summary["baseline"] = baseline
+        scenario_baseline(package, evidence_dir, selected, baseline)
         summary["status"] = "PASS"
         exit_code = 0
     except (BaselineError, RuntimeError, OSError, ValueError, KeyError, json.JSONDecodeError,
