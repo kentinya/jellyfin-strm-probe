@@ -1,143 +1,140 @@
-# NO ACTIVE IMPLEMENTATION TASK
+# Task 5.2 — 自备 ZIP 隔离安装与视频／音频原生 Web 播放基线
 
-Task 5.1 已经 B 审查 PASS；以下保留完整合同、报告与决定，下一步由 B 在当前 Slice 内规划 Task 5.2。本检查点无活动实施 Task。
-
-# Task 5.1 — 干净检出的 Python 3.11 质量回归与 CI 修复
-
-受已提交的 [Slice 5](SLICE.md) 约束，以 [开发流程](docs/development-workflow.md) 为准。实施前阅读 [Developer 经验](docs/agent-experience/developer-implementation-role.md)。
+受已提交的 [Slice 5](SLICE.md) 约束，按 [开发流程](docs/development-workflow.md) 执行。实施前阅读 [Developer 经验](docs/agent-experience/developer-implementation-role.md)。
 
 ```text
-Task ID: 5.1
+Task ID: 5.2
 Parent Slice: 5
-Status: PASS
-Task Base: 2111e20488ba5afbf46cfe8af8782cf4a63379fb
+Status: PLANNED
+Task Base: 4c75761982bc16dd1c6bae09bee1c3561da2c178
 Contract Checkpoint: 2111e20488ba5afbf46cfe8af8782cf4a63379fb
-Difficulty: Medium
-Test Level: T3
+Difficulty: High
+Test Level: T4
 Planner / Reviewer: B
 ```
 
+## 前置检查与已接受结果
+
+工作区在规划前干净。Task 5.1 的完整合同、报告、B PASS 与授权后远端补审保存在 `4c75761982bc16dd1c6bae09bee1c3561da2c178:TASK.md`；其实现为 `2291ee21a989cc5c905fc945bd8936aaa23a2673`，发布 head 为 `0d7162c56c3a2ea9a4fa7ffbdfc0e5c9e49bf482`，[Repository quality 39521097113](https://github.com/kentinya/jellyfin-strm-probe/actions/runs/39521097113) 全步骤成功。B 已重判：RO-4 满足，RO-1～RO-3 未完成。Task Base 为上述 B PASS 检查点，不移动 Slice Base。
+
+规划前治理检查通过。本轮只规划，不运行 Jellyfin、不改产品／工具、不触碰现存全部 1004 项准备库。用户授权的本次发布已经完成；此计划和后续实现不自动推送。
+
 ## Goal
 
-完成 RO-4／AC-5 的质量反馈闭环：干净检出在 Python 3.11 下执行全部 Python 测试，修复 CI-F1～CI-F3，不依赖开发机忽略夹具／镜像锁／数据库或运行中的 Docker 服务，保留隔离及不可变锁拒绝规则；取得匹配修复候选的远端 Repository quality 成功结果。RO-1～RO-3 留待本 Task 通过后规划，不以 CI 绿灯宣称播放正确。
+实现 RO-1 的隔离安装／自备输入部分和 RO-2 所需的真实播放基线，交付一条完整使用旅程：从固定候选 ZIP 安装、自备真实媒体／STRM、原生索引与禁用插件时准备主流，到启用后的首次信任、原生 Web 点击播放、再次播放与重启后复用。MP4、MKV、真实 Audio 项目均有实际查看的截图、至少 5 秒进度、媒体请求、实际 ffprobe、原生保存和五字段对账。
+
+本 Task PASS 只接受该基线旅程；RO-1 的 HTTP Range、固定 URL 内容切换与失败路由等余项仍由后续矩阵 Task 验证，不能提前宣称整个 RO-1 满足。现有媒体服务源码只委托 SimpleHTTPRequestHandler，尚无本仓库显式 Range 实现或验证，不假定已支持。
+
+这是八类矩阵的可执行基线，解决真实音频输入可达和浏览器证据缺口；本 Task 不执行或宣称完成 P01～P08／ColorRange 变化回归。基线通过后，B 才能按已证实的音频输入固定下一 Task 的完整展开行。若固定版本不能原生形成音频 STRM 项目，保留 BLOCKED／NOT RUN 并交 A 处理合同，不把视频音轨、普通音频文件或假对象当作音频 STRM。
 
 ## 实际缺口与实施范围
 
-规划前工作区干净，main 比 origin/main 超前三个文档提交；治理检查通过。HEAD 的 Slice 5／Roadmap 已提交为 ACTIVE，无活动 Task。默认 Python 为 3.13.5，PATH 未发现 python3.11，实施须先准备并记录真实 3.11 解释器及补丁版本，不以 3.13 代替。
+B 已读真实源码：`package_environment.py` 有归属工作区、不可变镜像锁、ZIP 解包部署和原生向导；`ensure_media` 只生成 2 秒视频；`add_library_authenticated` 固定 movies；`run_isolated_package_integration.py::native_probe_and_save` 固定要求 Video，现有 clean 场景先用 PlaybackInfo 准备／检查，再调用浏览器，不能直接作为新矩阵的测量路径；`package_playback_driver.mjs` 只找 video、以 0.1 秒和画面宽度判定，尚无截图、5 秒推进或音频支持。现有 `run_browser_driver` 的日志名固定，多次调用必须使用不同证据子目录。
 
-| 缺口 | 真实代码及修复边界 |
-|---|---|
-| CI-F1 | `tests/test_isolated_batch_integration.py::BatchScriptGuardTests.test_temporary_fixture_refuses_to_overwrite_and_writes_a_versioned_manifest` 在真实 artifacts 目录先 unlink，再调用读取 `batch.FIXTURE` 的 `temporary_fixture`。改为临时目录自备源并注入路径，保留版本、URL、字段及拒绝覆盖断言；不得删写开发夹具。 |
-| CI-F2 | `tests/test_isolated_package_integration.py::PackageEnvironmentTests.test_compose_uses_a_separate_project_port_and_no_source_mount` 只替换 WORK，`write_compose` 仍读取真实镜像锁。提供合法确定性临时锁或注入加载边界，保留专用端口／项目、内部网络及无源码挂载断言；真实缺锁、可变 tag、错误仓库／spec 仍拒绝。 |
-| CI-F3 | `tests/test_isolated_large_library_integration.py::PreparedLibraryReuseTests.test_reuse_full_scenario_verifies_copy_and_delegates_without_rebuilding` 有 21 个同层 with 上下文，触及 3.11 静态嵌套限制；相邻非空指纹拒绝用例也须检查。用 ExitStack 等保持全部 patch 生命周期、调用及断言，不删用例或仅升级 Python。 |
+实施限于：
 
-主要修改限这三个测试文件，必要时小改 `.github/workflows/quality.yml` 的语法覆盖；工作流已固定 3.11，不要求形式性修改。只在无法隔离现有边界时，才可对 `scripts/run_isolated_batch_integration.py`、`scripts/package_environment.py` 作最小可测性调整，记录理由，不改变部署、归属、锁验证或探测行为。T3 因跨工具导入／共享模块／隔离保护；全 Python discovery 用于检验模块间 patch 泄漏和导入次序，三个聚焦函数不能代替。
+- 最多新增一个直接顺序调用既有函数的脚本 `scripts/run_isolated_playback_integration.py`，本 Task 只实现 baseline；后续矩阵继续扩展同一脚本。复用 `pe.select_workspace`、锁／归属检查、ZIP 部署／摘要、原生 API、现有媒体服务与浏览器调用，不另建框架、环境管理器、场景 DSL、调度器或证据系统。
+- 必要小改现有 `scripts/package_playback_driver.mjs`，增加新基线显式启用的截图、5 秒推进、视频解码帧／音频进度和播放请求关联。保留既有包验收兼容：旧 2 秒夹具的默认行为不冒充新基线；新入口必须显式启用严格条件且拒绝遗漏。不要为了本 Task 改共享 `ensure_media` 的默认媒体长度或重建既有夹具。
+- 新增 `tests/test_isolated_playback_integration.py`；必要补充 `tests/test_isolated_package_integration.py` 的直接受影响覆盖。若不得不修改 `package_environment.py` 或 `run_isolated_package_integration.py`，先由 B 记录最小理由及受影响入口／回归追加，保留本 Task ID／Base；不得自行扩大成功判定或省略门槛。
+- 不修改 `src/`、C# 测试、依赖、成功判定或插件诊断。RO-3 的三阶段差异调查留待后续 Task；日志不足时不得通过临时修改插件来绕过本边界。
+
+音频库与 Audio 项目目前未实证。实施先从固定 Jellyfin 源码、原生管理 UI／其真实请求确认支持的库类型、扩展名和播放路径，再在本轮隔离库验证。只能调用经确认的真实入口；不得猜测一个 Audio HTTP 接口、客户端可指定的 PlaybackInfo 探测参数或不可达状态。准备期的原生 PlaybackInfo 允许用于建主流，须单列；测量期必须由浏览器真实 Play 点击触发，不得先消费目标请求。
 
 ## 验收条件
 
-- [x] 在独立干净 Base 检出和真实 Python 3.11 下保留三处原失败，区分历史远端 FAIL 与本轮复现；未复现则报告差异，不虚填。（Developer 原始日志保留；B 另在独立干净 Base 经既有入口复现全部三处。）
-- [x] 修复保持原行为和拒绝条件，输入／清理仅限测试自备临时目录，不触碰现存 artifacts、1004 项准备库或用户文件。（B 已审查真实差异并通过干净候选全量核验，现存准备库未操作。）
-- [x] 干净候选完整 Python discovery 无 error／failure，记录发现数、执行数及所有 skip 原因；两个现有发布归档缺失 skip 单列、不计 PASS，不新增 skip 掩盖失败。（B 独立新跑：264 项、262 通过、2 个既有发布归档缺失 skip，无失败／错误；skip 不计 PASS。）
-- [x] 全 scripts／tests Python 语法、治理、差异检查通过；完整 C# 门槛由 B 承担或核验匹配证据，不交回 Developer。（B 已完成 Python 静态检查及 C# locked restore／Release build／202 项测试／format；首次 format 预算中止与补跑通过分别保留。）
-- [x] 不需要启动 Jellyfin／容器／数据库、拉镜像或读取本地凭据，原生锁及隔离保护仍有效。（B 全量含 Compose CLI config 解析，无需 Docker 服务／容器／镜像拉取／凭据；Developer 关于未运行 CLI 子检查的说法见下方纠正。）
-- [x] 匹配候选远端 Repository quality 必要步骤全部成功。（用户授权后已普通推送 `0d7162c`；run `39521097113`／job `118964842819` 全步骤 success，CPython 3.11.17，264 项含 2 个既有 skip，详见 B 补审。）
-- [x] Developer 提交真实实现 SHA、聚焦证据及省略项；B 审查完整 Task Base..Head，不修改 Slice 合同或插件成功判定。（B 已审查完整 Base..`2291ee2` 与报告后继 `a23037c`。）
+- [ ] 从固定 Jellyfin 12.2.0／源码 `ca0f16eb7c195f720a1493ed469a27c4657db0c6`、Linux x64、SDK 10.0.401 和仓库镜像锁建立全新归属工作区；独立本机端口／新凭据，服务器只见 ZIP 负载。记录主机资源、容器／镜像、浏览器／Node／Python、ZIP／sidecar／部署摘要、Active 和原生任务默认无触发，不接管旧实例。
+- [ ] 用 Jellyfin 自带 FFmpeg 生成至少 20 秒的 MP4／MKV（H.264＋AAC）与音频（优先 AAC／M4A，具体原生支持须实证）A／B、逐字节副本／别名；有可辨识内容标记，记录完整生成命令、实际 SHA-1／Size、ffprobe 流信息及 STRM 身份。准备明确 limited／full ColorRange 与未指定字段对照，依据实际输出报告，不能只凭参数宣称存在或缺失。本 Task 只确认夹具，不提前宣称变化场景通过。
+- [ ] 三行基线 B01=MP4、B02=MKV、B03=真实 Audio STRM：原生类型、item／source ID、库归属和必要主流均可核验；音频不是视频项目音轨。停用插件的准备阶段原生保存正确地址／主流，启用后固定无旧指纹前提；扫描／自动任务与测量隔离。
+- [ ] 每行依次进行首次信任、再次播放、重启后播放，全部由原生 Web 真实 Play 点击开始。首次信任初建五字段且不计成功探测；各测量窗口实际目标 ffprobe=0，日志／进程证据缺失不能当零。保留权限和原生响应契约，不使用无探测权限入口准备流。
+- [ ] 每次播放均保存开始及随后时间至少推进 5 秒的截图；执行者逐张打开并记录内容标记／原生播放器／错误。视频有真实解码帧，音频有实际播放进度；均有成功媒体请求及对应 PlaybackInfo 的源／URL／必要主流。只报 HTTP 200、元素存在、图片路径或自动化 advanced=true 不通过。
+- [ ] 重启前冻结三行完整原生 URL／流和五字段；重启后在任何 PlaybackInfo／播放前只读比较，再逐行播放，不能用首次信任补写掩盖状态丢失。原生状态查询本身不得触发媒体探测。
+- [ ] 工具对缺截图／进度不足／缺解码帧或音频进度／响应错误／源不匹配／缺计数／重启前置读取缺失拒绝 PASS。单元控制只验证工具拒绝，不冒充真实 Jellyfin 产品异常。真实失败保留首败、报错截图、退出码和恢复，禁止删断言／降阈值／预期失败掩盖。
+- [ ] 提交被测实现 SHA、精确命令和逐行结果；源变动、资源、配置／任务、停止及归属收尾完整。只清理本轮资源；现存全部 1004 项库及指纹前置基线保留。Developer 交 READY FOR B REVIEW，由 B 完成指定全量和独立验收。
 
 ## 必要测试
 
 ### 开发／修正反馈（Developer）
 
-从检出根目录执行；python3.11 须为经版本核验的真实解释器，若用绝对路径，报告逐字记录实际命令。
+只跑新／修改与直接受影响模块，记录缺失全量；不承担 B 最终套件。验证命令（新测试模块须先实施，现有程序入口已核对）：
 
 ```bash
-python3.11 --version
-python3.11 -m unittest discover -s tests -p test_isolated_batch_integration.py -v
-python3.11 -m unittest discover -s tests -p test_isolated_package_integration.py -v
-python3.11 -m unittest discover -s tests -p test_isolated_large_library_integration.py -v
-python3.11 -m py_compile tests/test_isolated_batch_integration.py tests/test_isolated_package_integration.py tests/test_isolated_large_library_integration.py
+/opt/py311/python/bin/python3.11 --version
+/opt/py311/python/bin/python3.11 -m unittest discover -s tests -p test_isolated_playback_integration.py -v
+/opt/py311/python/bin/python3.11 -m unittest discover -s tests -p test_isolated_package_integration.py -v
+node --check scripts/package_playback_driver.mjs
 python3 scripts/check_governance.py
 git diff --check
 ```
 
-先在新的干净 Base 检出运行对应命令保留首败，不在带开发夹具的主工作区运行旧 F1。新增／修改测试随上述模块执行；若改到许可工具，补其直接受影响模块并说明覆盖。Developer 只运行受影响验证，报告完整 Python／C#、远端及实机未运行项。
+第一条新测试模块在本计划时尚不存在；实施新增后 discovery 必须发现实际用例，0 项不通过。只在修改对应既有模块时跑该模块；若影响共享 package 环境，补其直接依赖的 scan／large 工具测试并交 B 重评真实回归。只改 Python／浏览器时，不要求 Developer 重跑 C#。
+
+生成可审阅提交后，用现有 `python3 scripts/package_plugin.py --configuration Release --output-dir <本轮包目录>` 构建指定候选 ZIP；source revision 必须为当时 HEAD，记录构建及载荷摘要，不能把脏工作区工具当成已提交候选。
+
+**拟新增入口，不是当前已有命令或已运行事实：** `python3 scripts/run_isolated_playback_integration.py --package <指定ZIP绝对路径> --scenario baseline --evidence-dir <本轮证据绝对路径>`。新增脚本使用现有 `JF_PROBE_PACKAGE_PORT`，沿用归属规则，运行前以实际 `--help` 固定 argv 并写入完成报告；不得在实现前调用不存在的脚本。只进行一次完整三行基线反馈，失败先修正同一 Task，不连续盲跑昂贵回归。实际媒体探测／播放始终经过上述已确认原生入口。
 
 ### 最终检查点门槛（B）
 
-B 固定 Developer 已提交的完整实现 SHA，另建隔离干净检出，记录 tree、无用户改动及无忽略产物的起点，不清理当前工作区。只准备解释器和工具，不复制 artifacts／凭据／数据库。B 执行：
+B 固定完整实现 SHA、tree、无用户改动和 ZIP，重新运行消费当前文档的治理。完成所有指定门槛后才能 PASS；有明确阻塞可先 FIX REQUIRED，余项如实 NOT RUN，不交回 Developer 跑全量。
 
 ```bash
-python3.11 --version
-python3.11 scripts/check_governance.py
-python3.11 -m unittest discover -s tests -v
-python3.11 -m compileall -q scripts tests
-git diff --check
-git show --format= --check HEAD
 bash scripts/dotnet-local restore Jellyfin.Plugin.StrmProbeOptimizer.sln --locked-mode
 bash scripts/dotnet-local build Jellyfin.Plugin.StrmProbeOptimizer.sln --configuration Release --no-restore
 bash scripts/dotnet-local test Jellyfin.Plugin.StrmProbeOptimizer.sln --configuration Release --no-restore
 bash scripts/dotnet-local format Jellyfin.Plugin.StrmProbeOptimizer.sln --verify-no-changes --no-restore
+/opt/py311/python/bin/python3.11 -m unittest discover -s tests -v
+/opt/py311/python/bin/python3.11 -m compileall -q scripts tests
+node --check scripts/package_playback_driver.mjs
+python3 scripts/check_governance.py
+git diff --check
 ```
 
-C# 使用 SDK 10.0.401；B 可在固定候选主检出执行四项或核验匹配的完整原始证据，不能改为 Developer 必跑。完整 Python 已含聚焦模块，通过后不机械重跑。现有 `test_real_compose_config_is_isolated` 只调用 Docker Compose CLI 的 config 解析，不启动服务；记录 CLI 版本，不为测试拉镜像或启动服务。实际发现其他运行服务依赖时保留失败，在同 Task 修复隔离，不跳过模块。
+C# SDK 固定 10.0.401；Python 3.11 可在新主机准备并记录实际解释器，路径不是环境绑定。完整 Python 在独立干净候选检出，不复制 artifacts／凭据／库；全部聚焦已含其中，不机械重复。归档缺失等 skip 单列、不计 PASS。Node 语法不是浏览器播放证据。
 
-远端步骤前先完成可审阅候选、本地门槛及索引。初次规划未授权新推送；2026-10-21 用户明确授权普通推送已审查的 `0d7162c` 到现有 origin 并核验原生触发的 workflow，该动作已执行。本计划不自动发布后续候选。授权后核验 push／PR 原生触发的 Repository quality 的 head SHA、工作流、Python 版本和每步日志，不能借其他提交绿灯。远端欠项留在本 Task，不另造补 CI Task。
+B 对同一 ZIP 执行：
+
+1. 新 baseline 全部三行／三次播放的完整结果；核验匹配 Developer 原始资料可复用该完整运行，缺失／失配则重跑。B 另在新归属实例独立复现三种真实媒体的首次信任／再播／只读重启前后／实播，审阅全部截图；不能把 Developer 自报截图已看当作 B 已看。
+2. 已有包入口的回归：`python3 scripts/run_isolated_package_integration.py --package <同ZIP> --baseline-revision 7c64eb5dcad6e5f20fb7eb41819be2521f65484d --scenario all --evidence-dir <包回归目录>`。该基线是已接受的 Slice 3 完整 Implementation Head，作为包兼容起点，不移动当前 Task Base。此回归验证共享浏览器驱动未破坏既有安装／升级／配置／恢复，不能代替新 5 秒／音频基线。
+3. 当前限定改动不影响插件运行链，也不修改旧 scan／large／plugin／batch／configuration 的执行入口，故不新增宣称这些实机已重跑；完整 Python 仍包含相关保护测试。若实际改到共享环境、媒体服务或旧包流程，B 必须在同 Task 按真实调用影响追加相关实机计划；若触及插件共用探测链，先停止越界改动交 A／用户，后续必须保留完整原生播放／批量／扫描／安装及现存全部 1004 项门槛，不能借本条省略。1004 项始终复用，不重建。
+
+Task 5.1 远端结果只证明其候选；本 Task 不新增远端 CI 成功作为必要门槛，也不把旧 CI 说成本 Task 新工具已通过。Slice Final 继续履行当前合同完整门槛。
 
 ### B 独立验证
 
-1. 审查固定 `2111e20488ba5afbf46cfe8af8782cf4a63379fb..Head` 的全部差异，包括断言、skip、patch 范围和额外文件；核验没有插件源码／依赖／成功判定变化。
-2. 独立核验并按需复现 Base 三个真实失败入口，在干净候选运行完整 discovery／compileall；F1 核对不触碰开发夹具，F2 核对合法临时锁和真实缺锁／错误锁拒绝，F3 核对所有 patch 生效与恢复、完整委派及非空指纹拒绝断言。通过既有函数／测试入口复现，不臆造 HTTP 参数或不可达产品路径。
-3. 本 Task 不改播放链，不运行播放矩阵或操作现存实例；包／扫描／1004 项实机不是本 Task 的新通过声明。必要改动若影响这些链路，先由 B 重评同 Task 测试计划；合同范围问题交 A，产品修复仍待用户决定。
-4. 阅读匹配候选全量原始证据并承担欠缺门槛，不采信标签代替日志。远端欠项或当前 Task 阻塞给 FIX REQUIRED，修正继续同一 Task。
+审查 `4c75761982bc16dd1c6bae09bee1c3561da2c178..Head` 全差异、原始命令／日志／全部图片和候选／ZIP 关联。重点核验新入口严格模式不可遗漏、三次播放各自前提、视频帧／音频进度及实际请求、0 次探测的测量完整性、原生／指纹只读重启对账、真实音频入口和隔离收尾。工具假对象不能作为原生输入支持或产品探测成功证据。
+
+RO-1 与基线可独立完成即有完整用户结果，不凭额外 P01～P08 或 ColorRange 诊断增加本 Task。遇到有效媒体误拒绝保留 FAIL 并交用户决定；音频原生能力／合同范围问题交 A，不私改合同。修正沿用同一 Task，B 只给 PASS／FIX REQUIRED。
 
 ### 证据、预算与重跑规则
 
-使用 `.git/validation-evidence/<完整源码SHA>/<run-id>/`，含 INDEX、源码／tree／候选、解释器／SDK／Compose、工作流／锁摘要、干净检出证明、逐条命令／退出码／计数／耗时、Base 首败与重跑；原始资料不上传，远端结果授权后补入。纯文档后继比较输入并重跑治理；可执行输入变化重取受影响结果，不复用失配证据，不机械重跑不相关 Final。
+`.git/validation-evidence/<完整实现SHA>/<run-id>/INDEX.md` 固定全部输入／版本、ZIP／部署摘要、逐行基线表、精确 argv／cwd／退出码／实际耗时、实际 ffprobe／流／五字段／媒体请求、截图与逐张查看结论、重启先读后播、首败／恢复、配置与资源收尾。凭据／数据库／媒体／STRM 和原始私有资料不上传。每场景独立证据目录，不能覆盖同名浏览器日志。
 
-每轮从开始检查起记录实际总用时与测试累计时间，严格满足用户要求的测试占比小于 50%。失败／重试、构建／静态门槛和等待远端测试计入测试；重叠区间按墙钟并集计，同时保留逐命令耗时，不靠并发隐藏。初始上限：Developer 每轮总预算 30 分钟、测试 10 分钟；B 每轮总预算 40 分钟、测试 12 分钟，均不要求耗满。启动测试前用已实际发生的非测试工作量留足余量；实际比例仍须小于 50%，不能拿计划预算作分母。接近上限停止启动新测试，保留结果和余项，不空等凑比例、不降低门槛、不将未跑写 PASS；环境准备另记实耗。
+开始前记录真实主机 CPU／内存／磁盘、端口和本轮归属；并发使用原生默认 2，基线串行，先做最小可达性验证再启动昂贵验收。实际状态不足只修复本轮准备前提，不能对旧准备库全库重建。
+
+Developer 每轮初始总上限 60 分钟、测试 15 分钟；B 每轮初始总上限 90 分钟、测试 25 分钟，均非要求耗满。实际测试／总耗时严格小于 50%；构建、夹具生成、等待健康／扫描／播放／远端及失败重试的验收区间保守计入测试，重叠按墙钟并集，工具安装另记准备实耗。启动前依据已发生非测试工作留足余额，禁止空等凑分母。预算不足停止新测试，保存首败／资源状态和余项，下一真实工作轮继续同 Task，不降低门槛或将未跑记 PASS。
+
+可执行输入变化后按 T4 在最终候选重新取得全部指定证据；纯报告后继明确比较输入并重跑文档消费检查后复用，不机械重跑 Final。完成后 B 重查全部 RO：仍有矩阵／误判缺口则规划下一完整行为；全部满足才提交 Closure Packet，交 A 最终审查。
 
 ## 非目标
 
-不实施 RO-1～RO-3 播放夹具／浏览器矩阵，不改插件诊断或 returnedPrimaryMatchesProbe，不建新框架，不操作生产／现存实例／准备库，不验证 JellyfinProxy，不移动 Base、不改写历史或自动推送。后续播放 Task 须固定真实已有入口、音频支持、全部展开行和截图实际查看，不假造尚不存在的矩阵命令。
+不实施 P01～P08 的变化矩阵、ColorRange 返回主流判定修复、插件诊断或产品成功旁路；不增加新客户端取消语义，不猜测接口；不改生成程序／OpenList／JellyfinProxy，不接管现存实例／1004 项库，不建框架、改工作流、改依赖、移动 Base、自动发布或关闭 Slice。
 
 ## Developer Completion Report
 
-- Changed Files：`tests/test_isolated_batch_integration.py`、`tests/test_isolated_package_integration.py`、`tests/test_isolated_large_library_integration.py`（仅此三个；插件源码、`scripts/`、依赖、工作流与成功判定未改）。
-- Implemented：CI-F1 改为在测试自备临时目录中写版本化 STRM 并注入 `ROOT`／`FIXTURE`，仍调用真实 `temporary_fixture`，保留版本／URL／字段及二次写入 `FileExistsError` 拒绝，并断言未在仓库 `artifacts/` 留下文件；CI-F2 从临时根目录注入确定性不可变镜像锁后调用 `write_compose`，保留专用端口／项目、内部网络与无源码挂载断言，新增 `test_compose_refuses_a_missing_mutable_or_foreign_image_lock` 保留缺锁／可变 tag／错误 spec／错误仓库的真实拒绝；CI-F3 将 21 项 patch 链与相邻非空指纹拒绝用例改为单个 `ExitStack`，patch 集合、顺序、生命周期与全部断言不变。`.github/workflows/quality.yml` 经评估后未改（改动会被既有治理测试拒绝，且非必需）。
-- Tests and Results：真实 Python 3.11.10（`/opt/py311/python/bin/python3.11`，python-build-standalone 20241016 归档，自备解包；主机默认 3.13.5 未用于门槛）。干净 Base `2111e20` 复现三处原始失败（206 tests，3 errors，2 skips；F1 缺 `artifacts/dev-env/strm/Environment Fixture.strm`，F2 缺不可变镜像锁，F3 导入期 `SyntaxError: too many statically nested blocks`）。干净候选 `2291ee2`（无 `artifacts/`）：完整 discovery 264 tests `OK (skipped=2)` EXIT=0；聚焦三模块 24／31／58 全 OK；`py_compile`、`compileall scripts tests`、`check_governance.py` PASS、`git diff --check`、`git show --format= --check HEAD` 全部 EXIT=0。两个 skip 均为 `'the published release archive is not present'`（`test_package_plugin.PackageIntegrityTests` 两项），单列且不计 PASS，未新增 skip。证据：`.git/validation-evidence/2291ee21a989cc5c905fc945bd8936aaa23a2673/dev-implementation-20261021T0008Z/INDEX.md`。
-- Decisions：F1 保留对真实写入函数的覆盖而非改测 `temporary_fixture_in`；F2 选择在测试侧注入临时 `ROOT` 与合法锁，未改 `load_image_lock`／`write_compose` 的产品边界，从而不触碰锁验证语义；F3 用 `ExitStack` 而非拆用例或升级解释器。未使用 Docker、容器、镜像拉取、数据库或本地凭据。
-- Remaining In-Slice Work：RO-1～RO-3 全部（P01～P08 真实播放矩阵、ColorRange 返回主流误判回归）；RO-4 的远端 Repository quality 成功结果仍未取得。
-- Risks / Deviations：Python 3.11 为自备 standalone 解释器（3.11.10），与 CI 的 `setup-python 3.11` 具体补丁版本可能不同，B 若要求精确对齐须自行确认；远端 workflow 未推送、未触发，记 BLOCKED / NOT RUN，不据此签 PASS；两个发布归档缺失 skip 未消除；未运行完整 C# 门禁、Docker Compose CLI `config` 子检查、任何 Jellyfin／容器／1004 项实机回归（按分工交 B）；本 Task 未改播放链与 `returnedPrimaryMatchesProbe`，产品误判仍待用户决定。
-- Head SHA：`2291ee21a989cc5c905fc945bd8936aaa23a2673`（tree `1b9df66b8678753c1cf6d8faedf32011e16676df`）。
-- Timing：本轮从 00:03:50Z 开始实现，候选提交 00:07:39Z，证据收尾至 00:08:34Z；测试累计约 60 秒（聚焦三模块 ≈1.7s、完整 discovery 主工作区 ≈10.5s、干净候选 ≈6.7s、Base 复现 ≈6.7s 及各模块），占本轮实际用时远低于 30%。
+- Changed Files：NOT SET。
+- Implemented：NOT RUN。
+- Tests and Results：NOT RUN；提交时补聚焦／完整基线证据、候选、计数、首败、实际图片查看和省略的 B 全量项目。
+- Decisions：NOT SET。
+- Remaining In-Slice Work：RO-1、RO-2／RO-3 真实矩阵与误判／失败恢复；RO-4 已由 Task 5.1 完成。
+- Risks / Deviations：真实 Audio STRM 支持尚待本 Task 核验；不能写成已支持。新 baseline 入口尚未实现。产品修复仍未授权。
+- Head SHA：NOT SET。
 
 ## B Review Result
 
 ```text
-Reviewed: 2111e20488ba5afbf46cfe8af8782cf4a63379fb..2291ee21a989cc5c905fc945bd8936aaa23a2673
-Report Checkpoint Reviewed: 0d7162c56c3a2ea9a4fa7ffbdfc0e5c9e49bf482
-Decision: PASS
+Reviewed: NOT SET
+Decision: PENDING
 Slice Required Outcomes all satisfied: NO
-Next: B PLANS TASK 5.2 FOR THE REMAINING SLICE OUTCOMES
+Next: DEVELOPER IMPLEMENTS TASK 5.2
 ```
 
-B 于 2026-10-21 独立审查完整 Task Base..实现候选及其报告后继；三个测试修复未发现需改代码的阻塞，插件、工具、依赖、工作流与成功判定未改。**首轮阻塞 B5.1-1（现已闭合）：当时缺少匹配候选的远端 Repository quality 成功结果（BLOCKED / NOT RUN）**。GitHub 只读查询实现 SHA 返回 422／No commit found，未推送或触发远端运行；本地通过不能代替 AC-5。保留同一 Task ID／Base／Goal／Scope，首次决定未获授权时未推送、未开始下一 Task；后续授权与闭合结果如下。
-
-- B 新跑：独立干净 Base 通过既有 unittest 入口复现 F1／F2／F3 原失败；独立干净候选 Python 3.11.10 完整 discovery 共 264 项，262 通过、2 个既有发布归档缺失 skip（不计 PASS），无失败／错误；完整套件包含全部聚焦用例及真实 Compose CLI config，无需重复跑聚焦模块。compileall、治理、差异和提交空白检查通过。
-- B 承担 C# 完整门禁：SDK 10.0.401 locked restore／Release build／202 项 C# 测试通过；format 首次因本轮测试预算中止（19.08 秒、EXIT=124），保留首次记录；相同命令补跑 27.30 秒、EXIT=0。未将全量交回 Developer。
-- 归属：Python 干净候选为 `2291ee21a989cc5c905fc945bd8936aaa23a2673`；C# 在主检出 `a23037cba585d14fde77d4a6dd5623ff81b25382` 执行，已逐字节核对全部 69 个非 Markdown 跟踪输入与候选一致，后继仅改 Task 报告。Developer 原始证据仅作佐证，本轮全量和关键复现由 B 独立执行。Developer 报告所称未运行 Compose CLI 子检查需纠正：完整 discovery 实际已执行 `test_real_compose_config_is_isolated`；它仅解析配置，不启动服务。
-- B 证据：`.git/validation-evidence/2291ee21a989cc5c905fc945bd8936aaa23a2673/b-review-20261021T0015Z/INDEX.md`，包含准确命令、退出码、耗时、首败、跳过、输入摘要、远端只读结果和收尾；只在本机可读，不上传原始资料。
-- 时间：截至 00:20:26Z，本轮实际 307.13 秒、保守累计测试 88.15 秒（含 Base 失败、首次 format 中止、补跑及静态门槛），占 28.70%，低于 50%；无空等补时。两个本轮自建 worktree 已核验后移除，日志持续保留。
-- 后续只补本 Task 的远端欠项：授权后普通推送可审阅 main 检查点到现有 origin，核验原生 push 触发的同 head workflow／Python／逐步骤日志。纯报告后继比较可执行输入并重跑治理后复用匹配全量，不机械重跑 Final。若远端失败，修正仍留在 Task 5.1。
-- 首轮重判：当时 RO-1～RO-3 真实播放矩阵／ColorRange 均 NOT RUN，RO-4 尚缺远端门槛；未生成 Closure Packet、未返回 SLICE READY FOR A REVIEW、未自行关闭 Slice。本 Task 不操作现存 Jellyfin 或全部 1004 项准备库。
-
-
-### B 授权后补审与最终决定（2026-10-21）
-
-用户回复“给予授权”后，B 将准确候选 `0d7162c56c3a2ea9a4fa7ffbdfc0e5c9e49bf482` 普通快进发布到现有 GitHub `main`，从原远端 `323a3f3` 前进，无强推或历史改写。HTTPS 因本机无凭据失败；已有 SSH 认证只读核验成功后，直接向同一仓库 SSH URL 普通推送成功，保留失败日志，origin 配置不变。没有用 API 重建提交或替换其 SHA。
-
-- 远端：[Repository quality run 39521097113](https://github.com/kentinya/jellyfin-strm-probe/actions/runs/39521097113)；head 为上述完整发布 SHA，event=`push`，workflow=`.github/workflows/quality.yml`，run／唯一 governance job `118964842819`／全部必要与收尾步骤均 `completed / success`，无重跑。checkout 原始日志确认同一 SHA；setup-python 为 CPython 3.11.17，完整 discovery 264 项，262 通过、2 个既有发布归档缺失 skip，无失败／错误；治理、语法、提交空白检查全部成功。三处原失败对应函数及新增锁拒绝均有逐项 `ok`，不借用旧提交绿灯。
-- 输入复用：`2291ee2..0d7162c` 仅 TASK.md 改变；再次核验原 B 输入清单的 69 个非 Markdown 跟踪文件摘要均匹配。采用首轮 B 的独立 Base 复现、干净 Python 3.11.10 全量／compileall、C# 四项门禁及原始日志；新增远端 3.11.17 完整结果闭合补丁版本差异。没有机械重跑本地全量、Final 或现存实例。
-- 原始补审索引：`.git/validation-evidence/2291ee21a989cc5c905fc945bd8936aaa23a2673/b-remote-20261021T0022Z/INDEX.md`。含准确推送命令／退出码、run／job／逐步骤原始日志、源码／tree、摘要、测试与等待时间。原始资料留本机，不随源码上传。
-- **Task 5.1：PASS；B5.1-1 CLOSED；无当前 Task 阻塞。** ID、Task Base、Goal、Scope、Slice 合同均保持。
-- 全部 RO 重判：RO-4／本 Task AC-5 已满足；RO-1 隔离自备输入及 ZIP 环境、RO-2 八类真实播放矩阵、RO-3 ColorRange／失败恢复仍未完成。下一步规划一个完整的自备隔离安装与视频／音频原生 Web 基线行为，确认输入可达与证据能力后再固定完整矩阵，不虚构尚不存在的命令或音频支持。
-- Slice 5 仍 ACTIVE，不具备 Closure Packet／SLICE READY FOR A REVIEW 条件，B 不关闭。后续规划只改本地文档，不包含产品实施或再次发布授权。
+本文件是活动计划，不是产品 PASS。B 未运行本 Task 的播放、包安装或独立实机验收。Task 5.1 B PASS 以其固定 Git 快照保留；Slice 5 仍 ACTIVE。
