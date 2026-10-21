@@ -706,29 +706,22 @@ def prepare_instance(package: Path) -> dict:
     return summary
 
 
-def native_audio_strm_response(item_id: str) -> dict:
+def native_audio_strm_response(auth_header: str, item_id: str) -> dict:
     """Record what the fixed Jellyfin build itself returns for an Audio STRM item.
 
-    Called only while the plugin is disabled, so the observation is purely native. The universal
-    audio endpoint is the native web client's own audio route. A fixed-version limitation is
-    reported (never hidden): the audio STRM item keeps its local ``.strm`` path as the media
-    source, so the response body is the STRM text instead of the remote audio bytes.
+    Called only while the plugin is disabled, so the observation is purely native, and it reuses
+    the run's existing token (a second login would invalidate that token and make the following
+    reads fail with 401). The universal audio endpoint is the native web client's own audio route.
+    A fixed-version limitation is reported, never hidden: the audio STRM item keeps its local
+    ``.strm`` path as the media source, so the response body is the STRM text, not audio bytes.
     """
     credentials_value = credentials()
-    identity = ('MediaBrowser Client="STRM Probe Optimizer package acceptance", Device="local-test", '
-                'DeviceId="strm-probe-package", Version="0.1.0"')
-    body = json.dumps({"Username": credentials_value["username"], "Pw": credentials_value["password"]}).encode()
-    request = pe.urllib.request.Request(
-        f"{credentials_value['base_url']}/Users/AuthenticateByName", data=body, method="POST",
-        headers={"Content-Type": "application/json", "Authorization": identity})
-    with pe.urllib.request.urlopen(request, timeout=20) as response:
-        token = json.load(response)["AccessToken"]
+    token = auth_header.split('Token="', 1)[1].rstrip('"')
     query = urllib.parse.urlencode({"DeviceId": "strm-probe-baseline", "audioCodec": "aac",
                                     "container": "opus,mp3,aac,m4a,m4b,flac,wav,ogg",
                                     "transcodingContainer": "ts", "transcodingProtocol": "hls"})
     target = f"{credentials_value['base_url']}/Audio/{item_id}/universal?{query}"
-    native = pe.urllib.request.Request(
-        target, method="GET", headers={"Authorization": identity + f', Token="{token}"'})
+    native = pe.urllib.request.Request(target, method="GET", headers={"Authorization": auth_header})
     try:
         with pe.urllib.request.urlopen(native, timeout=90) as response:
             head = response.read(64)
@@ -761,7 +754,7 @@ def prepare_rows(auth: str, rows: list[dict]) -> dict:
     require(str(pkg.plugin_status(auth)).lower() not in {"active", "0"}, "The plugin remained active after disable.")
     for row in rows:
         if row["media_type"] == "audio":
-            row["nativeAudioResponse"] = native_audio_strm_response(row["item"]["Id"])
+            row["nativeAudioResponse"] = native_audio_strm_response(auth, row["item"]["Id"])
         required = "Video" if row["media_type"] == "video" else "Audio"
         deadline = time.monotonic() + MAX_WAIT
         saved: list[str] = []
