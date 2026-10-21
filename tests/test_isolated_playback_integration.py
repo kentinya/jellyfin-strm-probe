@@ -271,6 +271,28 @@ class MeasurementWindowTests(unittest.TestCase):
                                                  counter_validated=True)
         self.assertTrue(any("backwards" in failure for failure in failures), failures)
 class RestartReadbackTests(unittest.TestCase):
+    def test_freeze_uses_fresh_auth_after_the_browser_login(self):
+        from unittest.mock import patch
+        row = {"item": {"Id": ITEM_ID}, "sourceKey": SOURCE_ID, "url": URL}
+        with patch.object(playback.pkg, "api_auth", return_value="fresh-auth") as login, \
+             patch.object(playback, "fingerprint_row_for_item", return_value=fingerprint()) as read_fp, \
+             patch.object(playback, "native_source_snapshot", return_value={"sources": []}) as read_native, \
+             patch.object(playback, "probe_count", return_value=1):
+            frozen = playback.freeze_state("revoked-auth", row)
+        login.assert_called_once_with()
+        read_fp.assert_called_once_with("fresh-auth", ITEM_ID, SOURCE_ID)
+        read_native.assert_called_once_with("fresh-auth", ITEM_ID)
+        self.assertNotIn("auth", frozen)
+
+    def test_freeze_still_rejects_a_failed_native_read(self):
+        from unittest.mock import patch
+        row = {"item": {"Id": ITEM_ID}, "sourceKey": SOURCE_ID, "url": URL}
+        with patch.object(playback.pkg, "api_auth", return_value="fresh-auth"), \
+             patch.object(playback, "fingerprint_row_for_item", return_value=fingerprint()), \
+             patch.object(playback, "native_source_snapshot", side_effect=playback.BaselineError("native read failed")):
+            with self.assertRaises(playback.BaselineError):
+                playback.freeze_state("revoked-auth", row)
+
     sources = [{"id": SOURCE_ID, "path": URL, "pathHash": "8c5bb2d1" + "0" * 56, "protocol": "Http",
                 "container": "mp4", "runTimeTicks": 240000000, "size": SIZE,
                 "streams": [{"Type": "Audio", "fields": {"Index": 1, "Codec": "aac", "ColorRange": None}},

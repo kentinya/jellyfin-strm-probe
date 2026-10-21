@@ -1011,6 +1011,9 @@ def _strm_sha256(row: dict):
 
 
 def freeze_state(auth: str, row: dict) -> dict:
+    # Web Play logs in independently and revokes the journey's older API token. Freeze
+    # through a fresh login, as play_once already does for its read-only observations.
+    auth = pkg.api_auth()
     item = row["item"]
     return {
         "fingerprint": fingerprint_row_for_item(auth, item["Id"], row.get("sourceKey")),
