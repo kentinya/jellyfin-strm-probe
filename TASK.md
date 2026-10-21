@@ -21,6 +21,8 @@ Planner / Reviewer: B
 
 ## Goal
 
+**2026-10-21 用户范围决定优先：** 用户明确“音频不在考虑范围内，后续不会使用 strm 形式”。从本次指令起不再调查、修复或执行 B03／音频 STRM 专属验收；其历史 FAIL／BLOCKED 保留、不转为 PASS。下方原 Goal／三行计划记录已提交合同的既有义务，音频条款待 A 正式同步；B 不以旧音频义务继续阻塞开发，也不自行签发合同变更或 Task PASS。视频旅程、完整回归及 B 独立验收要求保持。
+
 实现 RO-1 的隔离安装／自备输入部分和 RO-2 所需的真实播放基线，交付一条完整使用旅程：从固定候选 ZIP 安装、自备真实媒体／STRM、原生索引与禁用插件时准备主流，到启用后的首次信任、原生 Web 点击播放、再次播放与重启后复用。MP4、MKV、真实 Audio 项目均有实际查看的截图、至少 5 秒进度、媒体请求、实际 ffprobe、原生保存和五字段对账。
 
 **交付物是下表中的真实运行结果、原始证据及审查结论。** 脚本、浏览器驱动和工具单元测试只支持采集及防止误报，不能代替实播结果，也不以完善工具作为另一条完成路线。
@@ -37,7 +39,7 @@ Planner / Reviewer: B
 
 ## 当前状态与最小修正边界
 
-已存在 `scripts/run_isolated_playback_integration.py`、浏览器严格模式和对应单元测试。修正候选 `e8fa3f8` 的六次视频播放已补足至少 5 秒推进、源关联及重启地址／主流字段／指纹记录；B 已审阅原始浏览器输出和全部 12 张截图，原 BR-1～BR-3 的具体缺口不再作为继续开发工具的理由。此为修正证据核验，完整全量与 B 新实例独立实播仍未执行；B03 真实音频旅程未完成，当前先交 A 裁定，详见下方最新 B Review Result。
+已存在 `scripts/run_isolated_playback_integration.py`、浏览器严格模式和对应单元测试。修正候选 `e8fa3f8` 的六次视频播放已补足至少 5 秒推进、源关联及重启地址／主流字段／指纹记录；B 已审阅原始浏览器输出和全部 12 张截图，原 BR-1～BR-3 的具体缺口不再作为继续开发工具的理由。完整全量与 B 新实例独立实播仍未执行。音频 STRM 已由用户明确撤出考虑范围，不再等待能力裁定；下一步由 A 记录该实质合同变更，B 随后按同一 Task 的 B01／B02 视频旅程重判并完成保留门槛。
 
 修正按以下顺序进行：
 
@@ -215,10 +217,19 @@ Range: 4c75761982bc16dd1c6bae09bee1c3561da2c178..38c1184c488baf1e6bd1c3b2ff4b126
 Reviewed: 4c75761982bc16dd1c6bae09bee1c3561da2c178..e8fa3f8ca87e2fb92b6453fe2a0301656581ea00
 Decision: FIX REQUIRED
 Slice Required Outcomes all satisfied: NO
-Next: A RESOLVES REQUIRED AUDIO CAPABILITY / CONTRACT; B RETAINS FINAL GATES
+Next: A RECORDS USER-DIRECTED AUDIO STRM EXCLUSION; B REASSESSES SAME TASK AND RETAINS VIDEO FINAL GATES
 ```
 
-### 最新 B 复核：修正候选 `e8fa3f8`（2026-10-21）
+### 用户明确范围决定后的 B 交接（2026-10-21）
+
+用户已决定排除音频 STRM，**无需再调查其可行性，也无需再次询问是否撤出**。此决定改变 Slice RO-2／Required Surfaces／AC-2、AC-3 及 Task B03 的必要义务，按开发流程由 A 提交实质合同变更，再由 B 重核同一 Task。现保留 FIX REQUIRED 表示尚未完成正式合同同步及 B 最终门槛，不再以音频缺少成功播放作为后续修正要求。
+
+- A 的具体修订稿已准备在 `.git/validation-evidence/c63cecd8c3e4535d3eed7514973e64cb7d82b981/audio-scope-change-20261021/a-contract-draft.patch`，配套 README 说明了范围与交接。该稿覆盖 SLICE、scope、执行设计与架构入口，已通过 `git apply --check`，尚未应用或冒充已激活合同；不是把范围问题重新交用户选择。
+- A 保留 Slice／Task ID、Base、既有实现和 B 历史决定，只撤出音频 STRM 基线／缺 Audio／音频变化矩阵／专属库与实播验收，历史失败保留，不计 PASS。视频及其音轨、MP4／MKV 八类决策、缺 Video、ColorRange、失败恢复、重启和完整回归不减少；不删除插件通用逻辑。
+- A 合同提交后，B 记录真实新 Contract Checkpoint，继续 Task 5.2，改为 B01／B02 两行完整旅程，并使用已有 `--rows B01,B02` 入口。无需为了撤出音频重新开发／重构／删除工具；可执行输入不变时按证据匹配规则保留已有视频资料，缺失的最终原生证据仍由 B 取得。
+- 本轮只记录用户决定和准备可审阅修订稿，未运行媒体探测／播放、修改产品、操作实例或推送。Task 不自动 PASS，Slice 不关闭；下一步是 A 落定已明确的范围、B 完成视频指定全量与独立验收。
+
+### 本次用户范围调整前的 B 复核：修正候选 `e8fa3f8`（历史）
 
 按三行用户旅程核验后，决定仍为 **FIX REQUIRED**：当前明确阻塞是必需 B03 没有真实音频播放成功结果，交 A 处理范围／能力；不是继续完善工具。保留 Task ID／Base、Slice 合同和全部最终门槛，当前不规划下一 Task。
 
