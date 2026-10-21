@@ -5,7 +5,7 @@
 ```text
 Task ID: 5.3
 Parent Slice: 5
-Status: FIX REQUIRED
+Status: IN PROGRESS
 Task Base: f17fb1fc90dda242eeff9fac7b4f21576b5e6f94
 Contract Checkpoint: 68e7bf01e7796fe9972838dfc0d8ed8283aacedd
 Difficulty: High

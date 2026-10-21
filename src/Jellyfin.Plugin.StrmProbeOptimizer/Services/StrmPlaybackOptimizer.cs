@@ -1455,7 +1455,20 @@ public sealed class StrmPlaybackOptimizer
                 Coordinator.ActivePermits);
         }
 
-        using var probeContext = ProbeExecutionContext.Begin(projectItemId, sourceItem.Id, sourceKey, manifest.Url, requiredStreamType, MarkStarted);
+        void ObservePrimaryStream(string stage, string fields)
+        {
+            _logger.LogInformation(
+                "STRM probe primary fields for item {ItemId}, source {SourceId}, URL hash {UrlHash}, stage {Stage}: {Fields}",
+                projectItemId,
+                sourceKey,
+                manifest.UrlHash,
+                stage,
+                fields);
+        }
+
+        using var probeContext = ProbeExecutionContext.Begin(
+            projectItemId, sourceItem.Id, sourceKey, manifest.Url, requiredStreamType, MarkStarted,
+            _settings.DetailedLog ? ObservePrimaryStream : null);
         IReadOnlyList<MediaSourceInfo> sources;
         try
         {

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Threading;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Model.Entities;
@@ -13,13 +14,14 @@ public sealed class ProbeExecutionContext : IDisposable
     private readonly HashSet<PrimaryStreamIdentity> _successfulPrimaryResults = [];
     private readonly HashSet<PrimaryStreamIdentity> _persistedPrimaryResults = [];
     private readonly Action? _onMatchingCallStarted;
+    private readonly Action<string, string>? _onPrimaryStreamObserved;
     private int _matchingCallCount;
     private int _startNotified;
     private int _hasPrimaryResult;
     private int _hasPersistedAddress;
     private int _disposed;
 
-    private ProbeExecutionContext(Guid projectId, Guid sourceItemId, string sourceKey, string expectedUrl, MediaStreamType requiredStreamType, Action? onMatchingCallStarted)
+    private ProbeExecutionContext(Guid projectId, Guid sourceItemId, string sourceKey, string expectedUrl, MediaStreamType requiredStreamType, Action? onMatchingCallStarted, Action<string, string>? onPrimaryStreamObserved)
     {
         ProjectId = projectId;
         SourceItemId = sourceItemId;
@@ -27,6 +29,7 @@ public sealed class ProbeExecutionContext : IDisposable
         ExpectedUrl = expectedUrl;
         RequiredStreamType = requiredStreamType;
         _onMatchingCallStarted = onMatchingCallStarted;
+        _onPrimaryStreamObserved = onPrimaryStreamObserved;
         _previous = AmbientContext.Value;
         AmbientContext.Value = this;
     }
@@ -71,10 +74,11 @@ public sealed class ProbeExecutionContext : IDisposable
         string sourceKey,
         string expectedUrl,
         MediaStreamType requiredStreamType,
-        Action? onMatchingCallStarted = null)
+        Action? onMatchingCallStarted = null,
+        Action<string, string>? onPrimaryStreamObserved = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sourceKey);
-        return new ProbeExecutionContext(projectId, sourceItemId, sourceKey, expectedUrl, requiredStreamType, onMatchingCallStarted);
+        return new ProbeExecutionContext(projectId, sourceItemId, sourceKey, expectedUrl, requiredStreamType, onMatchingCallStarted, onPrimaryStreamObserved);
     }
 
     public void MarkCall(string? requestedPath)
@@ -103,11 +107,14 @@ public sealed class ProbeExecutionContext : IDisposable
         var primaryStream = result.MediaStreams?.FirstOrDefault(stream => stream.Type == RequiredStreamType);
         if (primaryStream is not null)
         {
+            var identity = PrimaryStreamIdentity.From(primaryStream);
             lock (_sync)
             {
-                _successfulPrimaryResults.Add(PrimaryStreamIdentity.From(primaryStream));
+                _successfulPrimaryResults.Add(identity);
                 Interlocked.Exchange(ref _hasPrimaryResult, 1);
             }
+
+            ObservePrimaryStream("encoder", identity);
         }
     }
 
@@ -125,6 +132,7 @@ public sealed class ProbeExecutionContext : IDisposable
         }
 
         var identity = PrimaryStreamIdentity.From(primaryStream);
+        ObservePrimaryStream("saved", identity);
         lock (_sync)
         {
             if (_successfulPrimaryResults.Contains(identity))
@@ -137,6 +145,7 @@ public sealed class ProbeExecutionContext : IDisposable
     public bool IsPersistedProbeResult(MediaStream stream)
     {
         var identity = PrimaryStreamIdentity.From(stream);
+        ObservePrimaryStream("returned", identity);
         lock (_sync)
         {
             return _persistedPrimaryResults.Contains(identity);
@@ -148,6 +157,16 @@ public sealed class ProbeExecutionContext : IDisposable
         if (item.Id == SourceItemId && string.Equals(item.ShortcutPath, ExpectedUrl, StringComparison.Ordinal))
         {
             Interlocked.Exchange(ref _hasPersistedAddress, 1);
+        }
+    }
+
+    private void ObservePrimaryStream(string stage, PrimaryStreamIdentity identity)
+    {
+        // The identity contains only the compared stream fields: never a request URL, path,
+        // credential or complete MediaStream/PlaybackInfo object. Disabled diagnostics allocate no JSON.
+        if (_onPrimaryStreamObserved is { } observer)
+        {
+            observer(stage, JsonSerializer.Serialize(identity));
         }
     }
 

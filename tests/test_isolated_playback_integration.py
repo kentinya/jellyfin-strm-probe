@@ -589,10 +589,10 @@ class MatrixPreconditionTests(MatrixRowIdTests):
         for row_id in ("MP4.P07.04", "MKV.P07.04"):
             row = rows[row_id]
             self.assertEqual(row["old"]["sha1"], "a" * 40)
-            self.assertEqual(self.resolved_tokens(row)["sha1"], "a" * 39)
+            self.assertEqual(self.resolved_tokens(row)["sha1"], "a" * 39 + "z")
         for row_id in ("MP4.P07.05", "MKV.P07.05"):
             row = rows[row_id]
-            self.assertEqual(row["old"]["sha1"], "a" * 39)
+            self.assertEqual(row["old"]["sha1"], "a" * 39 + "z")
             self.assertEqual(row["old"]["size"], "not-a-size")
             tokens = self.resolved_tokens(row)
             self.assertEqual(tokens["sha1"], "a" * 40)
@@ -750,6 +750,36 @@ class RawScanDiagnosticTests(unittest.TestCase):
         finally:
             playback.pe.request_json = original_request
         self.assertIn("refusing to guess", str(caught.exception))
+class FailureObservationTests(unittest.TestCase):
+    def test_native_500_preserves_read_only_state_before_rejecting_the_playback(self):
+        from contextlib import ExitStack
+        from unittest.mock import patch
+        row = {"id": "MP4.P02.01", "name": "Matrix MP4 P02 01", "media_type": "video",
+               "item": {"Id": ITEM_ID}, "sourceKey": SOURCE_ID, "url": URL}
+        driver = {"strict": True, "results": [{"advanced": False, "playbackInfo": [{"status": 500}]}]}
+        patches = [(playback, "credentials", lambda: {"base_url": "http://127.0.0.1:1", "username": "test", "password": "test"}),
+                   (playback, "probe_count", lambda url: 2),
+                   (playback, "plugin_event_lines", lambda: []),
+                   (playback, "plugin_event_delta", lambda before: []),
+                   (playback, "media_server_requests", lambda: {}),
+                   (playback.pkg, "run_browser_driver", lambda *a, **kw: driver),
+                   (playback.pkg, "unexpected_console_errors", lambda result: [{"text": "native500"}]),
+                   (playback.pkg, "api_auth", lambda: "private-test-token"),
+                   (playback, "fingerprint_row_for_item", lambda *a: fingerprint()),
+                   (playback, "native_source_snapshot", lambda *a: {"sources": []}),
+                   (playback.time, "sleep", lambda seconds: None)]
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            for owner, name, replacement in patches:
+                stack.enter_context(patch.object(owner, name, replacement))
+            with self.assertRaises(playback.BaselineError):
+                playback.play_once("old-auth", row, "window", Path(tmp))
+            result = (Path(tmp) / row["id"] / "window" / "observation.json").read_text()
+            saved = json.loads(result)
+            self.assertEqual(saved["fingerprint"], fingerprint())
+            self.assertEqual(saved["playback"]["playbackInfo"][0]["status"], 500)
+            self.assertNotIn("auth", saved)
+            self.assertNotIn("private-test-token", result)
+
 class ParsedTokenTests(unittest.TestCase):
     def test_a_valid_sha1_and_size_parse_to_the_stored_values(self):
         self.assertEqual(playback.parsed_tokens("A" * 40, "4096"), ("a" * 40, 4096))

@@ -677,7 +677,7 @@ def item_media_type(auth: str, item_id: str) -> dict:
             "Name": payload.get("Name")}
 
 
-def raw_item_query(auth: str, name: str) -> dict:
+def raw_item_query(auth: str, name: str, item_path: str | None = None) -> dict:
     """Return the raw native item-search evidence without collapsing the failure into a timeout.
 
     The row is located by its unique STRM path; ``name`` is the row's STRM file name (without
@@ -687,7 +687,7 @@ def raw_item_query(auth: str, name: str) -> dict:
     started = time.monotonic()
     attempts: list[dict] = []
     deadline = started + MAX_WAIT
-    strm_path = "/media/strm/" + name + ".strm"
+    strm_path = item_path or ("/media/strm/" + name + ".strm")
     while time.monotonic() < deadline:
         stamp = round(time.monotonic() - started, 1)
         # The row is identified by its STRM path, never by the item name: the native library naming
@@ -915,12 +915,9 @@ def play_once(auth: str, row: dict, phase: str, evidence_dir: Path, relax_consol
         "items": [{"name": row["name"], "id": item["Id"], "mediaType": row["media_type"]}],
     }
     result = pkg.run_browser_driver(PLAYBACK_DRIVER, scenario, phase_dir, timeout=420)
-    require("error" not in result, f"{row['id']} {phase}: the browser driver failed: {result.get('error')}")
-    require(result.get("strict") is True, f"{row['id']} {phase}: the driver did not run in strict mode.")
     console_errors = [] if relax_console else pkg.unexpected_console_errors(result)
-    require(not console_errors, f"{row['id']} {phase}: unexpected console errors {console_errors}")
-    require(len(result.get("results") or []) == 1, f"{row['id']} {phase}: expected exactly one playback result.")
-    entry = result["results"][0]
+    entries = result.get("results") or []
+    entry = entries[0] if len(entries) == 1 else {}
     # Let the server's asynchronous log sink and the media container flush before counting.
     time.sleep(2)
     # The driver's own login invalidates the API token this run handed out before the playback
@@ -930,6 +927,16 @@ def play_once(auth: str, row: dict, phase: str, evidence_dir: Path, relax_consol
     after_probes = probe_count(url)
     after_media = media_server_requests()
     events = plugin_event_delta(before_events)
+    read_errors: dict[str, str] = {}
+    def read_state(name, operation, missing):
+        try:
+            return operation()
+        except (RuntimeError, OSError, ValueError, KeyError, subprocess.SubprocessError) as error:
+            read_errors[name] = type(error).__name__
+            return missing
+
+    fingerprint = read_state("fingerprint", lambda: fingerprint_row_for_item(auth, item["Id"], row["sourceKey"]), None)
+    native_sources = read_state("nativeSources", lambda: native_source_snapshot(auth, item["Id"]), {})
     observation = {
         "row": row["id"], "phase": phase, "itemId": item["Id"], "expectedSourceId": row["sourceKey"],
         "url": url,
@@ -940,12 +947,17 @@ def play_once(auth: str, row: dict, phase: str, evidence_dir: Path, relax_consol
         "mediaServerRequests": {"before": before_media.get("GET " + filename, 0),
                                 "after": after_media.get("GET " + filename, 0),
                                 "delta": media_request_delta(before_media, after_media, filename)},
-        "fingerprint": fingerprint_row_for_item(auth, item["Id"], row["sourceKey"]),
-        "nativeSources": native_source_snapshot(auth, item["Id"]),
+        "fingerprint": fingerprint,
+        "nativeSources": native_sources,
+        "readErrors": read_errors,
     }
     (phase_dir / "observation.json").write_text(json.dumps(observation, ensure_ascii=False, indent=2),
                                                 encoding="utf-8")
-    observation["auth"] = auth
+    require("error" not in result, f"{row['id']} {phase}: the browser driver failed: {result.get('error')}")
+    require(result.get("strict") is True, f"{row['id']} {phase}: the driver did not run in strict mode.")
+    require(not console_errors, f"{row['id']} {phase}: unexpected console errors {console_errors}")
+    require(len(entries) == 1, f"{row['id']} {phase}: expected exactly one playback result.")
+    require(not read_errors, f"{row['id']} {phase}: read-only state unavailable: {read_errors}")
     return observation
 
 
@@ -1694,8 +1706,8 @@ def build_matrix_rows(fixture_table: dict) -> list[dict]:
         # 05 starts from the invalid hash/size pair and gains a valid hash and size;
         # 06 has neither side and moves the old size to the Int64 overflow text.
         p07 = [("01", va, DELETE, None, na), ("02", None, va, na, DELETE),
-               ("03", None, None, None, None), ("04", va, l39, na, "-1"),
-               ("05", l39, va, "not-a-size", na), ("06", None, None, na, "9223372036854775808")]
+               ("03", None, None, None, None), ("04", va, x40, na, "-1"),
+               ("05", x40, va, "not-a-size", na), ("06", None, None, na, "9223372036854775808")]
         for tail, old_sha, new_sha, old_size, new_size in p07:
             apply: dict = {}
             if new_sha is not None:
@@ -2186,7 +2198,8 @@ def restart_then_play(auth: str, row: dict, evidence_dir: Path, result: dict,
         expected_delta = 0
     after = play_once(auth, row, "after-restart", evidence_dir)
     assert_playback(row, after, counter_validated=not record_only,
-                    expected_delta=expected_delta, url_for_source=url_for_source)
+                    expected_delta=expected_delta, url_for_source=url_for_source,
+                    allow_missing_media_fetch=row["apply_kind"] == "d04")
     fp_final = fp_snapshot(auth, row)
     if not record_only:
         require(fp_final == observed_state["fingerprint"],
@@ -2501,7 +2514,8 @@ def prepare_matrix_rows(auth: str, rows: list[dict], evidence_dir: Path) -> dict
     # item lookups makes the per-row waits start from a real scan trigger.
     pe.request_json("POST", "/Library/Refresh", headers={"Authorization": auth})
     for row in rows:
-        item = raw_item_query(auth, row["item"])
+        item_path = "/media/local/" + row["media"] if row["apply_kind"] == "d04" else None
+        item = raw_item_query(auth, row["strm_name"], item_path)
         summary[row["id"] + ".scan"] = {"status": item["status"],
                                         "elapsedSeconds": item["elapsedSeconds"],
                                         "attempts": item["attempts"]}
@@ -2524,6 +2538,12 @@ def prepare_matrix_rows(auth: str, rows: list[dict], evidence_dir: Path) -> dict
                 time.sleep(1)
             require("Video" in saved, f"{row['id']}: no native Video stream was prepared.")
             summary[row["id"] + ".preparedStreams"] = saved
+            row["url"] = "/media/local/" + row["media"]
+            snapshot = native_source_snapshot(auth, row["item"]["Id"])
+            ids = [source["id"] for source in snapshot["sources"] if source.get("id")]
+            require(len(ids) == 1, f"{row['id']}: expected exactly one native source, found {ids}.")
+            row["sourceKey"] = ids[0]
+            summary[row["id"] + ".preparedSource"] = snapshot
             continue
         # Every STRM-backed row is prepared on the URL that currently serves its prepared media,
         # so the counter, the saved address and the snapshot all belong to the same real input.
@@ -2552,6 +2572,9 @@ def prepare_matrix_rows(auth: str, rows: list[dict], evidence_dir: Path) -> dict
         auth = pkg.api_auth()
     require(pkg.plugin_action(auth, True) == 204, "The package-instance plugin enable failed.")
     pkg.restart()
+    auth = pkg.api_auth()
+    require(set_plugin_configuration(auth, {"DetailedLog": True}) in (200, 204),
+            "The diagnostic logging configuration could not be saved.")
     return summary
 
 
@@ -2573,10 +2596,12 @@ def scenario_matrix(package: Path, evidence_dir: Path, selected: list[str],
     summary["mediaSetup"] = setup_matrix_media(rows)
     strm_identities = []
     for row in rows:
-        if row["apply_kind"] == "d05":
-            strm_identities.append(write_matrix_strm(row, unversioned=True))
-        else:
-            strm_identities.append(write_matrix_strm(row))
+        if row["apply_kind"] == "d04":
+            strm_identities.append({"path": "/media/local/" + row["media"], "ordinaryMedia": True})
+            continue
+        identity = write_matrix_strm(row, unversioned=row["apply_kind"] == "d05")
+        row["path"] = identity["path"]
+        strm_identities.append(identity)
     summary["strm"] = [{"id": row["id"], **identity} for row, identity in zip(rows, strm_identities)]
     summary["instance"] = prepare_instance(package)
     auth = pkg.api_auth()

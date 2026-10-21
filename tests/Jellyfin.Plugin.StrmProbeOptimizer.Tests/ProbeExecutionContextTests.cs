@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text.Json;
 using Jellyfin.Plugin.StrmProbeOptimizer.Interceptors;
 using Jellyfin.Plugin.StrmProbeOptimizer.Services;
 using MediaBrowser.Controller.MediaEncoding;
@@ -12,6 +13,42 @@ namespace Jellyfin.Plugin.StrmProbeOptimizer.Tests;
 [TestClass]
 public sealed class ProbeExecutionContextTests
 {
+    [TestMethod]
+    public void DiagnosticSnapshotsDescribeTheThreeNativeStagesWithoutRequestSecrets()
+    {
+        var itemId = Guid.NewGuid();
+        const string url = "https://media.example.invalid/video.mp4?token=private-test-token";
+        var observed = new List<(string Stage, string Fields)>();
+        using var context = ProbeExecutionContext.Begin(
+            itemId, itemId, itemId.ToString("N"), url, MediaStreamType.Video,
+            onPrimaryStreamObserved: (stage, fields) => observed.Add((stage, fields)));
+        var stream = new MediaStream
+        {
+            Type = MediaStreamType.Video,
+            Codec = "h264",
+            Index = 0,
+            Width = 320,
+            Height = 180,
+            ColorRange = "tv",
+            Path = "/private/media/path",
+        };
+
+        context.RecordResult(url, new MediaInfo { MediaStreams = [stream] });
+        context.RecordPersistedMediaStreams(itemId, [stream]);
+        Assert.IsTrue(context.IsPersistedProbeResult(stream));
+
+        CollectionAssert.AreEqual(new[] { "encoder", "saved", "returned" }, observed.Select(entry => entry.Stage).ToArray());
+        foreach (var (_, fields) in observed)
+        {
+            using var document = JsonDocument.Parse(fields);
+            Assert.AreEqual(33, document.RootElement.EnumerateObject().Count());
+            Assert.AreEqual("tv", document.RootElement.GetProperty("ColorRange").GetString());
+            Assert.IsFalse(fields.Contains("private-test-token", StringComparison.Ordinal));
+            Assert.IsFalse(fields.Contains("/private/media/path", StringComparison.Ordinal));
+            Assert.IsFalse(fields.Contains(url, StringComparison.Ordinal));
+        }
+    }
+
     [TestMethod]
     public async Task EncoderProxyObservesOnlyMatchingNativeResultWithRequiredStream()
     {
