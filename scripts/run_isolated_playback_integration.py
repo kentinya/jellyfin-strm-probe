@@ -923,6 +923,10 @@ def play_once(auth: str, row: dict, phase: str, evidence_dir: Path, relax_consol
     entry = result["results"][0]
     # Let the server's asynchronous log sink and the media container flush before counting.
     time.sleep(2)
+    # The driver's own login invalidates the API token this run handed out before the playback
+    # (a fresh AuthenticateByName revokes the previous access token), so the read-only observation
+    # queries authenticate again instead of failing with an unrelated HTTP 500/401.
+    auth = pkg.api_auth()
     after_probes = probe_count(url)
     after_media = media_server_requests()
     events = plugin_event_delta(before_events)
@@ -941,6 +945,7 @@ def play_once(auth: str, row: dict, phase: str, evidence_dir: Path, relax_consol
     }
     (phase_dir / "observation.json").write_text(json.dumps(observation, ensure_ascii=False, indent=2),
                                                 encoding="utf-8")
+    observation["auth"] = auth
     return observation
 
 
@@ -1814,8 +1819,14 @@ def setup_matrix_media(rows: list[dict]) -> dict:
         for key in ("to", "recovery_file", "corrupt_to"):
             if apply.get(key):
                 needed.add(apply[key])
-        if apply.get("url") and apply["url"].startswith(MEDIA_PREFIX + "missing-"):
-            pass  # the F01 404 target must stay missing until the recovery stage
+        if apply.get("url"):
+            target_name = apply["url"][len(MEDIA_PREFIX):].split("?", 1)[0]
+            if target_name.startswith("missing-"):
+                pass  # the F01 404 target must stay missing until the recovery stage
+            else:
+                # A URL-change row's new address must really serve its bytes from this run's files;
+                # the file behind it is created here from the row's fixture content.
+                needed.add(target_name)
     source_map: dict[str, str] = {}
     for ext in ("mp4", "mkv"):
         source_map[f"switch-copy-{ext}.{ext}"] = f"baseline-{ext}-a.{ext}"
