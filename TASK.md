@@ -308,48 +308,56 @@ Developer 每真实轮初始总上限 60 分钟／测试 15 分钟；B 为 90 �
 ## B Review Result
 
 ```text
-Reviewed: f17fb1fc90dda242eeff9fac7b4f21576b5e6f94..14d435f0c93587089471b325faa1d0cc3c96e89b
-Implementation Candidate: f55c2d0d9b9e5489790b48c380908d3ef0460086
+Reviewed: f17fb1fc90dda242eeff9fac7b4f21576b5e6f94..f7ee96539f81c0a80640482b7d2d959f2a8feb69
+Implementation Candidate: 4e235f569dbe050f818bb206d1273e762940250f
 Decision: FIX REQUIRED
 Slice Required Outcomes all satisfied: NO
-Next: DEVELOPER CORRECTS THE BLOCKERS BELOW IN THE SAME TASK 5.3; B RETAINS ALL FINAL GATES
+Next: A / USER DECIDES PRODUCT REPAIR SCOPE; CORRECTIONS REMAIN IN TASK 5.3; B RETAINS ALL FINAL GATES
 ```
 
-### 本轮核验与结果（2026-10-21）
+### 复审身份与范围（2026-10-21）
 
-开始时真实工作区干净，main 超前 origin/main 31 个提交；实施前治理检查 PASS。已审查上述完整 Task Base..Head 的 7 个改变文件及 Developer 原始 JSON／包／索引。候选到报告 Head 的可执行、测试、依赖、镜像及工作流输入相同；本轮不改产品、测试工具或合同，不移动 Slice／Task Base，不新建 Task、不推送。未启动、接管或清理任何 Jellyfin 实例和现存 1004 项库。
+开始时真实工作区干净，main 超前 origin/main 44 个提交；治理检查 PASS。AGENTS／必读维护文档／Slice 合同与上一轮已读版本相同，本轮重新核对流程及当前交付；修正仅改变顺序入口、对应 Python 测试和 Task 报告。完整 Base..Head 仍为 7 个改变文件；复审实际修正差异并保留完整 Task 差异。源码候选至报告 Head 的可执行／测试／依赖／锁／工作流输入完全相同，未改 C#。Slice／Task ID、Base、目标和验收保持。
 
-本轮本机证据：`.git/validation-evidence/f55c2d0d9b9e5489790b48c380908d3ef0460086/b-review-20261021T113750Z/INDEX.md`；完整差异、输入摘要、精确命令／工作目录／UTC／退出码／耗时和原文日志同目录保留。目录仅本机可读，不随 Git 发布。
+上一轮 B 决定及 B53-1～B53-5 原文保留于 `5e71de5eedc87e652f26d78feeef1161995f9130:TASK.md`。下述为当前结论，不将原失败和缺日志记录改写成 PASS。
 
-| 门槛 | 本轮结果 |
+本轮本机索引：`.git/validation-evidence/4e235f569dbe050f818bb206d1273e762940250f/b-rereview-20261021T145548Z/INDEX.md`。包含输入及证据摘要、完整差异、干净候选、完整 Python 原文、逐图查看结论和独立日志重数。将 `/tmp/pkg53` 中原 ZIP／manifest／sha256 复制到本索引下稳定 `package/` 保留；仍是原 ZIP，SHA-256 `10b789a97537080c6bc5514db5fdd99d566b00f26231446896515779349e0347`，SourceRevision 与候选相同。资料只在本机，不随 Git 发布。
+
+### 已核验的真实交付与限制
+
+B 已打开 Developer fix11 的完整原始服务器日志、矩阵 JSON、原始浏览器输出／首次信任响应和全部 6 张截图，按项目／源／完整日期和目标 URL 独立对账；未仅凭报告标签接受。
+
+| 对象 | 本次独立核验 |
 |---|---|
-| 固定候选独立干净检出的完整 Python discovery | Python **3.11.10**，331 项：329 PASS、0 FAIL、2 SKIPPED，进程 exit 0；不是 Developer 所报的 3.11.17。两项是缺忽略发布包的 assembly-version 控制，保留 SKIPPED，不计 PASS。 |
-| 同一干净检出的 compileall／Node 语法 | PASS。 |
-| 原指定 ZIP 与 sidecar 核验 | PASS，SHA-256 仍为 `351d164753858ce39777e7e5d7c56f10f19e140d6de980706c4856ed435d99b4`；不代表播放／安装门槛通过。 |
-| 当前治理／差异检查 | PASS；报告提交后再核验提交状态。 |
-| Developer 两条 C02 的原始运行 | 准备阶段 FAIL，测量／播放 NOT RUN；原 JSON 没有 rowsResult，未产生实播图。B 未将其写成产品 FAIL 或 PASS。 |
-| 本轮独立实机关键复现、C# 完整门禁、同 ZIP baseline／矩阵／package／scan／large、plugin／batch／configuration、Slice Final | NOT RUN：下列已确认阻塞允许先拒绝候选；不重复已失败的扫描前提，不机械启动昂贵门槛。最终责任仍属 B。 |
+| 扫描 | P02.01 按唯一 STRM 路径在 3.5 秒找到，C02.limited 在 0.1 秒找到。列表实际显示后者名称为 `Matrix MP4 C02`，STRM 路径仍包含 `limited`，证实该样本按名称查找会失配；路径匹配解决了本次前提。不能据此倒填旧轮缺失日志。 |
+| 首次信任 | 两行 ffprobe before=after=2、delta=0；FirstTrust／calls=0；项目／源和五字段对应真实 A（SHA-1 `adb64ff6503f355ac209e5cd06029dd19b2655f4`，Size 1660446）。实际推进 5.393645／5.383535 秒、88 解码帧、320×180；四张图均打开，MP4 A 画面从 00:00:00.333 到 00:00:05.667。 |
+| P02.01 换地址 | 原日志 14:35:35.102 启动目标 `switch-copy-mp4.mp4` 的 1 次 ffprobe；14:35:38.520 对应项目出现五项判定 `1 / True / True / True / False`，随后原生 POST PlaybackInfo 500；媒体日志为对应文件完整区间 206。浏览器 advanced=false，失败图已打开，显示原生“播放错误／处理请求时发生错误”。本行 FAIL。 |
+| C02.limited 换地址 | 原日志 14:38:05.299 启动目标 `baseline-mp4-limited.mp4` 的 1 次 ffprobe；14:38:06.440 同样五项判定及 PlaybackInfo 500；对应文件完整区间 206。失败图已打开，显示相同原生错误。本行 FAIL。 |
+| ColorRange 输入 | 本轮记录的两种格式 C02／C06 共 12 个目标均分别为 tv／pc／null，limited／unspecified 错配已在该次夹具记录中纠正；不是 12 条播放或三阶段取证 PASS。 |
+| 原日志与收尾 | 新轮完整服务器日志／原始 ffprobe 行及媒体日志实际存在；总共 4 次目标 ffprobe（准备 A 两次、换地址各一次），不是每行 4 次。归档发生在清理前；JSON 记录双服务 exit 0、无 OOM、归属对账 CLEAN、本轮工作区 CLEANED。B 未再次操作任何实例或现存全部 1004 项库。 |
 
-Developer 所报 264 项聚焦结果及构建输出在交接索引中有描述，但本轮找到的交接目录没有这些原始命令日志，不能仅凭标签复用；独立完整 Python 结果替代了本候选的 Python 回归证据。既有 Task 5.1／5.2 的审查决定保留，不自动外推到新媒体服务和矩阵；本轮不宣称新远端 CI 成功。
+这是现有 `--scenario matrix --rows MP4.P02.01,MP4.C02.limited`→原生 Web Play→原生 POST PlaybackInfo 的真实可达失败。P02.01 只是给有效 A 内容换地址，属于“URL 变化即探测且当次可播放”的必要需求；C02.limited 对应显式 ColorRange 的实际输入。该结果已越过旧扫描阻塞，属于产品拒绝结果造成的播放 FAIL。
 
-### 当前 Task 的 P1 阻塞项
+**已知的是失败条件，具体差异字段仍未知。** 服务器诊断证明本次存在匹配探测、必要主流和保存／地址信号，源码在 `returnedPrimaryMatchesProbe` 不成立时抛出异常，早于新指纹提交。日志没有①编码器返回／②保存成功入参／③返回主流的完整同次字段对照，不能直接认定根因就是 ColorRange，也不能用生成夹具时另一次 ffprobe 代替。失败窗口在 console 错误检查处提前退出，没有生成失败后的 observation／完整原生状态／五字段，因此旧指纹保护和原生保存的实机最终状态仍未独立闭合。
 
-以下静态问题均沿已实现的 `--scenario matrix --rows <固定ID>` 正常调用链定位；未通过猜测 API、直接调用产品内部方法或捏造实机复现得出。已发生的运行事实另行明确列出。修正只覆盖现有入口所需的行为，不建立新框架。
+### 当前阻塞与同一 Task 的修正边界
 
-1. **B53-1：扫描准备未交付可运行前提，且现有后续调用还有确定的执行错误。** 原两条 C02 在 `prepare_matrix_rows`→现有 `pkg.scan_and_wait` 等待首项失败，具体查询异常和 Jellyfin 原始日志已经丢失，根因尚未确定，不能认定仅增加超时即可修复。先在现有入口留存真实查询响应／异常和服务日志，再定位实际索引名称／路径／范围。静态审查同时发现：`prepare_matrix_rows` 将 `row["item"]` 从名称替换成项目字典（2233 行），后续 `write_matrix_strm`／mtime 分支仍将其与字符串相加（1642／1669 行），P／C／F 的正常变更路径会触发 TypeError；D06 的 `native_static_stream_read` 返回未定义的 `contentType`（1764 行）；P01 向证据目录备份时调用只允许写 WORK 内的 `pe.copy_owned`（1785 行），与现有归属保护冲突。使用稳定名称／初始真实 STRM 路径，按已有归属规则备份并保留保护；不能绕过检查。D03 的配置读写还使用带 `/0.1.0.0/` 的路径（1736／1745 行），与现有已验证配置入口不一致；对照既有入口和固定源码确认，不能继续猜测路由。
+1. **P1 产品阻塞，交 A／用户决定。** RO-2／RO-3、AC-2／AC-4 的有效媒体实际播放失败，Task 不能 PASS。当前 Slice 明确不授权修改插件成功判定，B 本轮不扩大授权。提交给 A 的事实为上述两条可达失败、固定候选／ZIP、原始日志和已查看图像；由 A／用户决定是否在同一 Task 5.3 内授权查明字段往返及产品修正。修改仍须保留真实成功、原生保存、当前 URL／主流、Manifest 稳定和条件提交，不以删除断言、关闭匹配、预期失败或伪造流完成合同。三阶段缺口一并交接，不能声称根因已闭合。
 
-2. **B53-2：固定 ID 对应的实际前提与合同不符。** `build_matrix_rows` 丢弃值为 None 的变更字段、`apply_matrix_change` 又回填旧值：P03.04 未删除 Size，P05.01／P07.01 等未删除旧 SHA-1；P03.03 只保留旧大写值，没有执行大小写变化。P07.03 实为 N→N，合同为 Ø→Ø；P07.04 用 L 而非 X，P07.05 用 L 而非 X。P06.02.down／05.down 将 up 文件的 `vu` 写给实际 p4b 字节。C02 当前执行固定 URL 换字节（1535～1538 行），合同要求 URL A→B；F01 失败窗口删除全部身份字段（1691 行），没有按合同保留预备真实 B 的内容身份。逐项修正真实写出的 STRM／媒体动作，测量前核验实际前提；保留完整 116 个固定 ID 及既定预期，不从插件结果反推预期。
+2. **P1 必要失败状态仍在采集前被断言丢弃（B53-5 未完全关闭）。** `play_once` 在 921 行遇到 500 即抛出，早于 930～947 行计数、原生状态及指纹读取／保存；fix11 两个 window 目录确实均无 observation.json。应在现有入口尽可能先保留响应、计数、只读状态及每项读取错误，再保留原 FAIL 并抛出。无需再造采集框架，也不能放宽正常播放断言或补写已删除的数据库状态。
 
-3. **B53-3：多行执行会消耗并污染其他行的媒体前提。** P04 多行共用 `switch-p04-*`，P06 多行共用 up／down 文件；原子切换直接 `os.replace(source, destination)` 移走公共 partner（1684／1726 行）。例如同批 P04.02 后，P04.03 已失去 p4b 源文件；后续行准备时持有的 A 地址／流也不再对应 A 字节。P06 和失败恢复存在相同依赖。保留生成的 partner，通过本行拥有的暂存副本原子替换目标，并保证下一行开始前其独立 A 基线与真实字节一致；不能只靠单行分批掩盖现有多行入口错误。无需管理框架或重建现存 1004 项库。
+3. **P1 P07.04／P07.05 仍偏离固定输入（B53-2 部分未修）。** 1697～1698 行继续用 39 位 L，合同两行明确为 40 位非十六进制 X；新增 `test_p07_keeps_the_contract_directions` 也在断言 L。恢复合同输入并验证实际写出的 STRM。其余已修的删除语义、哈希方向、C02 URL 变化和 F01 身份保留有效；本轮不降低行集合或把测试断言当成合同修改。
 
-4. **B53-4：真实 ColorRange 夹具已经证明不符合标注，RO-3 仍无证据。** 原 `matrix-result.json` 中 `baseline-mp4-limited.mp4` 和 `matrix-mp4-short-limited.mp4` 的 Video `color_range` 均为 null；`matrix-mkv-unspecified.mkv` 和 `matrix-mkv-short-unspecified.mkv` 均为 tv。因此不能用这些输入声称 limited／unspecified 通过。调整本轮合成媒体，使实际输出分别符合 tv／pc／字段缺失，并在现有准备中拒绝错配；不能重命名场景或改预期。三阶段①②尚未取得，③现有快照还仅投影 11 个字段，不能代表 PrimaryStreamIdentity 的全部字段。按已授权标准只读调试器取证方案取得同次调用的完整字段；若无法取得或有效视频真实误拒绝，保留缺失／FAIL，交 B／A／用户决定，不能自行改 C# 判定。
+4. **P1 D04 正常入口选择了 STRM，普通文件对照不能成立。** `scenario_matrix` 为 D04 也写版本化 STRM（2575～2579 行）；`prepare_matrix_rows` 对所有行走只匹配 `/media/strm/<name>.strm` 的查询（2504 行），不会选择新普通文件库中的 `/media/local/regular-*` 文件；D04 的准备分支还在建立 sourceKey 前 continue（2527 行），随后 `play_once` 必读 sourceKey。按 D04 已有普通文件路径／真实原生源完成定位与重启地址对账；不能以同名 STRM 的播放证明普通媒体委托。此项来自既有固定 D04 调用链的静态审查，尚未新跑实机，不是新增场景。
 
-5. **B53-5：失败收尾会再次删除必要原始证据。** `main` 在保存索引前清理工作区（1127～1138 行），没有先归档 Jellyfin／媒体服务原文日志；当前只存计数／筛选事件，无法独立按日期／会话／目标重数实际 ffprobe，也无法定位首败。已交接目录除 JSON／人工索引／包与 sidecar 外，缺索引宣称的 runner-console／package-build／verify 等原日志。应在现有顺序入口正常及异常收尾中先保留本轮原始日志、已采集响应与阶段状态，再进行归属核验的清理；首败不能由后跑结果覆盖。正常观测还须保留完整原生流而非字段投影，以支持重启全字段对账。只补必要直接保存，不建设证据管理系统；已经丢失的旧日志保持缺失，不补写。
+5. **P1 新增 auth 字段会进入成功行的结果日志。** `play_once` 在 948 行把完整 Authorization 字符串加入返回 observation，`trust_play` 将其整体交给正常旅程的 firstTrust（2208 行），成功结果最终写入 matrix-result.json 并打印（1309／1313 行）。现有成功矩阵行会因此输出 token，违反日志不含凭据的约束。删除证据对象中的凭据传递；重新认证可以留在局部变量，不需要通过 observation 返回。本轮两条失败结果丢弃 firstTrust，未在其最终 JSON 中观察到该字段，不宣称发生了远端泄露；结论为正常成功路径的静态阻塞，不输出任何实际凭据。
 
-### 同一 Task 的修正与再审分工
+已修正的稳定 STRM 名称、D06 变量、原生配置路由、staging 复制及逐行 A 复位、完整流快照和原日志归档均予以保留。P01／D06／多行完整旅程尚未实机验收，不签发其 PASS。修正限当前入口交付所需行为，不增加管理系统、通用框架或非阻塞润色 Task。
 
-Developer 先修上述现有入口／前提／直接采集问题，补有意义的受影响反馈，使用原有固定行入口交一小批完整旅程及原文证据。入口／矩阵变更覆盖 playback；共用 HTTP 服务变化再覆盖原计划的直接消费者；共享浏览器驱动变化按计划覆盖 package 和 Node。明确省略的全量与实机行。扫描及正确夹具前提尚未成立时不反复盲跑 C02，不要求 Developer 执行完整 116 行、全部部署回归或 B 独立验收。
+### 固定候选门禁、复用与下一步
 
-B 在修正提交后重新固定完整候选及同 ZIP，审查同一 Base..新 Head，负责本 Task 原定全部 C#／Python／同 ZIP 矩阵及 baseline／package／scan／全部 1004 项 large，以及 plugin／batch／configuration 和独立关键旅程／逐图查看。匹配、完整的原始结果可复用；输入改变按 T4 更新指定门槛。此次 Python／静态通过不能替代修正候选的全量要求，不把全量退回 Developer。
-
-RO-1 尚未完成可控前提，RO-2／RO-3 未完成，RO-4 保留既有 Task 5.1 决定。当前无需新增 Task 或扩大产品授权；若后续真实复现证明必须修改产品，由 A／用户决定范围。全部 RO 满足后 B 才停止规划、形成 Closure Packet 并返回 SLICE READY FOR A REVIEW，本轮不具备该条件。每轮测试墙钟并集仍须严格小于实际总时间 50%，本轮账务见本机 timing-ledger.json。
+- B 新运行候选独立干净检出的 Python **3.11.10** 完整 discovery：345 项，343 PASS、0 FAIL、2 SKIPPED（缺忽略发布包的两个 assembly-version 控制，保留 SKIPPED）。compileall、Node 语法、原 ZIP／sidecar 核验、输入一致性、治理及差异检查通过；精确 argv／cwd／时序／退出码及原文日志见本轮索引。
+- 原 fix11 的匹配失败证据已独立核验并用于拒绝候选；不是本轮 B 新运行的实机，也不代替 PASS 所需的 B 关键独立复现。依据流程“已有明确阻塞时可先拒绝”，本轮不为确认同一未授权产品阻塞再次运行同批实机；完整 C# 门禁、B 新实机关键复现、其余矩阵／baseline、package／scan／全部 1004 项 large、plugin／batch／configuration 与 Slice Final 均 NOT RUN。责任仍属 B，产品修正后按固定新候选补齐全部指定门槛，不交回 Developer。
+- Developer 可在现授权内修正上列必要入口问题，运行修改／直接影响的反馈及少量完整旅程，明确省略项。产品修改和扩大诊断构建须先有 A／用户授权；不盲跑其余昂贵矩阵。若需要三阶段观察，仍按现合同从实际 Web Play 触发并使用已授权标准只读调试方案，不能猜构造入口或调用内部探测函数。
+- RO-1 部分交付，RO-2／RO-3 存在上述真实 FAIL 与证据缺口，RO-4 保留 Task 5.1 既有决定。保持同一 Task 5.3／Slice 5／Base；本轮不规划新 Task、不出 Closure Packet、不返回 SLICE READY FOR A REVIEW、不关闭。待全部 RO 真正满足后才提交 A 最终审查。
+- 每轮测试墙钟并集须严格小于本轮实际总时间 50%；本轮未人工等待凑分母，账务见本机 timing-ledger.json。仅 Task 审查文档形成普通本地提交，提交后再核验治理与干净状态；不推送、不改历史、不操作生产或准备库。
