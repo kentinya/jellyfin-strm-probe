@@ -57,7 +57,7 @@ FIXTURE_SECONDS = 24
 MOVIE_LIBRARY = pe.STRM_LIBRARY
 MUSIC_LIBRARY = "Package Audio Fixtures"
 MUSIC_LIBRARY_PATH = "/media/local/music"
-FFPROBE_MARKER = "Starting /usr/lib/jellyfin-ffmpeg/ffprobe with args"
+FFPROBE_MARKER = 'Starting "/usr/lib/jellyfin-ffmpeg/ffprobe" with args'
 FINGERPRINT_FIELDS = {"item_id", "source_key", "url_hash", "sha1", "file_size"}
 FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 MAX_WAIT = 180
@@ -374,9 +374,17 @@ def server_log_lines() -> list[str]:
 
 
 def probe_count(url: str) -> int:
-    """Count the pinned server's real ffprobe process starts for exactly this media URL."""
-    needle = " -i " + url + " "
-    return sum(1 for line in server_log_lines() if FFPROBE_MARKER in line and needle in line)
+    """Count the pinned server's real ffprobe process starts for exactly this media URL.
+
+    The pinned server logs ``Starting "<ffprobe>" with args "... -i \\"<url>\\" ..."``, so the URL
+    appears wrapped in escaped quotes inside the argument string. Requiring the closing quote (or
+    the end of the operand) means a longer path that has this URL as a prefix is never counted, and
+    only ffprobe starts are counted (never ffmpeg media reads or the ffmpeg capability probe).
+    """
+    quoted = '-i \\"' + url + '\\"'
+    candidates = (quoted + " ", quoted, " -i " + url + " ", " -i " + url + '\\"')
+    return sum(1 for line in server_log_lines()
+               if FFPROBE_MARKER in line and any(candidate in line for candidate in candidates))
 
 
 def plugin_event_lines() -> list[str]:

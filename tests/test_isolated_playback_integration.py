@@ -252,6 +252,35 @@ class ScenarioDefinitionTests(unittest.TestCase):
                     sys.argv = original
 
 
+class ProbeCountTests(unittest.TestCase):
+    LINE = ('[2026-10-21 02:15:11.494 +00:00] [DBG] [19] MediaBrowser.MediaEncoding.Encoder.MediaEncoder: '
+            'Starting "/usr/lib/jellyfin-ffmpeg/ffprobe" with args "-analyzeduration 200M -probesize 1G '
+            '-i \\"http://media:8080/baseline-mp4-a.mp4\\" -threads 0 -v warning -print_format json"')
+
+    def test_escaped_quoted_url_is_counted_and_prefixes_are_not(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            log_dir = Path(tmp) / "config" / "log"
+            log_dir.mkdir(parents=True)
+            (log_dir / "log_1.log").write_text("\n".join([
+                self.LINE,
+                self.LINE.replace("baseline-mp4-a.mp4", "baseline-mp4-a-copy.mp4"),
+                # an unrelated ffprobe (the ffmpeg capability probe) must never be counted
+                '[x] [DBG] MediaBrowser.MediaEncoding.Encoder.MediaEncoder: Starting "/usr/lib/jellyfin-ffmpeg/ffprobe" '
+                'with args "-loglevel quiet -f lavfi -i nullsrc=s=1x1:d=1 -only_first_vframe"',
+                # ffmpeg (not ffprobe) media reads must never be counted as probes
+                '[x] [DBG] MediaBrowser.MediaEncoding.Encoder.MediaEncoder: '
+                '"/usr/lib/jellyfin-ffmpeg/ffmpeg" "-i \\"http://media:8080/baseline-mp4-a.mp4\\""',
+            ]) + "\n", encoding="utf-8")
+            original = playback.pe.WORK
+            playback.pe.WORK = Path(tmp)
+            try:
+                self.assertEqual(playback.probe_count("http://media:8080/baseline-mp4-a.mp4"), 1)
+                self.assertEqual(playback.probe_count("http://media:8080/baseline-mp4-a-copy.mp4"), 1)
+                self.assertEqual(playback.probe_count("http://media:8080/baseline-mkv-a.mkv"), 0)
+            finally:
+                playback.pe.WORK = original
+
+
 class EntityClassTests(unittest.TestCase):
     def test_native_movie_and_audio_entities_are_accepted(self):
         self.assertEqual(playback.entity_class_failures(
