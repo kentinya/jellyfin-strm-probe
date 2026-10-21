@@ -2584,6 +2584,18 @@ def journey_d06(auth: str, row: dict, evidence_dir: Path) -> dict:
     return result
 
 
+def native_item_path(row: dict) -> str | None:
+    """The native path the row's item must be located by, or ``None`` for a STRM row.
+
+    D04 is the ordinary-media control: its item is a real file under the regular-media library, so
+    the lookup must address that path. Every other row is a versioned STRM item addressed by its
+    STRM file, which ``raw_item_query`` derives from the row's stable name.
+    """
+    if row["apply_kind"] == "d04":
+        return "/media/local/" + row["media"]
+    return None
+
+
 def prepare_matrix_rows(auth: str, rows: list[dict], evidence_dir: Path) -> dict:
     """Native preparation with the plugin disabled, bounded P01 surgery, then re-enable.
 
@@ -2597,7 +2609,7 @@ def prepare_matrix_rows(auth: str, rows: list[dict], evidence_dir: Path) -> dict
     # item lookups makes the per-row waits start from a real scan trigger.
     pe.request_json("POST", "/Library/Refresh", headers={"Authorization": auth})
     for row in rows:
-        item_path = "/media/local/" + row["media"] if row["apply_kind"] == "d04" else None
+        item_path = native_item_path(row)
         item = raw_item_query(auth, row["strm_name"], item_path)
         summary[row["id"] + ".scan"] = {"status": item["status"],
                                         "elapsedSeconds": item["elapsedSeconds"],

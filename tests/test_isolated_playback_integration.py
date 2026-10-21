@@ -744,8 +744,11 @@ class RewriteApplyTests(unittest.TestCase):
                 strm_dir = Path(tmp) / "strm"
                 strm_dir.mkdir()
                 target = strm_dir / "Matrix MP4 P08 03.strm"
-                content = ("# strm-probe-version:1\n# strm-probe-sha1:" + "a" * 40 +
-                           "\n# strm-probe-size:1000\n" + playback.MEDIA_PREFIX + "baseline-mp4-a.mp4\n")
+                # A deliberately non-canonical original: the size line precedes the hash line and a
+                # trailing comment is present. Reconstructing the manifest from the row's tokens
+                # would reorder/drop these bytes, so only a real byte-identical rewrite passes.
+                content = ("# strm-probe-version:1\n# strm-probe-size:1000\n# strm-probe-sha1:" + "a" * 40 +
+                           "\n# Modified: 2026-10-21T00:00:00Z\n" + playback.MEDIA_PREFIX + "baseline-mp4-a.mp4\n")
                 target.write_text(content, encoding="utf-8")
                 record = playback.apply_matrix_change(self._scanned_row(Path(tmp)))
                 self.assertEqual(target.read_text(encoding="utf-8"), content)
@@ -909,6 +912,27 @@ class RawScanDiagnosticTests(unittest.TestCase):
         with patch.object(playback.pe, "request_json", return_value=(200, {"Items": [stray_strm, ordinary]})):
             found = playback.raw_item_query("auth", "Matrix Regular MP4", path)
         self.assertEqual(found["item"]["Path"], path)
+
+    def test_the_d04_row_resolves_its_ordinary_file_while_other_rows_resolve_their_strm(self):
+        # DR53-4: the ordinary-media control must be addressed by the real regular-media file, and
+        # every other row by its versioned STRM. A D04 lookup that fell back to a STRM path (or a
+        # STRM row that pointed at the regular-media directory) would not prove native delegation.
+        d04 = {"id": "MP4.D04", "fmt": "MP4", "apply_kind": "d04",
+               "media": "regular-mp4/Matrix Regular MP4.mp4", "strm_name": "Matrix Regular MP4"}
+        self.assertEqual(playback.native_item_path(d04), "/media/local/regular-mp4/Matrix Regular MP4.mp4")
+        for kind in ("none", "manifest", "switch", "d05", "d06", "f01", "f02"):
+            row = {"id": f"MP4.{kind}", "fmt": "MP4", "apply_kind": kind,
+                   "media": "baseline-mp4-a.mp4", "strm_name": "Matrix MP4 A"}
+            self.assertIsNone(playback.native_item_path(row), kind)
+        # The D04 lookup really refuses the stray same-name STRM item when the real file is absent.
+        from unittest.mock import patch
+        stray = self._item("/media/strm/Matrix Regular MP4.strm", name="Matrix Regular MP4")
+        with patch.object(playback.pe, "request_json", return_value=(200, {"Items": [stray]})), \
+                patch.object(playback, "MAX_WAIT", 0), \
+                patch.object(playback, "server_log_lines", lambda: []):
+            with self.assertRaises(playback.BaselineError) as caught:
+                playback.raw_item_query("auth", "Matrix Regular MP4", playback.native_item_path(d04))
+        self.assertIn("/media/local/regular-mp4/Matrix Regular MP4.mp4", str(caught.exception))
 
     def test_a_duplicate_strm_path_is_refused_with_the_raw_evidence(self):
         item = self._item("/media/strm/Matrix MP4 C02 limited.strm", name="Matrix MP4 C02")
