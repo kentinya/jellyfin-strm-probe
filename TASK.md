@@ -5,7 +5,7 @@
 ```text
 Task ID: 5.2
 Parent Slice: 5
-Status: READY FOR B REVIEW
+Status: FIX REQUIRED
 Task Base: 4c75761982bc16dd1c6bae09bee1c3561da2c178
 Contract Checkpoint: 2111e20488ba5afbf46cfe8af8782cf4a63379fb
 Difficulty: High
@@ -37,7 +37,7 @@ Planner / Reviewer: B
 
 ## 当前状态与最小修正边界
 
-已存在 `scripts/run_isolated_playback_integration.py`、浏览器严格模式和对应单元测试；不再按“新增工具”的原计划重新开发。现有视频运行有播放画面、探测计数与指纹记录，但截图间推进不足 5 秒，重启前后缺完整原生 URL／媒体流对账，源 ID 关联证据也未被充分核验；B03 已形成 Audio 项目但未完成实播。当前所缺结果见下方 B Review Result。
+已存在 `scripts/run_isolated_playback_integration.py`、浏览器严格模式和对应单元测试。修正候选 `e8fa3f8` 的六次视频播放已补足至少 5 秒推进、源关联及重启地址／主流字段／指纹记录；B 已审阅原始浏览器输出和全部 12 张截图，原 BR-1～BR-3 的具体缺口不再作为继续开发工具的理由。此为修正证据核验，完整全量与 B 新实例独立实播仍未执行；B03 真实音频旅程未完成，当前先交 A 裁定，详见下方最新 B Review Result。
 
 修正按以下顺序进行：
 
@@ -212,13 +212,41 @@ Range: 4c75761982bc16dd1c6bae09bee1c3561da2c178..38c1184c488baf1e6bd1c3b2ff4b126
 ## B Review Result
 
 ```text
-Reviewed: 4c75761982bc16dd1c6bae09bee1c3561da2c178..38c1184c488baf1e6bd1c3b2ff4b1264c9e08e93
+Reviewed: 4c75761982bc16dd1c6bae09bee1c3561da2c178..e8fa3f8ca87e2fb92b6453fe2a0301656581ea00
 Decision: FIX REQUIRED
 Slice Required Outcomes all satisfied: NO
-Next: DEVELOPER COMPLETES MISSING PLAYBACK JOURNEY EVIDENCE; A RESOLVES REQUIRED AUDIO CAPABILITY / CONTRACT
+Next: A RESOLVES REQUIRED AUDIO CAPABILITY / CONTRACT; B RETAINS FINAL GATES
 ```
 
-### B 独立审查（2026-10-21）
+### 最新 B 复核：修正候选 `e8fa3f8`（2026-10-21）
+
+按三行用户旅程核验后，决定仍为 **FIX REQUIRED**：当前明确阻塞是必需 B03 没有真实音频播放成功结果，交 A 处理范围／能力；不是继续完善工具。保留 Task ID／Base、Slice 合同和全部最终门槛，当前不规划下一 Task。
+
+| 交付结果 | 本轮 B 核验 | 当前决定 |
+|---|---|---|
+| B01 MP4 首信／再播／重启后播放 | 原始 driver 与 observation 一致；推进 5.359111／5.346066／5.342764 秒，解码帧 88／93／90；逐张打开六张图，见 MP4 A、原生播放器及推进，无可见报错 | 原短推进缺口已补足；不是全量门槛或 B 新实例独立实播 PASS |
+| B02 MKV 同一旅程 | 推进 5.385592／5.364783／5.409932 秒，解码帧 90／94／95；逐张打开六张图，见 MKV A、原生播放器及推进，无可见报错 | 同上 |
+| 重启状态与源关联 | 原始记录包含实际源 ID、URL／hash、协议、容器、时长及已选主流字段；两行冻结与重启先读结果相同，五字段对应项目／源，PlaybackInfo 和媒体请求对应本项目 | BR-1／BR-3 的具体缺口已修正并有视频补证；最终完整原生状态及独立验收仍由 B 核验，不额外要求工具重构 |
+| B03 真实音频 STRM | Audio 实体／AAC 主流存在，实际保存源为 `/media/local/music/Baseline Audio.strm`、Protocol File；记录的原生音频响应返回 STRM 文本，整轮退出 1，缺三阶段成功实播 | **BLOCKED，不计 PASS；交 A** |
+
+**审查与复用边界：** 入口 checkout `e0fad0b83e428d1fb787cbff61eb17a68149321b`、tree `cf7908daa005f05f5397863985e9e4640ea57877`，初始干净 main 超前 origin/main 20 个提交；治理 PASS。固定实现为上方 Reviewed Head，tree `6eb0d959bc73979b6cfac03b4bea98277210a0c9`，报告后继只改 TASK。基于首轮完整审查继续审阅 Task Base..Head 的全部新增计划／代码／测试差异，核对同候选 ZIP／sidecar：SHA-256 `8a44d13236c0a9c8f6f60ddd7cea4252f6cf73a4b64cace7dd51350ab79b247f`，sourceRevision 为 `e8fa3f8ca87e2fb92b6453fe2a0301656581ea00`。本机索引为 `.git/validation-evidence/e8fa3f8ca87e2fb92b6453fe2a0301656581ea00/b-rereview-20261021T040746Z/INDEX.md`，含原始文件摘要、逐次结果独立对账和实际看图结论；没有新建开发工具或修改实现。
+
+**证据限制：** 修正轮原实例已 CLEANED，所交证据目录保留 JSON／浏览器输出／截图，但没有原服务器 ffprobe 日志可供 B 重数；0 次探测在此轮只能称为已保存的计数记录。原生源快照保存了列出的主流字段，不等于完整原生 DTO 的逐字段原文。本轮因此不把 Developer 视频反馈复用为完整原生／零探测最终门槛 PASS。B 最终独立验收时取得并保留对应原生读回与原始日志／进程窗口；这不是交回 Developer 的新工具开发项目。
+
+**入口约束：** 实播核验对应原生 Web Play→POST PlaybackInfo→原生媒体请求；重启先读采用既有 `GET /Items/{id}?Fields=MediaSources,MediaStreams,Path` 查询，已核对既有 scan 入口同样使用该查询。只接受经源码／原生客户端确认且实际能触发的入口；本轮没有构造或调用新探测 API、提高权限、注入不属于实际旅程的问题或盲试音频参数。已有音频失败只证明当前输入／已观察路径未完成，不能推断所有原生音频 STRM 均不支持。
+
+**交 A 的范围包（不是 Slice Closure Packet）：**
+
+- 当前必须交付 B03 三阶段音频旅程，以及 Slice RO-2／AC-3 的真实音频缺主流场景；已有 Audio 类型／主流不代表播放成功。
+- 输入与失败定位为上述固定 Jellyfin／ZIP／B03，原始 `baseline-result.json` 的 preparation／rowsResult 与首轮原生 Web 报错截图保持可追溯；本轮没有新的音频浏览器成功或独立失败复现。
+- 请 A 先裁定固定版本是否有经确认可用的原生播放路径及后续合同处理。若改变必要义务，先由 A 提交实质合同变更，再由 B 重判同一 Task；若涉及产品成功判定／诊断修改，仍须用户决定。B 不自行撤出音频、不改普通音频或视频音轨替代、不把 BLOCKED 改为 PASS。
+- A 决定前不要求 Developer 再开发工具或反复运行当前已知失败路径。已有视频结果按输入匹配规则保留；后续可执行输入变化才按 T4 重取相应指定证据。
+
+**本轮门槛与责任：** 新运行仅治理／文档和短时证据核对；完整 C# restore／build／test／format、干净 Python 3.11 全量／compileall、Node、同 ZIP package all、完整 baseline、B 新实例独立关键实播及 Slice Final 均为 **NOT RUN**。依流程在明确 B03 阻塞时先拒绝，不机械重跑 Final；PASS 前原定全量与独立验收仍由 B 承担，不交回 Developer。Developer 仅在 A 决定后、原 Task 内确需修改时运行直接受影响反馈并报告遗漏。本轮不改产品／运行实例／1004 项库，不推送；全部短检查保守按 10 秒上限计测试，实际比例见索引 timing，严格小于 50%。
+
+RO 重核：RO-4 保留 Task 5.1 已提交决定；RO-1 余项、RO-2 完整矩阵／音频和 RO-3 仍未满足。Slice 5 保持 ACTIVE，不生成 Closure Packet 或 SLICE READY FOR A REVIEW，不自行关闭。
+
+### 首轮 B 独立审查（历史，当前决定以上方复核为准）
 
 入口 checkout 为 `2abbecf4c47d263cb5fa7e10bc254adba365f7cf`，tree 为 `f89c27802cc316f381440b566812a79bbb58cfa6`；初始 `git status --short --branch` 干净、main 比 origin/main 超前 14 个提交。已读必读文档、B 经验及真实全范围差异（含合同入口／计划、浏览器驱动、新顺序入口及全部新增测试）。治理检查 PASS；`38c1184..2abbecf` 只有报告变化，可执行输入一致。未修改产品、合同、Base 或历史决定，未推送、未启动／接管／停止任何 Jellyfin 实例或改动现存全部 1004 项库。
 
