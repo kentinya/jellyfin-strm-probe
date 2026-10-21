@@ -683,19 +683,21 @@ def raw_item_query(auth: str, name: str) -> dict:
             headers={"Authorization": auth})
         if status == 200:
             total = payload.get("TotalRecordCount")
-            matches = [item.get("Id") for item in payload.get("Items", []) if item.get("Name") == name]
-            attempts.append({"status": status, "totalRecordCount": total, "matchingIds": matches})
-            if matches:
-                # A native item query can transiently return zero while the library scan settles;
-                # the found path is therefore re-read through the exact single-match lookup and a
-                # transient duplicate/zero answer keeps polling instead of aborting the row.
-                try:
-                    result = pkg.item_by_name(auth, name)
-                except RuntimeError:
-                    time.sleep(1)
-                    continue
+            matches = [item for item in payload.get("Items", []) if item.get("Name") == name]
+            attempts.append({"status": status, "totalRecordCount": total,
+                             "matchingIds": [item.get("Id") for item in matches]})
+            # Resolve the item directly from this raw response: the previous indirect lookup ran a
+            # second query that swallowed its own errors, so a persistently found item could never
+            # be resolved and the real reason stayed invisible. More than one match is a real
+            # duplicate and fails with the full evidence instead of polling forever.
+            if len(matches) == 1:
                 return {"status": "FOUND", "elapsedSeconds": round(time.monotonic() - started, 1),
-                        "attempts": attempts, "item": result}
+                        "attempts": attempts, "item": matches[0]}
+            if len(matches) > 1:
+                raise BaselineError(
+                    f"The native query returned {len(matches)} items named {name!r} "
+                    f"(ids {[item.get('Id') for item in matches]}); refusing to guess the row's item. "
+                    f"Raw query attempts {json.dumps(attempts, ensure_ascii=False)}")
         else:
             attempts.append({"status": status, "body": payload})
         time.sleep(2)

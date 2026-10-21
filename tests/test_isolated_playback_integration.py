@@ -720,16 +720,26 @@ class RawScanDiagnosticTests(unittest.TestCase):
     def test_a_found_item_returns_the_native_dictionary(self):
         item = {"Id": "8" * 8 + "-1111-2222-3333-" + "a" * 12, "Name": "Matrix MP4 P02 01"}
         original_request = playback.pe.request_json
-        original_item = playback.pkg.item_by_name
-        playback.pe.request_json = lambda *args, **kwargs: (200, {"TotalRecordCount": 1, "Items": [item]})
-        playback.pkg.item_by_name = lambda auth, name: item
+        playback.pe.request_json = lambda *args, **kwargs: (
+            200, {"TotalRecordCount": 1, "Items": [dict(item)]})
         try:
             result = playback.raw_item_query("auth", "Matrix MP4 P02 01")
         finally:
             playback.pe.request_json = original_request
-            playback.pkg.item_by_name = original_item
         self.assertEqual(result["status"], "FOUND")
         self.assertEqual(result["item"], item)
+
+    def test_a_duplicate_item_name_is_refused_with_the_raw_evidence(self):
+        item = {"Id": "8" * 8 + "-1111-2222-3333-" + "a" * 12, "Name": "Matrix MP4 P02 01"}
+        original_request = playback.pe.request_json
+        playback.pe.request_json = lambda *args, **kwargs: (
+            200, {"TotalRecordCount": 2, "Items": [dict(item), dict(item)]})
+        try:
+            with self.assertRaises(playback.BaselineError) as caught:
+                playback.raw_item_query("auth", "Matrix MP4 P02 01")
+        finally:
+            playback.pe.request_json = original_request
+        self.assertIn("refusing to guess", str(caught.exception))
 class ParsedTokenTests(unittest.TestCase):
     def test_a_valid_sha1_and_size_parse_to_the_stored_values(self):
         self.assertEqual(playback.parsed_tokens("A" * 40, "4096"), ("a" * 40, 4096))
