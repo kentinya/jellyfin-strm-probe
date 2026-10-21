@@ -228,6 +228,123 @@ def run(*args: str, timeout: int = 300) -> subprocess.CompletedProcess[str]:
     return pe.run(*args, timeout=timeout)
 
 
+# ---------------------------------------------------------------------------------------------------------------------
+# Run-scoped environment adaptation: explicit Compose subnets
+#
+# The Docker daemon on this host has every predefined address pool fully subnetted by bridge
+# networks left behind by earlier runs, so a plain ``docker compose up`` fails with "all
+# predefined address pools have been fully subnetted". Per the documented development-server
+# practice this run gives only its own two Compose networks explicit, non-overlapping /28
+# subnets instead of pruning or deleting retained networks and instead of changing the shared
+# environment tooling. ``acceptance`` stays internal.
+# ---------------------------------------------------------------------------------------------------------------------
+
+SUBNET_SPACE = "10.253.0.0/16"
+
+
+def _ip_to_int(value: str) -> int:
+    parts = [int(part) for part in value.split(".")]
+    require(len(parts) == 4 and all(0 <= part <= 255 for part in parts), f"Invalid IPv4 address {value!r}.")
+    return (parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8) | parts[3]
+
+
+def _int_to_ip(value: int) -> str:
+    return ".".join(str((value >> shift) & 0xFF) for shift in (24, 16, 8, 0))
+
+
+def subnet_bounds(cidr: str) -> tuple[int, int]:
+    """Return the inclusive [first, last] address range of an IPv4 CIDR block."""
+    address, _, prefix = cidr.partition("/")
+    require(prefix.isdigit() and 0 <= int(prefix) <= 32, f"Invalid CIDR {cidr!r}.")
+    bits = int(prefix)
+    size = 1 << (32 - bits)
+    first = _ip_to_int(address) & ~(size - 1) & 0xFFFFFFFF
+    return first, first + size - 1
+
+
+def choose_free_subnets(used: list[str], count: int = 2, space: str = SUBNET_SPACE,
+                        prefix: int = 28) -> list[str]:
+    """Return ``count`` non-overlapping /prefix blocks inside ``space`` that touch no ``used`` range."""
+    occupied = [subnet_bounds(cidr) for cidr in used if cidr]
+    space_first, space_last = subnet_bounds(space)
+    size = 1 << (32 - prefix)
+    chosen: list[str] = []
+    candidate = space_first
+    while candidate + size - 1 <= space_last and len(chosen) < count:
+        last = candidate + size - 1
+        if not any(candidate <= used_last and used_first <= last for used_first, used_last in occupied):
+            chosen.append(f"{_int_to_ip(candidate)}/{prefix}")
+            occupied.append((candidate, last))
+        candidate += size
+    require(len(chosen) == count,
+            f"Could not find {count} free /{prefix} subnets inside {space}; refusing to reuse an occupied range.")
+    return chosen
+
+
+def existing_subnets() -> list[str]:
+    """Every IPv4 subnet known to Docker plus every host route, so a chosen range never overlaps."""
+    found: list[str] = []
+    listed = run(*DOCKER, "network", "ls", "-q", timeout=120)
+    require(listed.returncode == 0, "Could not list the Docker networks for the subnet check.")
+    ids = listed.stdout.split()
+    if ids:
+        inspected = run(*DOCKER, "network", "inspect", *ids, timeout=120)
+        require(inspected.returncode == 0, "Could not inspect the Docker networks for the subnet check.")
+        for network in json.loads(inspected.stdout):
+            for config in (network.get("IPAM") or {}).get("Config") or []:
+                if config.get("Subnet"):
+                    found.append(str(config["Subnet"]))
+    routes = run("ip", "-4", "route", timeout=60)
+    if routes.returncode == 0:
+        for line in routes.stdout.splitlines():
+            for token in line.split():
+                if "/" in token and token[0].isdigit():
+                    found.append(token)
+    return found
+
+
+def inject_subnets(text: str, subnets: dict[str, str]) -> str:
+    """Add an explicit ``ipam`` block to the named networks of a generated compose file."""
+    lines = text.splitlines()
+    try:
+        index = lines.index("networks:")
+    except ValueError:
+        raise BaselineError("The generated compose file has no networks section.") from None
+    rebuilt = list(lines[: index + 1])
+    for line in lines[index + 1:]:
+        stripped = line.strip()
+        if line.startswith("  ") and not line.startswith("    ") and stripped.endswith(":"):
+            name = stripped[:-1]
+            rebuilt.append(line)
+            if name in subnets:
+                rebuilt += ["    ipam:", "      config:", f'        - subnet: "{subnets[name]}"']
+            continue
+        rebuilt.append(line)
+    return "\n".join(rebuilt) + "\n"
+
+
+def install_explicit_subnets() -> dict:
+    """Adapt only this run's Compose networks when the default Docker pools are exhausted."""
+    used = existing_subnets()
+    try:
+        chosen = choose_free_subnets(used, 2)
+    except BaselineError:
+        return {"applied": False, "reason": "no free /28 block inside the adaptation space"}
+    mapping = {"acceptance": chosen[0], "frontend": chosen[1]}
+    original = pe.write_compose
+
+    def patched() -> Path:
+        path = original()
+        text = path.read_text(encoding="utf-8")
+        pe.write_owned_bytes(path, inject_subnets(text, mapping).encode("utf-8"),
+                             label="compose file with explicit subnets")
+        return path
+
+    pe.write_compose = patched  # run-scoped adaptation of this process only
+    return {"applied": True, "subnets": mapping, "usedRangesChecked": len(used),
+            "reason": "the Docker daemon reported all predefined address pools fully subnetted"}
+
+
 def enable_probe_logging() -> dict:
     """Enable the pinned server's own ffprobe debug lines so probe counts come from real processes.
 
@@ -528,6 +645,7 @@ def read_only_state(auth: str, row: dict) -> dict:
 
 def prepare_instance(package: Path) -> dict:
     summary: dict[str, object] = {}
+    summary["networkAdaptation"] = install_explicit_subnets()
     pe.prepare_clean_instance()
     summary["logging"] = enable_probe_logging()
     pe.compose("stop")

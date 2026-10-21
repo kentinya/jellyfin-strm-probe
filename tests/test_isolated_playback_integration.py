@@ -252,6 +252,35 @@ class ScenarioDefinitionTests(unittest.TestCase):
                     sys.argv = original
 
 
+class SubnetAdaptationTests(unittest.TestCase):
+    def test_free_subnets_avoid_every_used_range(self):
+        used = ["10.253.0.0/28", "10.253.0.16/28", "172.17.0.0/16"]
+        chosen = playback.choose_free_subnets(used, 2)
+        self.assertEqual(chosen, ["10.253.0.32/28", "10.253.0.48/28"])
+        for cidr in chosen:
+            first, last = playback.subnet_bounds(cidr)
+            for other in used:
+                used_first, used_last = playback.subnet_bounds(other)
+                self.assertFalse(first <= used_last and used_first <= last, (cidr, other))
+
+    def test_no_free_block_is_refused_instead_of_reusing_one(self):
+        with self.assertRaises(playback.BaselineError):
+            playback.choose_free_subnets(["10.253.0.0/16"], 2)
+
+    def test_injected_ipam_blocks_only_name_the_requested_networks(self):
+        text = ("services:\n  a:\n    networks:\n      - acceptance\nnetworks:\n"
+                "  acceptance:\n    internal: true\n  frontend:\n    driver: bridge\n")
+        patched = playback.inject_subnets(text, {"acceptance": "10.253.1.0/28"})
+        self.assertIn('        - subnet: "10.253.1.0/28"', patched)
+        self.assertEqual(patched.count("ipam:"), 1)
+        self.assertIn("internal: true", patched)
+        self.assertTrue(patched.endswith("\n"))
+
+    def test_compose_without_networks_section_is_refused(self):
+        with self.assertRaises(playback.BaselineError):
+            playback.inject_subnets("services:\n  a: {}\n", {"acceptance": "10.253.1.0/28"})
+
+
 class IndexRenderingTests(unittest.TestCase):
     def test_index_reports_failures_and_rows(self):
         summary = {
