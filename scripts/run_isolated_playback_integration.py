@@ -131,6 +131,31 @@ def fingerprint_fields_match(row: dict | None, *, expected_url: str, sha1: str, 
     return failures
 
 
+def picture_evidence_failures(entry: dict | None, media_type: str) -> list[str]:
+    """Return the reasons the decoded-picture evidence is missing or degenerate.
+
+    The screenshots themselves must still be opened and checked by a reviewer; this only proves
+    that the driver decoded a real picture (a non-uniform luminance grid) at the progress point.
+    """
+    if media_type != "video":
+        return []
+    samples = [item for item in (entry or {}).get("strictObservations") or []
+               if item.get("phase") == "progress"]
+    if not samples:
+        return ["no progress observation was recorded for the decoded picture"]
+    picture = samples[-1].get("picture")
+    if not isinstance(picture, dict) or picture.get("error"):
+        return [f"the progress picture could not be sampled: {picture!r}"]
+    grid = picture.get("grid") or []
+    if len(grid) != 64:
+        return [f"the progress picture grid has {len(grid)} cells instead of 64"]
+    if len(set(grid)) < 3:
+        return [f"the progress picture is uniform (only {len(set(grid))} distinct luminance values)"]
+    if int(picture.get("distinctColors") or 0) < 4:
+        return [f"the progress picture has only {picture.get('distinctColors')} distinct colours"]
+    return []
+
+
 def playback_failures(entry: dict | None, *, expected_url: str, media_type: str,
                       minimum_seconds: float = MINIMUM_PROGRESS_SECONDS) -> list[str]:
     """Return the reasons a strict playback observation is not acceptable (empty means accepted)."""
@@ -174,6 +199,7 @@ def playback_failures(entry: dict | None, *, expected_url: str, media_type: str,
     requests = entry.get("mediaRequests") or []
     if not any(isinstance(item.get("status"), int) and item["status"] in (200, 206) for item in requests):
         failures.append("no successful media request was observed")
+    failures += picture_evidence_failures(entry, media_type)
     required_stream = "Video" if media_type == "video" else "Audio"
     expected_hash = hashlib.sha256(expected_url.encode()).hexdigest()
     matched_source = False

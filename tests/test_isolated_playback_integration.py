@@ -86,6 +86,14 @@ class PlaybackObservationTests(unittest.TestCase):
             "videoHeight": 180, "decodedFrames": 92, "readyState": 4, "paused": False,
             "mediaErrorCode": None, "playerVisible": True,
             "startScreenshot": str(start), "progressScreenshot": str(progress), "incompleteScreenshot": None,
+            "strictObservations": [
+                {"phase": "start", "currentTime": 0.4, "element": "video", "decodedFrames": 6,
+                 "picture": {"grid": list(range(0, 64)), "distinctColors": 40, "meanLuma": 96.5,
+                             "width": 320, "height": 180}},
+                {"phase": "progress", "currentTime": 6.4, "element": "video", "decodedFrames": 92,
+                 "picture": {"grid": [((index * 37) % 200) for index in range(64)], "distinctColors": 44,
+                             "meanLuma": 101.2, "width": 320, "height": 180}},
+            ],
             "mediaRequests": [{"status": 200, "path": "/baseline-mp4-a.mp4", "kind": "media"}],
             "playbackInfo": [{"status": 200, "method": "GET", "urlPath": "/Items/x/PlaybackInfo",
                               "body": {"playbackInfo": None, "mediaSources": [
@@ -167,6 +175,31 @@ class PlaybackObservationTests(unittest.TestCase):
                                            "streamTypes": ["Audio"]}]}}]
             failures = playback.playback_failures(entry, expected_url=URL, media_type="video")
         self.assertTrue(any("Video stream" in failure for failure in failures), failures)
+
+
+class PictureEvidenceTests(unittest.TestCase):
+    def _entry(self, picture, phase="progress"):
+        return {"strictObservations": [{"phase": phase, "picture": picture}]}
+
+    def test_a_decoded_picture_with_variation_is_accepted(self):
+        picture = {"grid": [((index * 37) % 200) for index in range(64)], "distinctColors": 44}
+        self.assertEqual(playback.picture_evidence_failures(self._entry(picture), "video"), [])
+
+    def test_audio_rows_do_not_require_a_picture(self):
+        self.assertEqual(playback.picture_evidence_failures({"strictObservations": []}, "audio"), [])
+
+    def test_missing_uniform_or_unsampled_pictures_are_refused(self):
+        cases = {
+            "missing": {"strictObservations": []},
+            "no progress phase": self._entry({"grid": list(range(64)), "distinctColors": 9}, phase="start"),
+            "unsampled": self._entry(None),
+            "draw error": self._entry({"error": "SecurityError"}),
+            "wrong cell count": self._entry({"grid": [1, 2, 3], "distinctColors": 9}),
+            "uniform": self._entry({"grid": [12] * 64, "distinctColors": 9}),
+            "too few colours": self._entry({"grid": list(range(64)), "distinctColors": 2}),
+        }
+        for label, entry in cases.items():
+            self.assertTrue(playback.picture_evidence_failures(entry, "video"), label)
 
 
 class MeasurementWindowTests(unittest.TestCase):

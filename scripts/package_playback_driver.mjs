@@ -136,6 +136,61 @@ async function observeMedia(page) {
   });
 }
 
+// Sample the decoded picture of the media element into an 8x8 luminance grid. This is real
+// decoded-pixel evidence (distinct from "the element exists"), and it lets a reviewer compare the
+// rows: the A/B fixtures use different test patterns, so the grids must differ between rows.
+async function pictureSample(page, element) {
+  return page.evaluate((kind) => {
+    const media = document.querySelector(kind === 'video' ? 'video' : 'audio, video');
+    if (!media) {
+      return null;
+    }
+    const width = kind === 'video' ? media.videoWidth : 0;
+    const height = kind === 'video' ? media.videoHeight : 0;
+    if (!width || !height) {
+      return null;
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = 64;
+    canvas.height = 64;
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    if (!context) {
+      return null;
+    }
+    try {
+      context.drawImage(media, 0, 0, canvas.width, canvas.height);
+    } catch (error) {
+      return { error: String(error && error.message ? error.message : error) };
+    }
+    const data = context.getImageData(0, 0, canvas.width, canvas.height).data;
+    const grid = [];
+    const colors = new Set();
+    let total = 0;
+    for (let gy = 0; gy < 8; gy += 1) {
+      for (let gx = 0; gx < 8; gx += 1) {
+        let sum = 0;
+        for (let y = 0; y < 8; y += 1) {
+          for (let x = 0; x < 8; x += 1) {
+            const index = (((gy * 8 + y) * canvas.width) + (gx * 8 + x)) * 4;
+            const luma = 0.299 * data[index] + 0.587 * data[index + 1] + 0.114 * data[index + 2];
+            sum += luma;
+            total += luma;
+            colors.add((data[index] >> 4) * 256 + (data[index + 1] >> 4) * 16 + (data[index + 2] >> 4));
+          }
+        }
+        grid.push(Math.round(sum / 64));
+      }
+    }
+    return {
+      width,
+      height,
+      meanLuma: Math.round((total / (canvas.width * canvas.height)) * 100) / 100,
+      distinctColors: colors.size,
+      grid,
+    };
+  }, element);
+}
+
 async function strictPlay(page, item, strict) {
   const slug = safeName(item.id || item.name);
   mkdirSync(strict.screenshotDir, { recursive: true });
@@ -152,12 +207,14 @@ async function strictPlay(page, item, strict) {
       if (!startShot && state.currentTime > 0.2) {
         startShot = join(strict.screenshotDir, `${slug}-start.png`);
         await page.screenshot({ path: startShot });
-        observations.push({ phase: 'start', currentTime: state.currentTime, element: state.element, decodedFrames: state.decodedFrames });
+        observations.push({ phase: 'start', currentTime: state.currentTime, element: state.element,
+          decodedFrames: state.decodedFrames, picture: await pictureSample(page, state.element) });
       }
       if (state.currentTime >= strict.minimumSeconds && !progressShot) {
         progressShot = join(strict.screenshotDir, `${slug}-progress.png`);
         await page.screenshot({ path: progressShot });
-        observations.push({ phase: 'progress', currentTime: state.currentTime, element: state.element, decodedFrames: state.decodedFrames });
+        observations.push({ phase: 'progress', currentTime: state.currentTime, element: state.element,
+          decodedFrames: state.decodedFrames, picture: await pictureSample(page, state.element) });
         break;
       }
     }
