@@ -1003,7 +1003,7 @@ def render_index(summary: dict) -> str:
                   "| row | status | ffprobe (first/second/restart) | playback seconds |", "|---|---|---|---|"]
         for row_id, result in rows.items():
             if result.get("status") != "PASS":
-                lines.append(f"| {row_id} | FAIL | - | - |")
+                lines.append(f"| {row_id} | {result.get('status')} | - | - |")
                 continue
             probes = "/".join(str(result[key]["ffprobe"]["delta"])
                               for key in ("firstTrust", "secondPlay", "afterRestart"))
@@ -1012,7 +1012,7 @@ def render_index(summary: dict) -> str:
             lines.append(f"| {row_id} | PASS | {probes} | {times} |")
         lines.append("")
         for row_id, result in rows.items():
-            if result.get("status") != "PASS":
+            if result.get("status") not in ("PASS", "BLOCKED"):
                 lines += [f"### {row_id} failure", "", f"```\n{result.get('error')}\n```", ""]
     blocked = (summary.get("baseline") or {}).get("blocked") or []
     if blocked:
