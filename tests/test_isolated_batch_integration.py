@@ -307,6 +307,77 @@ class BatchScriptGuardTests(unittest.TestCase):
         self.assertEqual(started, {"abc123", "def456"})
 
 
+class AbsoluteRoundAttributionTests(unittest.TestCase):
+    """A round must be measured on real instants, never on a bare time of day.
+
+    The isolated server keeps one rolling log, so an earlier session's entry can carry a later
+    time of day than today's round start. That made one pre-existing entry-line count as this
+    round's and refused the round for having "20" entries.
+    """
+
+    def test_the_container_absolute_prefix_is_authoritative(self):
+        line = ("2026-10-22T10:42:27.512000000Z [10:42:27.512] [INF] [7] X: "
+                "STRM media information check entered: stop requested False.")
+        self.assertAlmostEqual(batch.round_marker(line), 1792665747.512, places=3)
+        with self.assertRaises(RuntimeError):
+            batch.round_marker("[10:42:27.512] [INF] [7] X: no container prefix")
+
+    def test_an_earlier_days_entry_is_not_attributed_to_todays_round(self):
+        old = ("2026-10-21T17:05:10.476000000Z [17:05:10.476] [INF] X: "
+               "STRM media information check entered: stop requested at entry False.")
+        current = ("2026-10-22T10:42:27.512000000Z [10:42:27.512] [INF] X: "
+                   "STRM media information check entered: stop requested at entry False.")
+        logs = type("Logs", (), {"returncode": 0, "stdout": old + "\n" + current + "\n", "stderr": ""})()
+        round_start = 1792665740.0  # today, just before the current entry
+        with patch.object(batch.base, "run", return_value=logs):
+            entries = batch.batch_run_entries_absolute("container", round_start)
+        self.assertEqual(len(entries), 1)
+        self.assertIn("10:42:27.512", entries[0]["line"])
+        self.assertNotIn("2026-10-22T", entries[0]["line"])
+
+    def test_summaries_and_completions_use_the_same_absolute_window(self):
+        old = ("2026-10-21T17:05:10.476000000Z [17:05:10.476] [INF] X: "
+               + batch.TASK_NAME + " Completed after 0 minute(s) and 1 seconds")
+        current = ("2026-10-22T10:43:00.000000000Z [10:43:00.000] [INF] X: "
+                   + batch.TASK_NAME + " Cancelled after 0 minute(s) and 20 seconds")
+        summary_old = ("2026-10-21T17:05:10.476000000Z [17:05:10.476] [INF] X: "
+                       "STRM media information check finished: candidates 4")
+        summary_current = ("2026-10-22T10:43:00.000000000Z [10:43:00.000] [INF] X: "
+                           "STRM media information check finished: candidates 6")
+        stdout = "\n".join([old, current, summary_old, summary_current]) + "\n"
+        logs = type("Logs", (), {"returncode": 0, "stdout": stdout, "stderr": ""})()
+        round_start = 1792665740.0
+        with patch.object(batch.base, "run", return_value=logs):
+            completions = batch.task_completion_events_absolute("container", round_start)
+            summaries = batch.batch_events_absolute("container", round_start)
+        self.assertEqual([entry["status"] for entry in completions], ["Cancelled"])
+        self.assertEqual(len(summaries), 1)
+        self.assertIn("candidates 6", summaries[0]["line"])
+
+    def test_probe_starts_use_the_absolute_window_too(self):
+        old = ("2026-10-21T17:05:10.476000000Z [17:05:10.476] [INF] X: "
+               "Native STRM probe started for item AAAA; running probes 1, active permits 1.")
+        current = ("2026-10-22T10:42:40.000000000Z [10:42:40.000] [INF] X: "
+                   "Native STRM probe started for item BBBB; running probes 1, active permits 1.")
+        logs = type("Logs", (), {"returncode": 0, "stdout": old + "\n" + current + "\n", "stderr": ""})()
+        with patch.object(batch.base, "run", return_value=logs):
+            entries = batch.probe_start_entries_absolute("container", 1792665740.0)
+        self.assertEqual([entry["item_id"] for entry in entries], ["bbbb"])
+
+    def test_the_stop_scenario_measures_on_real_instants(self):
+        source = (ROOT / "scripts" / "run_isolated_batch_integration.py").read_text(encoding="utf-8")
+        stop_body = source[source.index("def scenario_stop("):source.index("def scenario_sharing(")]
+        self.assertIn("round_started_epoch = time.time()", stop_body)
+        self.assertIn("stopped_at_epoch = time.time()", stop_body)
+        self.assertNotIn("batch_run_entries(container, since=round_started_at)", stop_body)
+        self.assertNotIn("current_round_completion(container, stopped_at)", stop_body)
+        # The settlement obligations themselves are unchanged.
+        for required in ("entries_timeline[1:]", "settlement_probe_starts", "entries_after >= 2",
+                         "queued_entry[\"epoch\"] >= cancelled_at_epoch"):
+            self.assertIn(required, stop_body)
+
+
+
 class NativeScanSettlementTests(unittest.TestCase):
     """The stop scenario must measure from a settled native scan, not from a busy scheduler.
 

@@ -28,6 +28,7 @@ import argparse
 import datetime
 import hashlib
 import json
+import re
 import shutil
 import sqlite3
 import sys
@@ -142,6 +143,60 @@ def set_triggers(api: base.JellyfinApi, task_id: str, triggers: list[dict]) -> i
     return status
 
 
+def log_lines_absolute(container: str, marker: str, since_epoch: float) -> list[dict]:
+    """Return every log line containing ``marker`` with its container-absolute epoch.
+
+    ``docker logs --timestamps`` prefixes each line with the container's real instant. Jellyfin's own
+    message only carries a time of day, and the isolated server keeps one rolling log across
+    sessions, so an earlier day's line can have a later time of day than today's round. Binding on
+    the absolute prefix keeps each scenario's measurement window exact without truncating history.
+    """
+    logs = base.run(["docker", "logs", "--timestamps", "--tail", "8000", container], timeout=20)
+    base.require(logs.returncode == 0, "Could not read the isolated Jellyfin container logs.")
+    entries: list[dict] = []
+    for raw in (logs.stdout + logs.stderr).splitlines():
+        if marker not in raw:
+            continue
+        try:
+            epoch = round_marker(raw)
+        except RuntimeError:
+            continue
+        if epoch < since_epoch:
+            continue
+        message = raw.split(" ", 1)[1] if raw[:1].isdigit() and " " in raw else raw
+        entries.append({"line": message, "epoch": epoch})
+    return entries
+
+
+def batch_events_absolute(container: str, since_epoch: float) -> list[dict]:
+    return log_lines_absolute(container, "STRM media information check finished", since_epoch)
+
+
+def task_completion_events_absolute(container: str, since_epoch: float) -> list[dict]:
+    entries = log_lines_absolute(container, " after ", since_epoch)
+    completions: list[dict] = []
+    for entry in entries:
+        if TASK_NAME not in entry["line"]:
+            continue
+        for status in ("Completed", "Cancelled", "Failed", "Aborted"):
+            if f"{TASK_NAME} {status} after" in entry["line"]:
+                completions.append({"status": status, "epoch": entry["epoch"]})
+                break
+    return completions
+
+
+def probe_start_entries_absolute(container: str, since_epoch: float) -> list[dict]:
+    entries: list[dict] = []
+    for entry in log_lines_absolute(container, "Native STRM probe started", since_epoch):
+        item = re.search(r"probe started for item ([0-9a-fA-F-]+)", entry["line"])
+        running = re.search(r"running probes (\d+)", entry["line"])
+        if not (item and running):
+            continue
+        entries.append({"item_id": item.group(1).lower(), "running": int(running.group(1)),
+                        "epoch": entry["epoch"]})
+    return entries
+
+
 def batch_events(container: str, since: float | None = None) -> list[str]:
     """Return the redacted batch summary lines. When ``since`` (seconds of day) is given, only summaries at or
     after it are returned, which binds them to the current round despite ``--tail`` truncation in long sessions."""
@@ -181,6 +236,32 @@ def batch_run_entries(container: str, since: float | None = None) -> list[str]:
     return entries
 
 
+def batch_run_entries_absolute(container: str, since_epoch: float) -> list[dict]:
+    """Return every round entry with its own absolute epoch, keeping Jellyfin's message text intact.
+
+    ``docker logs --timestamps`` prefixes the container's absolute instant, while Jellyfin's message
+    only carries a time of day. The isolated server keeps one rolling log across sessions, so a line
+    written on an earlier day has a *later* time of day than today's round start and cannot be
+    attributed by that alone. Each entry therefore carries the stripped message plus the absolute
+    epoch parsed from the prefix, and only entries at or after ``since_epoch`` are returned.
+    """
+    logs = base.run(["docker", "logs", "--timestamps", "--tail", "8000", container], timeout=20)
+    base.require(logs.returncode == 0, "Could not read the isolated Jellyfin container logs.")
+    entries: list[dict] = []
+    for raw in (logs.stdout + logs.stderr).splitlines():
+        if "STRM media information check entered" not in raw:
+            continue
+        try:
+            epoch = round_marker(raw)
+        except RuntimeError:
+            continue
+        if epoch < since_epoch:
+            continue
+        message = raw.split(" ", 1)[1] if raw[:1].isdigit() and " " in raw else raw
+        entries.append({"line": message, "epoch": epoch})
+    return entries
+
+
 def trigger_arm_times(container: str) -> list[float]:
     """Return the epoch seconds at which the native DailyTrigger logged it would fire for this task."""
     logs = base.run(["docker", "logs", "--tail", "4000", container], timeout=20)
@@ -199,6 +280,23 @@ def trigger_arm_times(container: str) -> list[float]:
         except ValueError:
             continue
     return times
+
+
+def round_marker(line: str) -> float:
+    """Return the absolute epoch of a log line, honouring the ``docker logs --timestamps`` prefix.
+
+    The Jellyfin message itself only carries a time of day, so a line written on an earlier day (the
+    isolated server keeps one rolling log across sessions) would otherwise sort after today's round
+    start and be counted as this round's. The container's own absolute timestamp is authoritative
+    when present; the time-of-day form stays the fallback for lines read without ``--timestamps``.
+    """
+    match = re.match(r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z)", line)
+    if match:
+        try:
+            return datetime.datetime.fromisoformat(match.group(1).replace("Z", "+00:00")).timestamp()
+        except ValueError:
+            pass
+    raise RuntimeError(f"Could not parse an absolute timestamp from {line!r}.")
 
 
 def parse_log_epoch(line: str) -> float:
@@ -764,6 +862,7 @@ def scenario_stop(api: base.JellyfinApi, container: str, media_container: str) -
         before_id_counts = slow_request_counts(media_container)
         armed_before = len(trigger_arm_times(container))
         round_started_at = now_time_of_day_seconds()
+        round_started_epoch = time.time()
         status, _ = api.request_response("/ScheduledTasks/Running/" + task_id, method="POST")
         base.require(status == 204, "Jellyfin did not accept the stop-scenario batch start.")
 
@@ -780,7 +879,7 @@ def scenario_stop(api: base.JellyfinApi, container: str, media_container: str) -
         base.require(bool(started), "The batch stop scenario never reached a real probe.")
         # The current round's own entry marker, filtered by the timestamp captured before the start so a long
         # multi-scenario session cannot inflate the count via --tail truncation. Exactly one entry is expected.
-        entries_during_round = len(batch_run_entries(container, since=round_started_at))
+        entries_during_round = len(batch_run_entries_absolute(container, round_started_epoch))
         base.require(entries_during_round == 1, f"The current round must have exactly one Execute entry, found {entries_during_round}.")
 
         # Arm a real wall-clock trigger to fire during the settlement window, so a timer-triggered run (not only a
@@ -790,11 +889,11 @@ def scenario_stop(api: base.JellyfinApi, container: str, media_container: str) -
         armed = trigger_arm_times(container)
         base.require(len(armed) > armed_before, "The settlement-window trigger was not armed for this round (no new arm log).")
         armed_fire_at = armed[-1]
-        armed_time_of_day = trigger_arm_time_of_day_seconds(container)
 
         stop_status = stop_task(api)
         base.require(stop_status == 204, "Jellyfin did not accept the native stop.")
         stopped_at = now_time_of_day_seconds()
+        stopped_at_epoch = time.time()
 
         # Freeze the started-before-stop set at the stop boundary; this is the stopped round's committed set.
         started_before_stop = {rid for rid, count in slow_request_counts(media_container).items() if count > before_id_counts.get(rid, 0)}
@@ -817,18 +916,26 @@ def scenario_stop(api: base.JellyfinApi, container: str, media_container: str) -
                 break
             time.sleep(0.2)
         # Bind the stopped round's Cancelled completion and its settle time.
-        current_round_result = current_round_completion(container, stopped_at)
-        base.require(current_round_result is not None, f"The stopped round produced no native completion after the stop ({task_completion_events(container)}).")
-        base.require(current_round_result == "Cancelled", f"The stopped round did not record Cancelled: {current_round_result} ({task_completion_events(container)}).")
-        cancelled_at = next(timestamp for timestamp, status in task_completion_events_with_time(container) if status == "Cancelled" and timestamp >= stopped_at)
+        completions_after_stop = task_completion_events_absolute(container, stopped_at_epoch)
+        base.require(bool(completions_after_stop), "The stopped round produced no native completion after the stop.")
+        current_round_result = completions_after_stop[0]["status"]
+        base.require(current_round_result == "Cancelled",
+                     f"The stopped round did not record Cancelled: {current_round_result} "
+                     f"({[entry['status'] for entry in completions_after_stop]}).")
+        cancelled_at_epoch = completions_after_stop[0]["epoch"]
         # No new round may have entered before the stopped round settled.
-        entries_timeline = [(parse_log_epoch(entry), entry) for entry in batch_run_entries(container, since=round_started_at)]
-        for entry_at, entry in entries_timeline[1:]:
-            base.require(entry_at >= cancelled_at, f"A repeated manual start or the timer actually entered a new round during settlement (entry {entry_at:.3f} < settled {cancelled_at:.3f}; timeline {[round(t, 3) for t, _ in entries_timeline]}).")
+        entries_timeline = batch_run_entries_absolute(container, round_started_epoch)
+        for entry in entries_timeline[1:]:
+            base.require(entry["epoch"] >= cancelled_at_epoch,
+                         f"A repeated manual start or the timer actually entered a new round during settlement "
+                         f"(entry {entry['epoch']:.3f} < settled {cancelled_at_epoch:.3f}; "
+                         f"timeline {[round(item['epoch'], 3) for item in entries_timeline]}).")
         # No new probe may have started during the settlement window [stop, settled). Probe starts are timestamped,
         # so this is deterministic and does not race the queued run's own legitimate probe after settlement.
-        settlement_probe_starts = [entry for entry in probe_start_entries(container, since=stopped_at) if entry["timestamp"] < cancelled_at]
-        base.require(not settlement_probe_starts, f"A repeated manual start or the timer began a new probe during settlement: {settlement_probe_starts}.")
+        settlement_probe_starts = [entry for entry in probe_start_entries_absolute(container, stopped_at_epoch)
+                                   if entry["epoch"] < cancelled_at_epoch]
+        base.require(not settlement_probe_starts,
+                     f"A repeated manual start or the timer began a new probe during settlement: {settlement_probe_starts}.")
         base.require(trigger_fired, "The armed settlement-window trigger never fired while the old round was settling.")
 
         # Clear the trigger so only the already-queued native run (which must run only after settlement) remains.
@@ -838,18 +945,19 @@ def scenario_stop(api: base.JellyfinApi, container: str, media_container: str) -
         status_value = "cancelled"
 
         # The stopped round is the first summary after the round start; the queued run adds a later one.
-        all_summaries = batch_events(container, since=round_started_at)
+        all_summaries = batch_events_absolute(container, round_started_epoch)
         base.require(len(all_summaries) >= 1, "The stopped round never completed after settlement.")
-        stop_summary = base.safe_event(all_summaries[0])
+        stop_summary = base.safe_event(all_summaries[0]["line"])
         stop_fields = summary_fields(stop_summary)
         assert_summary_equations(stop_fields)
-        entries_after = len(batch_run_entries(container, since=round_started_at))
+        timeline = batch_run_entries_absolute(container, round_started_epoch)
+        entries_after = len(timeline)
         base.require(entries_after >= 2, f"The queued trigger/manual run never actually ran after settlement (entries since round start {entries_after}).")
         # The queued run must be this round's request: it entered after the armed trigger fired, not from a prior
         # container-history event.
-        queued_entry_line = batch_run_entries(container, since=round_started_at)[1]
-        base.require(parse_log_epoch(queued_entry_line) >= armed_time_of_day, "The queued run entered before the armed settlement trigger fired.")
-        base.require(parse_log_epoch(queued_entry_line) >= cancelled_at, "The queued run entered before the stopped round settled.")
+        queued_entry = timeline[1]
+        base.require(queued_entry["epoch"] >= armed_fire_at, "The queued run entered before the armed settlement trigger fired.")
+        base.require(queued_entry["epoch"] >= cancelled_at_epoch, "The queued run entered before the stopped round settled.")
 
         # Per-source settlement of the stopped round: the sources that actually started before the stop committed
         # their new delayed URL and are the stopped round's reliable successes; the rest were revoked without
