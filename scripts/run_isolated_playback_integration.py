@@ -1553,8 +1553,8 @@ def require_f02_unprobeable(name: str, streams: list[dict], probe_error: str | N
     The manifest for the failing window records the real SHA-1/Size of this controlled input, so
     the input itself must be genuinely unusable. A truncated file that already exposes a video
     stream would make the expected failure window playable again (the previous first-third cut did
-    exactly that even though its byte count was smaller); either the probe must fail, or no video
-    stream may be visible, and a successful probe with a video stream is rejected outright.
+    exactly that even though its byte count was smaller). Generation therefore requires the pinned
+    ffprobe to fail and the result to contain no video stream.
     """
     videos = [stream for stream in streams if stream.get("codec_type") == "video"]
     require(not videos,
