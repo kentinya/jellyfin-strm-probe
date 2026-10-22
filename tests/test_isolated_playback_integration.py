@@ -1063,6 +1063,32 @@ class FailureObservationTests(unittest.TestCase):
             self.assertNotIn("auth", saved)
             self.assertNotIn("private-test-token", result)
 
+    def test_the_journey_verifies_the_prepared_precondition_instead_of_repeating_the_surgery(self):
+        """The bounded removal runs once in preparation; repeating it would delete missing rows."""
+        source = (ROOT / "scripts" / "run_isolated_playback_integration.py").read_text(encoding="utf-8")
+        journey = source[source.index("def journey_p01("):source.index("def journey_f01(")]
+        self.assertNotIn('p01_stream_surgery([row], drop_spec, evidence_dir, "pre")', journey)
+        self.assertIn("p01_precondition(auth, row)", journey)
+        # The "with fingerprint" rows still remove the streams a second time, after the real prime.
+        self.assertIn('p01_stream_surgery([row], drop_spec, evidence_dir, "prime-after")', journey)
+        prepare = source[source.index("def prepare_matrix_rows("):source.index("def scenario_matrix(")]
+        self.assertIn('p01_stream_surgery(p01_rows, drop_spec, evidence_dir, "pre")', prepare)
+
+    def test_the_precondition_requires_no_video_and_keeps_audio_only_for_video_drops(self):
+        from unittest.mock import patch
+        row = {"id": "MP4.P01.03", "item": {"Id": ITEM_ID}, "apply": {"drop": "video", "prime": False}}
+        with patch.object(playback, "saved_stream_types", lambda auth, item: ["Audio"]):
+            result = playback.p01_precondition("auth", row)
+        self.assertEqual(result["savedStreams"], ["Audio"])
+        with patch.object(playback, "saved_stream_types", lambda auth, item: ["Audio", "Video"]):
+            with self.assertRaises(playback.BaselineError):
+                playback.p01_precondition("auth", row)
+        dropped_all = {"id": "MP4.P01.01", "item": {"Id": ITEM_ID}, "apply": {"drop": "all", "prime": False}}
+        with patch.object(playback, "saved_stream_types", lambda auth, item: ["Audio"]):
+            with self.assertRaises(playback.BaselineError):
+                playback.p01_precondition("auth", dropped_all)
+
+
 class P01NativeDatabaseTests(unittest.TestCase):
     """The P01 surgery must adapt to the pinned native schema, not to an assumed one."""
 

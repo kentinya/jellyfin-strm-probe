@@ -2446,13 +2446,27 @@ def journey_normal(auth: str, row: dict, evidence_dir: Path) -> dict:
     return result
 
 
+def p01_precondition(auth: str, row: dict) -> dict:
+    """Read-only check that this row really starts without its necessary video stream.
+
+    The bounded removal itself is the stopped-copy surgery recorded once for all selected P01 rows
+    in the preparation summary (backup, schema-inspected, parameterized delete, read-only verified).
+    Repeating it here would delete rows that are already gone, so the journey only verifies the
+    frozen precondition: no Video stream, and Audio still present when only Video was dropped.
+    """
+    saved = saved_stream_types(auth, row["item"]["Id"])
+    expected = [] if row["apply"]["drop"] == "all" else ["Audio"]
+    require(sorted(saved) == sorted(expected),
+            f"{row['id']}: the prepared missing-stream precondition is {saved}, expected {expected}.")
+    return {"stage": "precondition", "savedStreams": saved, "expected": expected}
+
+
 def journey_p01(auth: str, row: dict, evidence_dir: Path) -> dict:
     drop = row["apply"]["drop"]
     prime = row["apply"]["prime"]
     result: dict[str, object] = {"journey": "p01", "drop": drop, "prime": prime}
     drop_spec = {row["id"]: drop}
-    result["surgery"] = p01_stream_surgery([row], drop_spec, evidence_dir, "pre")
-    auth = refresh_auth()
+    result["precondition"] = p01_precondition(auth, row)
     require(fp_snapshot(auth, row) is None, f"{row['id']}: a fingerprint existed before the window.")
     if prime:
         # The "with fingerprint" P01 rows prime once: the probe succeeds and commits the fingerprint,
