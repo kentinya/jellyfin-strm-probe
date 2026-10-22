@@ -13,7 +13,7 @@ Test Level: T4
 Planner / Reviewer: B
 ```
 
-最新 B 复核（2026-10-22 04:18 UTC 续验轮）：正式 ZIP 已独立接受 `MKV.F02`、`MP4.C02.limited`／`full` 和 baseline `B01` 对应的 `MP4.D01`，矩阵进度 **4／116**；F02 夹具阻塞保持解除，Task 仍为 **FIX REQUIRED（完整验收未齐）**。没有新增 Developer 修正项，下一步由 **B 继续同一候选的剩余完整门禁**，不把未运行门禁退交 Developer。详细证据与复用边界见文末最新 B 决定。
+最新 B 复核（2026-10-22 04:18 UTC 续验轮）：正式 ZIP 已独立接受 `MKV.F02`、`MP4.C02.limited`／`full`／`unspecified` 和完整 baseline `B01`／`B02` 对应的 `MP4.D01`／`MKV.D01`，矩阵进度 **6／116**；F02 夹具阻塞保持解除，Task 仍为 **FIX REQUIRED（完整验收未齐）**。没有新增 Developer 修正项，下一步由 **B 继续同一候选的剩余完整门禁**，不把未运行门禁退交 Developer。详细证据与复用边界见文末最新 B 决定。
 
 ## B 合同重判与继续决定（2026-10-21）
 
@@ -549,3 +549,20 @@ NEXT ACTION: B CONTINUES THE FIXED-ZIP REMAINING FULL GATES IN TASK 5.3; NO DEVE
 - **baseline B01／MP4.D01 PASS：** 只用已有 `--scenario baseline --rows B01`，在启动前按 Task D01 表明确登记别名，不增加一次虚构执行。退出 0，runner **213.9 秒**／完整墙钟 **215.285 秒**；新归属 `run-20261022-044207-7233470d`、18116。原生禁用准备后，首次信任真实 FirstTrust 建立 A 的预期五字段；首次／再播／重启后目标 ffprobe **0／0／0**（全原文仅原生准备 1 次），推进 **5.352244／5.405038／5.397585 秒**，解码 90／92／95 帧，源 `84494acd30e0fc749734da902f0f0007`／A URL／Video＋Audio 正确。完整原生源／流、五字段、STRM 摘要、计数在重启任何播放前精确相等。6 张原图全部打开，均为 MP4 A、嵌入计数推进，无错误；本轮新图合计 **22 张**。
 - **收尾／未启动尝试：** 两次正式运行均部署负载匹配／Active／原生任务无默认触发，双服务 exit 0／无 OOM、对账 CLEAN／无 disturbed、仅本轮工作区 CLEANED。曾考虑独立检出并行 B01，但预算守卫在任何工作区／端口／容器操作前因 236.647＜240 秒拒绝，该尝试 **NOT RUN**；保留记录，不把它算作一次执行或改变估算来强行开跑。随后上述 B01 为有实际余额的串行新运行，无同项目并行冲突。原 1170 文件准备库最终只读摘要与起始完全一致，生产／共享实例未操作。
 - **当前完整门禁进度：** 同 ZIP 接受 **4／116**（MKV.F02、MP4.C02.limited、MP4.C02.full、MP4.D01），baseline **B01 PASS、B02 NOT RUN**；其余 **112 个矩阵 ID／10 个 C 行**、其余指定关键复现及 package／scan／全部 1004 large／plugin／batch／configuration 仍由 B 补齐。完整基线可按当前已实现的单行选择分别执行两个格式，再核验同 ZIP 下 B01＋B02 的全部同等旅程；不减少任一阶段。Task 仍 **FIX REQUIRED（完整验收未齐）**，没有新 Developer 修正请求，不移交全量、不新建 Task、不签发 Slice Final／Closure Packet／A-ready 或自行关闭。全部本轮精确命令、原始证据及同轮测试区间保留在前述索引，最终比例见 `timing-ledger.json`；下一步按实际余额继续 B 的完整门禁。
+
+
+### 同一 04:18 UTC 轮追加：完整视频 baseline
+
+- **baseline B02／MKV.D01 PASS：** 只用原有 `--scenario baseline --rows B02`，启动前依 D01 表登记同次覆盖，不增加虚构执行。正式 ZIP 仍为 `a8a57cad5587980a9451f2cd0a74b06f259537498feb56de1f2f22b8e4e86f54`，Reviewed Range 为 `f17fb1fc90dda242eeff9fac7b4f21576b5e6f94..dc79790022579ac8ba78155bf8bf304920ba0e0f`；较实现 Head 仅 TASK.md 后继，成功判据未改。实际准入余额 314.102 秒后启动估计 240 秒的完整旅程，仍从本轮 04:18:34 UTC 计时。退出 0，runner **213.5 秒**／墙钟 **214.919 秒**，归属 `run-20261022-044943-6621267a`／18116。
+- **原因、场景与需求结果：** 原生已有 Video＋Audio、尚无插件指纹，首次信任应建立历史基线而不重探测。实际 MKV A SHA-1 `184202a9732b91532a646575ac5ce3dc1cd9c5c6`／Size 1669928，源 `cf7436b5603c13fcd83674c0087b445b`；首次真实 FirstTrust、预期五字段建立，首次／再播／重启后探测 **0／0／0**，原文仅原生准备 1 次。推进 **5.400786／5.376900／5.369249 秒**、解码 **93／92／94 帧**，三个 HTTP 200 原始 PlaybackInfo 的源／URL／Video＋Audio 均正确，无客户端、媒体或读回错误。重启任何播放前，完整原生地址／流、五字段、STRM 摘要、计数与冻结状态精确相等，符合 D01 及基线要求，不把首次信任称为实测成功。
+- **截图与收尾：** 6 张原图全部打开：MKV A 嵌入时间首次 00:00:00.667→00:00:06.000、再播 00:00:00.600→00:00:05.933、重启 00:00:00.667→00:00:06.067，无可见错误；本轮累计 **28 张**。媒体服务原日志中一次客户端结束读取时的 ConnectionResetError 保留，三阶段实际响应、媒体读取、解码和推进全部成功，不隐藏或据此制造产品缺陷。部署 8 文件匹配、Active、原生任务无默认触发，双服务 exit 0／无 OOM，对账 CLEAN／无 disturbed，仅本轮工作区 CLEANED；原准备库 1170 文件最后只读全量摘要仍完全一致。
+- **完整基线与剩余范围：** 同包 B01＋B02 的全部三阶段旅程均独立接受，baseline 门禁 **PASS**；对应 D01 合法复用，同包矩阵 **5／116**、指定关键 **3／40**，余 **111 个矩阵 ID／10 个 C 行**及 package／scan／全部 1004 large／plugin／batch／configuration 仍属 B。当前 Task **FIX REQUIRED（完整验收未齐）**，无 Developer 修正请求，不改 Slice／Task Base、不造 Task、不签发 Closure Packet 或 SLICE READY FOR A REVIEW、不自行关闭。原始资料及逐项结论见同轮 `baseline-b02-independent-review.json`／`coverage.json`／`screenshot-review.json`。
+
+
+### 本轮最终追加与 B 决定：MP4.C02 三类完成
+
+- **MP4.C02.unspecified PASS：** 按已实现矩阵入口，实际余额 **321.762 秒**才启动估计 300 秒的完整旅程；沿用原 04:18:34 UTC 轮，不借未来时间。退出 0，runner **273.4 秒**／完整墙钟 **275.161 秒**；新归属 `run-20261022-045701-5eb8b95e`／18116，同一正式 ZIP，无调试器、无额外预热或断言改动。实际目标 H.264＋AAC／24 秒，ffprobe Video ColorRange **null**、SHA-1 `d1a2edc15f2eec92eea33048fa428873094ec7d1`／Size 1724237，未把未指定伪装为 limited／full。
+- **原因、场景与需求结果：** URL A→新有效视频，即使已有可用流也必须真正探测并原生保存。首次信任／换址／再播／重启后目标计数 **0／1／0／0**，推进 **5.362486／5.398636／5.388731／5.386745 秒**，解码 **93／91／89／93 帧**；四个原始响应 HTTP 200，正确源 `9363ef45732afe54b0b8fe42544d4d95`、目标地址、Video＋Audio、预期五字段和真实媒体读取，无错误。原文重数仅新目标 1 次和旧 A 准备 1 次。满足本行需要探测、原生持久化、当次及重启后使用新源的要求。
+- **字段／原生状态／原图：** 同次 encoder **05:00:09.121**→成功保存 **05:00:09.392**→returned **05:00:12.299**，33 字段三阶段**全部精确相等**，ColorRange 均 null。新原生 Video BitRate **453588→474854**、ColorSpace **bt709→null**，并非只沿用旧流；完整重启冻结＝任何播放前只读状态。8 张原图实际打开，A 后为 MP4 UNS，三个新源嵌入计数分别 00:00:00.467→00:00:05.867、00:00:00.333→00:00:05.667、00:00:00.600→00:00:05.933；本轮新图合计 **36 张**。部署／Active／无默认触发、双服务 exit 0／无 OOM、CLEAN／无 disturbed、仅自有工作区 CLEANED 均核实。详见本轮 `c02-unspecified-fields.md`／`c02-unspecified-independent-review.json`。
+- **最终决定：FIX REQUIRED（完整验收未齐），没有新增产品 P0／P1 或 Developer 源码修正项。** 固定包累计 **6／116**：MKV.F02、MP4.C02.limited／full／unspecified、MP4.D01、MKV.D01；baseline B01＋B02 **PASS**，指定独立关键 **4／40**，全部 12 个 C 行中的 MP4.C02 三行已完成、其余 **9 行**未运行。剩余 **110 个矩阵 ID**、指定关键其余 **36 项**及 package-all／scan-all／现存全部 1004 项 large-all／plugin-full／batch-suite／configuration-all 仍由 **B** 在同 Task／同候选继续，不交回 Developer、不重新建准备库；匹配完整 C#／Python 回归证据继续复用。RO-2／RO-3 与 Slice Final 尚未齐备，不签发 Closure Packet／SLICE READY FOR A REVIEW，不自行关闭。
+- **时间与下一步：** 五次完整实机串行运行墙钟合计 **1257.692 秒**，其他检查保守计 10 秒，测试并集 **1267.692 秒**。05:02:29 实际本轮 2635.188 秒时占 **48.11%**，新增余额仅 **99.804 秒**，不足下一条完整矩阵估计 300 秒，故停止新测试、完成证据及普通本地文档提交；未空等凑分母、未重置轮次或放宽用户规则，最终值见同轮 `timing-ledger.json`。继续时沿用固定候选与未完成清单，优先 MP4.F02／其余 C02／C06 关键复现；完整安装、扫描、大库及开发部署门禁仍须逐项补齐。
