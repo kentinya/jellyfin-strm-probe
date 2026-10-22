@@ -13,7 +13,7 @@ Test Level: T4
 Planner / Reviewer: B
 ```
 
-最新 B 复核（2026-10-22 13:17 UTC 轮）：**FIX REQUIRED**，继续同一 Task 5.3。实现 `4b4d0cca33f37308842710b2a0a70b1919cd0a58` 的就绪归属修正通过本轮完整入口验证；B53-20261022-5 的真实错误正文也已验证落盘／交接。B 新跑完整 Python **408 PASS＋2 SKIPPED／410 项**；plugin-full **FAIL（211.738 秒）**，在原生合并版本后首次 PlaybackInfo 重现源集合变化 500。该窗口确有本轮原生 post-scan 仍在执行，不能将其认定为已稳定的多版本旅程。新记录 **B53-20261022-8**，只补这一既有旅程的稳定前提和必要失败状态，保留原断言；稳定后仍失败则交 A，不授权产品源集合规则修正。其余完整门禁仍归 B；正式 ZIP、205 C# PASS 和匹配 3／116 独立矩阵证据复用。见文末最新决定。
+最新 B 决定：**FIX REQUIRED**，继续同一 Task 5.3；已核验修正和实际失败见下方 2026-10-22 13:17 UTC 复审。经核对历史 A 决定，B53-20261022-8 不再要求 Developer 先将异步准备适配内置正式工具；由 B 沿已接受的准备方法补齐当前候选的合并版本验收，原始 FAIL 与全部产品断言保留。见文末“合并版本历史决定核对与计划纠正”。
 
 ## B 合同重判与继续决定（2026-10-21）
 
@@ -789,4 +789,18 @@ RO-1 有正式包／隔离部分证据，RO-2／RO-3 完整视频及失败恢复
 
 本轮提交前保守计时为测试侧 **273.4 秒／总计 1378.0 秒（19.8%）**，严格小于实际总时间 **50%**；夹具生成／启动／等待、完整 Python、完整 plugin 首败、收尾与质量检查均计入，未空等凑分母、未预借后续时间启动测试。准确命令／版本／候选、真实正文／扫描时间线、复用／未运行和时间账本见 `.git/validation-evidence/4b4d0cca33f37308842710b2a0a70b1919cd0a58/b-review-20261022T131747Z/INDEX.md`。
 
-NEXT ACTION: DEVELOPER CORRECTS ONLY THE OBSERVED NATIVE-MERGE PRECONDITION IN TASK 5.3; B RETAINS ALL FULL GATES. STABLE SOURCE-SET FAILURE GOES TO A; NO NEW TASK OR SLICE CLOSE.
+上述 Developer 前置修正要求由下方历史核对决定替代；原运行、失败、时间账本及未完成门禁保持。
+
+## B 合并版本历史决定核对与计划纠正（2026-10-22）
+
+用户要求核查此前合并版本的决定。B 只读检查真实 Git 历史、关闭账本、A Final Review 及仍可读取的私有准备适配源码，纠正上一轮将已接受准备方法再次变成 Developer 必修工具开发的要求。
+
+- **已接受的准备方法。** A 关闭检查点 `020b05a6cb2026fbc5e6bcdf5e868345470594fb:SLICE.md` 的 Closure Packet／A Final Review 明确接受：plugin／batch 在多版本／停止夹具索引后等待原生扫描完成，保留原函数、断言与阈值；未内置正式工具属于非阻塞 P2，不为此延长 Slice 或新增 Task。当前 [关闭账本](docs/progress.md#slice-4-closed) 保留这一决定。B 实际读取旧 `plugin-prepared/dev_gate.py`：在原 `multiversion_and_sqlite_failure_check` 等到条目后，通过既有 `/ScheduledTasks` 读取 `RefreshLibrary`，等待 Idle 且 LastExecutionResult 为 Completed，再继续原旅程；未用 PlaybackInfo 预热或消费首次失败。该源码位于 `.git/validation-evidence/5cb81717039df627c7eafd02affd8404e08c3a9b/b-complete-gates-20261020T054244Z/plugin-prepared/dev_gate.py`。这证明方法已接受，不代表已完成本候选验收。
+- **合并版本的产品义务未撤出。** Task 4.2 的 B PASS 快照 `a06a80f:TASK.md` 要求按当前原生 canonical item／MediaSourceId 对账，两个源独立指纹及正确显式选源；扫描或重启后重新解析身份，允许遗留孤儿行但不能拿它代替当前键。实现 `86946cc4ef5c0648b71aafc00aa666f2a2bb20c5` 将 FullRefresh 绑定到当前可见合并项目及其对应版本，避免对隐藏的合并前子项发请求却等待另一个源。A 最终接受三源重启前、重启后任何 PlaybackInfo 前、选源后三阶段一致性。这些决定不允许放宽两源、正确地址／主流、稳定保存或重启要求。
+- **验收归属。** 同一 Task 4.2 快照已记录以 B 独立补证替代 Developer 继续扩建工具，保留必要用户结果及原失败。当前同样由 B 使用既有 plugin 入口／原 helper，按当前实例身份采用并留存必要准备适配，核对实际扫描完成时序后执行原始合并与首次 PlaybackInfo 断言；不能直接照搬旧绝对路径、端口或把旧结果算作本候选 PASS。适配及调用输入、原断言和本次结果分别留证，不把带适配运行写成未经适配命令 PASS。
+
+**B53-20261022-8 重判：** 当前完整门禁失败及稳定前提未证实仍待 B 验收，不能签发 PASS；撤销“Developer 必须先修改正式工具”的阻塞要求。上一轮 211.738 秒 FAIL、6 条真实 500、扫描重叠与因果未证实的限制均保留，不追认为工具原因或产品缺陷。B 在固定候选补验；若稳定前提下仍出现源集合 500，交 A 裁定产品取证／修正边界，不绕过保护、不吞掉首次失败、不以重试成功替代。Task ID／Base／合同与其他未完成门禁不变，不新增 Task、不关闭 Slice。
+
+本次仅修正 B 测试计划及职责，不修改产品或正式工具，不运行真实 Jellyfin／完整回归；治理与差异检查不作为产品 PASS。
+
+NEXT ACTION: B COMPLETES CURRENT-CANDIDATE NATIVE-MERGE ACCEPTANCE WITH THE PREVIOUSLY ACCEPTED PREPARATION METHOD AND RETAINS ALL FULL GATES; STABLE SOURCE-SET FAILURE GOES TO A. NO DEVELOPER TOOLING PREREQUISITE, NEW TASK OR SLICE CLOSE.
