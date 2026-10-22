@@ -13,7 +13,7 @@ Test Level: T4
 Planner / Reviewer: B
 ```
 
-最新 B 复核（2026-10-22，本轮测试占比小于 50%）：**FIX REQUIRED**。最终实现 `3a7de05` 已重建正式 ZIP；B 新跑完整 C# **205 PASS**、Python **395 PASS＋2 SKIPPED**，独立 MP4／MKV.P01.04 与 MP4.D06 完整旅程通过（当前同 ZIP **3／116**）。B53-20261022-5 的原生错误正文仍只在内存、未进入交接证据，其他完整门禁仍由 B 补齐。旧 6／116 及 package／large／configuration 通过决定保留为对应旧候选结果。修正继续同一 Task；完整验收不交回 Developer，尚不具备 Slice 最终审查条件，见文末最新 B 决定。
+最新 B 复核（2026-10-22 12:40 UTC 轮）：**FIX REQUIRED**，继续同一 Task 5.3。审查实现 `4be8e80f43d5c294326a4a72642abab46864eb64`，交付 Head `a6a6523`；完整 Python **401 PASS＋2 SKIPPED／403 项**。错误正文落盘的源码缺口已修正，真实错误旅程因新归属 plugin-full 在启动阶段实际 HTTP 503 而未达。新阻塞 **B53-20261022-7**：`restart_isolated_server` 启动本轮 18122 实例，却固定读取 18096 的 public-info，提前接受其他实例的就绪结果。只修正该既有入口的实例归属／等待，全部完整门禁仍归 B。正式 ZIP 与已匹配 C# 205 PASS、3／116 独立矩阵证据复用；未满足全部 RO，不规划新 Task、不交最终审查，详见文末。
 
 ## B 合同重判与继续决定（2026-10-21）
 
@@ -698,3 +698,37 @@ P01 三份真实原生数据库备份已只读独立打开，`quick_check=ok`，
 NEXT ACTION: INDEPENDENT B VERIFIES THIS CORRECTION AND RETAINS ALL REMAINING TASK 5.3 FULL GATES; NO NEW TASK OR SLICE CLOSE.
 
 NEXT ACTION (PREVIOUS ROUND): DEVELOPER COMPLETES ONLY B53-20261022-5 SAME-RESPONSE ERROR EVIDENCE IN TASK 5.3; B RETAINS ALL REMAINING FULL GATES; NO NEW TASK OR SLICE CLOSE.
+
+
+## B 独立复审（2026-10-22 12:40 UTC 轮）
+
+- **Decision：FIX REQUIRED。** 保持 Slice 5／Task 5.3、原 Task Base `f17fb1fc90dda242eeff9fac7b4f21576b5e6f94` 与 Contract Checkpoint `68e7bf01e7796fe9972838dfc0d8ed8283aacedd`。本轮只审查、验证及记录决定，不实施产品／工具修正、不委派代理、不推送或改写历史。
+- **Reviewed Range：** `f17fb1fc90dda242eeff9fac7b4f21576b5e6f94..a6a65235a02c0bb2517a4232381d7fc5ffba602d`；实现 `4be8e80f43d5c294326a4a72642abab46864eb64`。起始真实工作区干净，main 超前 origin/main 80 提交，治理通过。累计 20 文件；上一 B 实现 `3a7de05` 后只改 TASK.md、plugin 入口及其测试。已核对实际差异、产品匹配边界、已有原始产物及必读合同，沿用同一完整行为 Task。
+
+### 交付核对及唯一必要修正
+
+**B53-20261022-5 的源码交付缺口已修正。** HTTP 响应仍可读取时，GET／POST PlaybackInfo 与 MergeVersions 的错误状态、项目／请求类别及限长正文确实写入忽略的 JSONL，main 重置旧轮、finally 交付路径／计数，后续成功清空旧错误。完整 discovery 包含全部 14 项 plugin 控制，其中新增 6 项覆盖真实文件写读，不再只是内存字段。保留该修正；本轮未到达真实 500 旅程，不把控制通过称为实机错误正文验收。此前合并 500 的历史原文仍缺失，不补造，也不要求人为注入来重造历史。
+
+**B53-20261022-7／P1：既有 plugin-full 的就绪检查读了另一实例，真实新实例启动中即继续，HTTP 503 退出。** 位置 `scripts/run_isolated_plugin_integration.py:214–238`，特别是 227 行。当前合同要求 B 在新检出／新开发实例使用现有 `JF_PROBE_PORT`；compose 按 `JF_PROBE_PORT=18122` 启动本轮项目 `jf-strm-probe-725b873b55`，凭据也指向 18122，但 helper 固定读取 `http://127.0.0.1:18096/System/Info/Public`。18096 是现存非本轮实例，不能作为本轮 API 就绪证明。
+
+这不是猜测构造的端点或内部探测：B 直接运行已有 `python3.11 scripts/run_isolated_plugin_integration.py`，仅设置已存在的 `JF_PROBE_PORT=18122`。该次完整入口于 **12:46:20.733～12:46:29.335 UTC** 运行 **8.602 秒**、退出 **1／HTTP 503**；本轮 Jellyfin 启动时间 **12:46:23.124**，健康命令于 **12:46:28.496～28.750** 对 `Degraded` 仍给 exit 0，服务器原日志随后到 **12:46:35.482** 才记录 Startup complete。stdout 只有部署／失败收尾、尚无 plugin-status 或播放结果；错误正文文件为空，不声称已经验证真实错误留存。Docker 健康状态本身不足以补上该 API 就绪缺口，helper 原有的 public-info 等待必须关联正确实例。
+
+**Developer 最小修正边界：** 只改现有 `restart_isolated_server` 及直接相关控制，使 public-info 使用与本轮 compose／凭据一致的实际地址，按原有超时继续等待本轮 503／启动中到固定版本可用；保留原容器归属、版本检查、失败和超时。默认端口仍按现有环境规则，不能改探测入口、产品判定／计数、SQL／源集合或增加新配置、框架、通用诊断系统。现有调用者签名不变时，只运行 plugin 模块的新回归、既有 batch／configuration 的直接调用控制和改动／直接导入文件语法检查；scan／large 使用自己的包实例 restart，不因间接 import 机械追加全量。若实际扩大调用影响，先记录对应必要反馈。回归应覆盖本次已发生的“Docker healthy／Degraded exit 0 但目标 API 仍 503”和非默认端口归属；真实反馈仅在新归属实例核对一次该既有重启与正常请求，不能接管 18096。本轮未授权产品修正，完整 plugin／batch／configuration 及其余全量不交回 Developer。
+
+### B 门禁、匹配复用与首败
+
+- 在独立干净检出 `a6a6523` 使用 Python **3.11.10** 新跑完整 discovery：**403 项，401 PASS、0 FAIL、2 SKIPPED**。两项跳过仍是缺省发布归档缺失的 assembly-version 控制，不计 PASS。完整原文、准确 argv／cwd／退出与时间在本机索引。完整 discovery 已覆盖此次聚焦，不再重复。
+- 逐项比对实际 Git 对象及记录的输入摘要，改变的可执行／测试文件只有 plugin 入口与其测试。产品构建、C# 测试、媒体服务、矩阵、驱动、包工具、依赖／镜像／配置输入均未改变。复用上一 B 的 SDK **10.0.401** locked restore／Release build（0 warning／error）／format、**205 C# PASS**、Node 语法与正式 ZIP，未重建未改变的产品。ZIP sourceRevision `3a7de052bf089141f76e2f60921de285bd5184c4`、build inputs `f394eabc06a7e5423adefeed0aed34b18078be80d0a7ac9143f46340bb8d98ef`、SHA-256 **`9641fe917cc8db8d36ec32c841fb968b0149890f39094adce5338a0f28dd9e37`**。
+- 上一 B 新归属 `MP4.P01.04`／`MKV.P01.04`／`MP4.D06` 的完整实际输入仍匹配；本轮独立核验原始结果中完整冻结＝重启先读状态，以及此前 B 实际打开的 **24 张原图摘要**均相同，复用原看图结论，不宣称本轮重新看图／重新播放。当前同 ZIP 保持 **3／116、独立关键 3／40、C 行 0／12**，不把旧候选的 6 行、package／large／configuration 或 Developer 聚焦场景提升为当前全量。
+- 新 plugin 部署从该正式 ZIP 的相同负载准备，在新检出的既有开发部署入口运行；这是开发部署门禁尝试，不称为 package-all。B 初次准备把包中平铺的 native 库直接放入构建输出，入口按既有开发布局要求拒绝（missing pinned Linux SQLite runtime，0.216 秒）；B 已自行将完全相同字节补到其要求的 `runtimes/linux-x64/native`，未改源码／断言，首败及修正均保留。这一准备错误不交给 Developer。随后才发生上方独立完整入口的真实 503。
+- 本轮新跑的 plugin-full 为 **FAIL（启动就绪阶段）**，不是成功套件或产品探测 FAIL。明确入口阻塞后，baseline、剩余 113 行／12 个 C、其余 37 个独立关键、package-all／scan-all／现存全部 1004 项 large-all／batch-suite／configuration-all 及 Slice Final 本轮 **NOT RUN**；责任仍归 B，修正后依真实输入匹配获取相应门槛。Python 完整回归因源码／测试改变须由 B 更新；C#／ZIP／已匹配矩阵不机械重跑。
+
+### RO、资源和交接
+
+RO-1 已有同包隔离资料；RO-2／RO-3 的逐行及完整失败恢复／ColorRange 门槛仍缺；RO-4 保留 Task 5.1 已接受 CI 决定。本 Task 未 PASS，全部 RO 未满足，**不新造 Task、不提交 Closure Packet、不返回 SLICE READY FOR A REVIEW、不自行关闭**。范围变化仍交 A。
+
+本轮仅运行新归属 18122 实例，原有 18096 只被既有 helper 的 public-info 只读访问，没有操作其配置／生命周期。两项自有服务已正常停止，exit 0／无 OOM，保留本轮检出、配置和原始日志供复核；未 prune／删除现存资源、未使用或改动原全部 1004 项准备库、未操作生产。完整日志与首败在稳定忽略目录，不上传凭据／原始资料。
+
+本轮提交前保守计时为测试侧 **71.7 秒／总计 818.4 秒（8.8%）**，严格小于实际总时间 **50%**，所有测试、夹具生成／向导／等待、首败／重跑、收尾及质量检查均计入测试侧并集，先前无限时间及 Developer 30% 文案只作历史；不空等凑分母、不预借后续时间。本机精确计时／原文／版本、首败、实例、复用核验与剩余门槛见：`.git/validation-evidence/4be8e80f43d5c294326a4a72642abab46864eb64/b-review-20261022T124000Z/INDEX.md`。
+
+NEXT ACTION: DEVELOPER CORRECTS ONLY B53-20261022-7 OWN-INSTANCE READINESS IN THE SAME TASK; B RETAINS EVERY REMAINING FULL GATE. NO NEW TASK OR SLICE CLOSE.
