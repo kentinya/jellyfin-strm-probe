@@ -13,7 +13,7 @@ Test Level: T4
 Planner / Reviewer: B
 ```
 
-最新 B 复核（2026-10-22 12:40 UTC 轮）：**FIX REQUIRED**，继续同一 Task 5.3。审查实现 `4be8e80f43d5c294326a4a72642abab46864eb64`，交付 Head `a6a6523`；完整 Python **401 PASS＋2 SKIPPED／403 项**。错误正文落盘的源码缺口已修正，真实错误旅程因新归属 plugin-full 在启动阶段实际 HTTP 503 而未达。新阻塞 **B53-20261022-7**：`restart_isolated_server` 启动本轮 18122 实例，却固定读取 18096 的 public-info，提前接受其他实例的就绪结果。只修正该既有入口的实例归属／等待，全部完整门禁仍归 B。正式 ZIP 与已匹配 C# 205 PASS、3／116 独立矩阵证据复用；未满足全部 RO，不规划新 Task、不交最终审查，详见文末。
+最新 B 复核（2026-10-22 13:17 UTC 轮）：**FIX REQUIRED**，继续同一 Task 5.3。实现 `4b4d0cca33f37308842710b2a0a70b1919cd0a58` 的就绪归属修正通过本轮完整入口验证；B53-20261022-5 的真实错误正文也已验证落盘／交接。B 新跑完整 Python **408 PASS＋2 SKIPPED／410 项**；plugin-full **FAIL（211.738 秒）**，在原生合并版本后首次 PlaybackInfo 重现源集合变化 500。该窗口确有本轮原生 post-scan 仍在执行，不能将其认定为已稳定的多版本旅程。新记录 **B53-20261022-8**，只补这一既有旅程的稳定前提和必要失败状态，保留原断言；稳定后仍失败则交 A，不授权产品源集合规则修正。其余完整门禁仍归 B；正式 ZIP、205 C# PASS 和匹配 3／116 独立矩阵证据复用。见文末最新决定。
 
 ## B 合同重判与继续决定（2026-10-21）
 
@@ -747,3 +747,46 @@ NEXT ACTION: INDEPENDENT B VERIFIES B53-20261022-7 AND RETAINS EVERY REMAINING T
 - **收尾：** 仅停止本轮项目，`development_environment.py stop` 退出 0；`jf-strm-probe-89770164c5-jellyfin-1` exit 0／无 OOM、`…-media-1` exit 0／无 OOM；未 prune／删除既有资源，未启动或改动 18096 主检出实例、生产实例与现存全部 1004 项准备库。原始日志／端口／前后容器状态见本机证据目录，隔离检出与工作区保留供 B 复核。
 - **证据与预算：** 本机 `.git/validation-evidence/4b4d0cc/developer-b53-7/INDEX.md`（含精确命令、退出码、环境、真实反馈原文、`server-log-tail.txt`、`published-ports.json`、前后容器状态、`stop.txt`、NOT RUN 清单）。本轮总时长约 45 分钟，测试侧墙钟并集约 4 分钟（三个聚焦模块 0.82 秒、编译／Node／治理／差异约 3 秒、真实重启与登录反馈约 21 秒、一次跨设备复制失败尝试约 1 分钟），约 **9%**，低于 30% 上限；未空等凑分母。
 - **Remaining In-Slice Work：** 本 Task 仍未 PASS。plugin-full 完整旅程（含此前被 503 阻断的真实错误正文旅途）、其余矩阵行、完整 C#／Python、package／scan／现存全部 1004 项 large、batch／configuration 全量、独立关键复现与 Slice Final 仍由 B 在固定最终候选上补齐或核验复用。RO-1 有部分交付；RO-2／RO-3 仍缺完整逐行与失败恢复／ColorRange 验收；RO-4 保留 Task 5.1 已接受决定。不提交 Closure Packet、不返回 SLICE READY FOR A REVIEW、不关闭 Slice。
+
+
+## B 独立复审（2026-10-22 13:17 UTC 轮）
+
+- **Decision：FIX REQUIRED。** Slice 5／Task 5.3、Task Base `f17fb1fc90dda242eeff9fac7b4f21576b5e6f94`、Contract Checkpoint `68e7bf01e7796fe9972838dfc0d8ed8283aacedd` 均不变。审查完整 `f17fb1fc90dda242eeff9fac7b4f21576b5e6f94..b75e00603f0a71f942817145393b18ee9cb8ee08`，修正实现 `4b4d0cca33f37308842710b2a0a70b1919cd0a58`；起始工作区干净、main 超前 origin/main 83 提交，治理通过。只有 plugin 验证入口／其测试及 TASK.md 比上一 B 记录改变。B 没有实施产品／工具修正、委派、推送、改写历史或规划新 Task。
+
+### 本轮先核对的交付结果
+
+**B53-20261022-7 通过本轮验证。** 新源码从本轮容器实际 8096/tcp 发布端口取得地址，配置／凭据不一致则拒绝，原超时内继续等待本轮 API。B 核对 Developer 原始端口／启动日志和真实源码摘要后，在独立干净检出／新项目 `jf-strm-probe-94721b353c` 使用已有 `JF_PROBE_PORT=18124`，完整原有 plugin CLI 确实越过原 503 启动点，完成多轮重启和后续真实 API 旅程；没有借用 18096 的就绪结果。
+
+**B53-20261022-5 的当前真实错误正文留存通过核验。** 同一次完整入口产生 **6 条实际 HTTP 500 记录**，每条含请求方法／项目／时刻／状态与非空原生正文（各 25 字符）；finally 报告真实路径及计数 6，B 打开实际 JSONL 对账并在外部稳定忽略目录保留副本。前五条依次对应缺主流首次失败、换地址失败、失败重试、失败重启后重试、Manifest 竞态；第六条为下方实际合并版本失败。正文是服务器实际返回的通用错误文本，详细异常来自同次原始服务器日志，未人为生成／重造历史首败正文。此前历史副本缺失仍如实保留。
+
+**完整 plugin 门禁仍 FAIL。** B 直接使用既有命令 `/opt/py311/python/bin/python3.11 scripts/run_isolated_plugin_integration.py`，cwd 为本轮干净检出，13:25:31.915～13:29:03.653 UTC、**211.738 秒**、退出 **1**。从前述固定正式 ZIP 的相同负载准备现有开发部署布局（Linux native 同字节补到该布局要求的子目录），没有构造 `--package` 参数或新探测入口，也不称为 package-all。最后失败文案仍是 `The primary entry did not return its own usable source after the native version merge.`，不是启动问题。
+
+真实已到达结果包括首次信任 200／0、同 SHA 换 URL 200／1、再播及地址重启复用 200／0、真实失败各 500／1、旧五字段在失败重启后保持、同目标修复后 200／1、同源共享只启动／提交 1 次、普通文件依真实路径原生委托，以及旧 STRM／Live TV／false 权限／Manifest 竞态和手动刷新控制。它们只作为该完整门禁的已到达部分结果，不能将 FAIL 套件写成 PASS，不能代替严格 Web 矩阵／截图或其余全量。
+
+### B53-20261022-8／P1：合并版本测量尚未有稳定原生前提
+
+同次日志中，13:28:56.311812775 UTC 刚开始 `Running post-scan task 1/9: SplashscreenPostScanTask`；13:28:56.490077728 插件已为新 alternate 源记录实际探测接受／地址保存／指纹提交；13:28:56.494258452 随后触发可见源集合变化保护，13:28:56.498 返回 500。异常栈明确为 `EnsureVisibleSourcesAndManifestsCurrent` → `GetPlaybackMediaSourcesAsync`，不是已知的返回主流字段匹配误拒绝。五字段／原生数据库不能因最终 HTTP 500 就被假定整体回滚。
+
+实际现有 `multiversion_and_sqlite_failure_check` 在写 alternate STRM 后只请求 RefreshLibrary、等待条目可见，便 MergeVersions／首次 PlaybackInfo；条目可见并不能证明本轮扫描及 post-scan 已收尾。**原生后处理与该失败窗口重叠是事实；它是否导致本次源集合变化仍是待验证推断。** 当前日志未记录内部比较前后完整源集合，不能断言究竟是重复 ID、数量变化还是成员移除，更不能据此弱化源集合检查。
+
+**Developer 仅在同一既有合并旅程补必要前提／交付：** 复用现有原生任务与日志的只读收尾判断，在本轮 alternate 索引／后处理真正结算后，再执行原样 MergeVersions 与首次 PlaybackInfo 断言；必要时保留该次合并响应、首次结果和可读取的原生状态／五字段后再抛原异常。不得用固定 sleep、额外播放／PlaybackInfo 预热、消费首次 500 后仅展示重试成功、放宽 200／两源及源身份断言、删掉保存／SQLite／恢复控制来完成门禁。只修改 plugin 入口及直接相关控制，不新增选择器／路由／框架或产品诊断系统，不改 C#、成功匹配、指纹和源集合保护。
+
+Developer 运行实际修改的 plugin 模块控制／语法检查与少量既有真实合并旅程反馈，明确原生收尾→合并→首次请求的时间／状态；完整 plugin-full 和其余全量仍由 B。若实际改到被 batch／configuration 使用的共享 helper，按调用影响补直接控制；否则不因 import 机械重跑无关模块。**稳定前提下仍出现同样源集合 500，交 A 裁定产品取证／修正边界，B 不把它预先认定为工具问题，也不授权改变产品不变量。** 不新增 Task 或借本项扩大到通用诊断／测试工具开发。
+
+### B 全量、证据复用及未运行
+
+- B 在本轮独立干净检出用 Python **3.11.10** 新跑完整 discovery：**410 项，408 PASS、0 FAIL、2 SKIPPED**；全部 21 项 plugin 控制包含在内，不重复聚焦。两项 skip 仍是缺省发布归档缺失的 assembly-version 控制，不计 PASS。新编译／治理／差异检查及原文、准确命令、退出、时长见索引。
+- 逐项比对实际 Git 对象与已记录输入，产品构建、C# 测试、依赖、镜像、媒体服务、Web 驱动和矩阵／包入口均未变。核验旧原始日志／退出元数据后复用 SDK **10.0.401** locked restore／Release build（0 warning／error）／format、**205 C# PASS** 与 Node；不重建未改变的产品。正式 ZIP 仍为 sourceRevision `3a7de052bf089141f76e2f60921de285bd5184c4`、build inputs `f394eabc06a7e5423adefeed0aed34b18078be80d0a7ac9143f46340bb8d98ef`、SHA-256 **`9641fe917cc8db8d36ec32c841fb968b0149890f39094adce5338a0f28dd9e37`**。
+- 原同 ZIP `MP4.P01.04`／`MKV.P01.04`／`MP4.D06` 的全部消费输入、完整冻结／重启先读状态及先前 B 实际打开的 **24 张原图摘要**再次匹配，复用原看图／独立旅程结论，不声称本轮新实播／新看图。覆盖保持 **3／116、独立关键 3／40、C 0／12**。旧其他 ZIP 六行与 package／large／configuration、Developer 聚焦运行均不升级为当前全量。
+- B 保存完整原始物理服务器日志、Docker 两服务日志、stdout、错误正文及失败上下文；从实际 Debug 物理日志独立重数 **29 次 ffprobe 启动、0 次另列 FFmpeg 转码**，包括准备及整个失败 API 套件，不能当矩阵窗口或 Web 播放计数。Console 排除了 Debug，初次在 console 搜索无匹配不等于零探测，该检查限制和后续正确物理日志计数均保留。
+- 确认完整门禁存在实际阻塞后，不盲跑无关昂贵门槛。本轮 baseline、剩余 113 个矩阵／全部 12 个 C、其余 37 个独立关键、package-all／scan-all／现存全部 1004 项 large-all／batch-suite／configuration-all 和 Slice Final **NOT RUN**，仍由 B 负责；固定行／门禁清单在本机 remaining-gates.json。后续只更新受变更影响或不能确认匹配的证据，不机械重跑 Final，不把全量交给 Developer。
+
+### RO、收尾与停止点
+
+RO-1 有正式包／隔离部分证据，RO-2／RO-3 完整视频及失败恢复／ColorRange 门槛仍不齐，RO-4 保留 Task 5.1 已接受决定。**全部 RO 未满足，不新造 Task、不提交 Closure Packet、不返回 SLICE READY FOR A REVIEW、不自行关闭。**
+
+本轮合成媒体／STRM 文件前后摘要完全相等，既有入口已解除临时版本关系、验证临时条目消失并恢复原播放地址。自有两服务正常停止、exit 0／无 OOM；只读打开停止后的两数据库 quick_check=ok，不把清理后状态冒充失败当次源集合。原有运行容器启动时间／状态未变；没有操作生产、18096 长期实例或原全部 1004 项准备库，没有 prune／删除保留资源。新检出与原始资料稳定保留在本机忽略目录，不上传。
+
+本轮提交前保守计时为测试侧 **273.4 秒／总计 1378.0 秒（19.8%）**，严格小于实际总时间 **50%**；夹具生成／启动／等待、完整 Python、完整 plugin 首败、收尾与质量检查均计入，未空等凑分母、未预借后续时间启动测试。准确命令／版本／候选、真实正文／扫描时间线、复用／未运行和时间账本见 `.git/validation-evidence/4b4d0cca33f37308842710b2a0a70b1919cd0a58/b-review-20261022T131747Z/INDEX.md`。
+
+NEXT ACTION: DEVELOPER CORRECTS ONLY THE OBSERVED NATIVE-MERGE PRECONDITION IN TASK 5.3; B RETAINS ALL FULL GATES. STABLE SOURCE-SET FAILURE GOES TO A; NO NEW TASK OR SLICE CLOSE.
