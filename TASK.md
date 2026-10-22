@@ -13,7 +13,7 @@ Test Level: T4
 Planner / Reviewer: B
 ```
 
-最新 B 复核（2026-10-22 04:18 UTC 续验轮）：正式 ZIP 已独立接受 `MKV.F02`、`MP4.C02.limited`／`full`／`unspecified` 和完整 baseline `B01`／`B02` 对应的 `MP4.D01`／`MKV.D01`，矩阵进度 **6／116**；F02 夹具阻塞保持解除，Task 仍为 **FIX REQUIRED（完整验收未齐）**。没有新增 Developer 修正项，下一步由 **B 继续同一候选的剩余完整门禁**，不把未运行门禁退交 Developer。详细证据与复用边界见文末最新 B 决定。
+最新 B 复核（2026-10-22 04:18 UTC 续验轮）：正式 ZIP 已独立接受 `MKV.F02`、`MP4.C02.limited`／`full`／`unspecified` 和完整 baseline `B01`／`B02` 对应的 `MP4.D01`／`MKV.D01`，矩阵进度 **6／116**；F02 夹具阻塞保持解除，Task 仍为 **FIX REQUIRED（完整验收未齐）**。后续无时间限制续验发现 **P01 准备入口阻塞**，修正继续同一 Task；其余完整门禁仍由 **B** 继续，不把全量退交 Developer。详细证据与复用边界见文末最新 B 决定。
 
 ## B 合同重判与继续决定（2026-10-21）
 
@@ -566,3 +566,11 @@ NEXT ACTION: B CONTINUES THE FIXED-ZIP REMAINING FULL GATES IN TASK 5.3; NO DEVE
 - **字段／原生状态／原图：** 同次 encoder **05:00:09.121**→成功保存 **05:00:09.392**→returned **05:00:12.299**，33 字段三阶段**全部精确相等**，ColorRange 均 null。新原生 Video BitRate **453588→474854**、ColorSpace **bt709→null**，并非只沿用旧流；完整重启冻结＝任何播放前只读状态。8 张原图实际打开，A 后为 MP4 UNS，三个新源嵌入计数分别 00:00:00.467→00:00:05.867、00:00:00.333→00:00:05.667、00:00:00.600→00:00:05.933；本轮新图合计 **36 张**。部署／Active／无默认触发、双服务 exit 0／无 OOM、CLEAN／无 disturbed、仅自有工作区 CLEANED 均核实。详见本轮 `c02-unspecified-fields.md`／`c02-unspecified-independent-review.json`。
 - **最终决定：FIX REQUIRED（完整验收未齐），没有新增产品 P0／P1 或 Developer 源码修正项。** 固定包累计 **6／116**：MKV.F02、MP4.C02.limited／full／unspecified、MP4.D01、MKV.D01；baseline B01＋B02 **PASS**，指定独立关键 **4／40**，全部 12 个 C 行中的 MP4.C02 三行已完成、其余 **9 行**未运行。剩余 **110 个矩阵 ID**、指定关键其余 **36 项**及 package-all／scan-all／现存全部 1004 项 large-all／plugin-full／batch-suite／configuration-all 仍由 **B** 在同 Task／同候选继续，不交回 Developer、不重新建准备库；匹配完整 C#／Python 回归证据继续复用。RO-2／RO-3 与 Slice Final 尚未齐备，不签发 Closure Packet／SLICE READY FOR A REVIEW，不自行关闭。
 - **时间与下一步：** 五次完整实机串行运行墙钟合计 **1257.692 秒**，其他检查保守计 10 秒，测试并集 **1267.692 秒**。05:02:29 实际本轮 2635.188 秒时占 **48.11%**，新增余额仅 **99.804 秒**，不足下一条完整矩阵估计 300 秒，故停止新测试、完成证据及普通本地文档提交；未空等凑分母、未重置轮次或放宽用户规则，最终值见同轮 `timing-ledger.json`。继续时沿用固定候选与未完成清单，优先 MP4.F02／其余 C02／C06 关键复现；完整安装、扫描、大库及开发部署门禁仍须逐项补齐。
+
+
+## B 无时间限制完整验收：已确认入口阻塞（2026-10-22 05:06 UTC 起）
+
+- 用户明确取消全部执行时间预算，B 已在干净真实仓库和治理 PASS 后按同一正式 ZIP／Task 5.3 继续；身份、Base、验收及审查责任不变。执行起点 `e56e181` 为纯 TASK.md 用户时间要求同步，所测可执行输入仍匹配实现 `494302f5520912201e10b0559cd883fad83789d5`。原始资料目录 `.git/validation-evidence/f71d44193e0484b8b27cfd48e01db078df61e1e5/b-unrestricted-full-20261022T050633Z/`，运行和独立审查尚在继续，本节不代表本轮完成。
+- **B53-20261022-3／P1 门槛阻塞：P01 准备入口。** 原有 `--scenario matrix --rows <全部剩余110行>` 在任何正式行播放前退出 1（墙钟 353.259 秒），错误为 “The Jellyfin database was not found at the documented path”。原生准备后 `p01_stream_surgery` 固定读取 `config/data/db.sqlite3`；同次原生启动原文明确 `/config/data/jellyfin.db`。对已停止准备库仅作 immutable／mode=ro 的结构核验：当前流表为 **MediaStreamInfos**，列为 **ItemId（TEXT）／StreamType（INTEGER）／Codec**；现入口还假设 Item_Id 二进制 GUID 与 Type 字符串。因此只替换文件名不足以修正。本次不是插件产品失败，未删除任何媒体流；原始日志／首败／正常 CLEAN 对账及 CLEANED 收尾保留。该 110 行执行没有任何正式行 PASS。
+- **同一 Task 的 Developer 受影响修正：** 仅修正既有 P01 停服手术对固定原生数据库位置、实际表／列、文本项目身份和流类型表示的适配；备份、归属、精确目标／行数、前后只读验证及必要 Video 删除／Audio 保留断言不减少。禁止猜测其他数据库、建立影子表或放宽缺流条件。修正同时覆盖首次无历史与已有历史的四类前提和每行重启后的第二次手术，MP4／MKV 共 8 行。Developer 运行该入口及 `test_isolated_playback_integration.py` 直接受影响的反馈，报告其余未运行项；无 C# 产品修正请求，不把 B 全量交给 Developer。
+- **B 最终门禁仍保持：** 独立核验修正差异／原始备份／固定原生结构和 8 个 P01 完整旅程，以及原定完整回归、矩阵、关键复现和实机门禁；若后续变更仅影响 P01，B 先比较实际函数／配置／候选输入再明确复用不受影响证据，不自动使任何未运行项 PASS。B 已在新归属工作区用原入口继续其余 **102 行**，保留这 8 行阻塞；安装、扫描、plugin、batch、configuration 和原有全部 1004 项大库仍由 B 负责。当前 Task 保持 **FIX REQUIRED**，不新造 Task、不出 Closure Packet 或 SLICE READY FOR A REVIEW、不自行关闭。
