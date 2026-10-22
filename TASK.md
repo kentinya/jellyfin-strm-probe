@@ -13,7 +13,7 @@ Test Level: T4
 Planner / Reviewer: B
 ```
 
-最新 B 决定：**FIX REQUIRED**，继续同一 Task 5.3；已核验修正和实际失败见下方 2026-10-22 13:17 UTC 复审。经核对历史 A 决定，B53-20261022-8 不再要求 Developer 先将异步准备适配内置正式工具；由 B 沿已接受的准备方法补齐当前候选的合并版本验收，原始 FAIL 与全部产品断言保留。见文末“合并版本历史决定核对与计划纠正”。
+最新 B 决定：**FIX REQUIRED（其余必要门禁待 B 补齐）**，继续同一 Task 5.3。本轮已沿 A 接受的准备方法独立验证完整合并版本／SQLite helper，并完成带明确准备适配的 plugin 完整入口，两者 PASS，B53-20261022-8 已闭合；不再要求 Developer 修改准备工具。历史 FAIL 保留，视频矩阵及其他完整门禁仍由 B 负责。见文末“合并版本补验与完整 plugin 门禁”。
 
 ## B 合同重判与继续决定（2026-10-21）
 
@@ -804,3 +804,27 @@ RO-1 有正式包／隔离部分证据，RO-2／RO-3 完整视频及失败恢复
 本次仅修正 B 测试计划及职责，不修改产品或正式工具，不运行真实 Jellyfin／完整回归；治理与差异检查不作为产品 PASS。
 
 NEXT ACTION: B COMPLETES CURRENT-CANDIDATE NATIVE-MERGE ACCEPTANCE WITH THE PREVIOUSLY ACCEPTED PREPARATION METHOD AND RETAINS ALL FULL GATES; STABLE SOURCE-SET FAILURE GOES TO A. NO DEVELOPER TOOLING PREREQUISITE, NEW TASK OR SLICE CLOSE.
+
+## B 合并版本补验与完整 plugin 门禁（2026-10-22 14:44 UTC 轮）
+
+**Decision：FIX REQUIRED（其余必要门禁待 B 补齐）。B53-20261022-8 闭合，本轮未发现需交 Developer 的新增实施修正。** 审查范围为 `f17fb1fc90dda242eeff9fac7b4f21576b5e6f94..d3b92cbb39d37782cfe8caabeb0db2290245f522`，实现仍为 `4b4d0cca33f37308842710b2a0a70b1919cd0a58`；Task／Slice／Base／合同不变。开始时工作区干净，97 项实际输入仅 TASK.md 比前轮改变；治理通过。B 未改产品、正式工具／测试或依赖，未委派、推送或改写历史。
+
+### 本次实际结果
+
+- **独立完整合并版本／SQLite helper：PASS，退出 0，151.369 秒。** 在原有 `multiversion_and_sqlite_failure_check` 等到新条目后，采用旧已接受的原生任务只读收尾判断；原函数／断言不变，不预热 PlaybackInfo、不消费 500。物理日志的 post-scan 完成于 **14:50:04.345 UTC**，扫描 Completed 于 **14:50:04.347**，随后 **14:50:04.451** 合并；第一个原始请求于 **14:50:06.384** 返回 **200／两个正确 Video 源**。完整旅程包括显式唯一选源、直接版本入口、单版本 URL／缺 SHA-1 变化、独立五字段、重启零额外探测，以及真实 SQLite 更新拒绝／只读故障及各自恢复。B 另打开实际首响应与原始结果，独立重核时序、源集合、完整主版本基线及恢复，不只采用脚本 PASS 标签。
+- **带已披露准备适配的 plugin 完整入口：PASS，退出 0，516.139 秒。** 调用原有 `main()` 全部行为，原始 main／合并／共享／并发／配置／成功断言函数内容不变；私有适配只等待合并夹具原生扫描完成，并按此前 A 已接受方法在独立刷新饱和前预热原生 FullRefresh。不是未经适配 CLI 的 PASS，也不是 package-all。完整前序操作后的合并同样成功；原生并发默认 2、保存后重启前仍 2、重启后 1 均成立，同源共享仅开始／提交各 1 次。实际饱和时独立刷新 **878 ms**，保留原 **2.5 秒**阈值；不推导冷启动 SLA。完整入口的原始结果、源码摘要、适配源码及独立原文审计均留存。
+- 本次完整入口只有 **5 条预期真实 HTTP 500**，各保留 25 字符原生正文，分别对应缺主流、换地址失败、重试、失败后重启及 Manifest 竞态；没有第六条合并失败。完整物理日志在准确运行窗口独立重数 **46 次 ffprobe 启动、0 次另列 FFmpeg 转码、0 次源集合变化保护**；独立 helper 窗口另计 **9／0／0**。这些是 API 门禁含准备的整体计数，不冒充 Web／矩阵测量窗口。
+
+上一轮未适配完整入口的 211.738 秒 FAIL、6 条真实错误、原生后处理重叠和因果未证实限制全部保留。本轮证明固定候选在已接受稳定准备下通过，**不反推旧失败的确切根因，不修改成功／保存／Manifest／源集合保护**。无需据此交 A 扩展产品修正范围，也不再形成 Developer 工具修正循环。
+
+### 输入、复用与收尾
+
+复用前一 B 专属且已停止的开发实例 `jf-strm-probe-94721b353c`／18124；媒体／STRM 原始摘要一致，不重建夹具库。消费原正式 ZIP 的同字节负载，sourceRevision `3a7de052bf089141f76e2f60921de285bd5184c4`、SHA-256 `9641fe917cc8db8d36ec32c841fb968b0149890f39094adce5338a0f28dd9e37`，未重新构建。205 项 C#、完整 Python 410 项（408 PASS＋2 既有 SKIPPED）、restore／build／format／Node 及相同输入的 3／116 矩阵证据继续按原始输入匹配复用；没有新增 Web 实播或看图声明。
+
+原生 finally 已解除版本关系、删除本次临时输入并核对条目消失、同步恢复主夹具。最终媒体／STRM 全部字节与运行前一致，配置恢复默认值；两项专属服务正常停止，exit 0／无 OOM。停止后的原生及指纹数据库 quick_check 均 ok，无遗留注入触发器或 immutable 标记。其余 **58 个容器**的 StartedAt／运行状态／镜像／完整挂载内容不变；初次只读观察把 22 项挂载数组顺序差异误判为变化，原始前后数组及首次观察失败保留，独立按完整内容排序比对后闭合，未重跑产品。未操作共享实例、生产或现存 1004 项准备库。
+
+RO-2／RO-3 仍未全部满足：矩阵保持 **3／116、独立关键 3／40、C 0／12**；剩余 113 行／37 个独立关键、完整 baseline、package-all／scan-all／全部 1004 项 large-all／batch-suite／configuration-all 及 Slice Final 尚待 B。没有将 API 合并 PASS 替代真实 Web 行，也不启动新 Task、提交 Closure Packet 或自行关闭 Slice。本轮按既有分批规则收束，不为预算空等或启动不能在已积累预算内完成的下一昂贵批次；下一轮仍由 B 继续验收。
+
+本机证据索引：`.git/validation-evidence/4b4d0cca33f37308842710b2a0a70b1919cd0a58/b-merge-acceptance-20261022T144452Z/INDEX.md`。包含精确命令／时间／退出、原始响应／正文／物理日志、适配源码、完整差异／输入、独立审计及时间账本；仅本机可读，未上传。测试占比以该索引的实际时间账本为准，严格小于本轮 50% 要求。
+
+NEXT ACTION: B CONTINUES THE REMAINING FIXED-CANDIDATE VIDEO MATRIX AND ALL SPECIFIED FULL GATES. NATIVE-MERGE BLOCKER CLOSED; NO NEW DEVELOPER TOOLING REQUEST, TASK OR SLICE CLOSE.
