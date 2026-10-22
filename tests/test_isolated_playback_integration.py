@@ -1063,6 +1063,80 @@ class FailureObservationTests(unittest.TestCase):
             self.assertNotIn("auth", saved)
             self.assertNotIn("private-test-token", result)
 
+class P01NativeDatabaseTests(unittest.TestCase):
+    """The P01 surgery must adapt to the pinned native schema, not to an assumed one."""
+
+    def _database(self, directory, *, name="jellyfin.db", item_id="00269FE5-4AF7-30BB-4084-A1725F020FD0",
+                  stream_type="INTEGER", path_column="ItemId", type_column="StreamType",
+                  raw_item_id=None):
+        connection = playback.sqlite3.connect(Path(directory) / name)
+        connection.execute(
+            f'CREATE TABLE "MediaStreamInfos" ("{path_column}" {stream_type.replace("INTEGER", "TEXT")}, '
+            f'"StreamIndex" INTEGER, "Codec" TEXT, "{type_column}" {stream_type})')
+        stored = raw_item_id if raw_item_id is not None else item_id
+        connection.execute(f'INSERT INTO "MediaStreamInfos" VALUES (?, ?, ?, ?)', [stored, 0, "h264", 1])
+        connection.execute(f'INSERT INTO "MediaStreamInfos" VALUES (?, ?, ?, ?)', [stored, 1, "aac", 0])
+        connection.commit()
+        connection.close()
+
+    def test_the_real_database_file_name_is_discovered_rather_than_assumed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            data = Path(tmp) / "config" / "data"
+            data.mkdir(parents=True)
+            self._database(data)
+            self.assertEqual(playback.native_database_path(Path(tmp) / "config"), data / "jellyfin.db")
+            (data / "db.sqlite3").write_bytes(b"")
+            with self.assertRaises(playback.BaselineError):
+                playback.native_database_path(Path(tmp) / "config")
+            (data / "db.sqlite3").unlink()
+
+    def test_a_missing_native_database_is_refused_by_name(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "config" / "data").mkdir(parents=True)
+            with self.assertRaises(playback.BaselineError) as raised:
+                playback.native_database_path(Path(tmp) / "config")
+            self.assertIn("jellyfin.db", str(raised.exception))
+
+    def test_the_pinned_text_item_id_and_integer_stream_type_are_understood(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._database(tmp)
+            connection = playback.sqlite3.connect(Path(tmp) / "jellyfin.db")
+            table = playback.native_stream_table(connection)
+            connection.close()
+            self.assertEqual(table["table"], "MediaStreamInfos")
+            self.assertEqual((table["itemColumn"], table["typeColumn"]), ("ItemId", "StreamType"))
+            self.assertEqual(playback.native_item_identity("00269FE5-4AF7-30BB-4084-A1725F020FD0"),
+                             "00269fe54af730bb4084a1725f020fd0")
+            # An integer column must be written with integers; a string would silently match nothing.
+            self.assertEqual(playback.native_stream_type_values("INTEGER", [0, 1], ["Video"]), [1])
+            self.assertEqual(playback.native_stream_type_values("INTEGER", [0, 1], ["Video", "Audio"]), [1, 0])
+            self.assertEqual(playback.native_stream_type_values("TEXT", ["Video"], ["Video"]), ["Video"])
+
+    def test_a_raw_binary_guid_item_id_is_byte_swapped_exactly(self):
+        guid = uuid.UUID("00269FE5-4AF7-30BB-4084-A1725F020FD0")
+        self.assertEqual(playback.native_item_identity(guid.bytes_le), guid.hex)
+        # A stored TEXT value is already the GUID's string form (the pinned layout); only raw bytes
+        # use the mixed-endian layout, so a hex string is never re-swapped.
+        self.assertEqual(playback.native_item_identity(guid.hex.upper()), guid.hex)
+        self.assertEqual(playback.native_item_identity(str(guid)), guid.hex)
+
+    def test_an_ambiguous_or_absent_stream_table_is_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "jellyfin.db"
+            connection = playback.sqlite3.connect(path)
+            self.assertRaises(playback.BaselineError, playback.native_stream_table, connection)
+            connection.execute('CREATE TABLE "AttachmentStreamInfos" ("ItemId" TEXT, "Codec" TEXT)')
+            connection.commit()
+            self.assertRaises(playback.BaselineError, playback.native_stream_table, connection)
+            connection.close()
+
+    def test_a_non_guid_stored_item_id_is_refused_instead_of_matched_loosely(self):
+        with self.assertRaises(playback.BaselineError):
+            playback.native_item_identity("not-an-item-id")
+        with self.assertRaises(playback.BaselineError):
+            playback.native_item_identity(b"\x00" * 8)
+
+
 class ParsedTokenTests(unittest.TestCase):
     def test_a_valid_sha1_and_size_parse_to_the_stored_values(self):
         self.assertEqual(playback.parsed_tokens("A" * 40, "4096"), ("a" * 40, 4096))

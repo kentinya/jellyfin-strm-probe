@@ -2142,70 +2142,161 @@ def native_static_stream_read(auth: str, item_id: str, head_bytes: int = 256 * 1
             "headLength": len(head)}
 
 
+# The pinned server's own database file name. Older Jellyfin layouts used ``db.sqlite3``; the
+# fixed 12.2 startup log names ``/config/data/jellyfin.db``, so both are recognised and exactly one
+# real file must exist. The name is discovered, never assumed: replacing the file name alone is not
+# enough because the stream table's columns and value representations differ as well.
+NATIVE_DATABASE_NAMES = ("jellyfin.db", "db.sqlite3")
+# The native stream table is recognised by the column pair carrying the owning item and the stream
+# type, plus the codec column the attachment table also has. Nothing is guessed from a table name.
+NATIVE_ITEM_COLUMNS = ("itemid", "item_id")
+NATIVE_STREAM_TYPE_COLUMNS = ("streamtype", "type")
+NATIVE_CODEC_COLUMNS = ("codec",)
+# ``MediaStreamType`` in the pinned server: 0 = Audio, 1 = Video.
+NATIVE_STREAM_TYPE_VALUES = {"Video": 1, "Audio": 0}
+
+
+def native_database_path(config_root: Path | None = None) -> Path:
+    """Return this run's own Jellyfin database file, or refuse when it is not there."""
+    data_directory = (config_root or (pe.WORK / "config")) / "data"
+    found = [data_directory / name for name in NATIVE_DATABASE_NAMES if (data_directory / name).is_file()]
+    require(found, f"No Jellyfin database ({', '.join(NATIVE_DATABASE_NAMES)}) was found under the owned config/data.")
+    require(len(found) == 1, f"Ambiguous native database location: {[path.name for path in found]}.")
+    return found[0]
+
+
+def native_stream_table(connection: sqlite3.Connection) -> dict:
+    """Locate the native stream table with its real column names and value representation.
+
+    The pinned database stores ``MediaStreamInfos(ItemId TEXT, StreamType INTEGER, Codec TEXT)``;
+    the lookup therefore accepts the documented column-name variants by their real position and
+    reports the representation so the delete never writes a string where an integer belongs.
+    """
+    tables = [row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")]
+    matches: list[dict] = []
+    for table in tables:
+        columns = {str(row[1]).lower(): str(row[1])
+                   for row in connection.execute(f"PRAGMA table_info(\"{table}\")")}
+        item_column = next((columns[name] for name in NATIVE_ITEM_COLUMNS if name in columns), None)
+        type_column = next((columns[name] for name in NATIVE_STREAM_TYPE_COLUMNS if name in columns), None)
+        codec_column = next((columns[name] for name in NATIVE_CODEC_COLUMNS if name in columns), None)
+        if item_column and type_column and codec_column:
+            declaration = {str(row[1]).lower(): str(row[2]).upper()
+                           for row in connection.execute(f"PRAGMA table_info(\"{table}\")")}
+            matches.append({"table": table, "itemColumn": item_column, "typeColumn": type_column,
+                            "codecColumn": codec_column,
+                            "typeAffinity": declaration.get(str(type_column).lower(), "")})
+    require(len(matches) == 1, f"Expected exactly one native stream table, found {matches} in {tables}.")
+    return matches[0]
+
+
+def native_item_identity(value: object) -> str | None:
+    """Normalise one stored item identity to the 32-character GUID hex form.
+
+    The pinned database stores the item id as TEXT (``00269FE5-4AF7-30BB-...``); an older layout
+    stored the raw binary GUID, whose first three blocks are little-endian. Both are normalised so
+    the comparison is exact and never a prefix/substring match.
+    """
+    if isinstance(value, (bytes, bytearray)):
+        raw = bytes(value)
+        require(len(raw) == 16, f"A stored binary item id must be a 16-byte GUID, found {len(raw)} bytes.")
+        return uuid.UUID(bytes_le=raw).hex
+    if isinstance(value, str):
+        text = value.strip().strip("{}").replace("-", "").lower()
+        require(re.fullmatch(r"[0-9a-f]{32}", text),
+                "A stored item id must be a GUID string or 16 raw bytes.")
+        return text
+    return None
+
+
+def native_stream_type_values(type_affinity: str, observed: list[object], kinds: list[str]) -> list[object]:
+    """Map the requested stream kinds onto the table's real stored representation."""
+    text_affinity = "CHAR" in type_affinity or "TEXT" in type_affinity
+    if text_affinity or any(isinstance(value, str) for value in observed):
+        return list(kinds)
+    require(not any(isinstance(value, (bytes, bytearray)) for value in observed),
+            "The native stream type column must be stored as an integer or text, not a blob.")
+    return [NATIVE_STREAM_TYPE_VALUES[kind] for kind in kinds]
+
+
 def p01_stream_surgery(rows: list[dict], drop_spec: dict, evidence_dir: Path, stage: str) -> dict:
     """Bounded stream removal in this run's stopped owned copy, then read-only verification.
 
-    The service is stopped first, the database file is backed up, the schema is inspected so the
-    stream table is never guessed, the item rows are matched by their real id bytes, and the
-    delete is parameterized to the target item plus the allowed stream types. After the service is
-    back up, the saved stream set is verified read-only before any playback in this stage.
+    The service is stopped first, the real database file and its WAL sidecars are backed up, the
+    schema is inspected so the stream table is never guessed, the item rows are matched by their
+    real stored identity, and the delete is parameterized to the target item plus the allowed
+    stream types in their real representation. After the service is back up, the saved stream set
+    is verified read-only before any playback in this stage.
     """
-    import base64
-
     record: dict[str, object] = {"stage": stage, "targets": []}
     run(*DOCKER, "stop", "-t", "30", pe.container_name("jellyfin"), timeout=300)
-    database = pe.WORK / "config" / "data" / "db.sqlite3"
-    require(database.is_file(), "The Jellyfin database was not found at the documented path.")
+    database = native_database_path()
+    record["databaseName"] = database.name
     backup_dir = evidence_dir / "db-backups"
     backup_dir.mkdir(parents=True, exist_ok=True)
-    backup = backup_dir / f"p01-{stage}-{uuid.uuid4().hex[:8]}.sqlite3"
+    token = uuid.uuid4().hex[:8]
     # The evidence directory sits outside the owned workspace (so cleanup keeps it); the backup is
     # therefore written with plain file IO under the same non-symlink guarantees, not through the
     # workspace-scoped pe.copy_owned guard, which must keep refusing foreign destinations.
-    require(not backup.is_symlink(), "The P01 backup path must not be a symbolic link.")
-    shutil.copy2(database, backup)
-    record["backup"] = str(backup)
-    side_files = {name: (database.parent / name).is_file()
-                  for name in ("db.sqlite3-wal", "db.sqlite3-shm")}
-    record["walSideFiles"] = side_files
+    sidecar_names = (database.name + "-wal", database.name + "-shm")
+    backups: dict[str, str] = {}
+    for name in (database.name, *sidecar_names):
+        source = database.parent / name
+        target = backup_dir / f"p01-{stage}-{token}-{name}"
+        require(not target.is_symlink(), "The P01 backup path must not be a symbolic link.")
+        if not source.is_file():
+            continue
+        shutil.copy2(source, target)
+        backups[name] = str(target)
+    record["backup"] = backups.get(database.name)
+    record["sidecarBackups"] = {name: backups.get(name) for name in sidecar_names if name in backups}
+    record["walSideFiles"] = {name: (database.parent / name).is_file() for name in sidecar_names}
     connection = sqlite3.connect(database)
     try:
         if connection.execute("PRAGMA journal_mode").fetchone()[0].lower() == "wal":
             connection.execute("PRAGMA wal_checkpoint(TRUNCATE);")
             connection.commit()
-        tables = [row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")]
-        stream_table: str | None = None
-        for table in tables:
-            columns = [row[1].lower() for row in connection.execute(f"PRAGMA table_info(\"{table}\")")]
-            if {"item_id", "codec", "type"} <= set(columns):
-                stream_table = table
-                break
-        require(stream_table, f"No single stream table with Item_Id/Codec/Type found in {tables}.")
-        record["streamTable"] = stream_table
-        raw_ids = [row[0] for row in connection.execute(f'SELECT DISTINCT Item_Id FROM "{stream_table}"')]
-
-        def match_item_id(item_guid_hex: str, raw: bytes) -> bool:
-            raw_hex = raw.hex()
-            # The .NET mixed-endian binary layout of a GUID: the first three little-endian blocks
-            # are byte-reversed relative to the string form, the last eight bytes are stored raw.
-            net_hex = b"".join([raw[3::-1], raw[5:3:-1], raw[7:5:-1], raw[9:7:-1], raw[10:]]).hex()
-            return raw_hex.lower() == item_guid_hex or net_hex.lower() == item_guid_hex
+        stream = native_stream_table(connection)
+        record["streamTable"] = stream["table"]
+        record["streamTableColumns"] = {"item": stream["itemColumn"], "type": stream["typeColumn"],
+                                        "typeAffinity": stream["typeAffinity"]}
+        item_column, type_column, table = stream["itemColumn"], stream["typeColumn"], stream["table"]
+        raw_ids = [row[0] for row in connection.execute(f'SELECT DISTINCT "{item_column}" FROM "{table}"')]
+        identities = [(raw, native_item_identity(raw)) for raw in raw_ids]
+        require(all(identity is not None for _, identity in identities),
+                "Every stored native item id must be a GUID string or 16 raw bytes.")
+        observed_types = [row[0] for row in connection.execute(f'SELECT DISTINCT "{type_column}" FROM "{table}"')]
+        record["storedStreamTypes"] = sorted({str(value) for value in observed_types})
 
         for row in rows:
-            item_guid = str(uuid.UUID(row["item"]["Id"])).replace("-", "").lower()
-            matches = [raw for raw in raw_ids if match_item_id(item_guid, raw)]
+            item_guid = uuid.UUID(row["item"]["Id"])
+            matches = [raw for raw, identity in identities if identity == item_guid.hex]
             require(len(matches) == 1,
                     f"P01 {row['id']}: expected exactly one stream row owner for the item, found {len(matches)}.")
             kinds = ["Video", "Audio"] if drop_spec[row["id"]] == "all" else ["Video"]
+            values = native_stream_type_values(stream["typeAffinity"], observed_types, kinds)
+            placeholders = ",".join("?" for _ in values)
+            item_ref = '"' + item_column + '"'
+            type_ref = '"' + type_column + '"'
+            table_ref = '"' + table + '"'
+            present = connection.execute(
+                "SELECT DISTINCT " + type_ref + " FROM " + table_ref + " WHERE " + item_ref +
+                " = ? AND " + type_ref + " IN (" + placeholders + ") ORDER BY " + type_ref,
+                [matches[0], *values]).fetchall()
+            require(len(present) == len(values),
+                    f"P01 {row['id']}: the target item does not carry every requested stream type; "
+                    f"the surgery would remove {present} instead of {values}.")
             cursor = connection.execute(
-                f'DELETE FROM "{stream_table}" WHERE Item_Id = ? AND Type IN (' +
-                ",".join("?" for _ in kinds) + ")", [bytes(matches[0]), *kinds])
-            record["targets"].append({"row": row["id"], "removedRows": cursor.rowcount, "kinds": kinds})
+                "DELETE FROM " + table_ref + " WHERE " + item_ref + " = ? AND " + type_ref +
+                " IN (" + placeholders + ")", [matches[0], *values])
+            require(cursor.rowcount > 0,
+                    f"P01 {row['id']}: the parameterized delete matched no stream row.")
+            record["targets"].append({"row": row["id"], "removedRows": cursor.rowcount, "kinds": kinds,
+                                      "storedValues": values})
         connection.commit()
     finally:
         connection.close()
-    record["walSideFilesAfter"] = {name: (database.parent / name).is_file()
-                                    for name in ("db.sqlite3-wal", "db.sqlite3-shm")}
+    record["walSideFilesAfter"] = {name: (database.parent / name).is_file() for name in sidecar_names}
     pe.compose("up")
     pe.wait_healthy()
     auth = refresh_auth()

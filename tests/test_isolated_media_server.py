@@ -108,5 +108,69 @@ class RangeSupportTests(unittest.TestCase):
         self.assertEqual(response.status, 404)
 
 
+    def test_a_special_route_answers_one_whole_file_read_per_request(self):
+        """One native probe must produce exactly one request marker, not one per Range read.
+
+        The diagnostic routes (``slow``/``delay``/``independent``) exist to hold a probe open and
+        to count real probe reads. When the range path also served them, a single ffprobe emitted
+        two ``SLOW_MEDIA_REQUEST_STARTED`` lines and the shared-probe gate misread one probe as two.
+        """
+        captured: list[str] = []
+        for header, expected_status, expected_body in (
+            (None, 200, self.body),
+            ({"Range": "bytes=5-9"}, 200, self.body),
+        ):
+            with self.subTest(header=header):
+                import contextlib
+                import io
+
+                buffer = io.StringIO()
+                with contextlib.redirect_stdout(buffer):
+                    response, payload = self.request("GET", "/slow/req-1/clip.mp4", headers=header or {})
+                captured.extend(line for line in buffer.getvalue().splitlines() if line)
+                self.assertEqual(response.status, expected_status)
+                self.assertEqual(payload, expected_body)
+        self.assertEqual(sum(line.startswith("SLOW_MEDIA_REQUEST_STARTED ") for line in captured), 2)
+        self.assertEqual(sum(line.startswith("PROBE_MEDIA_REQUEST_FINISHED ") for line in captured), 2)
+        self.assertEqual([line for line in captured if line.startswith("SLOW_MEDIA_REQUEST_STARTED ")],
+                         ["SLOW_MEDIA_REQUEST_STARTED req-1", "SLOW_MEDIA_REQUEST_STARTED req-1"])
+
+    def test_a_delay_route_keeps_its_whole_file_behaviour_for_range_requests(self):
+        import contextlib
+        import io
+
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            response, payload = self.request("GET", "/delay/0/req-2/clip.mp4",
+                                             headers={"Range": "bytes=0-15"})
+        self.assertEqual(response.status, 200)
+        self.assertEqual(payload, self.body)
+        self.assertIn("SLOW_MEDIA_REQUEST_STARTED req-2", buffer.getvalue())
+        self.assertNotIn("MEDIA_RANGE", buffer.getvalue())
+
+    def test_an_independent_route_keeps_its_whole_file_behaviour_for_range_requests(self):
+        import contextlib
+        import io
+
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            response, payload = self.request("GET", "/independent/req-3/clip.mp4",
+                                             headers={"Range": "bytes=0-3"})
+        self.assertEqual(response.status, 200)
+        self.assertEqual(payload, self.body)
+        self.assertIn("INDEPENDENT_MEDIA_REQUEST_STARTED req-3", buffer.getvalue())
+
+    def test_a_plain_file_request_still_serves_a_real_range(self):
+        import contextlib
+        import io
+
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            response, payload = self.request("GET", "/clip.mp4", headers={"Range": "bytes=0-3"})
+        self.assertEqual(response.status, 206)
+        self.assertEqual(payload, self.body[0:4])
+        self.assertIn("MEDIA_RANGE GET /clip.mp4 0-3/", buffer.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -28,6 +28,7 @@ class MediaHandler(SimpleHTTPRequestHandler):
             print(f"SLOW_MEDIA_REQUEST_STARTED {request_id}", flush=True)
             time.sleep(3)
             self.path = "/" + filename
+            self._legacy_full_response = True
             print(f"MEDIA_REQUEST {self.command} " + filename, flush=True)
             print(f"PROBE_MEDIA_REQUEST_FINISHED {request_id}", flush=True)
             return
@@ -43,6 +44,7 @@ class MediaHandler(SimpleHTTPRequestHandler):
             print(f"SLOW_MEDIA_REQUEST_STARTED {request_id}", flush=True)
             time.sleep(seconds)
             self.path = "/" + filename
+            self._legacy_full_response = True
             print(f"MEDIA_REQUEST {self.command} " + filename, flush=True)
             print(f"PROBE_MEDIA_REQUEST_FINISHED {request_id}", flush=True)
             return
@@ -52,6 +54,7 @@ class MediaHandler(SimpleHTTPRequestHandler):
             print(f"INDEPENDENT_MEDIA_REQUEST_STARTED {request_id}", flush=True)
             time.sleep(3)
             self.path = "/" + filename
+            self._legacy_full_response = True
             print(f"MEDIA_REQUEST {self.command} " + filename, flush=True)
             return
 
@@ -64,8 +67,12 @@ class MediaHandler(SimpleHTTPRequestHandler):
 
         Only one ``bytes=start-end`` interval is supported (browser MSE and ffprobe both use a
         single interval); multi-range or malformed headers fall through to the legacy full-file
-        behaviour, and the special slow/delay/independent routes keep their existing semantics.
+        behaviour. The special slow/delay/independent routes keep their existing semantics: they
+        answer exactly one whole-file read, so a single native probe still produces exactly one
+        request marker instead of one per Range read.
         """
+        if getattr(self, "_legacy_full_response", False):
+            return False
         range_header = self.headers.get("Range")
         if not range_header or self.path.startswith("/") is False:
             return False
@@ -118,12 +125,14 @@ class MediaHandler(SimpleHTTPRequestHandler):
         return True
 
     def do_GET(self) -> None:
+        self._legacy_full_response = False
         self._prepare_route()
         if self._serve_range():
             return
         super().do_GET()
 
     def do_HEAD(self) -> None:
+        self._legacy_full_response = False
         self._prepare_route()
         if self._serve_range():
             return

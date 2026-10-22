@@ -246,6 +246,56 @@ def trigger_arm_time_of_day_seconds(container: str) -> float:
     raise RuntimeError("No DailyTrigger arm line was found for this task.")
 
 
+def native_scan_state(api: base.JellyfinApi) -> dict:
+    """Return the native library scan task's own state, which owns the post-scan task sequence.
+
+    The pinned ``TaskManager`` drains its queue whenever any task completes and only executes queued
+    work from an Idle worker; queued work that is still busy at that moment is not retained. A scan
+    (with its nine post-scan tasks) therefore has to be settled before a queued batch run is
+    measured, or the queued run can be dropped by native scheduling rather than by the plugin.
+    """
+    tasks = base.request_json(api.base_url + "/ScheduledTasks", headers=api.headers, timeout=20)
+    scan = next((task for task in tasks if task.get("Key") == "RefreshLibrary"), None)
+    base.require(scan is not None, "The isolated server did not expose its native library scan task.")
+    return {"id": scan.get("Id"), "state": task_state_name(scan),
+            "lastStart": last_start(scan),
+            "lastStatus": str((scan.get("LastExecutionResult") or {}).get("Status", ""))}
+
+
+def post_scan_settled(container: str) -> bool:
+    """Whether the newest post-scan sequence in the server log has already reported completion."""
+    logs = base.run(["docker", "logs", "--tail", "4000", container], timeout=20)
+    base.require(logs.returncode == 0, "Could not read the isolated Jellyfin container logs.")
+    lines = (logs.stdout + logs.stderr).splitlines()
+    for line in reversed(lines):
+        if "All post-scan tasks completed" in line:
+            return True
+        if "Running post-scan task" in line or "Running 9 post-scan task" in line:
+            return False
+    return True
+
+
+def wait_for_native_scan_settled(api: base.JellyfinApi, container: str, timeout: int = MAX_WAIT_SECONDS) -> dict:
+    """Wait (read-only) until this server's own native scan and post-scan work has really finished.
+
+    This is a measurement precondition, not a plugin behaviour change: the isolated stop scenario
+    must not start its round while a native scan is Running, because that native task's own
+    completion drains the scheduled-task queue and can drop the queued batch run the scenario is
+    about to observe. Nothing about the native scheduler, the plugin queue or the settlement
+    assertions changes.
+    """
+    deadline = time.monotonic() + timeout
+    observed: list[dict] = []
+    while time.monotonic() < deadline:
+        state = native_scan_state(api)
+        observed.append(state)
+        if state["state"] in {"idle", "0"} and post_scan_settled(container):
+            return {"waited": len(observed) > 1, "observations": len(observed), "settled": state}
+        time.sleep(0.5)
+    raise RuntimeError(f"The native library scan and its post-scan tasks never settled before the measurement "
+                       f"window: {observed[-1] if observed else None}.")
+
+
 def wait_for_stable_idle(api: base.JellyfinApi, container: str, stable_seconds: float = 3.0, timeout: int = MAX_WAIT_SECONDS) -> dict:
     """Wait until the task is Idle and no new run entry appears for a stable period, so a queued native run that
     started right after a previous settlement is not mistaken for the old round."""
@@ -702,6 +752,12 @@ def scenario_stop(api: base.JellyfinApi, container: str, media_container: str) -
         for name, path in zip(names, paths):
             path.write_bytes(base.write_versioned_fixture(path.read_bytes(), delay_url(plain_url, 12, slow_ids[name]), sha1, len(media)))
 
+        # Measurement precondition: this round must not start while the server's own native scan (and its
+        # post-scan tasks) is still Running. The native TaskManager drains its queue on any task completion
+        # and only starts queued work from an Idle worker, so a scan finishing inside the settlement window
+        # can drop the queued batch run this scenario exists to observe. Nothing about the native scheduler
+        # or the plugin's settlement rules is changed; the round is only measured from a settled server.
+        native_settlement = wait_for_native_scan_settled(api, container)
         task = find_task(api)
         task_id = task["Id"]
         before_counts = base.media_request_counts(media_container)
@@ -830,6 +886,7 @@ def scenario_stop(api: base.JellyfinApi, container: str, media_container: str) -
             delta = after_explicit.get(slow_ids[name], 0) - before_explicit[slow_ids[name]]
             base.require(delta == 0, f"A run after settlement re-probed the already accepted source {name} (delta {delta}).")
         return {
+            "nativeSettlementBeforeRound": native_settlement,
             "stop_http_status": stop_status,
             "task_status": status_value,
             "native_completions": task_completion_events(container),

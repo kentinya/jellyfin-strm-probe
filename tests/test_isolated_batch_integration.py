@@ -307,5 +307,71 @@ class BatchScriptGuardTests(unittest.TestCase):
         self.assertEqual(started, {"abc123", "def456"})
 
 
+class NativeScanSettlementTests(unittest.TestCase):
+    """The stop scenario must measure from a settled native scan, not from a busy scheduler.
+
+    The pinned ``TaskManager`` drains its queue whenever any task completes and only starts queued
+    work from an Idle worker, so a native scan finishing inside the settlement window can drop the
+    queued batch run whose observation the scenario depends on. This is a measurement precondition
+    only: no plugin queue, native scheduler or settlement assertion is changed.
+    """
+
+    def _scan(self, *, key="RefreshLibrary", state="Running", status="Completed"):
+        return {"Id": "task-1", "Key": key, "State": state,
+                "LastExecutionResult": {"Status": status, "StartTimeUtc": "2026-10-22T05:00:00Z"}}
+
+    def _api(self):
+        return type("Api", (), {"base_url": "http://127.0.0.1:1", "headers": {}})()
+
+    def test_the_native_scan_task_is_read_by_its_key_and_not_by_name(self):
+        with patch.object(batch.base, "request_json", return_value=[self._scan()]):
+            state = batch.native_scan_state(self._api())
+        self.assertEqual(state["id"], "task-1")
+        self.assertEqual(state["state"], "running")
+        self.assertEqual(state["lastStatus"], "Completed")
+        with patch.object(batch.base, "request_json", return_value=[]):
+            with self.assertRaises(RuntimeError):
+                batch.native_scan_state(self._api())
+
+    def test_an_unsettled_post_scan_sequence_is_not_accepted_as_settled(self):
+        running = type("Logs", (), {"returncode": 0, "stdout": "Running 9 post-scan task(s)\n", "stderr": ""})()
+        with patch.object(batch.base, "run", return_value=running):
+            self.assertFalse(batch.post_scan_settled("container"))
+        finished = type("Logs", (), {
+            "returncode": 0,
+            "stdout": ("Running post-scan task 1/9: \"X\"\n"
+                       "All post-scan tasks completed after 0 minute(s) and 7 seconds\n"), "stderr": ""})()
+        with patch.object(batch.base, "run", return_value=finished):
+            self.assertTrue(batch.post_scan_settled("container"))
+
+    def test_a_still_running_native_scan_blocks_the_measurement_boundary(self):
+        with patch.object(batch, "native_scan_state", return_value={"state": "running"}), \
+                patch.object(batch, "post_scan_settled", return_value=True), \
+                patch.object(batch.time, "sleep", lambda seconds: None):
+            with self.assertRaises(RuntimeError) as raised:
+                batch.wait_for_native_scan_settled(self._api(), "container", timeout=0.2)
+        self.assertIn("never settled", str(raised.exception))
+
+    def test_a_settled_native_scan_is_returned_with_its_observation_count(self):
+        idle = {"state": "idle", "id": "task-1", "lastStatus": "Completed", "lastStart": "x"}
+        with patch.object(batch, "native_scan_state", return_value=idle), \
+                patch.object(batch, "post_scan_settled", return_value=True):
+            settled = batch.wait_for_native_scan_settled(self._api(), "container", timeout=5)
+        self.assertFalse(settled["waited"])
+        self.assertEqual(settled["settled"], idle)
+        self.assertGreaterEqual(settled["observations"], 1)
+
+    def test_the_stop_scenario_waits_for_settlement_before_its_own_round_starts(self):
+        source = (ROOT / "scripts" / "run_isolated_batch_integration.py").read_text(encoding="utf-8")
+        stop_body = source[source.index("def scenario_stop("):source.index("def scenario_sharing(")]
+        settle_at = stop_body.index("wait_for_native_scan_settled(")
+        start_at = stop_body.index('api.request_response("/ScheduledTasks/Running/" + task_id')
+        self.assertLess(settle_at, start_at)
+        self.assertIn("nativeSettlementBeforeRound", stop_body)
+        # The settlement rules the scenario asserts must be untouched.
+        for recovery in ("entries_after >= 2", "new_probe_during_settlement", "current_round_result"):
+            self.assertIn(recovery, stop_body)
+
+
 if __name__ == "__main__":
     unittest.main()

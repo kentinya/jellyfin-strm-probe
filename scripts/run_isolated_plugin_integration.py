@@ -36,6 +36,9 @@ FIXTURE = ROOT / "artifacts" / "dev-env" / "strm" / "Environment Fixture.strm"
 CONFIGURATION_FILE = ROOT / "artifacts" / "dev-env" / "config" / "plugins" / "configurations" / "Jellyfin.Plugin.StrmProbeOptimizer.xml"
 PLUGIN_LOGGER = "Jellyfin.Plugin.StrmProbeOptimizer.Services.StrmPlaybackOptimizer"
 MAX_WAIT_SECONDS = 90
+# The ordinary-media control's real file inside the isolated regular-media library. Its display
+# name is owned by Jellyfin's metadata providers and can change, so the path is the stable identity.
+ORDINARY_MEDIA_PATH = "/media/local/fixture.mp4"
 
 # Well-formed JSON bodies whose values are invalid for the core configuration. Each must be rejected
 # without changing the effective configuration or the persisted file.
@@ -55,6 +58,18 @@ def run(command: list[str], *, timeout: int = 120) -> subprocess.CompletedProces
 def require(condition: bool, message: str) -> None:
     if not condition:
         raise RuntimeError(message)
+
+
+def raw_error_body(error: HTTPError) -> str:
+    """Return a native HTTP error's own body text, which is the real reason for a rejection.
+
+    Only the server's message is kept: the request URL and any Authorization header never enter
+    the evidence, so no signed address, token or cookie is retained.
+    """
+    try:
+        return error.read().decode("utf-8", "replace")[:4000]
+    except (OSError, ValueError):
+        return ""
 
 
 def deploy_plugin() -> dict[str, object]:
@@ -192,6 +207,9 @@ class JellyfinApi:
         self.identity = 'MediaBrowser Client="STRM Probe Optimizer local validation", Device="local-test", DeviceId="strm-probe-tests", Version="0.1.0"'
         self.user_id = ""
         self.headers: dict[str, str] = {}
+        # The last native PlaybackInfo error body, kept as the real failure reason for the run's
+        # evidence. It is never written into a success result and contains no request URL.
+        self.last_error_body: str = ""
         self.login()
 
     def login(self) -> None:
@@ -302,6 +320,20 @@ class JellyfinApi:
         require(len(matches) == 1, f"Expected exactly one isolated library item named {name!r}.")
         return matches[0]
 
+    def library_item_by_path(self, path: str, fields: str = "MediaSources,MediaStreams,Path") -> dict:
+        """Locate a library item by its own file path, which survives native display-name changes.
+
+        The isolated regular-media fixture kept its path ``/media/local/fixture.mp4``, but Jellyfin's
+        metadata providers renamed the display name to ``Substitute Fixture``. A name lookup is
+        therefore not a stable identity for ordinary media; the exact path is.
+        """
+        query = urlencode({"UserId": self.user_id, "Recursive": "true", "Limit": "1000", "Fields": fields})
+        result = request_json(self.base_url + "/Items?" + query, headers=self.headers, timeout=20)
+        matches = [item for item in result.get("Items", []) if str(item.get("Path") or "") == path]
+        require(len(matches) == 1,
+                f"Expected exactly one isolated library item at the real path {path!r}, found {len(matches)}.")
+        return matches[0]
+
     def item_details(self, item_id: str) -> dict:
         query = urlencode({"UserId": self.user_id, "Fields": "MediaStreams,Path"})
         return request_json(self.base_url + f"/Items/{item_id}?" + query, headers=self.headers, timeout=20)
@@ -332,7 +364,14 @@ class JellyfinApi:
             with urlopen(request, timeout=timeout) as response:
                 return response.status, json.load(response)
         except HTTPError as error:
-            return error.code, {}
+            # The native error body is real evidence for a rejected playback: keeping it lets a
+            # failure be reported by its own message instead of an empty object.
+            self.last_error_body = raw_error_body(error)
+            try:
+                payload = json.loads(self.last_error_body)
+                return error.code, payload if isinstance(payload, dict) else {}
+            except (ValueError, TypeError):
+                return error.code, {}
 
     def get_video_stream(self, item_id: str) -> tuple[int, bytes]:
         query = urlencode({"static": "true"})
@@ -355,7 +394,12 @@ class JellyfinApi:
             with urlopen(request, timeout=75) as response:
                 return response.status, json.load(response)
         except HTTPError as error:
-            return error.code, {}
+            self.last_error_body = raw_error_body(error)
+            try:
+                payload = json.loads(self.last_error_body)
+                return error.code, payload if isinstance(payload, dict) else {}
+            except (ValueError, TypeError):
+                return error.code, {}
 
     def saved_stream_snapshot(self, item_id: str) -> dict:
         query = urlencode({"UserId": self.user_id, "Fields": "MediaStreams"})
@@ -763,11 +807,15 @@ def delegated_playback(api: JellyfinApi, container: str, item_id: str, expected_
 
 
 def ordinary_media_delegation_check(api: JellyfinApi, container: str) -> dict[str, object]:
-    item = api.named_library_item("fixture")
+    item = api.library_item_by_path(ORDINARY_MEDIA_PATH)
+    require(item.get("Path") == ORDINARY_MEDIA_PATH,
+            "The ordinary-media control did not resolve to its real regular-media file path.")
     result = delegated_playback(api, container, item["Id"])
     require(result["http_status"] == 200 and result["has_media_source"] and result["has_video"], "Ordinary local media did not return its native playback source.")
     require(result["source_path_is_local"], "Ordinary local media did not retain its local path.")
     require(not result["plugin_events"], "The plugin intercepted ordinary local media.")
+    result["item_path"] = item.get("Path")
+    result["display_name_changed"] = item.get("Name") != "fixture"
     return result
 
 
