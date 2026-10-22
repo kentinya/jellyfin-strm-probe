@@ -13,7 +13,7 @@ Test Level: T4
 Planner / Reviewer: B
 ```
 
-最新 B 复核（2026-10-22 04:18 UTC 续验轮）：正式 ZIP 已独立接受 `MKV.F02`、`MP4.C02.limited`／`full`／`unspecified` 和完整 baseline `B01`／`B02` 对应的 `MP4.D01`／`MKV.D01`，矩阵进度 **6／116**；F02 夹具阻塞保持解除，Task 仍为 **FIX REQUIRED（完整验收未齐）**。后续无时间限制续验发现 **P01 准备入口阻塞**，修正继续同一 Task；其余完整门禁仍由 **B** 继续，不把全量退交 Developer。详细证据与复用边界见文末最新 B 决定。
+最新 B 复核（2026-10-22 无时间限制续验轮）：**FIX REQUIRED**。固定 ZIP 的 package-all、现存全部 1004 项 large-all，以及同源码开发部署的 configuration-all 已独立通过；矩阵累计接受仍为 **6／116**。P01 原生数据库适配、scan 共享探测计数及 plugin／batch 完整旅程存在下文阻塞，修正继续同一 Task。Developer 只做受影响反馈，完整门禁仍归 **B**；未达到 Slice 最终审查条件。详细原因、场景、复用边界与下一步见文末最新 B 决定。
 
 ## B 合同重判与继续决定（2026-10-21）
 
@@ -574,3 +574,54 @@ NEXT ACTION: B CONTINUES THE FIXED-ZIP REMAINING FULL GATES IN TASK 5.3; NO DEVE
 - **B53-20261022-3／P1 门槛阻塞：P01 准备入口。** 原有 `--scenario matrix --rows <全部剩余110行>` 在任何正式行播放前退出 1（墙钟 353.259 秒），错误为 “The Jellyfin database was not found at the documented path”。原生准备后 `p01_stream_surgery` 固定读取 `config/data/db.sqlite3`；同次原生启动原文明确 `/config/data/jellyfin.db`。对已停止准备库仅作 immutable／mode=ro 的结构核验：当前流表为 **MediaStreamInfos**，列为 **ItemId（TEXT）／StreamType（INTEGER）／Codec**；现入口还假设 Item_Id 二进制 GUID 与 Type 字符串。因此只替换文件名不足以修正。本次不是插件产品失败，未删除任何媒体流；原始日志／首败／正常 CLEAN 对账及 CLEANED 收尾保留。该 110 行执行没有任何正式行 PASS。
 - **同一 Task 的 Developer 受影响修正：** 仅修正既有 P01 停服手术对固定原生数据库位置、实际表／列、文本项目身份和流类型表示的适配；备份、归属、精确目标／行数、前后只读验证及必要 Video 删除／Audio 保留断言不减少。禁止猜测其他数据库、建立影子表或放宽缺流条件。修正同时覆盖首次无历史与已有历史的四类前提和每行重启后的第二次手术，MP4／MKV 共 8 行。Developer 运行该入口及 `test_isolated_playback_integration.py` 直接受影响的反馈，报告其余未运行项；无 C# 产品修正请求，不把 B 全量交给 Developer。
 - **B 最终门禁仍保持：** 独立核验修正差异／原始备份／固定原生结构和 8 个 P01 完整旅程，以及原定完整回归、矩阵、关键复现和实机门禁；若后续变更仅影响 P01，B 先比较实际函数／配置／候选输入再明确复用不受影响证据，不自动使任何未运行项 PASS。B 已在新归属工作区用原入口继续其余 **102 行**，保留这 8 行阻塞；安装、扫描、plugin、batch、configuration 和原有全部 1004 项大库仍由 B 负责。当前 Task 保持 **FIX REQUIRED**，不新造 Task、不出 Closure Packet 或 SLICE READY FOR A REVIEW、不自行关闭。
+
+## B 无时间限制续验最终决定（2026-10-22，FIX REQUIRED）
+
+```text
+Reviewed Range: f17fb1fc90dda242eeff9fac7b4f21576b5e6f94..b9f804db6c7e7cb1402bbf77a7450bf56eacf1d8
+Implementation Candidate: 494302f5520912201e10b0559cd883fad83789d5
+Formal ZIP SHA-256: a8a57cad5587980a9451f2cd0a74b06f259537498feb56de1f2f22b8e4e86f54
+Decision: FIX REQUIRED
+```
+
+用户已取消本轮时间限制；停止依据为已确认的必要门禁阻塞，不再按测试比例或旧预算截断。用户未授权代理委派，本轮没有启动其他代理，也未由 B 实施插件或测试源码修正。Slice／Task／Base／合同不变；本节取代上节“仍在继续”的运行状态，历史首败及尝试不改写。
+
+### 原始门禁与独立核验
+
+| 必要门禁 | 本轮结果 | 原因、实际场景与需求判断 |
+|---|---|---|
+| 完整 C#／Python／静态 | 匹配复用 | 已核对实现后继只改 TASK.md、可执行／测试／依赖输入未变，复用 03:43 UTC 轮 locked restore／Release build 0 warning／error、format、C# 205 passed；Python 3.11.10 干净归档 discovery 364＝362 passed＋2 个既有归档缺包 SKIPPED，及编译／Node。skip 不计 PASS。 |
+| baseline B01＋B02 | PASS，匹配复用 | 沿用前轮同 ZIP 全部首次信任／再播／重启先只读后播放及已查看截图，不机械重跑。 |
+| 剩余 110 行 matrix | FAIL（准备入口） | 353.259 秒、退出 1；B53-20261022-3 原生数据库路径／schema 不符，正式行开始前失败。不是插件探测失败，未移除任何流，没有新增接受行。 |
+| 排除八条 P01 的 102 行续跑 | NOT RUN（未完整完成） | B 在其他完整门禁已失败后主动 SIGINT 结束续跑，1112.666 秒、子进程 -2；原有 finally 完成归档、CLEAN 对账及 CLEANED。部分观察和六张已查看的 MP4.P02.01 原图缺完整冻结／重启汇总，全部不升级 PASS，也不是自然产品 FAIL。 |
+| 同 ZIP package-all | PASS | 383.675 秒、退出 0。11 类非法包拒绝且保护已有安装；干净安装 Active、8 文件精确匹配；首次信任 0、同 SHA 换址真实探测 1 并保存／提交、重启 0；升级、备份恢复／拒绝及 disable／remove／reinstall 重查通过。原生 MP4／MKV 读取与旧包 2 秒烟测通过，只证明原包门禁，不替代至少 5 秒矩阵。三张配置原图已打开；原生 Web console 噪声保留，不称控制台无错。 |
+| 同 ZIP scan-all | FAIL | 正式重试 462.353 秒、退出 1：共享场景将两次 HTTP Range 读取误计为两次探测，同次原生实际只有一次。后续停止／恢复段未运行，见 B53-20261022-4。首次 B 包装器误在证据目录预放元数据，0.473 秒被空目录守卫拒绝、未创建实例；保留首败，不归咎 Developer。 |
+| 同 ZIP large-all，全部 1004 项 | PASS | 504.648 秒、退出 0。复用原已停止准备库到本轮新副本、不重建／截取。首次信任 1004／探测 0，未变 0；增量 need／calls／success＝16／16／16。真实查询阶段停止、在途停止收尾、剩余两项恢复及随后未变 0 通过。四个新增缺 Video 对照使支持源变为 1008；任何重启后 PlaybackInfo 前，全部 1008 个五字段行及原生源身份摘要精确相等，随后选播 16 源无额外探测。 |
+| plugin-full | FAIL，首败未稳定独立重现 | 首次 216.622 秒、退出 1：原生合并版本后首次 PlaybackInfo 500，源集合保护报变化。完整重跑 186.017 秒、退出 1，先被普通文件显示名定位失败阻断。同一已有 multiversion helper 前段独立复现返回 200／两个正确源／Video／路径正确；33.203 秒诊断退出 0 不代表完整门禁 PASS，见 B53-20261022-5。 |
+| batch-suite | FAIL | 137.671 秒、退出 1。发现／定时／首信任／变化／未变段完成；停止收尾后预期排队轮未实际进入，只有一次 Execute。停止轮 Cancelled、已开始两项成功收尾，未在收尾中启动新探测；后续套件未运行。见 B53-20261022-6，不预判插件协调器缺陷。 |
+| configuration-all | PASS（完整独占重试） | 初次 136.718 秒失败保留：原生 Web chunk 加载失败伴随 ERR_NETWORK_CHANGED，实际拒绝保存反馈与旧值保护正确。停止其他验收项目后，原入口／源码／断言不变独占重试 276.911 秒、退出 0；19 个浏览器目录、57 张原图逐张打开，全部配置／原生任务场景及配置／触发器恢复 verified。只沿用已有精确原生 bundle 噪声分类，无新忽略规则。 |
+
+配置完整覆盖保存／重启、失效库、丢响应／提交前失败／服务器拒绝、并发与数字边界、读配置／读库失败恢复、旧范围、原生部分／全部库、关闭播放检查仍可批量及禁用／恢复；没有把首次 chunk 失败改写为 PASS。独占重试未出现同类网络变化错误；并行 Docker 网络变化是首败原因推断，不冒充已经独立证明的产品根因。
+
+大库资源另列实测，不把 ID 集合成本藏为常量：310 个资源样本、三次计划重启间隙，Jellyfin RSS 峰值 526,024,704 字节、媒体服务 24,489,984、编排进程 109,461,504，全部观测 OOM kill＝0。首次候选查询分配 5,000,840 字节、候选 ID 集合实测容量 62,728 字节、8 次完整对象分批读取；只证明本机固定规模，不承诺任意大库常量内存。原准备库 **1170 文件前后完整摘要完全相等**。副本 `artifacts/package-env/runs/run-20261022-053354-a566970c` 两服务 exit 0／无 OOM，STOPPED AND RETAINED；原全部 1004 项保留。
+
+### 同一 Task 的必要修正与范围
+
+**B53-20261022-3／P1：** 上节 P01 数据库适配修正保持有效。开发反馈限直接相关 playback 模块、编译与少量完整缺 Video 旅程；覆盖真实 TEXT item 身份、INTEGER StreamType、实际数据库及 WAL 备份／精确删除／只读核验，不能只换文件名。八行和二次缺流完整验收仍归 B。
+
+**B53-20261022-4／P1 验收入口：HTTP 请求不能等同实际探测。** scan-all 既有 `shared_probe_round` 要求同一 request ID 的 start 计数 1。实际 ffprobe 先请求 0–25178，再请求 48–25178，均为 206；原生只有一次 started／一次 accepted、calls 1、地址保存及指纹提交，播放明确 joined running。共享媒体服务现把 slow／delay 重写为普通文件后进入 Range 路径，延迟施加到多次读取；不能据此报告插件“双探测”。允许仅修正既有 HTTP 特殊路径兼容或门禁实际探测观察，仍须证实且断言只有一次真正探测、成功保存／共享／指纹正确；不能允许两次真正探测。Developer 运行实际改动直接影响的 media_server／scan 及共享服务直接消费者控制、编译与少量共享场景反馈，不增加控制 API／路由框架。
+
+**B53-20261022-5／P1 完整旅程缺口：普通文件定位与版本合并前提。** 原生只读核实 `/media/local/fixture.mp4` 仍存在、身份稳定，显示名已为 `Substitute Fixture`，`named_library_item("fixture")` 查不到；名称变化原因未定。允许既有 plugin-full 按实际普通文件路径／源身份唯一定位并核验归属，与 D04 方法一致，不改路径／手造对象来避开委托断言。合并后 500 首败保留；同一 native MergeVersions／初次 PlaybackInfo 独立前段返回 200，不抹掉完整失败或宣称根因已定。反馈先观察实际可见源／Manifest 稳定性和错误原文，再完成原旅程；不能删源集合保护、吞掉 500 或伪造重试成功。原 `playback_info` 丢弃 HTTP 错误正文，观察器保存的 `{}` 不能称为完整原始 500 body。只补必要前提／定位／同次错误留存；证据若要求超出 A 已授权结果匹配边界的产品变化，先交 A。
+
+**B53-20261022-6／P1 完整门禁缺口：原生排队轮与扫描收尾干扰。** 同次日志显示定时器约 05:25:23 触发、05:25:24.337 重设次日；另一个 Scan Media Library 于 05:25:24.062 完成，插件停止轮至 05:25:43.772 才 Cancelled。已核验固定原生源码摘要：TaskManager 在任一任务完成时排空队列，仅 Idle worker 执行，仍忙的出队项不保留。这与丢失后续轮吻合，是有源码依据的原因推断，尚非完整运行因果证明。允许既有 batch 停止场景在测量前等待自己的原生扫描／post-scan 真正结算，保留重复手动请求 HTTP 状态和实际定时／轮次时序，再取证验证；不新增插件队列、不改原生调度器、不放宽收尾前不得启动新轮／探测，也不删除后续轮和逐源指纹结算断言。直接反馈为已有 batch Python 模块、编译与该完整停止旅程；稳定前提下若仍需产品／合同变化，交 A。
+
+上述只恢复既定行为门禁，不另造 Task、通用证据系统或治理工具。Developer 根据实际修改文件运行直接受影响控制并报告省略项；不存在单独的 plugin Python 测试模块，不编造 discovery 命令。完整 C#／Python、116 行、独立关键 40 项、12 个 C 行及 package／scan／1004 large／plugin／batch／configuration 最终门禁仍归 B。新候选核对代码／工具／配置／夹具／产物输入，改变输入的相关证据重新获取；只有匹配证据才复用，不机械重跑 Final，不将全量退交 Developer。
+
+### 审查、证据与停止点
+
+- 已保存并复核真实完整 Base..Head 差异、文件清单和后继输入。有界 ColorRange 缺失读回仅在同次编码器＝成功保存后允许，其余字段、成功保存／源／地址／Manifest／条件提交保护保留，诊断受 DetailedLog 默认关闭控制。已确认脚本前提／计数阻塞，没有据不稳定合并首败新增无依据 C# 修正。
+- 正式包验收为上述固定 ZIP；plugin／batch／configuration 按原入口使用同源码开发部署，DLL SHA-256 `57b7fa9b14577acd211c8896ba4ee9e6b0681173bebbd562a0dbc1bf92d1e5c0`，区别于 RID 发布包。独立检出仅有隔离网络 IPAM 环境差异，精确 diff 保留，产品／测试源码未改。本轮资源按真实项目归属正常停止，原有共享／生产实例未操作。
+- 本机证据索引：`.git/validation-evidence/f71d44193e0484b8b27cfd48e01db078df61e1e5/b-unrestricted-full-20261022T050633Z/INDEX.md`，含精确命令／退出／墙钟、首败与重跑、原始服务日志／HTTP／原生状态、实际查看原图摘要、大库全部行独立比对、源库前后清单、native queue 源码摘要和完整差异。不是远程可访问证据，不上传原始日志／数据库／凭据。
+- **最终 FIX REQUIRED。** 接受规范矩阵仍为 **6／116**、独立关键 **4／40**、C 行 **3／12**；中断的 102 行不补计。RO-1 的包／环境证据已补充，RO-2／RO-3 仍缺完整场景／恢复证明，RO-4 保留 Task 5.1 已接受决定。不具备 Closure Packet／SLICE READY FOR A REVIEW 条件，不自行关闭。仅提交 B 决定，不推送／改历史，修正继续同一 Task。
+
+NEXT ACTION: DEVELOPER CORRECTS ONLY THE DOCUMENTED TASK 5.3 ENTRY/PRECONDITION BLOCKERS; INDEPENDENT B RETAINS ALL FINAL GATES; REFER PRODUCT/SCOPE CHANGES TO A.
