@@ -13,6 +13,8 @@ Test Level: T4
 Planner / Reviewer: B
 ```
 
+最新 B 复核（2026-10-22 03:43 UTC 轮）：F02 夹具阻塞已解除，正式 ZIP 的 `MKV.F02` 独立完整旅程通过；Task 仍为 **FIX REQUIRED（完整验收未齐）**。本轮没有新增 Developer 修正项，下一步由 **B 继续同一候选的剩余完整门禁**，不把未运行门禁退交 Developer。详细证据与复用边界见文末最新 B 决定。
+
 ## B 合同重判与继续决定（2026-10-21）
 
 B 已检查真实干净仓库、运行治理检查，并核对 A 已提交合同 `68e7bf01e7796fe9972838dfc0d8ed8283aacedd`。决定 **CONTINUE WITH ADJUSTED SCOPE**：继续同一 Task 5.3／Base，保留 B FIX REQUIRED 及全部未完成行，按下方更新范围实施；不是产品 PASS。原 A 交接和 B 审查历史保留于上述合同及 `76adf423b70649624a75d6830482fc3f1ca70bba:TASK.md`。
@@ -508,3 +510,19 @@ Decision: FIX REQUIRED
 - **候选包：** 测试包 `package-tested/` 从干净 `78063d3` 构建，sourceRevision `78063d38b10f5fc23c908cba36a39d3ee306ed45`，ZIP SHA-256 `312435b8cb66334ee4b6e2accea096968afdd6c7de9fa9fc70444bf09397cdec`；最终 HEAD 包 `package/` sourceRevision `494302f5520912201e10b0559cd883fad83789d5`，ZIP SHA-256 `a8a57cad5587980a9451f2cd0a74b06f259537498feb56de1f2f22b8e4e86f54`，尚未作为新实机候选运行。最终包与测试包之间的 C# 源码、Python 可执行逻辑和测试输入一致，差异仅为构建来源标识及 docstring／测试类位置；B 的最终门禁应使用最终包重新核验。
 - **证据与预算：** `.git/validation-evidence/78063d38b10f5fc23c908cba36a39d3ee306ed45/developer-f02-fix/`，含 `DEVELOPER-RUN-NOTE.md`、`run-mp4-f02/` 原始 JSON／服务器与媒体日志／9 张截图、测试包与最终包、fixture ffprobe 原文及命令。本轮真实 F02 运行前后均无其他包入口并行；容器正常退出 0、无 OOM、工作区 CLEAN、对账 CLEAN；生产实例与现存全部 1004 项准备库未操作。本轮从 03:15:44Z 开始；测试墙钟并集约 8.5 分钟（其中唯一必需的真实 F02 完整旅程 417 秒，92 项聚焦测试 0.10 秒，受控截断核验约 1.5 分钟），未运行全量、未空等凑分母；精确命令与时序见证据目录。
 - **Remaining In-Slice Work：** `MKV.F02` 的真实失败／恢复旅程、其余 P／C／D／F 行、完整 116 行、C02／C06 三阶段、baseline、完整 C#／Python、package／scan／1004 large／plugin／batch／configuration、B 独立复现和 Slice Final 均仍由 B 完成或核验；本轮只证明修正后的 F02 输入前提及 MP4 完整失败恢复行，不覆盖 MKV 或整个矩阵，不提交 Closure Packet／SLICE READY FOR A REVIEW，不关闭 Slice。
+
+
+## B 独立复核决定（2026-10-22 03:43 UTC 轮，FIX REQUIRED：完整门禁未齐）
+
+- **Reviewed Range：** `f17fb1fc90dda242eeff9fac7b4f21576b5e6f94..46a53d3777d4b52392a3c09967bd947ac3a188c7`，最新实现 `494302f5520912201e10b0559cd883fad83789d5`。开始时工作区干净、main 超前 origin/main 65 提交，治理检查通过；已读必读文档／B 经验并审查完整累计差异及上次 B 后增量。Slice 5／Task 5.3、两个 Base、Contract Checkpoint 不变，无范围变更／新 Task。
+- **Decision：FIX REQUIRED，仅因完整验收未齐；本轮没有新增 Developer 源码修正项。** 接受本次 F02 必要修正，解除 **B53-20261022-2／P1**：改为实际 A 的前 512 字节，并在生成前提核验固定原生 ffprobe 失败且无 Video；如实计算字节身份。原失败、旧基线、同 URL 修复、再播和重启断言未放宽，没有要求插件拒绝所有截断文件。下一步是 B 继续余下门禁，不交回 Developer 代跑全量。
+- **固定正式候选：** 最终 ZIP sourceRevision `494302f5520912201e10b0559cd883fad83789d5`，SHA-256 `a8a57cad5587980a9451f2cd0a74b06f259537498feb56de1f2f22b8e4e86f54`；build inputs `f394eabc06a7e5423adefeed0aed34b18078be80d0a7ac9143f46340bb8d98ef`、依赖锁 `2a523bb1f62b9c72bebb5bcc1f81cf78c78b8973fb42f6aab5c28aa355eeb00e` 与当前实际输入一致，9 个归档条目摘要匹配；实现后到审查 Head 只改 TASK.md。后续纯审查文档不重建 ZIP、不机械重跑匹配门槛。
+- **Developer 交付核对：** MP4.F02 原始记录实际为 0／1／1／0／0，失败 HTTP 500、旧指纹保留，修复同 URL 后正常播放和重启完整读回相等；已读原始响应／日志／原生全字段／五字段，逐张打开全部 9 张原图，恢复编码器与成功保存 33 字段完全相同，返回仅 ColorRange tv→null。`78063d3` 与最终播放入口去 docstring 后执行 AST 相同。但报告引用的 `package-tested/` 实际为空，旧 ZIP `312435b8...` 无法重新打开，且它与正式 ZIP 不同；该 MP4 反馈只支持聚焦修正事实，**不计当前同 ZIP 全矩阵 PASS**。P4B 无嵌入时间码，推进依据为配对原始媒体钟，不把静态标记图写成可见时间码推进。
+- **B 独立真实复现：MKV.F02 PASS。** 仅使用已有 `--scenario matrix --rows MKV.F02`、上述正式 ZIP、新归属工作区 `run-20261022-035310-5d1e5543` 与本机 18115；无并行包入口／调试器／预热变化后 PlaybackInfo。退出 0，runner 413.2 秒、完整墙钟 **414.864 秒**。首次信任 0 探测、推进 5.393401 秒；实际 512 字节损坏体 SHA-1 `cf53c2f1bedfd78de3d6a9082584e739c11b42a1`，已独立逐字节核对为真实 A 前缀并保留样本。失败窗口目标 ffprobe +1、原生日志 `streams and format are both null`、HTTP 500／无推进／错误截图；旧 SHA-1 `614ce5852a91459226d17bec49a3054af0edec7a`／Size 1669928 保持，旧原生流仍在，不宣称原生数据库回滚。媒体服务实际返回 `0-511/512`。
+- **同 URL 恢复与重启：** 有效 MKV P4B 实际 SHA-1 `3231b9c7405ef41f73483034c61f0c43026d3e0b`／Size 213145；恢复探测 +1、保存 Video＋Audio、编码器＝成功保存全部 33 字段、返回仅缺 ColorRange，新五字段提交。恢复／再播／重启后分别推进 **5.318248／5.280757／5.278577 秒**、解码 87／89／91 帧，后两窗各 0 探测；重启在播放前只读完整源／流／地址、STRM 摘要、五字段与 probe count 均与冻结快照相等。独立重数目标原始 ffprobe 共 3 次（含准备 1 次），本轮自身 9 张原图全部打开：首次 MKV A 计数推进、失败原生错误框、恢复／再播／重启均 MKV P4B 无错误。连同 Developer 图共实际查看 18 张。
+- **完整回归由 B 新跑：** SDK 10.0.401 locked restore／Release build（0 warning／error）／format 通过，C# **205 passed／0 failed／0 skipped**。Python **3.11.10** 在独立干净 Git archive 检出发现 **364 项，362 passed、2 SKIPPED**；两项 assembly-version 控制因无发布归档跳过，不计 PASS。compileall、Node 语法通过；精确 argv／cwd／版本／时序和原始日志保留。未修改任何可执行源码。
+- **正常收尾：** 当前正式 ZIP 部署负载匹配、插件 Active、原生任务默认无触发。双服务正常退出 0／无 OOM，实例对账 CLEAN／无 disturbed 项，现有入口仅清理本轮工作区 CLEANED；实际夹具字节与原始证据已留在外部忽略目录。生产／共享 dev-env／现存全部 1004 项准备库未操作，未推送或改写历史。
+- **剩余完整门禁仍归 B：** 当前正式 ZIP 已接受 **1／116 行（MKV.F02）**，其余 **115 行含 MP4.F02**、baseline B01／B02、其余独立关键旅程及全部 12 个 C 行、同包 package／scan／现存全部 1004 large、plugin／batch／configuration 本轮 NOT RUN。旧其他 ZIP 的 P06／P08／D04 等保留历史，不自动提升；下一实际 B 工作轮优先同 ZIP MP4.F02 与 C02／C06，按已实现入口串行分批补齐。Developer 仅在出现新的具体受影响修正项时跑该项直接反馈；B 的完整门槛不下放。RO-2／RO-3 与 Slice Final 未齐，RO-4 保留 Task 5.1 既有决定；不提交 Closure Packet／SLICE READY FOR A REVIEW，不关闭 Slice。
+- **证据与测试比例：** `.git/validation-evidence/46a53d3777d4b52392a3c09967bd947ac3a188c7/b-review-20261022T034312Z/INDEX.md`；包含完整差异／输入清单、全回归、独立运行命令、原始服务器与媒体日志、响应／完整状态、真实夹具、18 张图查看记录、复用限制和收尾。04:01:39 UTC 检查点实际总时间 **1107.198 秒**，全回归与真实运行的测试墙钟并集加保守检查额度为 **495.065 秒（44.71%）**。当时已发生时间余额仅 117 秒，不足下一完整实播旅程，停止启动新测试并保留本轮结果；未空等凑分母、未预借未来审查时间。后续报告／提交只增加实际非测试工作，最终精确比例见 `timing-ledger.json`。
+
+NEXT ACTION: B CONTINUES REMAINING TASK 5.3 FULL GATES ON THE FIXED FORMAL ZIP; NO NEW DEVELOPER CORRECTION REQUESTED IN THIS ROUND.
