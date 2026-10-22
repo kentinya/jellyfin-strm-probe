@@ -55,6 +55,11 @@ PLAYBACK_DRIVER = pkg.PLAYBACK_DRIVER
 DOCKER = pe.DOCKER
 MINIMUM_PROGRESS_SECONDS = 5.0
 FIXTURE_SECONDS = 24
+# F02 needs a controlled input that really cannot yield a native main stream. The first 512 bytes
+# of the real A file are a strict truncation whose MP4 moov/MKV metadata is incomplete; the pinned
+# image's own ffprobe rejects both containers at this length. Generation still proves the failure
+# below, so a fixture that becomes probeable stops the run before any playback.
+F02_CORRUPT_PREFIX_BYTES = 512
 MOVIE_LIBRARY = pe.STRM_LIBRARY
 FFPROBE_MARKER = 'Starting "/usr/lib/jellyfin-ffmpeg/ffprobe" with args'
 FINGERPRINT_FIELDS = {"item_id", "source_key", "url_hash", "sha1", "file_size"}
@@ -1526,6 +1531,40 @@ def pad_mp4_to(data: bytes, target: int) -> bytes:
     return result
 
 
+def f02_truncated_bytes(data: bytes) -> bytes:
+    """Return a real truncated copy of the A file for the F02 failure window.
+
+    F02 is not a successful-media scenario: the fixed URL must hold bytes that the native probe
+    really cannot turn into the necessary main stream. The container metadata of both fixed
+    fixtures lives in their first few hundred bytes, so cutting at 512 leaves a strict prefix with
+    no usable moov/Matroska stream description. The generated file is probed below before any row
+    is built; this helper only makes the cut deterministic and testable.
+    """
+    require(len(data) > F02_CORRUPT_PREFIX_BYTES,
+            f"The F02 source is only {len(data)} bytes; it cannot be truncated to a 512-byte prefix.")
+    prefix = data[:F02_CORRUPT_PREFIX_BYTES]
+    require(0 < len(prefix) < len(data), "The F02 corrupt partner is not a strict truncation of A.")
+    return prefix
+
+
+def require_f02_unprobeable(name: str, streams: list[dict], probe_error: str | None) -> None:
+    """Refuse an F02 partner that the pinned native probe could still accept.
+
+    The manifest for the failing window records the real SHA-1/Size of this controlled input, so
+    the input itself must be genuinely unusable. A truncated file that already exposes a video
+    stream would make the expected failure window playable again (the previous first-third cut did
+    exactly that even though its byte count was smaller); either the probe must fail, or no video
+    stream may be visible, and a successful probe with a video stream is rejected outright.
+    """
+    videos = [stream for stream in streams if stream.get("codec_type") == "video"]
+    require(not videos,
+            f"{name}: the F02 corrupt input still exposes video streams {videos!r}; "
+            f"the failure window would not prove a native probe failure.")
+    require(probe_error is not None,
+            f"{name}: the F02 corrupt input still probes successfully with streams {streams!r}; "
+            f"the failure window would not prove a native probe failure.")
+
+
 def require_p06_directions(label: str, a_size: int, up_size: int, down_size: int) -> None:
     """Refuse a P06 partner set whose real byte sizes contradict the fixed up/down direction.
 
@@ -1560,30 +1599,40 @@ def generate_matrix_fixtures() -> dict:
         padded = pad_mp4_to(p4b_bytes, len(a_bytes)) if ext == "mp4" else pad_mkv_to(p4b_bytes, len(a_bytes))
         pe.write_owned_bytes(pe.WORK / "media" / f"matrix-{ext}-b-padded.{ext}", padded,
                              label=f"padded partner matrix-{ext}-b-padded")
-        truncated = a_bytes[: max(1, len(a_bytes) // 3)]
+        truncated = f02_truncated_bytes(a_bytes)
         pe.write_owned_bytes(pe.WORK / "media" / f"matrix-{ext}-a-trunc.{ext}", truncated,
                              label=f"truncated partner matrix-{ext}-a-trunc")
         info = ffprobe(f"/out/matrix-{ext}-b-padded.{ext}")
         require(info.get("streams"), f"The padded partner matrix-{ext}-b-padded is not natively probeable.")
         derived[ext] = {"padded": f"matrix-{ext}-b-padded.{ext}", "truncated": f"matrix-{ext}-a-trunc.{ext}"}
+    corrupt_names = {item["truncated"] for item in derived.values()}
     fixtures = dict(base["fixtures"])
     for name in [*specs, *derived["mp4"].values(), *derived["mkv"].values()]:
         data = (pe.WORK / "media" / name).read_bytes()
         streams: list[dict] = []
+        probe_error: str | None = None
         try:
             info = ffprobe("/out/" + name)
             streams = [{key: stream.get(key) for key in
                         ("index", "codec_type", "codec_name", "width", "height", "pix_fmt", "color_range",
                          "sample_rate", "channels", "duration", "disposition")}
                        for stream in info.get("streams", [])]
-        except BaselineError:
-            streams = []  # the truncated F02 partner is intentionally not probeable
+        except BaselineError as error:
+            probe_error = str(error)[-300:]
+        if name in corrupt_names:
+            # The F02 corrupt input must fail before measurement; recording its real bytes is not
+            # enough, because a still-probeable truncation would make the expected failure window
+            # playable and silently change the scenario.
+            require_f02_unprobeable(name, streams, probe_error)
         if name in specs:
             # Extra ColorRange inputs prove their actual output the same way the baseline set does.
             require_actual_color_range(name, specs[name], streams)
-        fixtures[name] = {"sha1": hashlib.sha1(data).hexdigest(), "size": len(data),
-                          "sha256": hashlib.sha256(data).hexdigest(),
-                          "ffprobe": {"streams": streams, "probeable": bool(streams)}}
+        fixture = {"sha1": hashlib.sha1(data).hexdigest(), "size": len(data),
+                   "sha256": hashlib.sha256(data).hexdigest(),
+                   "ffprobe": {"streams": streams, "probeable": bool(streams)}}
+        if probe_error is not None:
+            fixture["ffprobe"]["error"] = probe_error
+        fixtures[name] = fixture
     return {"commands": commands, "fixtures": fixtures, "aliases": base["aliases"],
             "derived": derived, "durationSeconds": FIXTURE_SECONDS}
 

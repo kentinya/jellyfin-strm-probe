@@ -697,6 +697,36 @@ class MatrixPreconditionTests(MatrixRowIdTests):
             self.assertIn("strm_name", row)
             self.assertEqual(row["strm_name"], row["item"])
 
+class F02CorruptionTests(unittest.TestCase):
+    """F02's fixed URL must serve bytes the native probe really rejects.
+
+    The earlier first-third cut was still a valid container: its moov/Matroska metadata was at the
+    front, so ffprobe returned Video/Audio and the "failure" playback advanced. The controlled
+    partner is now a strict 512-byte prefix and generation refuses any result that still exposes a
+    video stream or a successful probe.
+    """
+
+    def test_the_f02_partner_is_a_strict_512_byte_truncation(self):
+        data = bytes(range(256)) * 8
+        prefix = playback.f02_truncated_bytes(data)
+        self.assertEqual(len(prefix), playback.F02_CORRUPT_PREFIX_BYTES)
+        self.assertEqual(prefix, data[:playback.F02_CORRUPT_PREFIX_BYTES])
+        self.assertLess(len(prefix), len(data))
+
+    def test_a_short_source_is_refused_instead_of_silently_written_as_is(self):
+        with self.assertRaises(playback.BaselineError):
+            playback.f02_truncated_bytes(b"x" * (playback.F02_CORRUPT_PREFIX_BYTES - 1))
+
+    def test_a_probeable_video_or_a_successful_probe_is_refused(self):
+        with self.assertRaises(playback.BaselineError):
+            playback.require_f02_unprobeable(
+                "matrix-mp4-a-trunc.mp4", [{"codec_type": "video", "codec_name": "h264"}], None)
+        with self.assertRaises(playback.BaselineError):
+            playback.require_f02_unprobeable(
+                "matrix-mkv-a-trunc.mkv", [], None)  # ffprobe returned success with no error
+        playback.require_f02_unprobeable(
+            "matrix-mp4-a-trunc.mp4", [], "ffprobe failed for /out/matrix-mp4-a-trunc.mp4")
+
 class MatrixApplyTests(unittest.TestCase):
     """apply_matrix_change must switch a fixed URL through a row-owned staging copy so the shared
     partner files survive for the following rows, and reset_row_media must re-establish the A
