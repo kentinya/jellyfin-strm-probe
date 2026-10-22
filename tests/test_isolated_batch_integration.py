@@ -307,6 +307,46 @@ class BatchScriptGuardTests(unittest.TestCase):
         self.assertEqual(started, {"abc123", "def456"})
 
 
+class CleanupConvergenceTests(unittest.TestCase):
+    """A leftover fixture is still a failure; only the native refresh is retried.
+
+    A native scan can settle before it reconciles an already-deleted ``.strm``, so one refresh is not
+    a reliable trigger. Retrying the refresh must never turn a genuinely leftover entry into a pass.
+    """
+
+    def _api(self, outcomes):
+        calls = {"refresh": 0, "present": 0}
+
+        class Api:
+            def refresh_library(self):
+                calls["refresh"] += 1
+
+            def wait_for_named_library_item_absent(self, name, timeout=30):
+                calls["present"] += 1
+                result = outcomes.pop(0) if outcomes else False
+                if not result:
+                    raise RuntimeError(f"still present: {name}")
+
+        return Api(), calls
+
+    def test_a_late_native_reconciliation_converges_and_leaves_no_problem(self):
+        api, calls = self._api([False, True])
+        with patch.object(batch, "CLEANUP_PROBLEMS", []):
+            batch.cleanup_fixtures(api, ["Batch Mixed Playback abc"])
+            self.assertEqual(batch.CLEANUP_PROBLEMS, [])
+        self.assertEqual(calls["refresh"], 2)
+
+    def test_a_really_leftover_entry_is_still_recorded_as_a_cleanup_problem(self):
+        api, calls = self._api([])
+        with patch.object(batch, "CLEANUP_PROBLEMS", []):
+            batch.cleanup_fixtures(api, ["Batch Mixed Playback abc"], timeout=0.5)
+            self.assertTrue(batch.CLEANUP_PROBLEMS)
+            self.assertIn("was not removed", batch.CLEANUP_PROBLEMS[0])
+        # The refresh really was retried instead of giving up after one attempt.
+        self.assertGreater(calls["refresh"], 1)
+
+
+
 class AbsoluteRoundAttributionTests(unittest.TestCase):
     """A round must be measured on real instants, never on a bare time of day.
 
@@ -363,6 +403,16 @@ class AbsoluteRoundAttributionTests(unittest.TestCase):
         with patch.object(batch.base, "run", return_value=logs):
             entries = batch.probe_start_entries_absolute("container", 1792665740.0)
         self.assertEqual([entry["item_id"] for entry in entries], ["bbbb"])
+
+    def test_the_shared_stop_and_mixed_scenarios_also_measure_on_real_instants(self):
+        source = (ROOT / "scripts" / "run_isolated_batch_integration.py").read_text(encoding="utf-8")
+        shared = source[source.index("def _shared_stop_direction("):source.index("def scenario_mixed(")]
+        self.assertIn("stopped_at_epoch = time.time()", shared)
+        self.assertIn("task_completion_events_absolute(container, stopped_at_epoch)", shared)
+        self.assertNotIn("current_round_completion(container, stopped_at)", shared)
+        mixed = source[source.index("def scenario_mixed("):source.index("def scenario_failure(")]
+        self.assertIn("probe_start_entries_absolute(container, mixed_started_epoch)", mixed)
+        self.assertNotIn("probe_start_entries(container, since=mixed_started_at)", mixed)
 
     def test_the_stop_scenario_measures_on_real_instants(self):
         source = (ROOT / "scripts" / "run_isolated_batch_integration.py").read_text(encoding="utf-8")

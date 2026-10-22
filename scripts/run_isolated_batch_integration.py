@@ -62,18 +62,34 @@ def record_cleanup_problem(message: str) -> None:
     CLEANUP_PROBLEMS.append(message)
 
 
-def cleanup_fixtures(api: base.JellyfinApi, names: list[str]) -> None:
-    """Remove this scenario's temporary library entries and verify they are gone. A failure is recorded so the
-    run cannot report PASS while the isolated instance still contains leftover entries."""
-    try:
-        api.refresh_library()
-    except Exception as error:
-        record_cleanup_problem(f"library refresh during cleanup failed: {type(error).__name__}")
-    for name in names:
+def cleanup_fixtures(api: base.JellyfinApi, names: list[str], timeout: int = 180) -> None:
+    """Remove this scenario's temporary library entries and verify they are gone.
+
+    A native scan can settle before it reconciles an already-deleted ``.strm``, so a single refresh
+    is not a reliable trigger for the removal to become visible. The wait therefore asks for another
+    native refresh while an entry is still listed, and only succeeds when the library really no
+    longer contains it. The obligation is unchanged: a leftover entry is still recorded as a cleanup
+    problem, so the run cannot report PASS while the instance holds it.
+    """
+    deadline = time.monotonic() + timeout
+    pending = list(names)
+    refreshes = 0
+    while pending and time.monotonic() < deadline:
         try:
-            api.wait_for_named_library_item_absent(name)
+            api.refresh_library()
+            refreshes += 1
         except Exception as error:
-            record_cleanup_problem(f"temporary library item {name!r} was not removed: {type(error).__name__}")
+            record_cleanup_problem(f"library refresh during cleanup failed: {type(error).__name__}")
+            break
+        still_present: list[str] = []
+        for name in pending:
+            try:
+                api.wait_for_named_library_item_absent(name, timeout=30)
+            except Exception:
+                still_present.append(name)
+        pending = still_present
+    for name in pending:
+        record_cleanup_problem(f"temporary library item {name!r} was not removed: RuntimeError")
 
 
 def find_task(api: base.JellyfinApi) -> dict:
@@ -1416,7 +1432,9 @@ def _shared_stop_direction(api: base.JellyfinApi, container: str, media_containe
             time.sleep(0.2)
         stop_status = stop_task(api)
         base.require(stop_status == 204, "Jellyfin did not accept the shared-stop stop.")
-        stopped_at = now_time_of_day_seconds()
+        # The shared-stop round is also bound to a real instant: an earlier session's completion must
+        # never be read as this round's Cancelled result.
+        stopped_at_epoch = time.time()
         settling = find_task(api)
         base.require(task_state_name(settling) in {"cancelling", "2", "running", "1"}, f"The shared-stop batch was not settling: {task_state_name(settling)}.")
 
@@ -1438,9 +1456,12 @@ def _shared_stop_direction(api: base.JellyfinApi, container: str, media_containe
         final = wait_for_stable_idle(api, container, timeout=MAX_WAIT_SECONDS)
         # Bind the Cancelled result to this round: the first native completion of this task logged after the stop
         # request must be the stopped round recording Cancelled, not an older entry from container history.
-        current_round_result = current_round_completion(container, stopped_at)
-        base.require(current_round_result is not None, f"The shared-stop round produced no native completion after the stop ({task_completion_events(container)}).")
-        base.require(current_round_result == "Cancelled", f"The shared-stop batch did not record Cancelled: {current_round_result} ({task_completion_events(container)}).")
+        shared_completions = task_completion_events_absolute(container, stopped_at_epoch)
+        base.require(bool(shared_completions), "The shared-stop round produced no native completion after the stop.")
+        current_round_result = shared_completions[0]["status"]
+        base.require(current_round_result == "Cancelled",
+                     f"The shared-stop batch did not record Cancelled: {current_round_result} "
+                     f"({[entry['status'] for entry in shared_completions]}).")
         status_value = "cancelled"
         summary_line = latest_batch_summary(container)["line"]
         fields = summary_fields(summary_line)
@@ -1558,7 +1579,7 @@ def scenario_mixed(api: base.JellyfinApi, container: str, media_container: str) 
 
         before_counts = base.media_request_counts(media_container)
         before_id_counts = slow_request_counts(media_container)
-        mixed_started_at = now_time_of_day_seconds()
+        mixed_started_epoch = time.time()
         playback_holder: dict = {}
 
         def playback() -> None:
@@ -1603,7 +1624,7 @@ def scenario_mixed(api: base.JellyfinApi, container: str, media_container: str) 
         # Attribute the peak per owner from the plugin's own start lines logged after this round started. The
         # playback item's start line must show running 2 (the playback owner plus a still-running batch owner),
         # proving both entries overlapped.
-        entries = probe_start_entries(container, since=mixed_started_at)
+        entries = probe_start_entries_absolute(container, mixed_started_epoch)
         peak_running = max((entry["running"] for entry in entries), default=0)
         playback_hex = playback_item["Id"].replace("-", "").lower()
         playback_entry = next((entry for entry in entries if entry["item_id"].replace("-", "").lower() == playback_hex), None)
