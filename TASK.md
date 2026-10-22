@@ -13,7 +13,7 @@ Test Level: T4
 Planner / Reviewer: B
 ```
 
-最新 B 复核（2026-10-22 无时间限制续验轮）：**FIX REQUIRED**。固定 ZIP 的 package-all、现存全部 1004 项 large-all，以及同源码开发部署的 configuration-all 已独立通过；矩阵累计接受仍为 **6／116**。P01 原生数据库适配、scan 共享探测计数及 plugin／batch 完整旅程存在下文阻塞，修正继续同一 Task。Developer 只做受影响反馈，完整门禁仍归 **B**；未达到 Slice 最终审查条件。详细原因、场景、复用边界与下一步见文末最新 B 决定。
+最新 B 复核（2026-10-22，本轮测试占比小于 50%）：**FIX REQUIRED**。最终实现 `3a7de05` 已重建正式 ZIP；B 新跑完整 C# **205 PASS**、Python **395 PASS＋2 SKIPPED**，独立 MP4／MKV.P01.04 与 MP4.D06 完整旅程通过（当前同 ZIP **3／116**）。B53-20261022-5 的原生错误正文仍只在内存、未进入交接证据，其他完整门禁仍由 B 补齐。旧 6／116 及 package／large／configuration 通过决定保留为对应旧候选结果。修正继续同一 Task；完整验收不交回 Developer，尚不具备 Slice 最终审查条件，见文末最新 B 决定。
 
 ## B 合同重判与继续决定（2026-10-21）
 
@@ -296,6 +296,8 @@ B 另在新归属视频实例独立复现：每种格式的 P01.04、P02.01、P0
 本矩阵允许在**同一 Task 的多个真实工作轮**分批完成，不能把固定行数包装为一次短 smoke。每批明确列出的行用独立证据目录和可核验前提，不覆盖旧行；纯预算分批不改变同一最终候选和完整行集合。需要重新生成前提时只准备本批小型合成输入，现存全部 1004 项持续复用。固定候选证据完整时不再复制相同运行；新可执行输入依 T4 重取指定证据，纯报告后继只检查输入匹配并重跑文档消费检查，不机械重跑 Final。
 
 **2026-10-22 用户明确“时间要求完全放宽，优先完成剩余门禁”。** 从此续验起，取消此前每轮总时间、测试时间及测试占比低于 50% 的执行预算限制，连续完成同一 Task／固定候选的剩余完整门禁；既往实际耗时、停止与审查记录仍保留。此调整仅涉及执行时间，不改变任何行、业务断言、固定输入、完整门槛、B 独立审查责任或 A 关闭权限；逐项保存原始首败／重试、真实耗时与资源观察，不因无时间上限而机械重跑匹配证据。
+
+本轮执行预算以当前用户指令为准：测试墙钟并集必须严格小于本轮实际总时间 **50%**；上方“时间完全放宽”只保留为历史执行安排，已被本轮明确指令覆盖。全部行和 B 最终门禁保持，不据预算删减验收；允许按本 Task 既有规则分真实工作轮完成。
 
 ## 非目标
 
@@ -639,3 +641,46 @@ NEXT ACTION: DEVELOPER CORRECTS ONLY THE DOCUMENTED TASK 5.3 ENTRY/PRECONDITION 
 - **证据与预算：** `.git/validation-evidence/608e08739f8e2656f061dfbde18aa30d2b25b138/developer-p01-fix/DEVELOPER-RUN-NOTE.md`（含 P01 运行目录、db 备份、截图、batch／plugin-full 原始 stdout 与首败）与 `.git/validation-evidence/a4d08b101d530ff74b985024f79871f9ee5abf8b/developer-scan-controls/`、`developer-scan-overlap2/`。构建 `4eb6019` 的首败证据目录在其源码被替代后删除，失败文本与原因保留于提交 `608e087` 说明及运行记录。所有真实运行只清理本轮自有工作区，双服务退出 0／无 OOM、对账 `CLEAN`／`disturbed []`；现存 1004 项准备库、生产实例与既有 dev-env 未重建或破坏，dev-env 夹具／配置／触发器逐场景 `restored and verified`。
 - **Risks / Deviations：** 旧轮遗留 48 个 `jf-strm-probe` 网络导致一次 `docker compose up` 报 "all predefined address pools have been fully subnetted"，已 `docker network prune -f` 清理未使用网络（保留的已停止容器与其挂载未动，未删镜像／容器／准备库），该首败保留于 `developer-scan-overlap/result.json`。本机无 `python3.11` 可执行文件，实机编排使用 Python 3.13.5，单元测试使用锁定 `/opt/py311/python/bin/python3.11`（3.11.10）。本轮测试侧墙钟并集约占本轮实际总时间 **43%**，高于用户 30% 上限；超出来自合同要求保留首败的两轮 `停止`／`mixed` 重跑、两条真实门禁（controls 165.7 秒、overlap 318.9 秒）以及只在完整停止轮才暴露的跨日归因缺陷，未空等凑分母、未重复跑匹配证据凑数，记账见运行记录。
 - **Remaining In-Slice Work：** 本 Task 仍未 PASS。四个已列入口阻塞已修正并取得上述聚焦真实结果；其余矩阵行、完整 C#／Python、package／scan／1004 large／plugin／batch／configuration、独立关键复现与 Slice Final 仍由 B 在固定最终候选上补齐或核验复用。不提交 Closure Packet、不返回 SLICE READY FOR A REVIEW、不关闭 Slice。
+
+## B 独立复审（2026-10-22，本轮恢复测试占比小于 50%）
+
+- **Decision：FIX REQUIRED。** 继续同一 Task 5.3／Slice 5／原 Base／Contract Checkpoint，不造新 Task。最新修正已恢复部分真实旅程，但 B53-20261022-5 的同次 HTTP 错误正文仍未落盘，完整验收亦未齐。Developer 仅补这一既定交付缺口；全部最终门禁仍归 B。没有新的插件修正或范围授权。
+- **Reviewed Range：** `f17fb1fc90dda242eeff9fac7b4f21576b5e6f94..2705d4f91f89e4f4ff049bd4fc01569d2b3d6fce`；实现候选 `3a7de052bf089141f76e2f60921de285bd5184c4`。开始时真实工作区干净、main 超前 origin/main 77 提交，治理通过。审查累计 20 个改变文件及上一 B 决定后的 8 个实现／测试文件；实现到报告后继仅 TASK.md。未改产品／测试源码、镜像锁或工作流，不推送／改历史，不委派代理。
+- **固定正式 ZIP：** 从上述最终实现的独立干净检出重建，sourceRevision `3a7de052bf089141f76e2f60921de285bd5184c4`，SHA-256 `9641fe917cc8db8d36ec32c841fb968b0149890f39094adce5338a0f28dd9e37`，build inputs `f394eabc06a7e5423adefeed0aed34b18078be80d0a7ac9143f46340bb8d98ef`。已按实际 Git 对象比较，产品构建输入与此前 `494302f` 相同；新媒体服务／Python 入口已经变化，不能把旧包或 Developer 的少量场景直接拼成当前同 ZIP 完整通过。
+
+### 当前交付结论与必要修正
+
+**B53-20261022-5／P1，部分未完成：原生错误正文只留在内存，实际结果仍丢失。** `JellyfinApi.playback_info`／`post_playback_info` 将正文写入 `last_error_body`（369／397 行），但没有消费者把它交付到原始证据；`call_playback`（762～785 行）在非 200 时仅返回布尔值／摘要，丢弃已解析的响应和该字段，版本合并处（1016 行）随后仍只抛固定文案。若首个合并 500 再现，同次正文仍无法从结果恢复；不是报告所称已经完整留存。
+
+此项基于已有真实入口和交付产物，没有构造新端点、调用内部探测或伪造异常：实际 `plugin-full.stdout.log` 中 `failed_changed_url`、`failed_url_retry`、`failed_url_after_restart`、`first_play_without_primary_stream`、`manifest_race` 共 **5 个 HTTP 500 结果对象**均没有正文。`rg` 也确认没有把该字段写入交接产物的消费者。新单元测试仅验证内存字段，不能证明持久证据。后来的完整 PASS 不抹掉首次版本合并 FAIL，也不能补写其原始正文。普通文件按真实路径定位的修正予以保留。
+
+修正仅限既有 plugin 入口：在本次响应仍可读取时，保留与项目／请求方法对应的真实状态及正文到本机忽略证据，再执行原有断言；确保失败处的 `finally`／原始 stdout 可实际交接，不把旧错误带到后续成功，不输出 URL／凭据。不另建诊断框架，不修改源集合保护、500 预期、成功匹配或产品代码。Developer 运行实际修改的 plugin 模块控制／语法检查和少量既有真实错误旅程反馈，控制验证交接结果而非仅内存值；不要求其跑完整矩阵或完整套件。若修改共享 JellyfinApi，按实际调用追加 batch／scan／large／configuration 的直接消费者控制；完整实机仍由 B 承担。B 自己保留 plugin-full 与其余全部最终责任。
+
+B53-20261022-3 的真实 TEXT item／INTEGER StreamType 适配及不重复前置手术、B53-20261022-4 的诊断路由恢复整文件读取、B53-20261022-6 的扫描结算与绝对时刻归因／原生清理刷新均在既定范围内。没有删除单探测、保存／指纹、收尾前禁止新轮或后续轮的断言。Developer 的 controls／overlap、stop／shared_stop／sharing／mixed 原输出作为聚焦修正反馈保留，不提升为完整 scan-all／batch-suite。删除过的 P01 首败原始目录如实保留“不可读取”限制，不补造，也不据此要求重造历史失败。
+
+### 新候选门禁与独立结果
+
+B 在最终实现的独立干净检出使用 SDK **10.0.401** 完成 locked restore／Release build（0 warning／error）／format verify，C# **205 PASS、0 FAIL、0 SKIPPED**；Python **3.11.10** 完整 discovery 为 **397 项：395 PASS、0 FAIL、2 SKIPPED**（既有发布归档缺失的 assembly-version 控制，不计 PASS）。Python compileall、Node 语法检查及正式 ZIP 构建通过；精确命令／原文输出／退出码和耗时在索引中，未用 Developer 聚焦结果代替全量。
+
+**B 新归属实机的三个独立关键旅程均 PASS，当前同一正式 ZIP 为 3／116、独立关键 3／40、C 行 0／12；历史旧候选覆盖另列。** 使用已有 `--scenario matrix --rows MP4.P01.04,MKV.P01.04,MP4.D06`，本机 18121、工作区 `run-20261022-113704-fbfd7f5f`，无额外探测端点、无内部方法直调、无调试器、无变化后 PlaybackInfo 预热。runner 581.4 秒、外部完整墙钟 **583.006 秒**，退出 0。真实镜像身份、正式包安装／部署匹配、Active、默认空触发器及原生并发池 2 已核验。
+
+| 必需行 | 本轮完整结果 |
+|---|---|
+| MP4.P01.04 | 准备和 prime-after 均只删除 Video、保留 Audio；真实 prime 建立旧指纹后再次移除 Video。prime／测量／再播／重启 ffprobe **1／1／0／0**，推进 **5.334381／5.401233／5.371152／5.393520 秒**。 |
+| MKV.P01.04 | 同样有旧指纹且仅 Audio 的真实前提；ffprobe **1／1／0／0**，推进 **5.355142／5.408483／5.395894／5.386723 秒**。 |
+| MP4.D06 | 原生既有 `GET /Videos/{id}/stream?static=true` 返回 **200、video/mp4、262144 字节**，未探测、未接受新指纹；随后第一次原生 Web Play 才探测 1、提交新 URL。首次信任／测量／再播／重启为 **0／1／0／0**，推进 **5.377961／5.400054／5.390976／5.398221 秒**。 |
+
+三行的完整源身份／地址／所有原生流、STRM 摘要、五字段与探测数均在重启后任何 PlaybackInfo 前和冻结快照精确相等；随后实播保持 Video＋Audio 与对应正确地址。实际打开全部 **24 张原图**，MP4／MKV A 标记与各行相符，成对嵌入时间推进均超过 5 秒、没有错误画面，解码帧 **87～95**。独立按原始服务器全文重数 ffprobe 共 **8 次**：MP4 A 4（含两项准备）、MKV A 3（含一项准备）、新 copy URL 1；其中准备 3、P01 prime 2、正式探测窗口 3；另列 **12 次 FFmpeg 转码启动**，不混入探测数。五次插件执行的同次 33 字段均为编码器＝成功保存，返回仅 ColorRange tv→null；本轮不是 C 行，不代替其余 12 个 ColorRange 指定旅程。
+
+P01 三份真实原生数据库备份已只读独立打开，`quick_check=ok`，真实列为 ItemId TEXT／StreamType INTEGER；准备前两流、初次删除与 prime-after 局部删除的目标身份均能对账。正常收尾双服务 exit **0**、无 OOM，实例对账 **CLEAN／disturbed=[]**，仅本轮工作区 **CLEANED**，原始日志、备份、响应和原图在外部忽略目录保留；未操作共享 dev-env／生产或原全部 1004 项准备库，未 prune 或删除保留资源。
+
+### 复用、剩余 RO 与停止点
+
+- 旧候选已接受的 6／116、4／40 独立关键、3／12 C 行以及 package-all／1004 large-all／configuration-all 的 B 决定全部保留；本轮不改写为当前 ZIP 已完成。新候选的完整 baseline、剩余矩阵及 C 行、package-all／scan-all／现存全部 1004 large-all、plugin-full／batch-suite／configuration-all 本轮未运行，均属 B。已存在明确交付阻塞，本轮不继续盲跑这些昂贵门禁，也不交回 Developer。
+- 纯报告后继不重建包、不机械重跑 Final。若本次修正只改变 plugin 错误留存及其直接测试，保留本轮正式 ZIP；B 比较每一门禁实际消费的源码／工具／配置／夹具／包，复用确实匹配且已核验的证据，重新获取受影响或无法确认的门槛。完整 Python 因测试输入改变仍由 B 更新；Developer 无须代跑。
+- RO-1 有当前包／隔离证据，RO-2／RO-3 尚缺完整逐行与失败恢复／ColorRange 验收；RO-4 沿用 Task 5.1 已接受决定。全部 RO 尚未满足，**不提交 Closure Packet、不返回 SLICE READY FOR A REVIEW、不自行关闭**。范围变化交 A。
+- 本轮用户重新明确测试墙钟并集严格小于实际总时间 50%，覆盖上方历史“时间完全放宽”的执行安排；不改变任何产品门槛。预算、命令、原始输出、截图实际查看、同次 33 字段对账与收尾见本机索引。未空等凑分母、未把并行测试耗时相加冒充并集，也不预借后续时间启动新批次。
+
+本机证据索引：`.git/validation-evidence/3a7de052bf089141f76e2f60921de285bd5184c4/b-review-20261022T113530Z/INDEX.md`。包含完整 Task Base..Head 与修正差异、最终候选／输入／包身份、独立全回归、上述真实旅程的原文／截图实际查看、同次字段表、数据库备份核验、交付 HTTP 错误缺口与明确复用／未运行清单；仅本机可读，不上传原始资料。时间以该索引的 `timing-ledger.json` 为准，保守从首次已留存 UTC 观测 11:35:16 起计，早先必读文档时间不计入分母，构建和并行质量检查都算入测试并集。
+
+NEXT ACTION: DEVELOPER COMPLETES ONLY B53-20261022-5 SAME-RESPONSE ERROR EVIDENCE IN TASK 5.3; B RETAINS ALL REMAINING FULL GATES; NO NEW TASK OR SLICE CLOSE.
