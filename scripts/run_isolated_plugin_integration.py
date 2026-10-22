@@ -211,12 +211,60 @@ def isolated_media_container_name() -> str:
     return matches[0]
 
 
+def isolated_server_port(container: str) -> int:
+    """Return the host port the round's own container actually publishes for the Jellyfin API.
+
+    Readiness must be proven on this round's instance. Taking the address from the container that
+    was just started, instead of a fixed host port, keeps another checkout's server (for example a
+    long-lived 18096 instance) from answering the wait.
+    """
+    result = run(["docker", "inspect", "--format", "{{json .NetworkSettings.Ports}}", container], timeout=15)
+    require(result.returncode == 0, "Could not inspect the isolated Jellyfin container's published ports.")
+    try:
+        ports = json.loads(result.stdout or "{}")
+    except json.JSONDecodeError as error:
+        raise RuntimeError("The isolated Jellyfin container's published ports were unreadable.") from error
+    bindings = (ports or {}).get("8096/tcp") or []
+    host_ports = {str(binding.get("HostPort")) for binding in bindings if binding.get("HostPort")}
+    require(len(host_ports) == 1, "Expected exactly one published host port for the isolated Jellyfin API.")
+    return int(host_ports.pop())
+
+
+def own_server_base_url(container: str) -> str:
+    """Return the API address of this round's own instance and prove it is the same instance.
+
+    Compose publishes the API on the round's configured ``JF_PROBE_PORT`` and the test account
+    records that same address, so the container's real published port, the configured port and the
+    recorded ``base_url`` must all agree. A disagreement is refused rather than resolved by waiting
+    on whichever server happens to answer.
+    """
+    configured_port = int(os.environ.get("JF_PROBE_PORT", "18096"))
+    published_port = isolated_server_port(container)
+    require(
+        published_port == configured_port,
+        f"The isolated Jellyfin container publishes the API on port {published_port} but this round is configured for {configured_port}.",
+    )
+    base_url = f"http://127.0.0.1:{published_port}"
+    credentials_path = ROOT / "artifacts" / "dev-env" / "credentials.local.json"
+    if credentials_path.is_file():
+        try:
+            recorded = str(json.loads(credentials_path.read_text(encoding="utf-8")).get("base_url", "")).rstrip("/")
+        except (OSError, json.JSONDecodeError) as error:
+            raise RuntimeError("The isolated Jellyfin credentials could not be read for the readiness check.") from error
+        require(
+            recorded == base_url,
+            f"The isolated Jellyfin credentials point at {recorded or 'no address'} but this round's instance publishes {base_url}.",
+        )
+    return base_url
+
+
 def restart_isolated_server() -> str:
     stop = run([sys.executable, str(ENVIRONMENT), "stop"], timeout=120)
     require(stop.returncode == 0, "The isolated Jellyfin stop command failed.")
     start = run([sys.executable, str(ENVIRONMENT), "up"], timeout=120)
     require(start.returncode == 0, "The isolated Jellyfin start command failed.")
     container = isolated_container_name()
+    base_url = own_server_base_url(container)
     deadline = time.monotonic() + MAX_WAIT_SECONDS
     observed_version: str | None = None
     last_public_info_error: OSError | json.JSONDecodeError | None = None
@@ -224,7 +272,9 @@ def restart_isolated_server() -> str:
         health = run(["docker", "inspect", "--format", "{{.State.Health.Status}}", container], timeout=15)
         if health.returncode == 0 and health.stdout.strip() == "healthy":
             try:
-                public_info = request_json("http://127.0.0.1:18096/System/Info/Public", timeout=10)
+                # Docker can report healthy while the pinned server is still starting up and the
+                # API answers 503, so the same timeout keeps waiting for this instance's own API.
+                public_info = request_json(base_url + "/System/Info/Public", timeout=10)
                 observed_version = public_info.get("Version")
                 if observed_version == "12.2.0":
                     return container
@@ -234,7 +284,8 @@ def restart_isolated_server() -> str:
     if observed_version is not None:
         raise RuntimeError(f"The isolated server did not report pinned version 12.2.0 before timeout; last observed {observed_version!r}.")
     if last_public_info_error is not None:
-        raise RuntimeError(f"The isolated Jellyfin container became healthy but its public API did not settle: {type(last_public_info_error).__name__}.")
+        detail = f"HTTP {last_public_info_error.code}" if isinstance(last_public_info_error, HTTPError) else type(last_public_info_error).__name__
+        raise RuntimeError(f"The isolated Jellyfin container became healthy but its own public API at {base_url} did not settle: {detail}.")
     raise RuntimeError("The isolated Jellyfin container did not become healthy.")
 
 

@@ -227,5 +227,128 @@ class NativeErrorEvidenceTests(unittest.TestCase):
         self.assertEqual(plugin.native_error_evidence_summary()["recorded"], 0)
 
 
+class _PortsResult:
+    def __init__(self, ports):
+        self.returncode = 0
+        self.stdout = json.dumps(ports)
+        self.stderr = ""
+
+
+class OwnInstanceReadinessTests(unittest.TestCase):
+    """Readiness must wait on this round's own instance, not a fixed shared host port."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.credentials = Path(self._tmp.name) / "credentials.local.json"
+        patcher = patch.object(plugin, "ROOT", Path(self._tmp.name))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _write_credentials(self, base_url: str) -> None:
+        path = Path(self._tmp.name) / "artifacts" / "dev-env" / "credentials.local.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"base_url": base_url, "username": "u", "password": "p"}), encoding="utf-8")
+        path.chmod(0o600)
+
+    def test_the_published_port_of_the_rounds_own_container_is_used(self):
+        self._write_credentials("http://127.0.0.1:18122")
+        with patch.dict("os.environ", {"JF_PROBE_PORT": "18122"}), \
+                patch.object(plugin, "run", return_value=_PortsResult({"8096/tcp": [{"HostIp": "127.0.0.1", "HostPort": "18122"}]})):
+            self.assertEqual(plugin.own_server_base_url("round-container"), "http://127.0.0.1:18122")
+
+    def test_a_default_port_round_still_uses_its_own_published_port(self):
+        self._write_credentials("http://127.0.0.1:18096")
+        with patch.dict("os.environ", {}, clear=True), \
+                patch.object(plugin, "run", return_value=_PortsResult({"8096/tcp": [{"HostIp": "127.0.0.1", "HostPort": "18096"}]})):
+            self.assertEqual(plugin.own_server_base_url("round-container"), "http://127.0.0.1:18096")
+
+    def test_a_configured_round_never_reads_another_instance(self):
+        # A different checkout's 18096 instance is not this round's readiness proof.
+        self._write_credentials("http://127.0.0.1:18122")
+        with patch.dict("os.environ", {"JF_PROBE_PORT": "18122"}), \
+                patch.object(plugin, "run", return_value=_PortsResult({"8096/tcp": [{"HostIp": "127.0.0.1", "HostPort": "18096"}]})):
+            with self.assertRaises(RuntimeError) as raised:
+                plugin.own_server_base_url("round-container")
+        self.assertIn("18122", str(raised.exception))
+
+    def test_credentials_pointing_at_another_instance_are_refused(self):
+        self._write_credentials("http://127.0.0.1:18096")
+        with patch.dict("os.environ", {"JF_PROBE_PORT": "18122"}), \
+                patch.object(plugin, "run", return_value=_PortsResult({"8096/tcp": [{"HostIp": "127.0.0.1", "HostPort": "18122"}]})):
+            with self.assertRaises(RuntimeError) as raised:
+                plugin.own_server_base_url("round-container")
+        self.assertIn("18096", str(raised.exception))
+
+    def test_an_unpublished_or_ambiguous_port_is_refused(self):
+        for ports in ({}, {"8096/tcp": []},
+                      {"8096/tcp": [{"HostPort": "18122"}, {"HostPort": "18123"}]}):
+            with patch.dict("os.environ", {"JF_PROBE_PORT": "18122"}), \
+                    patch.object(plugin, "run", return_value=_PortsResult(ports)):
+                with self.assertRaises(RuntimeError):
+                    plugin.own_server_base_url("round-container")
+
+    def test_a_healthy_container_answering_503_on_its_own_port_keeps_waiting(self):
+        # The observed first failure: Docker reported healthy/Degraded with exit 0 while the API
+        # still answered 503, so the existing timeout must keep waiting instead of continuing.
+        self._write_credentials("http://127.0.0.1:18122")
+        requested: list[str] = []
+        responses = [
+            HTTPError("http://127.0.0.1:18122/System/Info/Public", 503, "Service Unavailable", {}, io.BytesIO(b"")),
+            {"Version": "12.2.0"},
+        ]
+
+        def fake_request_json(url, **kwargs):
+            requested.append(url)
+            item = responses.pop(0)
+            if isinstance(item, Exception):
+                raise item
+            return item
+
+        def fake_run(command, **kwargs):
+            if command[:2] == ["docker", "inspect"] and any("NetworkSettings.Ports" in part for part in command):
+                return _PortsResult({"8096/tcp": [{"HostIp": "127.0.0.1", "HostPort": "18122"}]})
+            if command[:2] == ["docker", "inspect"]:
+                result = _PortsResult({})
+                result.stdout = "healthy"
+                return result
+            return _PortsResult({})
+
+        with patch.dict("os.environ", {"JF_PROBE_PORT": "18122"}), \
+                patch.object(plugin, "run", side_effect=fake_run), \
+                patch.object(plugin, "request_json", side_effect=fake_request_json), \
+                patch.object(plugin, "isolated_container_name", return_value="round-container"), \
+                patch.object(plugin.time, "sleep", return_value=None):
+            self.assertEqual(plugin.restart_isolated_server(), "round-container")
+        self.assertEqual(requested, ["http://127.0.0.1:18122/System/Info/Public"] * 2)
+
+    def test_the_wait_reports_the_own_port_when_its_api_never_settles(self):
+        self._write_credentials("http://127.0.0.1:18122")
+
+        def failing_request_json(url, **kwargs):
+            raise HTTPError(url, 503, "Service Unavailable", {}, io.BytesIO(b""))
+
+        def fake_run(command, **kwargs):
+            if command[:2] == ["docker", "inspect"] and any("NetworkSettings.Ports" in part for part in command):
+                return _PortsResult({"8096/tcp": [{"HostIp": "127.0.0.1", "HostPort": "18122"}]})
+            if command[:2] == ["docker", "inspect"]:
+                result = _PortsResult({})
+                result.stdout = "healthy"
+                return result
+            return _PortsResult({})
+
+        ticks = iter([0.0, 0.0, 1.0, 2.0, 1000.0] + [1000.0] * 50)
+        with patch.dict("os.environ", {"JF_PROBE_PORT": "18122"}), \
+                patch.object(plugin, "run", side_effect=fake_run), \
+                patch.object(plugin, "request_json", side_effect=failing_request_json), \
+                patch.object(plugin, "isolated_container_name", return_value="round-container"), \
+                patch.object(plugin.time, "monotonic", side_effect=lambda: next(ticks)), \
+                patch.object(plugin.time, "sleep", return_value=None):
+            with self.assertRaises(RuntimeError) as raised:
+                plugin.restart_isolated_server()
+        self.assertIn("http://127.0.0.1:18122", str(raised.exception))
+        self.assertIn("503", str(raised.exception))
+
+
 if __name__ == "__main__":
     unittest.main()
