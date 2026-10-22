@@ -13,7 +13,7 @@ Test Level: T4
 Planner / Reviewer: B
 ```
 
-最新 B 决定：**FIX REQUIRED（其余必要门禁待 B 补齐）**，继续同一 Task 5.3。完整合并版本／SQLite helper 与带明确准备适配的 plugin 完整入口已 PASS，B53-20261022-8 闭合；不再要求 Developer 修改准备工具。本轮继续同 ZIP 的真实视频验收，六个 C02 行及 MP4.C06.limited 已完成独立核验，累计矩阵 10／116；历史 FAIL 保留，剩余矩阵及完整门禁仍由 B 负责。见文末本轮续验记录。
+最新 B 决定：**FIX REQUIRED（其余必要门禁待 B 补齐）**，继续同一 Task 5.3。完整合并版本／SQLite helper 与带明确准备适配的 plugin 完整入口已 PASS，B53-20261022-8 闭合；不再要求 Developer 修改准备工具。继续同 ZIP 的真实视频验收，六个 C02 行及 MP4.C06.limited／full 已完成独立核验，累计矩阵 11／116；历史 FAIL 保留，剩余矩阵及完整门禁仍由 B 负责。见文末本轮续验记录。
 
 ## B 合同重判与继续决定（2026-10-21）
 
@@ -865,3 +865,32 @@ NEXT ACTION: B CONTINUES THE REMAINING FIXED-CANDIDATE VIDEO MATRIX AND ALL SPEC
 累计当前正式候选矩阵 **10／116**、B 独立关键 **10／40**、C **7／12**。其余 **106 行／30 个独立关键、5 个 C 行**、完整 baseline、同 ZIP package-all／scan-all／现存全部 1004 项 large-all、batch-suite／configuration-all 及 Slice Final **尚待 B**；历史旧 ZIP／旧输入结果不替代本候选门禁。本轮未发现新增 Developer 修正，不启动新 Task、不提交 Closure Packet、不关闭 Slice。全部 RO 未满足，不能返回 SLICE READY FOR A REVIEW。
 
 NEXT ACTION: B CONTINUES THE REMAINING FIVE C06 ROWS, FIXED-CANDIDATE VIDEO MATRIX AND SPECIFIED FULL GATES. PREPARED NATIVE-MERGE DECISION AND MATCHING PASS EVIDENCE RETAINED; NO NEW DEVELOPER TOOLING REQUEST.
+
+## B C06 full 视频续验（2026-10-22 23:14 UTC 轮）
+
+**Decision：FIX REQUIRED（必要门禁尚未齐，继续同一 Task 5.3）。** 开始时 main 干净、超前 origin/main 87 提交，治理 PASS；审查 Head `aa52f5d35ff9ccedba5cdf19b412e382c9c8bfb7`，实现仍为 `4b4d0cca33f37308842710b2a0a70b1919cd0a58`。Task Base／合同／Slice 保持。完整 Base..Head 差异留存，既有完整审查按匹配输入复用，另检查当前 C06 的决策、指纹创建、成功保存、33 字段匹配、原生 Web、固定地址换内容与重启路径；本轮未发现新增 Developer 实施修正。
+
+97 项实际输入与前轮最终摘要全部相同，正式 ZIP 仍为 sourceRevision `3a7de052bf089141f76e2f60921de285bd5184c4`／SHA-256 `9641fe917cc8db8d36ec32c841fb968b0149890f39094adce5338a0f28dd9e37`。复用 205 项 C#、完整 Python 410 项（408 PASS＋2 既有 SKIPPED）、restore／build／format／Node、已接受 10 行矩阵及完整 prepared plugin／独立合并原始证据；未重建包、重跑匹配门禁或更改此前合并准备决定。运行工具为 Python 3.11.10、Node 22.19.0、Playwright 1.55.0、Chromium 140.0.7339.16。
+
+**新增独立行 MP4.C06.full：PASS。** 使用既有 `--scenario matrix --rows MP4.C06.full`，新专属工作区／18129，正常退出 0，完整准备到清理墙钟 **275.571 秒**，无预算中断／重试／调试器／PlaybackInfo 预热／断言改变。实际原生 ffprobe 的 B 为 **pc**，真实大小 **1,660,446 → 1,523,345**、内容哈希不同；原子切换同一实际 URL，Manifest 省略新 SHA-1 并填写真实新大小。B 独立核对实际字节、原始 Manifest、保存源／Video／Audio／五字段及完整重启状态，新指纹 **sha1=null**，没有继承旧有效内容哈希。
+
+| 原生 Web 阶段 | 实际 ffprobe 增量 | 播放推进／解码帧 | 指纹 |
+|---|---|---|---|
+| 首次信任 A | 0 | 5.405 秒／93 | 真实 A SHA-1／大小 |
+| 同地址切换 B 后首次播放 | 1 | 5.368 秒／93 | 新 SHA-1 为空／真实 B 大小 |
+| 再播 B | 0 | 5.387 秒／90 | 完整五字段不变 |
+| 重启后实播 B | 0 | 5.380 秒／89 | 与先只读核对的完整状态一致 |
+
+重启前冻结完整原生源／媒体流、五字段、STRM 摘要及探测计数；重启后在任何 PlaybackInfo 之前只读相等，再播放零探测。8 张原图均由 B 逐张实际打开，正确 A／可辨识 C06FULL 标记（长标记两端略裁切）、实际时钟与画面变化、无错误；起止嵌入时钟分别为 0.600→5.933、0.600→5.933、0.400→5.733、0.333→5.667 秒，均超过 5 秒。未以图片路径或脚本 PASS 标签代替查看。
+
+本次项目／源／URL hash 关联的 33 字段原文及完整对照表显示：编码器＝成功保存全字段一致；返回仅 **ColorRange pc→null**，其余 32 项一致。独立按原始物理日志准确重数 **2 次 ffprobe**（A 准备＋B 变化各 1）、**4 次 FFmpeg 转码**；启动 lavfi 能力检查另列。唯一当前源、PlaybackInfo 的当前地址／Video／Audio 和五字段逐阶段核对，未另跑探测补写同次字段。
+
+既有入口只重建自身此前已停止的两个同根 project 容器；本批实际挂载均在新专属工作区、网络成员仅为本批服务。运行对账 CLEAN，正常清理 CLEANED，两服务 exit 0／无 OOM；其余 58 个容器的 StartedAt／状态／镜像／完整排序挂载内容不变。未操作共享、运行中、生产或现存全部 1004 项准备库，全部保留。当前浏览器根目录读取曾误用仓库 node_modules，按实际既有 package 入口纠正为原工具链；未安装新工具或重跑产品。
+
+本轮按实际预算将最初待选两行缩为上述一条，未删减完整验收集合；测试墙钟含准备／等待／退出／清理，另保守计小检查，时间账本从 **23:14:32 UTC** 起计，前序闲置时间不计入分母，严格小于本轮 **50%**。已积累余量不足下一条完整旅程与清理，不空等凑比例、不预借未来时间，按现有分批合同收束。
+
+累计当前候选矩阵 **11／116**、独立关键 **11／40**、C **8／12**；其余 **105 行／29 个独立关键、4 个 C06 行**及完整 baseline、同 ZIP package-all／scan-all／现存全部 1004 项 large-all、batch-suite／configuration-all、Slice Final 尚待 B。没有把全量交回 Developer、创建新 Task、推送、提交 Closure Packet 或关闭 Slice；RO 未齐，尚不具备 SLICE READY FOR A REVIEW 条件。
+
+本机忽略证据：`.git/validation-evidence/4b4d0cca33f37308842710b2a0a70b1919cd0a58/b-C06-rest-20261022T231432Z/INDEX.md`，保留精确命令／输入／实际环境、原始日志／响应、33 字段表、8 张原图及摘要／实际查看、完整状态／字节与隔离对账、首个观察读取限制、真实时间账本；原始凭据和数据库未进入普通提交。
+
+NEXT ACTION: B CONTINUES MP4.C06.unspecified AND ALL THREE MKV.C06 ROWS, THE REMAINING FIXED-CANDIDATE MATRIX AND SPECIFIED FULL GATES. SAME TASK, BASE AND FORMAL ZIP; NO NEW DEVELOPER TOOLING PREREQUISITE OR SLICE CLOSE.
