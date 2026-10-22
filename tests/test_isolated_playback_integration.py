@@ -706,6 +706,17 @@ class F02CorruptionTests(unittest.TestCase):
     video stream or a successful probe.
     """
 
+    def test_the_f02_rows_use_the_corrupt_bytes_and_their_real_identity(self):
+        rows = MatrixRowIdTests.rows_by_id()
+        for fmt, ext in (("MP4", "mp4"), ("MKV", "mkv")):
+            row = rows[f"{fmt}.F02"]
+            trunc = MatrixRowIdTests.FIXTURES[f"matrix-{ext}-a-trunc.{ext}"]
+            recovery = MatrixRowIdTests.FIXTURES[f"matrix-{ext}-p4b.{ext}"]
+            self.assertEqual(row["apply"]["corrupt_to"], f"matrix-{ext}-a-trunc.{ext}")
+            self.assertEqual(row["apply"]["corrupt_sha1"], trunc["sha1"])
+            self.assertEqual(row["apply"]["corrupt_size"], str(trunc["size"]))
+            self.assertEqual(row["fp_tokens"], (recovery["sha1"], str(recovery["size"])))
+
     def test_the_f02_partner_is_a_strict_512_byte_truncation(self):
         data = bytes(range(256)) * 8
         prefix = playback.f02_truncated_bytes(data)
