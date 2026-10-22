@@ -632,6 +632,47 @@ class MatrixPreconditionTests(MatrixRowIdTests):
             self.assertEqual(up_sha, self.FIXTURES[f"matrix-{ext}-p06up.{ext}"]["sha1"])
             self.assertEqual(down_sha, self.FIXTURES[f"matrix-{ext}-p4b.{ext}"]["sha1"])
 
+    def test_p06_real_sizes_follow_the_fixed_up_and_down_directions(self):
+        # The direction is a property of the real files, not of the row label: every ``up`` row
+        # must serve more bytes than A and every ``down`` row fewer.
+        rows = self.rows_by_id()
+        for fmt, ext in (("MP4", "mp4"), ("MKV", "mkv")):
+            a_size = self.FIXTURES[f"baseline-{ext}-a.{ext}"]["size"]
+            for tail in ("01", "02", "03", "04", "05"):
+                up = rows[f"{fmt}.P06.{tail}.up"]
+                down = rows[f"{fmt}.P06.{tail}.down"]
+                self.assertGreater(int(up["apply"]["size"]), a_size)
+                self.assertLess(int(down["apply"]["size"]), a_size)
+                self.assertGreater(self.FIXTURES[up["apply"]["to"]]["size"], a_size)
+                self.assertLess(self.FIXTURES[down["apply"]["to"]]["size"], a_size)
+
+    def test_p06_fixtures_with_wrong_directions_are_refused_before_any_row(self):
+        # A longer duration does not imply a longer file; the generated partners are measured and
+        # the row build stops if the real byte sizes contradict the fixed direction.
+        playback.require_p06_directions("MP4", 1000, 1400, 700)
+        with self.assertRaises(playback.BaselineError):
+            playback.require_p06_directions("MP4", 1660446, 381375, 700)
+        with self.assertRaises(playback.BaselineError):
+            playback.require_p06_directions("MP4", 1000, 1400, 1200)
+        broken = dict(self.FIXTURES)
+        broken["matrix-mp4-p06up.mp4"] = {"sha1": "d" * 40, "size": 900}
+        with self.assertRaises(playback.BaselineError):
+            playback.build_matrix_rows(broken)
+
+    def test_the_p06_up_partner_is_encoded_with_real_per_frame_noise(self):
+        # smptebars alone encodes smaller than the shorter A clip even at a longer duration, so the
+        # up partner needs a real content difference; the generation parameters alone prove
+        # nothing, which is why the measured sizes are checked separately above.
+        for fmt in ("MP4", "MKV"):
+            spec = playback.matrix_extra_specs(fmt)["matrix-{}-p06up.{}".format(
+                "mp4" if fmt == "MP4" else "mkv", "mp4" if fmt == "MP4" else "mkv")]
+            self.assertTrue(spec.get("noise"))
+            args = playback.fixture_ffmpeg_args(spec, "p06up.out")
+            self.assertIn(str(spec["noise"]), args[args.index("-vf") + 1])
+            down = playback.matrix_extra_specs(fmt)["matrix-{}-p4b.{}".format(
+                "mp4" if fmt == "MP4" else "mkv", "mp4" if fmt == "MP4" else "mkv")]
+            self.assertNotIn("noise", down)
+
     def test_c02_is_a_url_change_not_a_fixed_url_byte_swap(self):
         rows = self.rows_by_id()
         for fmt, ext in (("MP4", "mp4"), ("MKV", "mkv")):

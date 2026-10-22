@@ -770,8 +770,15 @@ def fixture_ffmpeg_args(spec: dict[str, object], name: str) -> list[str]:
     args = ["-y", "-f", "lavfi", "-i",
             f"{spec['pattern']}=duration={duration}:size=320x180:rate=15",
             "-f", "lavfi", "-i", f"sine=frequency={spec['tone']}:duration={duration}"]
-    filters = (f"drawtext=fontfile={FONT}:text='{spec['marker']}':fontsize=48:fontcolor=white:"
-               "x=(w-text_w)/2:y=(h-text_h)/2:box=1:boxcolor=black@0.5")
+    chain: list[str] = []
+    if spec.get("noise"):
+        # The P06 "up" partner must be a genuinely longer file, not merely a longer duration: a
+        # static smptebars source encodes to fewer bytes than the shorter A clip. Real per-frame
+        # noise raises the encoded size at the same resolution/duration, and stays decodable.
+        chain.append(str(spec["noise"]))
+    chain.append(f"drawtext=fontfile={FONT}:text='{spec['marker']}':fontsize=48:fontcolor=white:"
+                 "x=(w-text_w)/2:y=(h-text_h)/2:box=1:boxcolor=black@0.5")
+    filters = ",".join(chain)
     args += ["-vf", filters, "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p"]
     if spec["color_range"] == "pc":
         args += ["-color_range", "pc"]
@@ -1456,9 +1463,11 @@ def matrix_extra_specs(fmt: str) -> dict[str, dict[str, object]]:
     """The controlled extra media the matrix needs beyond the baseline fixtures.
 
     ``p4b`` is a short (16 s) smptebars B-side: the guaranteed-shorter partner and the
-    equal-length-after-legal-padding partner. ``p06up`` is the guaranteed-longer side. The
-    ``short-*`` and plain ColorRange names are the C-row controlled targets; the evidence records
-    the actual ffprobe fields, never the generation parameters.
+    equal-length-after-legal-padding partner. ``p06up`` is the guaranteed-longer side; a longer
+    duration alone does not make it longer in bytes (a static pattern encodes far smaller), so it
+    also carries real per-frame noise. The ``short-*`` and plain ColorRange names are the C-row
+    controlled targets; the evidence records the actual ffprobe fields, never the generation
+    parameters.
     """
     ext = "mp4" if fmt == "MP4" else "mkv"
     prefix = f"matrix-{ext}-"
@@ -1466,7 +1475,8 @@ def matrix_extra_specs(fmt: str) -> dict[str, dict[str, object]]:
         prefix + f"p4b.{ext}": {"container": ext, "pattern": "smptebars", "marker": fmt + " P4B", "tone": 660,
                                "color_range": "tv", "seconds": 16},
         prefix + f"p06up.{ext}": {"container": ext, "pattern": "smptebars", "marker": fmt + " P06UP", "tone": 660,
-                                  "color_range": "tv", "seconds": 28},
+                                  "color_range": "tv", "seconds": 28,
+                                  "noise": "noise=alls=40:allf=t+u"},
     }
     for tail, marker, color_range in (("limited", "C06LIM", "tv"), ("full", "C06FULL", "pc"),
                                       ("unspecified", "C06UNS", None)):
@@ -1516,6 +1526,22 @@ def pad_mp4_to(data: bytes, target: int) -> bytes:
     return result
 
 
+def require_p06_directions(label: str, a_size: int, up_size: int, down_size: int) -> None:
+    """Refuse a P06 partner set whose real byte sizes contradict the fixed up/down direction.
+
+    The contract's ten P06 rows per format are half ``up`` (the new media really has more bytes)
+    and half ``down`` (fewer). A longer duration does not imply more bytes, so the generated files
+    are measured and the run stops before any playback if a direction is wrong; a mislabelled
+    partner must never be reported as the other direction.
+    """
+    require(down_size < a_size,
+            f"{label}: the P06 down partner is {down_size} bytes, not fewer than A's {a_size}; "
+            f"the down direction would really be an up case.")
+    require(up_size > a_size,
+            f"{label}: the P06 up partner is {up_size} bytes, not more than A's {a_size}; "
+            f"the up direction would really be a down case.")
+
+
 def generate_matrix_fixtures() -> dict:
     """Generate the matrix media with the pinned FFmpeg and derive the padded/truncated partners."""
     base = generate_fixtures()
@@ -1529,8 +1555,8 @@ def generate_matrix_fixtures() -> dict:
     for ext in ("mp4", "mkv"):
         a_bytes = (pe.WORK / "media" / f"baseline-{ext}-a.{ext}").read_bytes()
         p4b_bytes = (pe.WORK / "media" / f"matrix-{ext}-p4b.{ext}").read_bytes()
-        require(len(p4b_bytes) < len(a_bytes),
-                f"matrix-{ext}-p4b is not shorter than baseline A; the equal-length pair is impossible.")
+        p06up_bytes = (pe.WORK / "media" / f"matrix-{ext}-p06up.{ext}").read_bytes()
+        require_p06_directions(ext.upper(), len(a_bytes), len(p06up_bytes), len(p4b_bytes))
         padded = pad_mp4_to(p4b_bytes, len(a_bytes)) if ext == "mp4" else pad_mkv_to(p4b_bytes, len(a_bytes))
         pe.write_owned_bytes(pe.WORK / "media" / f"matrix-{ext}-b-padded.{ext}", padded,
                              label=f"padded partner matrix-{ext}-b-padded")
@@ -1600,6 +1626,10 @@ def build_matrix_rows(fixture_table: dict) -> list[dict]:
         b = fx(f"baseline-{ext}-b.{ext}")
         p4b = fx(f"matrix-{ext}-p4b.{ext}")
         p06up = fx(f"matrix-{ext}-p06up.{ext}")
+        # The P06 rows are fixed as five "up" and five "down" directions per format; the real
+        # fixture byte counts must agree before any row is built, so a wrong-direction partner can
+        # never be labelled with the other direction.
+        require_p06_directions(fmt, int(a["size"]), int(p06up["size"]), int(p4b["size"]))
         bpad = fx(f"matrix-{ext}-b-padded.{ext}")
         trunc = fx(f"matrix-{ext}-a-trunc.{ext}")
         c02_targets = ({"limited": f"baseline-{ext}-limited.{ext}", "full": f"baseline-{ext}-full.{ext}",
