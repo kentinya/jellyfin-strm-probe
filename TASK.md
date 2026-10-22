@@ -13,7 +13,7 @@ Test Level: T4
 Planner / Reviewer: B
 ```
 
-最新 B 复核（2026-10-22 03:43 UTC 轮）：F02 夹具阻塞已解除，正式 ZIP 的 `MKV.F02` 独立完整旅程通过；Task 仍为 **FIX REQUIRED（完整验收未齐）**。本轮没有新增 Developer 修正项，下一步由 **B 继续同一候选的剩余完整门禁**，不把未运行门禁退交 Developer。详细证据与复用边界见文末最新 B 决定。
+最新 B 复核（2026-10-22 04:18 UTC 续验轮）：正式 ZIP 已独立接受 `MKV.F02` 和 `MP4.C02.limited`，矩阵进度 **2／116**；F02 夹具阻塞保持解除，Task 仍为 **FIX REQUIRED（完整验收未齐）**。没有新增 Developer 修正项，下一步由 **B 继续同一候选的剩余完整门禁**，不把未运行门禁退交 Developer。详细证据与复用边界见文末最新 B 决定。
 
 ## B 合同重判与继续决定（2026-10-21）
 
@@ -526,3 +526,16 @@ Decision: FIX REQUIRED
 - **证据与测试比例：** `.git/validation-evidence/46a53d3777d4b52392a3c09967bd947ac3a188c7/b-review-20261022T034312Z/INDEX.md`；包含完整差异／输入清单、全回归、独立运行命令、原始服务器与媒体日志、响应／完整状态、真实夹具、18 张图查看记录、复用限制和收尾。04:01:39 UTC 检查点实际总时间 **1107.198 秒**，全回归与真实运行的测试墙钟并集加保守检查额度为 **495.065 秒（44.71%）**。当时已发生时间余额仅 117 秒，不足下一完整实播旅程，停止启动新测试并保留本轮结果；未空等凑分母、未预借未来审查时间。后续报告／提交只增加实际非测试工作，最终精确比例见 `timing-ledger.json`。
 
 NEXT ACTION: B CONTINUES REMAINING TASK 5.3 FULL GATES ON THE FIXED FORMAL ZIP; NO NEW DEVELOPER CORRECTION REQUESTED IN THIS ROUND.
+
+
+## B 完整验收续验记录（2026-10-22 04:18 UTC 轮）
+
+- **固定身份／审查／复用：** 工作区开始干净、main 超前 origin/main 66 提交；治理通过。Reviewed Range `f17fb1fc90dda242eeff9fac7b4f21576b5e6f94..0cb9c70211f8f28cdcbd52fef54e3b9c590eda43`，相对已完整审查候选仅 TASK.md 后继；逐文件核对本 Task 全部 8 个可执行／测试输入摘要不变。继续正式 sourceRevision `494302f5520912201e10b0559cd883fad83789d5` 的 ZIP `a8a57cad5587980a9451f2cd0a74b06f259537498feb56de1f2f22b8e4e86f54`，无重建或源码改动。复用上一轮已核验的完整 C# 205／Python 362 passed＋2 archive 缺失 skip、restore／build／format／compileall／Node，以及独立 MKV.F02；匹配原始索引可读，不机械重跑，不把 skip 计 PASS。Slice／Task Base、合同和 ID 不变。
+- **本轮新实跑：MP4.C02.limited PASS。** 使用已有 `--scenario matrix --rows MP4.C02.limited`、上述同 ZIP、本机 18116、新归属 `run-20261022-042408-c40b7d76`，包入口保持串行。退出 0，runner 276.7 秒、完整墙钟 **278.372 秒**。真实限定范围 Video 为 tv、H.264＋AAC／24 秒，目标 SHA-1 `0d42b467afae22b06a6e9cb50ab12b17105e6f4d`／Size 1679710，区别于 A 的有效 SHA-1／Size；实际原生 Web Play 换到新 URL，未预先请求变化后 PlaybackInfo。
+- **三阶段与正确性：** 首次信任／换址窗口／再播／重启后 ffprobe **0／1／0／0**；独立重数新目标原始启动 1 次，另有不同旧目标准备 1 次。推进 **5.445799／5.361679／5.390558／5.379121 秒**，解码 95／90／93／94 帧，HTTP 200、正确 source `1ea937306d7d9ce520a2eaa5c4ec65f1`／最新地址／Video＋Audio，媒体 GET 为 1／2／1／1。同次编码器 04:27:20.948→保存成功 04:27:21.230→返回 04:27:24.327，关联相同项目／源和新 URL hash；33 字段编码器＝保存，返回仅 ColorRange tv→null，其余 32 字段一致。新保存的视频 BitRate 为 460010，旧值 453588；不是只凭旧主流存在接受。新五字段提交，重启前冻结完整原生源／媒体流、STRM 摘要、五字段和计数与任何播放前的只读快照精确相等；随后实播不重复探测。
+- **截图／收尾：** 8 张原图已逐张实际打开：首次 MP4 A 嵌入计数 00:00:00.733→00:00:06.133；换址／再播／重启均 MP4 LIM，分别 00:00:00.400→00:00:05.733、00:00:00.600→00:00:05.933、00:00:00.667→00:00:06.000，无可见错误，配对原始媒体钟也均大于 5 秒。部署负载匹配、插件 Active、原生任务无默认触发；双服务 exit 0／无 OOM，对账 CLEAN／无 disturbed 项，仅本轮工作区 CLEANED，原始日志／响应／状态和原图已外置保留。
+- **后续完整门禁的准备事实：** 已从旧实跑入口确认原始准备库 `artifacts/package-env/runs/run-20261019-104647-796ca45c`。只读重核其 1170 文件完整摘要仍为 `189b67c66e608833b27fa818de24bb1611788565c87eeffc0568b9eefe958bd2`，与原记录一致；无运行挂载重叠，SQLite immutable／read-only quick_check 均 ok，1006 个 STRM 夹具文件（含对照）保留。这只是准备资料核验，**不代替新候选全部 1004 原生支持源的大库验收**。未启动、复制、改写、清理原库；生产／共享 dev-env 未操作。安装／扫描／大库及开发部署门禁的既有网络、隔离和准备适配已复核，尚未冒充执行。
+- **Decision：FIX REQUIRED（完整验收未齐）；无新增产品 P0／P1 或 Developer 修正请求。** 当前同 ZIP 接受 **2／116**，其余 **114 行**（含 MP4.F02、其余 11 个 C 行）、baseline B01／B02、全部指定独立关键复现及 package／scan／现存全部 1004 large／plugin／batch／configuration 仍须 B 补齐；本轮这些项目 NOT RUN。RO-2／RO-3 未齐，RO-4 既有决定保持，不造新 Task、不交回 Developer 代跑全量、不提交 Closure Packet／SLICE READY FOR A REVIEW、不关闭 Slice。
+- **时间与证据：** `.git/validation-evidence/0cb9c70211f8f28cdcbd52fef54e3b9c590eda43/b-full-gates-20261022T041834Z/INDEX.md`；包括输入复用、完整累计差异、本轮精确命令／退出／时序、原始服务器与媒体日志／响应／原生全状态、8 张图实际查看记录、33 字段逐项表、原准备库只读核验及收尾。本轮仍按用户测试低于 50% 规则执行；实际已发生 797.995 秒时，新测试余额 221.25 秒，低于下一完整旅程估计 300 秒，故停止启动新测试并完成本轮取证与报告，未空等凑分母。真实运行 278.372 秒、其他检查保守计 10 秒，未运行的旧复用门禁不计新测试耗时，最终比例见 `timing-ledger.json`。未收到放宽比例的答复，不将未答复视为授权。
+
+NEXT ACTION: B CONTINUES THE FIXED-ZIP REMAINING FULL GATES IN TASK 5.3; NO DEVELOPER FIX REQUEST OR SLICE CLOSE.
