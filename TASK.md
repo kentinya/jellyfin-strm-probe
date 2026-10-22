@@ -13,7 +13,7 @@ Test Level: T4
 Planner / Reviewer: B
 ```
 
-最新 B 决定：**FIX REQUIRED（其余必要门禁待 B 补齐）**，继续同一 Task 5.3。本轮已沿 A 接受的准备方法独立验证完整合并版本／SQLite helper，并完成带明确准备适配的 plugin 完整入口，两者 PASS，B53-20261022-8 已闭合；不再要求 Developer 修改准备工具。历史 FAIL 保留，视频矩阵及其他完整门禁仍由 B 负责。见文末“合并版本补验与完整 plugin 门禁”。
+最新 B 决定：**FIX REQUIRED（其余必要门禁待 B 补齐）**，继续同一 Task 5.3。完整合并版本／SQLite helper 与带明确准备适配的 plugin 完整入口已 PASS，B53-20261022-8 闭合；不再要求 Developer 修改准备工具。本轮继续同 ZIP 的真实视频验收，六个 C02 行及 MP4.C06.limited 已完成独立核验，累计矩阵 10／116；历史 FAIL 保留，剩余矩阵及完整门禁仍由 B 负责。见文末本轮续验记录。
 
 ## B 合同重判与继续决定（2026-10-21）
 
@@ -828,3 +828,40 @@ RO-2／RO-3 仍未全部满足：矩阵保持 **3／116、独立关键 3／40、
 本机证据索引：`.git/validation-evidence/4b4d0cca33f37308842710b2a0a70b1919cd0a58/b-merge-acceptance-20261022T144452Z/INDEX.md`。包含精确命令／时间／退出、原始响应／正文／物理日志、适配源码、完整差异／输入、独立审计及时间账本；仅本机可读，未上传。测试占比以该索引的实际时间账本为准，严格小于本轮 50% 要求。
 
 NEXT ACTION: B CONTINUES THE REMAINING FIXED-CANDIDATE VIDEO MATRIX AND ALL SPECIFIED FULL GATES. NATIVE-MERGE BLOCKER CLOSED; NO NEW DEVELOPER TOOLING REQUEST, TASK OR SLICE CLOSE.
+
+## B ColorRange 视频续验（2026-10-22 15:17 UTC 轮）
+
+**Decision：FIX REQUIRED（必要门禁尚未齐，继续同一 Task）。** 开始时 main 干净、超前 origin/main 86 提交，治理通过；审查输入 Head `12a22553628911f11b9a599bf3ce2cb311d65c73`，实现仍为 `4b4d0cca33f37308842710b2a0a70b1919cd0a58`。完整 Task Base..Head 20 个文件差异留存并结合既有审查核对，97 项实际输入仅报告变化。未改产品、正式工具／测试、依赖或合同，未推送、委派或改写历史。
+
+继续复用原正式 ZIP：sourceRevision `3a7de052bf089141f76e2f60921de285bd5184c4`，SHA-256 `9641fe917cc8db8d36ec32c841fb968b0149890f39094adce5338a0f28dd9e37`。205 项 C#、完整 Python 410 项（408 PASS＋2 既有 SKIPPED）、restore／build／format／Node、旧 3 行视频及前轮完整 plugin／独立合并证据输入仍匹配，未机械重跑。前轮合并准备决定保持，不新增 Developer 工具修正。
+
+### 六个 C02 行的实际验收
+
+通过已有 `--scenario matrix --rows` 入口分三批执行，无预热 B PlaybackInfo、重试转绿或断言修改，无 P 行别名：
+
+| 独立行 | 实际目标 ColorRange | 首次信任／换地址／再播／重启探测增量 | B 结果 |
+|---|---|---|---|
+| MP4.C02.limited | tv | 0／1／0／0 | PASS |
+| MP4.C02.full | pc | 0／1／0／0 | PASS |
+| MP4.C02.unspecified | 原生输出缺失 | 0／1／0／0 | PASS |
+| MKV.C02.limited | tv | 0／1／0／0 | PASS |
+| MKV.C02.full | pc | 0／1／0／0 | PASS |
+| MKV.C02.unspecified | 原生输出缺失 | 0／1／0／0 | PASS |
+
+每行核对真实 A／B 不同字节及实际哈希／大小、唯一源→当前 URL→Video／Audio、完整原生源／流和五字段。四阶段均为原生 Web 实播，推进超过 5 秒且有解码帧；48 张原图已由 B 逐张实际打开，正确 A／B 标记、嵌入时钟和画面变化、无错误。每行重启前冻结完整状态，重启后在任何 PlaybackInfo 之前只读相等，再实际播放零额外探测；没有以播放补建掩盖持久化问题。
+
+六次探测均取得同次项目／源／URL hash 关联的完整 33 字段。编码器＝成功保存全字段一致；limited／full 仅返回 ColorRange 缺失，其余 32 项一致；unspecified 三阶段 33 项全部一致。实际字典、原文行号和逐字段表保留，未另跑 ffprobe 补写同次证据。三批物理启动独立重数共 12 次 ffprobe（6 次 A 准备＋6 次 B 测量）、24 次 FFmpeg 转码；启动时 lavfi 能力检查另列，不冒充转码或窗口探测。
+
+完整命令墙钟分别为 275.752／512.794／396.518 秒，均退出 0。各批沿既有入口重建其自身已停止的两个同根 project 容器，实际挂载只在本批新工作区；不是声称原 60 个容器 ID 全部不变。原有小型运行已 CLEANED，本批正常清理 CLEANED、两个服务 exit 0／无 OOM；其余 58 个容器的 StartedAt／状态／镜像／完整挂载内容不变。共享／运行中／生产及现存全部 1004 项准备库未操作，继续保留。观察读取的引号编码、GUID 表示、转码日志前缀及挂载顺序误判均保留并独立纠正，没有因此重跑产品。
+
+本轮原始资料与独立审计仅存本机忽略目录：`.git/validation-evidence/4b4d0cca33f37308842710b2a0a70b1919cd0a58/b-C02-limited-20261022T151717Z/INDEX.md`，包含各批精确 argv／环境／退出／耗时、实际负载／字节、原文／响应、截图摘要和查看记录、33 字段表、完整差异及归属对账；凭据、数据库及原始资料未进入普通提交。
+
+### 同轮追加 C06 与本轮停止点
+
+**MP4.C06.limited：PASS，退出 0，277.843 秒。** 同一已有矩阵入口，保持实际 URL 不变，原子替换为真实 B，大小由 **1,660,446 降至 1,446,825** 字节；旧 STRM 有真实有效 SHA-1，新 STRM 不含 SHA-1。B 独立读取实际目标文件摘要与 Manifest 原文，确认替换字节等于 B、当前大小真实、URL hash 保持；新五字段 **sha1=null**，没有继承旧版本有效哈希。首次信任／变化／再播／重启探测增量 **0／1／0／0**，重启先只读完整状态相等，四阶段正常实播及 8 张原图已逐张查看。同次 33 字段仍为编码器＝成功保存、仅返回 ColorRange 缺失，真实 tv 输入；原始物理启动为 2 次 ffprobe／4 次 FFmpeg 转码，能力检查另列。专属两服务正常停止 exit 0／无 OOM、小型运行 CLEANED，其余 58 容器不变；现存全部 1004 项继续保留。初期观察早于新容器启动、网络短 ID／完整 ID 比较不匹配的读取失败保留并纠正，未重跑产品。
+
+本轮新增 7 个独立视频行、56 张 B 实际查看原图，四批命令测试墙钟合计 **1462.907 秒**；另保守计 25 秒小检查，实际本轮从 **15:17:17 UTC** 开始，不重置分母、不空等凑比例、不预借未来时间，收束账本确认严格小于 **50%**。既有证据的阅读／比对不重计为原测试耗时。当前已积累余量不足下一条完整旅程及退出清理，按合同既有分批规则收束，不削减行集合。
+
+累计当前正式候选矩阵 **10／116**、B 独立关键 **10／40**、C **7／12**。其余 **106 行／30 个独立关键、5 个 C 行**、完整 baseline、同 ZIP package-all／scan-all／现存全部 1004 项 large-all、batch-suite／configuration-all 及 Slice Final **尚待 B**；历史旧 ZIP／旧输入结果不替代本候选门禁。本轮未发现新增 Developer 修正，不启动新 Task、不提交 Closure Packet、不关闭 Slice。全部 RO 未满足，不能返回 SLICE READY FOR A REVIEW。
+
+NEXT ACTION: B CONTINUES THE REMAINING FIVE C06 ROWS, FIXED-CANDIDATE VIDEO MATRIX AND SPECIFIED FULL GATES. PREPARED NATIVE-MERGE DECISION AND MATCHING PASS EVIDENCE RETAINED; NO NEW DEVELOPER TOOLING REQUEST.
