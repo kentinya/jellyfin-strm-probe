@@ -436,3 +436,31 @@ Decision: FIX REQUIRED (delivery self-review; independent B decision still pendi
 - **候选包：** 从干净 `292a369` 构建 `dev-fix-round/package/Jellyfin.Plugin.StrmProbeOptimizer_linux-x64.zip`，sourceRevision `292a369207d7a24d28d132d66434eeb4acb37919`，buildInputsSha256 `f394eabc06a7e5423adefeed0aed34b18078be80d0a7ac9143f46340bb8d98ef`，ZIP SHA-256 `677f50fe8a82ad257017e18128b92087a81a6b341fcc8745cf2f4fdcb8f39544`。两个真实行均使用同一 ZIP。
 - **证据与预算：** 本机 `.git/validation-evidence/292a369207d7a24d28d132d66434eeb4acb37919/dev-fix-round/INDEX.md`、`commands.json`、两个原始运行目录与日志、截图。本轮总时长约 41 分钟，测试墙钟并集约 9.5 分钟（两次真实矩阵 271＋246 秒、两次打包 12＋7 秒、单元／编译／治理／差异约 2 秒，两次运行无重叠），约 23%，低于 30% 上限；未空等凑分母。两轮新归属容器均正常退出 0、无 OOM、CLEANED、对账 CLEAN；生产实例、现存 1004 项准备库与既有 dev-env 未操作。
 - **Remaining In-Slice Work：** 本 Task 仍未 PASS：D02／D03／D06 与其余 P／C／F 行、完整 116 行、C02／C06 三阶段与失败恢复、baseline、完整 C#／Python、package／scan／1004 large／plugin／batch／configuration 及独立关键复现均由 B 在固定最终候选上完成或核验复用。RO-3 仍受上一轮产品修正的真实重跑限制约束。不提交 Closure Packet、不返回 SLICE READY FOR A REVIEW、不关闭 Slice。
+
+
+## B 独立复核决定（2026-10-22，FIX REQUIRED）
+
+已读取必读文档与 B 经验，检查真实干净 main（起始超前 origin/main 56 提交）、已提交合同及完整 Task 差异，治理检查通过。保留同一 Task 5.3／Slice 5／Base／Contract Checkpoint；本轮不改产品或测试代码，不新建 Task。
+
+```text
+Reviewed Range: f17fb1fc90dda242eeff9fac7b4f21576b5e6f94..283f14d2de05849ca2b81d397eda0bd14d6f3af5
+Implementation Candidate: 292a369207d7a24d28d132d66434eeb4acb37919
+Decision: FIX REQUIRED
+```
+
+### 当前阻塞与同 Task 修正边界
+
+**B53-20261022-1／P1：P06 全部 Size 增大行实际使用较小文件。** 既有 `--scenario matrix` 的 `generate_matrix_fixtures` 按 `matrix_extra_specs` 生成 28 秒 smptebars，然后 `build_matrix_rows` 将其分配给每种格式的五个 `P06.*.up`。B 本轮通过该真实入口重新生成的原始媒体表，与交付数据一致：MP4 A 为 1,660,446 字节、up 为 381,375；MKV A 为 1,669,928、up 为 378,331。时长变长不能证明字节数增大；十行即使实播显示 PASS，也只证明减小方向，遗漏已固定的增大义务。这是实际输入／合同不匹配，不是猜测的内部调用或插件缺陷。
+
+修正现有播放脚本的必要夹具生成与方向前提，使 up 的真实字节数大于 A、down 小于 A；重新计算实际 SHA-1／Size，确认正常可探测／解码，并在测量前拒绝方向错误。保留规范 ID、固定预期和真实 Manifest，不能把 down 改名充当 up，也不改插件决策／成功规则或增加框架。Developer 仅改直接相关代码／测试，运行受影响 playback Python 控制、修改文件编译及少量完整 up 旅程，明确省略项；没有 C# 改动无需因此重跑 C#。全部最终门禁仍由 B 承担。F02 截断文件本次准备数据仍可被 ffprobe 读出 Video／Audio，但尚无有效失败窗口实播；只记待 B 核验的失败前提，不据此要求插件拒绝可探测结果或预填产品 FAIL。
+
+### 本轮通过、匹配复用与未完成项
+
+- **完整回归新跑：** SDK 10.0.401 locked restore／Release build（0 warning／error）／format 通过，C# 205 passed、0 failed、0 skipped。Python 3.11.10 在独立干净 Git archive 检出发现 357 项，355 passed、2 SKIPPED（两项 assembly version 控制因发布归档缺失）；跳过不计 PASS。compileall、Node 语法通过；未复制忽略的 artifacts／数据库／凭据到干净检出。原始命令、cwd、时刻和输出均在本轮索引。
+- **交付复核：** 当前审查 Head 相比 292a369 只改 TASK.md；ZIP 实际 SHA-256 `677f50fe8a82ad257017e18128b92087a81a6b341fcc8745cf2f4fdcb8f39544` 与交接包／sidecar 一致。逐张实际打开 P08.03 的 8 张、D04 的 6 张原图，均为 MP4 A，画面时间推进超过 5 秒，无可见错误。结合原始 ffprobe 日志、完整原生源／流和五字段重启相等证据，接受 `MP4.P08.03`、`MP4.D04` 两行的匹配结果；不冒充 B 另跑的独立关键播放或整个矩阵通过。
+- **既有修正：** P08.03 的原 TypeError 说法确实忽略了旧专用分支不可达，Developer 对此纠正成立；真实修正依据是非规范 Manifest 的精确字节保留。D02／D03 源码现将再播／重启旅程放在恢复配置之前，但真实门禁仍未完成。已核验原同次 33 字段、三条原日志与固定原生源码摘要，编码器＝成功保存，返回仅 ColorRange 缺失；有界修正仍保留其他身份和保存门槛。以上不能代替 12 个 C 行和 RO-3 全体验收。
+- **B 编排失败如实保留：** 本轮误将 C02 与 F02 在同检出并行运行；18112／18113 独立端口仍共用 ROOT 派生 Compose 项目，准备相互干扰。C02 中断退出 -2（161.58 秒），F02 退出 1（83.32 秒）；随后串行 F02 仍因残留容器网络关联错误在准备阶段退出 1（54.27 秒）。均归类 **BLOCKED（B 编排问题）**，没有有效行播放／截图，不计产品 FAIL／PASS。原始结果的 FAIL／空状态与 cleanupError 不改写。保存完整 inspect 并逐挂载核对归属后，仅移除本轮两个已停止容器；保留其 exit 143／137、无 OOM、部分工作区及所有证据，不称这些轮次 CLEAN。
+- **保留门禁：** 发现明确 P1 输入阻塞后停止昂贵全量。baseline、其余 114 个规范行、B 完整关键播放、同 ZIP package／scan／现存全部 1004 项 large、plugin／batch／configuration 和 Slice Final 本轮 **NOT RUN**；C02／F02 尝试不构成完成其中任何一行。B 在修正后的固定候选核验可复用输入并补齐指定全量、独立复现、全部截图和完整 Base..Head 审查，不把全量交回 Developer。同检出包入口串行执行即可，本次编排错误不新增共享工具实施要求。
+- **证据与收尾：** `.git/validation-evidence/283f14d2de05849ca2b81d397eda0bd14d6f3af5/b-review-20261022T002144Z/INDEX.md`，含完整差异、输入方向原文、回归日志／skip、14 张图逐张核验、同次字段来源、失败／重试、归属与清理。时间按命令墙钟并集核算（含所有失败尝试），最终值见 `timing-ledger.json`；测试低于本轮实际总时间 50%，未空等凑分母。生产实例与现存全部 1004 项准备库未操作／重建，不推送、不改历史。
+
+RO-1 部分满足；RO-2／RO-3 仍有上述输入阻塞与完整验收缺口；RO-4 保留 Task 5.1 既有接受决定。当前不具备 Closure Packet／SLICE READY FOR A REVIEW 条件，不关闭 Slice。下一步仅修正同一 Task 的必要输入，交独立 B 继续最终门禁。
