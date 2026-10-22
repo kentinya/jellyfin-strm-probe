@@ -39,6 +39,10 @@ MAX_WAIT_SECONDS = 90
 # The ordinary-media control's real file inside the isolated regular-media library. Its display
 # name is owned by Jellyfin's metadata providers and can change, so the path is the stable identity.
 ORDINARY_MEDIA_PATH = "/media/local/fixture.mp4"
+# Local ignored evidence file for native rejections. Only the server's own status and body are
+# recorded at capture time so a later failure can be handed over from raw stdout, never a request
+# URL, credential or signed address.
+ERROR_EVIDENCE_PATH = ROOT / "artifacts" / "dev-env" / "playback-error-evidence.jsonl"
 
 # Well-formed JSON bodies whose values are invalid for the core configuration. Each must be rejected
 # without changing the effective configuration or the persisted file.
@@ -70,6 +74,49 @@ def raw_error_body(error: HTTPError) -> str:
         return error.read().decode("utf-8", "replace")[:4000]
     except (OSError, ValueError):
         return ""
+
+
+def record_native_error(request_kind: str, item_id: str | None, status: int, body: str) -> None:
+    """Persist a native rejection's real status and body to the ignored evidence file.
+
+    The record is written while the response is still readable so a later failure hands over its
+    own reason from the raw output instead of an empty object. Evidence problems must never mask
+    the real native failure, so write errors stay silent.
+    """
+    record = {
+        "recorded_at_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "request": request_kind,
+        "item_id": item_id,
+        "http_status": status,
+        "body": body[:4000],
+    }
+    try:
+        with ERROR_EVIDENCE_PATH.open("a", encoding="utf-8") as stream:
+            stream.write(json.dumps(record, ensure_ascii=False) + "\n")
+    except OSError:
+        pass
+
+
+def native_error_evidence_summary() -> dict[str, object]:
+    """Report how many native rejections were recorded for this run's handover."""
+    try:
+        location = str(ERROR_EVIDENCE_PATH.relative_to(ROOT))
+    except ValueError:
+        location = str(ERROR_EVIDENCE_PATH)
+    try:
+        lines = [line for line in ERROR_EVIDENCE_PATH.read_text(encoding="utf-8").splitlines() if line.strip()]
+    except OSError:
+        return {"recorded": 0, "path": location}
+    return {"recorded": len(lines), "path": location}
+
+
+def reset_native_error_evidence() -> None:
+    """Start the run's rejection log empty so a later summary never counts an older run."""
+    try:
+        ERROR_EVIDENCE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        ERROR_EVIDENCE_PATH.write_bytes(b"")
+    except OSError:
+        pass
 
 
 def deploy_plugin() -> dict[str, object]:
@@ -306,7 +353,11 @@ class JellyfinApi:
 
     def merge_versions(self, item_ids: list[str]) -> int:
         query = urlencode({"ids": ",".join(item_ids)})
-        status, _ = self.request_response("/Videos/MergeVersions?" + query, method="POST")
+        status, body = self.request_response("/Videos/MergeVersions?" + query, method="POST")
+        if status >= 400:
+            # The version-merge rejection was the first real 500 whose body was previously lost;
+            # keep its own body for the handover evidence.
+            record_native_error("POST /Videos/MergeVersions", ",".join(item_ids), status, body.decode("utf-8", "replace"))
         return status
 
     def delete_alternate_sources(self, item_id: str) -> int:
@@ -362,11 +413,14 @@ class JellyfinApi:
         request = Request(self.base_url + f"/Items/{item_id}/PlaybackInfo?{query}", headers=self.headers)
         try:
             with urlopen(request, timeout=timeout) as response:
+                # A success must not carry a previous rejection's reason into later evidence.
+                self.last_error_body = ""
                 return response.status, json.load(response)
         except HTTPError as error:
             # The native error body is real evidence for a rejected playback: keeping it lets a
             # failure be reported by its own message instead of an empty object.
             self.last_error_body = raw_error_body(error)
+            record_native_error("GET PlaybackInfo", item_id, error.code, self.last_error_body)
             try:
                 payload = json.loads(self.last_error_body)
                 return error.code, payload if isinstance(payload, dict) else {}
@@ -392,9 +446,11 @@ class JellyfinApi:
         )
         try:
             with urlopen(request, timeout=75) as response:
+                self.last_error_body = ""
                 return response.status, json.load(response)
         except HTTPError as error:
             self.last_error_body = raw_error_body(error)
+            record_native_error("POST PlaybackInfo", item_id, error.code, self.last_error_body)
             try:
                 payload = json.loads(self.last_error_body)
                 return error.code, payload if isinstance(payload, dict) else {}
@@ -1926,6 +1982,7 @@ def restore_fixture_and_sync(api: JellyfinApi | None, item_id: str | None, conta
 
 def main() -> int:
     require(FIXTURE.is_file(), "The isolated STRM fixture is missing.")
+    reset_native_error_evidence()
     original = FIXTURE.read_bytes()
     api: JellyfinApi | None = None
     item_id: str | None = None
@@ -2351,6 +2408,9 @@ def main() -> int:
             summary["temporary_fixture_cleanup"] = {"status": "FAIL", "error": type(error).__name__}
             temporary_cleanup_ok = False
         summary["fixture_restoration"] = restore_fixture_and_sync(api, item_id, container, original)
+        # Hand over the run's native rejections with the summary, including on failure paths:
+        # the finally block below always prints this summary before the FAIL line.
+        summary["native_error_evidence"] = native_error_evidence_summary()
         if exit_code == 0 and (
             plugin_disabled
             or not temporary_cleanup_ok

@@ -6,7 +6,10 @@ They cover the entry defects that blocked the Task 5.3 full journey:
   Jellyfin's metadata providers own the display name and renamed ``fixture`` to
   ``Substitute Fixture``;
 * a rejected native PlaybackInfo must keep the server's own error body instead of replacing it
-  with an empty object, without ever retaining the request URL or credentials.
+  with an empty object, without ever retaining the request URL or credentials;
+* the rejection's real status and body are written to the ignored evidence file while the
+  response is still readable, so a later failure hands over its own reason from the raw output
+  instead of an empty object, and a later success never carries an older rejection forward.
 
 They do not claim any real Jellyfin result.
 """
@@ -15,6 +18,8 @@ from __future__ import annotations
 
 import importlib.util
 import io
+import json
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -32,13 +37,17 @@ SPEC.loader.exec_module(plugin)
 class _Api:
     """A minimal stand-in that exercises the real lookup and request code paths."""
 
-    def __init__(self, items=None, error=None):
+    def __init__(self, items=None, error=None, responses=None):
         self.base_url = "http://127.0.0.1:1"
         self.headers = {"Authorization": "private-test-token"}
         self.user_id = "user"
         self.items = items or []
         self.error = error
+        self.responses = list(responses or [])
         self.last_error_body = ""
+
+    def request_response(self, path: str, *, method: str = "GET", data: bytes | None = None) -> tuple[int, bytes]:
+        return (self.responses.pop(0) if self.responses else (200, b"{}"))
 
     def _listing(self):
         return {"Items": self.items}
@@ -144,6 +153,78 @@ class PlaybackErrorBodyTests(unittest.TestCase):
                 raise OSError("no body")
 
         self.assertEqual(plugin.raw_error_body(_Unreadable()), "")
+
+
+class NativeErrorEvidenceTests(unittest.TestCase):
+    """The rejection evidence must land on disk with the response, not only in memory."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.evidence = Path(self._tmp.name) / "playback-error-evidence.jsonl"
+        patcher = patch.object(plugin, "ERROR_EVIDENCE_PATH", self.evidence)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.addCleanup(self._tmp.cleanup)
+
+    def test_a_rejected_playback_is_written_to_the_evidence_file(self):
+        body = b'{"message":"Jellyfin did not save a usable media source for the current STRM version."}'
+        api = _Api()
+        with patch.object(plugin, "urlopen", side_effect=PlaybackErrorBodyTests._native_500(api, body)):
+            status, payload = plugin.JellyfinApi.playback_info(api, "a" * 32)
+        self.assertEqual(status, 500)
+        lines = self.evidence.read_text(encoding="utf-8").splitlines()
+        self.assertEqual(len(lines), 1)
+        record = json.loads(lines[0])
+        self.assertEqual(record["request"], "GET PlaybackInfo")
+        self.assertEqual(record["item_id"], "a" * 32)
+        self.assertEqual(record["http_status"], 500)
+        self.assertIn("Jellyfin did not save a usable media source", record["body"])
+        # The handover record never contains the request URL or credentials.
+        self.assertNotIn("PlaybackInfo?", record["body"])
+        self.assertNotIn("private-test-token", json.dumps(record))
+
+    def test_a_stale_error_never_survives_a_later_success(self):
+        api = _Api()
+        api.last_error_body = "old rejection"
+        response = io.BytesIO(b'{"MediaSources":[]}')
+        response.status = 200
+        with patch.object(plugin, "urlopen", return_value=response):
+            status, _ = plugin.JellyfinApi.playback_info(api, "a" * 32)
+        self.assertEqual(status, 200)
+        self.assertEqual(api.last_error_body, "")
+        self.assertFalse(self.evidence.exists())
+
+    def test_a_rejected_merge_version_body_is_also_recorded(self):
+        api = _Api(responses=[(500, b"native merge refusal")])
+        status = plugin.JellyfinApi.merge_versions(api, ["a" * 32, "b" * 32])
+        self.assertEqual(status, 500)
+        record = json.loads(self.evidence.read_text(encoding="utf-8").splitlines()[0])
+        self.assertEqual(record["request"], "POST /Videos/MergeVersions")
+        self.assertEqual(record["http_status"], 500)
+        self.assertEqual(record["body"], "native merge refusal")
+
+    def test_a_successful_merge_does_not_record_any_error(self):
+        api = _Api(responses=[(204, b"")])
+        status = plugin.JellyfinApi.merge_versions(api, ["a" * 32])
+        self.assertEqual(status, 204)
+        self.assertFalse(self.evidence.exists())
+
+    def test_the_run_summary_reports_the_recorded_rejections(self):
+        self.assertEqual(plugin.native_error_evidence_summary(),
+                         {"recorded": 0, "path": str(self.evidence)})
+        plugin.record_native_error("GET PlaybackInfo", "a" * 32, 500, "first rejection")
+        plugin.record_native_error("GET PlaybackInfo", "b" * 32, 500, "second rejection")
+        summary = plugin.native_error_evidence_summary()
+        self.assertEqual(summary["recorded"], 2)
+        self.assertTrue(summary["path"].endswith("playback-error-evidence.jsonl"))
+
+    def test_a_truncated_or_unreadable_evidence_file_is_reported_as_empty(self):
+        plugin.ERROR_EVIDENCE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        plugin.ERROR_EVIDENCE_PATH.write_text("not-a-json-line\n", encoding="utf-8")
+        # A malformed line still counts as recorded content; it must not silently vanish.
+        self.assertEqual(plugin.native_error_evidence_summary()["recorded"], 1)
+        plugin.reset_native_error_evidence()
+        self.assertEqual(plugin.native_error_evidence_summary()["recorded"], 0)
 
 
 if __name__ == "__main__":
