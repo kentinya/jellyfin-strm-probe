@@ -683,4 +683,18 @@ P01 三份真实原生数据库备份已只读独立打开，`quick_check=ok`，
 
 本机证据索引：`.git/validation-evidence/3a7de052bf089141f76e2f60921de285bd5184c4/b-review-20261022T113530Z/INDEX.md`。包含完整 Task Base..Head 与修正差异、最终候选／输入／包身份、独立全回归、上述真实旅程的原文／截图实际查看、同次字段表、数据库备份核验、交付 HTTP 错误缺口与明确复用／未运行清单；仅本机可读，不上传原始资料。时间以该索引的 `timing-ledger.json` 为准，保守从首次已留存 UTC 观测 11:35:16 起计，早先必读文档时间不计入分母，构建和并行质量检查都算入测试并集。
 
-NEXT ACTION: DEVELOPER COMPLETES ONLY B53-20261022-5 SAME-RESPONSE ERROR EVIDENCE IN TASK 5.3; B RETAINS ALL REMAINING FULL GATES; NO NEW TASK OR SLICE CLOSE.
+## Developer Correction Report（B53-20261022-5 同次错误正文落盘，2026-10-22）
+
+- **交接状态：READY FOR B REVIEW。** 沿用同一 Task 5.3／Slice 5／Task Base `f17fb1fc90dda242eeff9fac7b4f21576b5e6f94` 与 Contract Checkpoint `68e7bf01e7796fe9972838dfc0d8ed8283aacedd`；保留 B 的 FIX REQUIRED 与全部历史 FAIL／NOT RUN，本代理不签发独立 B PASS。实现提交 **`4be8e80`**（完整 SHA 以 `git rev-parse` 为准）；本报告随后以单独文档提交。
+- **Changed Files：** 仅 `scripts/run_isolated_plugin_integration.py` 与 `tests/test_isolated_plugin_integration.py`（+144／−3）。未改 C#、其他 Python 入口、共享驱动、媒体服务、依赖、镜像锁、工作流、治理工具或 Slice 合同；插件成功判定、指纹算法、500 预期与源集合保护未改。
+- **确认 B 结论后的问题定位：** B 指出 `last_error_body` 仅是内存字段（原 369／397 行）、`call_playback` 在非 200 时丢弃已解析响应与该字段、版本合并处（原 1016 行）只抛固定文案；`rg` 确认无消费者把该字段写入任何交接产物。修正限于既有 plugin 入口，不另建诊断框架。
+- **实现：** ① 新增 `record_native_error`／`native_error_evidence_summary`／`reset_native_error_evidence`：真实状态＋服务端自身正文在响应仍可读时追加写入本机忽略证据文件 `artifacts/dev-env/playback-error-evidence.jsonl`（每行 JSON：UTC 时刻、请求类别、项目／目标身份、状态、限长正文；无请求 URL／凭据／签名地址；写失败静默，不掩盖真实原生失败）；② `playback_info`／`post_playback_info` 在真实 500 时写入记录，成功时清空旧拒绝原因；③ `merge_versions` 对 ≥400 的真实响应记录 `POST /Videos/MergeVersions` 状态与正文（版本合并 500 正是首个丢失正文的真实入口）；④ `main()` 开头重置该文件避免旧轮计数，`finally` 的 summary 始终附带 `native_error_evidence`（含 FAIL 路径，随后照常打印完整 summary 与 FAIL 行）；⑤ summary 的 `path` 以仓库相对路径报告，临时目录场景回退绝对路径。
+- **控制测试（`NativeErrorEvidenceTests`，6 项新增）：** 真实 500 正文写入证据文件且不含 URL／凭据；陈旧拒绝不会存活到后续成功（内存清空且无文件写入）；MergeVersions 500 正文同样落盘、成功合并不记录；summary 报告记录数与路径；非 JSON／无法读取文件按实际内容计数、`reset` 归零。原有 `PlaybackErrorBodyTests`／`OrdinaryMediaLocationTests` 全部保留，未删除断言。
+- **Tests and Results：** Python **3.11.10**（`/opt/py311/python/bin/python3.11`，宿主无 `python3.11`）`unittest discover -s tests -p test_isolated_plugin_integration.py` **14 项通过、0 失败**（原 8 项＋新增 6 项）；两改动文件 `py_compile` 通过、脚本真实导入通过；`python3 scripts/check_governance.py` 实施前与提交后均通过，`git diff --check` 通过。开发反馈期间出现 5 个测试侧缺陷（patch 目标落在 `_Api` 而非 `JellyfinApi`、临时目录路径 `relative_to` 异常等），均保留修正过程并全部以最终通过为准，未删减断言。
+- **真实错误旅程反馈：NOT RUN。** B 修正边界要求“少量既有真实错误旅程反馈、控制验证交接结果而非仅内存值”；本轮未重跑 plugin-full 或任何制造 500 的旅程：历史首败（multiversion 合并 500、定位失败）在上一轮已修复且完整 PASS，无法在不注入异常的前提下稳定重现同一路径，而人为注入不属于既有真实入口。单元控制已验证真实文件的写入与读取边界；完整 plugin-full 及其失败／成功路径的最终验收仍由 B 在固定候选上承担。按本轮 30% 测试时间上限，本轮测试墙钟并集约 1 分钟（14 项单元 0.02 秒、py_compile／导入／治理／差异检查），实际总时间约 25 分钟，占比约 4%，未空等凑分母。
+- **未运行／仍属 B：** 完整 C#（本轮无 C# 改动）、完整 Python discovery（B 因测试输入改变需更新）、其余矩阵行、baseline、package／scan／1004 large／plugin-full／batch／configuration 全量、B 独立关键复现与 Slice Final。当前正式 ZIP（sourceRevision `3a7de05…`，SHA-256 `9641fe91…`）未重建：本修正仅改 plugin Python 入口及其测试，B 按 T4 核验输入后决定是否重建候选并重新获取受影响门槛。
+- **Head SHA：** 实现 `4be8e80`（文档提交后以 `git log` 为准）。
+
+NEXT ACTION: INDEPENDENT B VERIFIES THIS CORRECTION AND RETAINS ALL REMAINING TASK 5.3 FULL GATES; NO NEW TASK OR SLICE CLOSE.
+
+NEXT ACTION (PREVIOUS ROUND): DEVELOPER COMPLETES ONLY B53-20261022-5 SAME-RESPONSE ERROR EVIDENCE IN TASK 5.3; B RETAINS ALL REMAINING FULL GATES; NO NEW TASK OR SLICE CLOSE.
