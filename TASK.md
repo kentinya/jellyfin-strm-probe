@@ -479,3 +479,21 @@ RO-1 部分满足；RO-2／RO-3 仍有上述输入阻塞与完整验收缺口；
 - **候选包：** 从干净 `dd05f74` 构建 `developer-p06-fix/package/Jellyfin.Plugin.StrmProbeOptimizer_linux-x64.zip`，sourceRevision `dd05f7425f97212b77675843e058a8117c269360`，buildInputsSha256 `f394eabc06a7e5423adefeed0aed34b18078be80d0a7ac9143f46340bb8d98ef`，ZIP SHA-256 `ccb991891fa9562adb600cdb1dc60efa90d1845f447e57d56870af6e85334f46`；两行真实播放均使用该 ZIP。
 - **证据与预算：** `.git/validation-evidence/dd05f7425f97212b77675843e058a8117c269360/developer-p06-fix/INDEX.md`、`summary.json`、`run-p06.log`、`run-p06/` 原始 JSON 与 16 张截图、`fixture-direction/` 的修正前／后原始媒体、编码 stderr、ffprobe JSON 与 `tests-focused.log`。本轮总时长约 49 分钟，测试墙钟并集约 9.5 分钟（真实两行 538.6 秒、六个对照夹具编码约 30 秒、单元 0.1 秒、编译／语法／差异／治理约 3 秒），约 19%，低于 30% 上限；未空等凑分母。打包约 30 秒另计。生产实例、现存 1004 项准备库与既有 dev-env 未操作，未推送、未改历史。
 - **Remaining In-Slice Work：** 本 Task 仍未 PASS。每种格式的 P06 仍有 8 行（4 up／4 down）及全部其余 P／C／F 行、完整 116 行、C02／C06 三阶段与失败恢复、baseline、完整 C#／Python、package／scan／1004 large／plugin／batch／configuration 和独立关键复现均由 B 在固定最终候选上补齐或核验；本次仅证明修正后 MP4 `P06.02.up`／`P06.02.down` 两行的真实方向、探测、保存、再播与重启，不覆盖 MKV 或其他 P06 子行。不提交 Closure Packet、不返回 SLICE READY FOR A REVIEW、不关闭 Slice。
+
+
+## B 独立复核决定（2026-10-22 02:19 UTC 轮，FIX REQUIRED）
+
+起始仓库干净、main 超前 origin/main 59 提交，治理通过；已读必读文档，复核同一 Task 5.3／Slice 5／Base／合同检查点，未改变范围或插件／测试源码。
+
+```text
+Reviewed Range: f17fb1fc90dda242eeff9fac7b4f21576b5e6f94..f485a30f2cd101ae49a5eac412c111e06e707a1e
+Implementation Candidate: dd05f7425f97212b77675843e058a8117c269360
+Decision: FIX REQUIRED
+```
+
+- **上一 P1 已解除：** P06 方向修正及提前拒绝控制符合授权。核对真实保留媒体摘要与两行全部原始 observation／日志／原生源、指纹、重启只读快照，逐张打开 16 张截图，接受同 ZIP 的 `MP4.P06.02.up`／`MP4.P06.02.down`：A 1,660,446→8,834,168／212,433 字节，首信任／窗口／再播／重启 ffprobe 为 0／1／0／0，各阶段媒体钟推进超过 5 秒，内容为 A→P06UP／P4B，完整重启快照相等。P06UP／P4B 图无嵌入时间码，推进依据为原始配对媒体钟观测，不沿用报告中的可见时间码说法。旧 292a369 ZIP 的 P08.03／D04 结果保留历史，不自动算作当前同 ZIP 全矩阵。
+- **当前阻塞 B53-20261022-2／P1：F02 夹具未产生要求的原生探测失败。** B 使用已有 `--scenario matrix --rows MKV.F02`、固定 dd05f74 ZIP 与新归属实例独立复现（18114，串行，无其他包入口并行）。正常首次信任后，将同 URL 的 A 按既有逻辑截取前三分之一；该 556,642 字节输入仍能被原生成功探测／保存，播放推进 **5.362982 秒、90 帧、无 media error**，指纹实际更新为该输入的 SHA-1 `e76db0e6d536bd9b9bbdfe709ce73e4738fa063b`／Size 556642。原生同次编码器＝成功保存，返回仅缺 ColorRange；窗口目标 ffprobe 为 1。原断言正确报 `the corrupted target must not produce an advancing playback`，整行 **FAIL**；不能证明预期的失败旧基线保护和恢复，也不能据此认定插件接受了失败探测。恢复／再播／重启段本次 NOT RUN。4 张本轮原图已逐张打开：均为 MKV A，画面计数推进，无错误框。
+- **同 Task 必要修正：** 在现有 `generate_matrix_fixtures` 的 F02 受控损坏生成与直接相关测试内，使输入确实无法由固定原生探测取得有效主流，并在测量前核验失败前提；如实计算新字节 SHA-1／Size，保留同 URL 修复有效 B 的旅程和全部失败／旧基线／恢复断言。不要求插件拒绝所有截断文件，不放宽成功判定，不把 F02 改成成功场景，不扩充框架。Developer 仅运行直接受影响的 playback Python 控制、修改文件编译及少量完整 F02 修正反馈，报告省略项；没有 C# 改动无需因此跑 C#。最终全量与两种格式的完整失败恢复仍由 B 承担，不交回 Developer。
+- **当前候选完整回归新跑：** SDK 10.0.401 locked restore／Release build（0 warning／error）／format 通过，C# **205 passed、0 failed、0 skipped**。Python **3.11.10** 在独立干净 Git archive 检出发现 **360 项，358 passed、2 SKIPPED**（两项 assembly version 控制缺发布归档）；skip 不计 PASS。compileall、Node 语法通过。报告中的 3.11.17 不用作本轮环境证据。dd05f74 后继只改 TASK.md；实际 ZIP／sidecar 一致，SHA-256 `ccb991891fa9562adb600cdb1dc60efa90d1845f447e57d56870af6e85334f46`，build inputs 保持 `f394eabc06a7e5423adefeed0aed34b18078be80d0a7ac9143f46340bb8d98ef`。
+- **剩余门禁及停止决定：** 本轮真实 F02 退出 1、墙钟 210.676 秒；对账 CLEAN、双服务正常退出 0／无 OOM、既有入口清理本轮工作区 CLEANED，生产／共享 dev-env／现存全部 1004 项库未操作。明确 P1 后停止昂贵全量；当前包只有上述两条 P06 行获匹配接受，F02 未通过，其余 113 个规范 ID、baseline、其他独立关键旅程、12 个 C 行、package／scan／全部 1004 large／plugin／batch／configuration 与 Slice Final 本轮 NOT RUN。B 保留这些完整责任，修正后核验输入复用并补齐，不机械重跑匹配 Final。RO-1 部分满足，RO-2／RO-3 未齐，RO-4 保留 Task 5.1 既有决定；继续同一 Task，不造新 Task，不提交 Closure Packet／SLICE READY FOR A REVIEW，不关闭 Slice。
+- **证据与时间：** `.git/validation-evidence/f485a30f2cd101ae49a5eac412c111e06e707a1e/b-review-20261022T021921Z/INDEX.md`，含完整差异与范围复核、精确命令、环境、原始完整回归、F02 响应／计数／原生保存／五字段和失败、全部 20 张图查看记录、匹配复用边界及正常收尾。测试墙钟并集计入失败实跑并保守计入文档检查，最终值见 `timing-ledger.json`，严格低于本轮实际总时间 50%，未空等凑分母。仅提交本审查文档，不推送、不改历史。
