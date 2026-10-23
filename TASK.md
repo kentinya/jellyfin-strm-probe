@@ -13,7 +13,7 @@ Test Level: T4
 Planner / Reviewer: B
 ```
 
-最新 B 决定：**FIX REQUIRED（其余必要门禁待 B 补齐）**，继续同一 Task 5.3。完整合并版本／SQLite helper 与带明确准备适配的 plugin 完整入口已 PASS，B53-20261022-8 闭合；不再要求 Developer 修改准备工具。继续同 ZIP 的真实视频验收，全部 12 个 ColorRange 行已完成独立核验，累计矩阵 17／116，完整 baseline 与 package-all 已通过；历史 FAIL 保留，剩余矩阵及完整门禁仍由 B 负责。见文末本轮续验记录。
+最新 B 决定：**FIX REQUIRED（其余必要门禁待 B 补齐）**，继续同一 Task 5.3。完整合并版本／SQLite helper 与带明确准备适配的 plugin 完整入口已 PASS，B53-20261022-8 闭合；不再要求 Developer 修改准备工具。继续同 ZIP 的真实视频验收，全部 12 个 ColorRange 行已完成独立核验，累计矩阵 21／116、独立关键 19／40，完整 baseline 与 package-all 已通过；历史 FAIL 保留，剩余矩阵及完整门禁仍由 B 负责。见文末本轮续验记录。
 
 ## B 合同重判与继续决定（2026-10-21）
 
@@ -952,3 +952,29 @@ B 另核对干净安装及升级的两组完整五字段：只变 URL hash，内
 本机忽略证据仍在 `b-C06-more-20261022T233155Z/`：`Baseline-complete/` 的原始结果／12 图实际查看／原文独立审计，`Package-complete/` 的精确命令与实际运行身份／隔离对账，`package-all/` 的四阶段原始日志、完整结果、原浏览器输出、3 图实际查看／独立审计／双服务清理；正式 ZIP 身份与累计时间账本保持。所有原始敏感资料仅本机保留。
 
 NEXT ACTION: B CONTINUES THE FOUR RUNNING P02.01/P03.02 VIDEO ROWS AND ALL REMAINING FIXED-CANDIDATE GATES. FULL BASELINE AND PACKAGE-ALL ACCEPTED; SAME TASK, BASE AND FORMAL ZIP.
+
+
+## B P02／P03 独立续验与本次收束（2026-10-23 00:13～00:25 UTC）
+
+**Decision：FIX REQUIRED（剩余必要门禁尚未齐），继续同一 Task 5.3。** 审查 Head `b57349a`，完整 Task Base..Head 差异及既有完整审查复用关系留存；97 项实际输入仅 SLICE／TASK 事实文档变化，另外 95 项不变。正式 ZIP、实现、合同、Slice／Task ID／Base 均保持；没有新的 Developer 产品／正式工具修正请求。
+
+**MP4／MKV P02.01、P03.02：四行独立 PASS。** 已有矩阵入口，新专属工作区／18134；整批 **623.750 秒**、退出 0，无中断／重跑／调试器／播放预热／断言修改。P02.01 新 URL 背后的媒体与 A 实际逐字节相同，真实内容 SHA-1／Size 相同，仍触发 **0／1／0／0**；新地址／完整媒体流保存，完整五字段只改变 URL hash，再播及重启复用。P03.02 实际字节／有效 SHA-1 保持 A，仅新 Manifest Size=N+1，结果 **0／0／0／0**，完整旧五字段保持。实际 MP4／MKV 大小分别 **1,660,446／1,669,928** 字节；没有把元数据扰动写成真实媒体大小变化。
+
+| 行 | 首信任／变化／再播／重启推进（秒） | 解码帧 |
+|---|---|---|
+| MP4.P02.01 | 5.366／5.355／5.378／5.403 | 90／90／89／95 |
+| MKV.P02.01 | 5.380／5.403／5.364／5.356 | 95／95／90／93 |
+| MP4.P03.02 | 5.387／5.371／5.329／5.351 | 91／90／89／92 |
+| MKV.P03.02 | 5.401／5.350／5.344／5.350 | 93／90／90／90 |
+
+**32 张原图均逐张实际打开**：各行正确 A 标记、实际测试画面与嵌入时钟／帧号推进超过 5 秒、无错误。原始 PlaybackInfo、唯一项目／当前源／正确地址／Video／Audio、完整五字段及实际 Manifest 摘要逐阶段重核；重启后在任何播放前只读完整冻结状态相同。独立按原始物理日志重数 **6 次 ffprobe（4 次原生准备＋2 次 URL 变化）／16 次 FFmpeg 转码**。CLEAN／CLEANED，两专属服务 exit 0／无 OOM，其余 58 个容器状态／StartedAt／镜像／完整排序挂载不变；全部 1004 项源库／历史副本未操作。
+
+**configuration-all：BLOCKED，不计 PASS。** B 核对旧独立 B 专属检出／18124 已停止、95 项非报告输入及正式包负载／夹具相同，尝试与矩阵并行运行原完整 CLI。最初预算守卫拒绝，未开始产品或容器操作；按历史完整独占运行 276.911 秒调整外部预算后，原 CLI **退出 2、0.961 秒（含停止）**：该 API 专用检出尚无本地 Playwright，browser_available=false，在部署及产品验收之前退出。B 遗漏了此项准备检查，原始 BLOCKED／命令及停止结果保留，不归咎 Developer，不冒充配置功能失败。该检出的现有两服务未启动；随后仅向其忽略目录复制既有固定 **Playwright 1.55.0** 工具链，459 个文件摘要完全相同，Chromium 1187 已在。补齐后完整配置入口 **NOT RUN**，没有用准备完成代替验收，也未启动新的产品重试。
+
+累计候选矩阵 **21／116**、独立关键 **19／40**、C **12／12**；完整 baseline、package-all 已 PASS，完整 prepared plugin／独立合并及匹配质量证据保持。仍须 B 补齐 **95 个矩阵行／21 个独立关键**、scan-all、全部 **1004 项** large-all、batch-suite、configuration-all 和 Slice Final。现存大库继续复用已核验准备数据，不重建／截取，不复用旧 ZIP 的验收结论。
+
+按用户“**整个 Task**”累计，当前保守可审计工作／测试口径约 **32,890／16,318 秒、49.61%**；15 份原始精确账本、历史近似／缺失限制及测试侧保守费用均保持。所有启动／等待／失败／收尾按测试墙钟并集计入，不因并行重复相加；不按“继续”清零，不计轮间闲置、不空等或预借未来时间。收束时余额不足下一完整门禁及必要清理，停止新增昂贵运行，未删减验收。Task 不 PASS，RO 未齐，不提交 Closure Packet／SLICE READY FOR A REVIEW、不自行关闭；没有新建 Task、推送或改写历史。
+
+本机忽略证据：`b-C06-more-20261022T233155Z/P02-P03-selected/` 的原始完整结果、32 图实际查看、原文／完整状态／字节审计及隔离对账；`Configuration-complete/` 的原始 BLOCKED、精确命令／准备及 459 文件摘要；根目录 INDEX、完整审查差异、固定输入和 `task-cumulative-time.json` 记录累计口径与限制。仅事实文档进入普通本地提交。
+
+NEXT ACTION: B RETAINS THE REMAINING 95 MATRIX ROWS / 21 INDEPENDENT KEYS, SCAN-ALL, ALL-1004 LARGE-ALL, BATCH-SUITE, CONFIGURATION-ALL AND SLICE FINAL. WHOLE-TASK ACCRUED TIME BUDGET APPLIES; NO NEW DEVELOPER FIX REQUEST, TASK OR SLICE CLOSE.
