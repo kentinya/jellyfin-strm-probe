@@ -5,7 +5,7 @@
 ```text
 Task ID: 5.3
 Parent Slice: 5
-Status: FIX REQUIRED
+Status: PASS
 Task Base: f17fb1fc90dda242eeff9fac7b4f21576b5e6f94
 Contract Checkpoint: 68e7bf01e7796fe9972838dfc0d8ed8283aacedd
 Difficulty: High
@@ -13,7 +13,7 @@ Test Level: T4
 Planner / Reviewer: B
 ```
 
-最新 B 决定：**FIX REQUIRED（B53-20261023-2：既有播放旅程后的正常停服／收尾未通过）**。`bd1c60510ea9df45b8791cd7e5ebdb9f19fa9aa2` 的 D02／D03 恢复修正已通过独立控制与实机核验。完整审查后正式接受 **115／116 行、独立关键40／40、ColorRange12／12**；最后 `MKV.P06.03.up` 的完整播放／保存／指纹／重启行为也已取得行级 PASS，但其串行运行整体仍因 Jellyfin 停服 exit137／无OOM 而 FAIL，不能补计完整验收或 Task PASS。完整Python422＝420 PASS＋2既有SKIP，其他匹配全量保持。Developer仅处理文末同一既有旅程的有界退出／收尾缺口；B保留全部最终门禁及Slice Final责任，不重开已接受的合并准备，不造Task、不提交Closure Packet或关闭Slice。
+最新 B 决定：**PASS（B53-20261023-2 正常退出／收尾已独立闭合）**。正式行义务116／116、独立关键40／40、ColorRange12／12及全部指定Task门禁满足；本轮新Python429＝427 PASS＋2既有SKIP，正常收尾全程exit0／无OOM。完整审查、复用边界和历史失败限制见文末。停止造Task，B继续当前合同Slice Final，A保留最终审查和关闭。
 
 ## B 合同重判与继续决定（2026-10-21）
 
@@ -194,14 +194,14 @@ D02～D05 的正常播放同样有至少 5 秒截图、再播和重启，计数�
 
 ## 验收条件
 
-- [ ] RO-1 的 Range／固定 URL 原子切换／查询别名／404 与损坏恢复输入均由实际字节及原生播放核验；媒体、STRM、镜像、ZIP／sidecar／部署、归属及资源可复核。
-- [ ] MP4／MKV 全部 88 个 P 行及 C／D／F 必需行有明确前置状态、实际结果和原始证据；别名复用有完全输入匹配说明。缺失／NOT RUN／BLOCKED 不计 PASS。
-- [ ] 每次正常原生 Web Play 的截图起止实际推进至少 5 秒，视频有解码帧和正确 A／B 标记、成功媒体请求；执行者及 B 均逐张实际打开并记录，HTTP 200／advanced=true／图片路径不代替检查。
-- [ ] P／C 测量窗口实际目标 ffprobe 为预期的 0 或 1；准备期先以非零计数验证日志，原始启动／完成及完整日期／会话／目标 URL 可重数，FFmpeg 转码另列；原生委托对照不强套零探测。
-- [ ] 每行核对 MediaSourceId→当前 URL→必要 Video／Audio、完整原生保存及五字段；首次信任不称成功探测，跳过不覆盖旧指纹，接受新版本缺有效 SHA-1 不继承旧版本哈希。
-- [ ] 每项成功后再播不重复探测；重启前冻结该批完整原生源／媒体流和指纹，重启后所有项目先只读相等再开始任何 PlaybackInfo／播放，禁止补建掩盖丢失。
-- [ ] ColorRange 三阶段实际字段与对照、失败旧基线保护及同目标恢复均可复核；有效媒体预期播放成功，未授权产品修复或缺证据保持 FIX REQUIRED，不改断言／预期失败完成合同。
-- [ ] B 完成下方固定候选完整门禁及独立关键复现、Task Base..Head 审查；配置、触发器、临时输入、服务正常退出与只清理本轮资源对账，现存全部 1004 项及适用基线保留。Developer 交 READY FOR B REVIEW，不自行 PASS。
+- [x] RO-1 的 Range／固定 URL 原子切换／查询别名／404 与损坏恢复输入均由实际字节及原生播放核验；媒体、STRM、镜像、ZIP／sidecar／部署、归属及资源可复核。
+- [x] MP4／MKV 全部 88 个 P 行及 C／D／F 必需行有明确前置状态、实际结果和原始证据；别名复用有完全输入匹配说明。缺失／NOT RUN／BLOCKED 不计 PASS。
+- [x] 每次正常原生 Web Play 的截图起止实际推进至少 5 秒，视频有解码帧和正确 A／B 标记、成功媒体请求；执行者及 B 均逐张实际打开并记录，HTTP 200／advanced=true／图片路径不代替检查。
+- [x] P／C 测量窗口实际目标 ffprobe 为预期的 0 或 1；准备期先以非零计数验证日志，原始启动／完成及完整日期／会话／目标 URL 可重数，FFmpeg 转码另列；原生委托对照不强套零探测。
+- [x] 每行核对 MediaSourceId→当前 URL→必要 Video／Audio、完整原生保存及五字段；首次信任不称成功探测，跳过不覆盖旧指纹，接受新版本缺有效 SHA-1 不继承旧版本哈希。
+- [x] 每项成功后再播不重复探测；重启前冻结该批完整原生源／媒体流和指纹，重启后所有项目先只读相等再开始任何 PlaybackInfo／播放，禁止补建掩盖丢失。
+- [x] ColorRange 三阶段实际字段与对照、失败旧基线保护及同目标恢复均可复核；有效媒体预期播放成功，未授权产品修复或缺证据保持 FIX REQUIRED，不改断言／预期失败完成合同。
+- [x] B 完成下方固定候选完整门禁及独立关键复现、Task Base..Head 审查；配置、触发器、临时输入、服务正常退出与只清理本轮资源对账，现存全部 1004 项及适用基线保留。Developer 交 READY FOR B REVIEW，不自行 PASS。
 
 ## 必要测试
 
@@ -1302,3 +1302,45 @@ Developer继续同一Task，仅对现有Web Play旅程及必要的退出／收�
 - **Head SHA：** 实现 `cab2eb50dbb3d29a58b09d9c63128cbc87545636`（本报告随后以单独文档提交）。
 
 NEXT ACTION: INDEPENDENT B VERIFIES THIS WEB PLAY EXIT / OWNED SHUTDOWN CORRECTION, RE-RUNS THE CURRENT CANDIDATE'S FULL PYTHON REGRESSION AND RETAINS EVERY REMAINING TASK 5.3 FULL GATE AND SLICE FINAL. NO NEW TASK OR SLICE CLOSE.
+
+
+## B 最终 Task 审查与正常收尾闭合（2026-10-23）
+
+```text
+Reviewed: f17fb1fc90dda242eeff9fac7b4f21576b5e6f94..bdbb4ee1955fb87076ac48f9257821cb31e248e5
+Implementation Head: cab2eb50dbb3d29a58b09d9c63128cbc87545636
+Plugin implementation checkpoint: 4b4d0cca33f37308842710b2a0a70b1919cd0a58
+Decision: PASS
+Current Task P0/P1 Blockers: NONE
+B53-20261023-1: CLOSED
+B53-20261023-2: CLOSED
+Next: B RUNS SLICE FINAL AND SUBMITS CLOSURE PACKET TO A
+```
+
+B 保留完整 Task Base..Head 差异，沿用此前逐项审查并完整核对本次三文件修正；报告后继仅 TASK.md。未发现越过已提交合同的实现、产品成功保护放宽或需交 A 的新范围问题。修正只在原严格播放测量结束后完成现有客户端退出，新增成功窗口的实际原生 Stop204 检查；至少5秒、解码帧、正确源／地址／流、实际ffprobe、五字段与重启先读断言均保持。全局20秒停服宽限未改，未增加Stop→探测取消关联。现有页面导航与客户端处理路径可达；正常反馈实际全部只用 osd-back，未调用内部播放函数或合成停止请求。
+
+**B 独立完整三行：PASS，退出0，含收尾1003.796秒。** 从干净 bdbb4ee 检出，经原 `--scenario matrix --rows MP4.D03,MKV.P06.03.up,MKV.F02` 入口，指定同一正式ZIP，18151／B专属项目串行执行；原断言、超时和准备方式不变。25张原图全部逐张实际打开，A／B标记、原生错误框、开始／进度画面均核对，未以脚本标签代替查看。
+
+| B独立行 | 实际窗口ffprobe | 结果 |
+|---|---|---|
+| MP4.D03 | 首信任0；关闭自动检查后的原生播放／再播／重启各1 | 无优化事件、旧五字段保持；关闭状态经过重启，最后恢复204／读回true／恢复后重启true，完整配置前后相等；4次正常Stop204。 |
+| MKV.P06.03.up | 0／1／0／0 | 四次实播推进5.136～5.480秒、84～93解码帧；新Size／sha1=null、源／流／完整指纹与重启只读冻结一致；4次Stop204。 |
+| MKV.F02 | 首信任0／损坏失败1／恢复1／再播0／重启0 | 真实500与错误截图、完整旧五字段保持；失败未伪造Stop；恢复实播B，成功窗口5.289～5.467秒、87～92帧，4次Stop204。 |
+
+B独立打开全部成功原始PlaybackInfo，核对唯一当前源／正确URL／Video＋Audio，完整原生保存、五字段和重启前后全状态；所有窗口无读取错误。物理完整日志独立重数9次ffprobe，与过滤归档及各URL最终累计计数完全一致；原生委托不强求零探测。12次成功窗口均实际Stop204、返回后媒体元素不存在、正常控制台无错误，完整原生日志另有12条stopped playback记录。外部只读Docker事件完整覆盖 **11次Jellyfin＋11次media退出，全部0、无OOM事件**，包括各重启及最终停服；最终CLEAN／CLEANED，两服务exit0／无OOM。原有68容器生命周期／镜像／完整排序挂载均未变。
+
+Developer同输入三行反馈的13个窗口／25张图也由B全部独立核对，MP4／MKV高码率B及损坏恢复均通过；其7次物理ffprobe与原观察累计一致、12次实际Stop204、原生500保留。Developer测量时的工作区三个源码摘要逐字节等于cab2eb5，不用不同工具反馈替代当前候选。B另通过实际现有playItem函数的三个受控记账控制，确认测量错误保留、退出错误分列、原异常传播、旧非严格分支不执行Stop；这是采集控制，不冒充原生故障。
+
+**取证措辞更正：** Developer所写16:51:10.143是内部重启；实际最终停服为 **16:51:53.826通知→53.845数据库收尾→53.927释放，Docker53.985退出0**。B最终停服为 **17:24:09.330→09.349→09.432，随后正常退出0**。原C／E的137及Cast首败保留，旧工作区不动；本次证明有界退出修正后的实际正常收尾，不以日志差别断言已证明旧阻塞的唯一内部await。驱动最后回退是人工dispatch的beforeunload事件，不能称浏览器真实触发的受信事件；本次所有正常窗口均未使用它，负向窗口尝试后仍无Stop报告／保留500，不影响本次通过。
+
+**完整门禁与复用边界：** 新跑干净Python3.11.10全量 **429项＝427 PASS＋2既有归档缺失SKIP，exit0，墙钟23.270秒**，包含119项playback控制；Node／compileall／治理／diff／提交空白及现有正式包完整verify均通过。C#／测试／SDK／锁／构建输入完全相同，205项、locked restore／Release build／format按原始证据复用，build inputs仍f394eabc06a7e5423adefeed0aed34b18078be80d0a7ac9143f46340bb8d98ef，不重构ZIP。plugin-full（已披露并已接受准备适配）／独立原生合并＋SQLite、scan-all、batch-suite、configuration-all、全部1004项large-all的实际输入闭包不变，原全量原文及命令摘要均可读且匹配，继续接受；不重开已接受合并准备，也不交回Developer。
+
+旧package-all消费的非严格分支逐字节未变，调用配置无strict，新增退出与finally均受strict.enabled保护，复用其380.501秒完整通过。既有116行的播放／探测／持久化／截图证据按执行阶段核验：strictPlay原测量函数完全相同，产品及原行决策、旅程、计数／状态保护保持；新退出在原测量之后，由本轮两角色完整反馈及后续Final补验。**不宣称旧115行都记录了新Stop204，不宣称用当前驱动单次重跑116行，也不改写旧整体FAIL。** 最后一行现已取得B新完整PASS；合并已接受证据后正式行义务 **116／116、独立关键40／40、ColorRange12／12** 满足，按阶段复用和全量输入分析见本轮索引。RO-4保留Task5.1已接受远端同SHA成功，当前Task不新增推送义务。
+
+原库1170文件完整摘要仍189b67c66e608833b27fa818de24bb1611788565c87eeffc0568b9eefe958bd2，所选库支持版本1源1004、两条旧／不支持及一条库外控制分列；原库、接受的大库副本与旧失败工作区保留，无重新准备／销毁。历史预算中断、SKIP、未保存的Web非JSON500正文和scan物理ffprobe未观测等限制原样保留，不升格为通过声明。
+
+稳定本机证据：`.git/validation-evidence/bdbb4ee1955fb87076ac48f9257821cb31e248e5/b-exit-review-20261023T170342Z/INDEX.md`，含完整差异、当前97项输入、429项原文、两角色50张逐图记录、逐行／完整物理日志独立审计、所有重启退出事件、包／输入复用分析和116行索引。原始证据不随Git上传。用户已取消测试占比预算，本次不再沿用历史50%或另造30%限制。
+
+**全部RO行为义务已具备证据，停止规划新Task。** 本Task PASS；Slice仍ACTIVE，Slice Final尚待B执行，先不交Closure Packet或关闭。后续只完成当前合同Final和交A审查，不增加实施、非阻塞工具开发或未来重构。
+
+NEXT ACTION: B RUNS CURRENT-CONTRACT SLICE FINAL, THEN SUBMITS CLOSURE PACKET AS SLICE READY FOR A REVIEW; A RETAINS FINAL REVIEW AND CLOSURE.

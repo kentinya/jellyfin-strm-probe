@@ -6,7 +6,7 @@ Name: 真实播放决策全场景验证与 CI 修复
 Owner: A
 Status: ACTIVE
 Base SHA: 323a3f310100c38c373ce078767d50f4135e8cf1
-Implementation Head: NOT SET
+Implementation Head: cab2eb50dbb3d29a58b09d9c63128cbc87545636
 ~~~
 
 ## 用户目标与激活边界
@@ -115,7 +115,7 @@ Python 完整回归另在 Python 3.11 干净检出执行。现有 `scripts/run_i
 
 ## Closure Packet
 
-NOT RUN。当前完整接受115／116行、独立关键40／40、ColorRange12／12；最后一行的播放／保存／指纹／重启行为已有证据，但同次原生停服exit137／无OOM使整体仍FAIL。正常退出／收尾及Slice Final尚未通过，不具备最终审查条件。B的同Task有界修正交接、匹配全量复用及全部历史结果见TASK.md；未改变合同义务或签发Task PASS。
+PENDING SLICE FINAL。Task5.3经B完整审查PASS，正式116／116行、独立关键40／40、ColorRange12／12及指定Task全量已满足，正常停服缺口通过同输入反馈与B独立实机闭合。RO-1～RO-4行为证据已齐，停止新Task；B随后运行当前合同Slice Final，才提交完整Closure Packet。Slice仍ACTIVE，A最终审查／关闭未执行；完整复用范围和历史失败限制见TASK.md。
 
 ## A Final Review
 
@@ -123,4 +123,4 @@ NOT RUN。当前完整接受115／116行、独立关键40／40、ColorRange12／
     Decision: PENDING
     P0/P1 Blockers: NOT ASSESSED
 
-NEXT ACTION: DEVELOPER ADDRESSES TASK 5.3 EXISTING WEB PLAY EXIT / OWNED SHUTDOWN GAP; B RETAINS SPECIFIED FULL GATES, INPUT-MATCHED REUSE AND SLICE FINAL (SEE TASK.md). NO NEW TASK OR SLICE CLOSE.
+NEXT ACTION: B RUNS CURRENT-CONTRACT SLICE FINAL, THEN SUBMITS CLOSURE PACKET AS SLICE READY FOR A REVIEW; A RETAINS FINAL REVIEW AND CLOSURE.
