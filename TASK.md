@@ -13,7 +13,7 @@ Test Level: T4
 Planner / Reviewer: B
 ```
 
-最新 B 决定：**FIX REQUIRED（其余必要门禁待 B 补齐）**，继续同一 Task 5.3。完整合并版本／SQLite helper 与带明确准备适配的 plugin 完整入口已 PASS，B53-20261022-8 闭合；不再要求 Developer 修改准备工具。继续同 ZIP 的真实视频验收，全部 12 个 ColorRange 行已完成独立核验，累计矩阵 29／116、独立关键 27／40，完整 baseline、package-all、configuration-all、batch-suite 与全部 1004 项 large-all 已通过；历史 FAIL 保留，剩余矩阵及完整门禁仍由 B 负责。见文末本轮续验记录。
+最新 B 决定：**FIX REQUIRED（其余必要门禁待 B 补齐）**，继续同一 Task 5.3。完整合并版本／SQLite helper 与带明确准备适配的 plugin 完整入口已 PASS，B53-20261022-8 闭合；不再要求 Developer 修改准备工具。继续同 ZIP 的真实视频验收，全部 12 个 ColorRange 行已完成独立核验，累计矩阵 29／116、独立关键 27／40，完整 baseline、package-all、scan-all、configuration-all、batch-suite 与全部 1004 项 large-all 已通过；历史 FAIL 保留，剩余矩阵及完整门禁仍由 B 负责。见文末本轮续验记录。
 
 ## B 合同重判与继续决定（2026-10-21）
 
@@ -1113,3 +1113,20 @@ NEXT ACTION: B CONTINUES REMAINING 87 MATRIX ROWS / 13 INDEPENDENT KEYS, SCAN-AL
 本机证据：`b-remaining-no-budget-20261023T060031Z/Batch/` 保存原命令／完整 stdout／原始服务器和 Docker 日志／独立行审计／首轮私有审计纠正／恢复及归属对账。所有实际耗时继续记录，已撤销旧测试占比限制，不再按其提前收束完整验证。
 
 NEXT ACTION: B COMPLETES THE RUNNING REMAINING MATRIX AND SCAN-ALL, THEN SLICE FINAL; BATCH-SUITE ACCEPTED, SAME TASK AND FIXED CANDIDATE.
+
+
+## B scan-all 完整独立验收（2026-10-23）
+
+**Decision：FIX REQUIRED（剩余矩阵及 Slice Final 未齐）；scan-all 独立 PASS。** 同正式 ZIP／95 项匹配非报告输入，原完整 `run_isolated_scan_integration.py --scenario all` 在 B 专属干净检出新包工作区／18145 运行，**841.456 秒、退出 0**，无外部预算中断、断言／原生超时修改或重跑。四段原流程及原始 result／stdout 一致，CLEAN／CLEANED、双服务 exit0／无 OOM。
+
+首次信任 136、探测 0；按 128＋8 分批的 136 个候选身份和最终 **135 项目／136 源** 对账。B 独立逐项核对 136 个原始 source_reconciliation 的完整五字段＝预期、当前源／Manifest 地址哈希／内容 SHA-1／Size／Video／Audio。原生日志与时间证明批量及播放探测均与扫描实际重叠；同一探测期间 B→C 再变址拒绝 B 并保留 A，随后 C 提交，内容／Size 变化均探测。新增／删除／移入／移出按固定候选集合与后续轮次结算；两个版本共享项目、独立选源正确，原生 FullRefresh 完成后仅重探目标，136 源收敛／再次检查零探测，原入口的地址重启核验通过，不扩大为其未提供的矩阵式完整流重启证明。
+
+定时触发真实执行且重启保持；双向共享各仅一次后端请求，批量 owner／joined 调用归属分别 1／0、可靠成功均 1；混合峰值 2。停止前快照实际开始两项（含已开始播放后加入的一项）、批量 calls 1／可靠成功 2，四个完整预期指纹全部吻合、两项未开始保持旧基线；撤销 1／未读 2，收尾进度单调且最大 **97.6923%**，原轮收尾前无第二次实际执行。明确保存停止快照之后才显式重跑，随后未变为 0。禁用、普通／旧 STRM 委托及单项失败隔离通过；状态库故障 Failed／全部活动计数不变，恢复／重启后所需提交与零探测复检通过。
+
+原始 **30 份**归档日志摘要按原工具“记录不含末尾换行、落盘增加换行”的约定全部匹配；去重原始 Docker 日志有 **29 条插件探测启动／3 条加入事件**。原 scan 入口归档 Docker console，未保留主机 Debug 的物理 ffprobe 命令，**不将未观察到写成 0 次**；本门禁按原生启动／后端事件和保存对账，严格矩阵物理计数另行核验。23 条触发器更新均 204，最后 21 条恢复请求与最初／最终原始 task-poll 的完整触发器映射完全相同；原生默认触发器并非全空，首次私有审计对此的错误假设已明确纠正，未改原验收条件。
+
+其余 58 个容器稳定生命周期／镜像／完整排序挂载不变，排除事前声明的矩阵／扫描／开发三个自有项目；全部 1004 项原库和已接受大库副本未操作。原始四段、全部源／候选／停止／恢复快照、事件流、日志、身份、正常收尾及独立审计在同轮 `Scan/`。
+
+矩阵累计接受仍 **29／116**、独立关键 **27／40**、C **12／12**；剩余 87 行完整原矩阵进程继续。已发现 `MP4.P02.02` 首信任 Web 的 Cast sender 资源 `net::ERR_NETWORK_CHANGED`，原行仅取得首信任观察，尚无完整旅程，不计 PASS；保留原始控制台／图片及最终首败，待本批结束后按相同入口单行复验，不改分类器或断言。没有新增 Developer 修正请求、源码变更、推送、新 Task、Closure Packet、SLICE READY FOR A REVIEW 或 Slice 关闭；取消时间预算继续适用。
+
+NEXT ACTION: B COMPLETES THE RUNNING REMAINING MATRIX, RETAINS FIRST FAILURES AND REPLAYS ONLY REQUIRED INCOMPLETE ROWS, THEN RUNS SLICE FINAL. SCAN-ALL AND BATCH-SUITE ACCEPTED.
