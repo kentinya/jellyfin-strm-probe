@@ -115,7 +115,7 @@ Python 完整回归另在 Python 3.11 干净检出执行。现有 `scripts/run_i
 
 ## Closure Packet
 
-NOT RUN。完整视频矩阵及 Slice Final 尚未完成，不具备最终审查条件；已有 Task 候选／CI 的分层结果见 TASK.md 与固定 Git 快照，本次范围修订不构成产品验收。
+NOT RUN。当前完整接受115／116行、独立关键40／40、ColorRange12／12；最后一行的播放／保存／指纹／重启行为已有证据，但同次原生停服exit137／无OOM使整体仍FAIL。正常退出／收尾及Slice Final尚未通过，不具备最终审查条件。B的同Task有界修正交接、匹配全量复用及全部历史结果见TASK.md；未改变合同义务或签发Task PASS。
 
 ## A Final Review
 
@@ -123,4 +123,4 @@ NOT RUN。完整视频矩阵及 Slice Final 尚未完成，不具备最终审查
     Decision: PENDING
     P0/P1 Blockers: NOT ASSESSED
 
-NEXT ACTION: B CONTINUES TASK 5.3 FIXED-CANDIDATE VIDEO MATRIX AND SPECIFIED FULL GATES; ALL 12 COLORRANGE ROWS ACCEPTED (SEE TASK.md)
+NEXT ACTION: DEVELOPER ADDRESSES TASK 5.3 EXISTING WEB PLAY EXIT / OWNED SHUTDOWN GAP; B RETAINS SPECIFIED FULL GATES, INPUT-MATCHED REUSE AND SLICE FINAL (SEE TASK.md). NO NEW TASK OR SLICE CLOSE.

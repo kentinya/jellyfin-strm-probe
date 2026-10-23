@@ -13,7 +13,7 @@ Test Level: T4
 Planner / Reviewer: B
 ```
 
-最新 B 决定：**FIX REQUIRED（实施遗漏已修正，B 剩余完整验收进行中）**。B 已核验 `bd1c60510ea9df45b8791cd7e5ebdb9f19fa9aa2`，独立控制确认 D03 写已生效／读回失败仍恢复原值、无法恢复即停止，D02 同类边界亦恢复且保留原失败。当前干净 Python 全量 422 项＝420 PASS＋2 个既有归档缺失 SKIP。完成原始 PASS 的全部剩余图片／计数审查及两行匹配反馈复用后，正式覆盖 **70／116、独立关键 33／40、ColorRange 12／12**；余下 **46 行由 B 在同一正式 ZIP 上实机复验中**。本次没有新的 Developer 实施请求，不重开已闭合的合并准备。完整门禁、旧 FAIL／BLOCKED 和 Slice Final 责任保留，未签发 Task PASS 或 Slice Ready，详见文末最新 B 复核。
+最新 B 决定：**FIX REQUIRED（B53-20261023-2：既有播放旅程后的正常停服／收尾未通过）**。`bd1c60510ea9df45b8791cd7e5ebdb9f19fa9aa2` 的 D02／D03 恢复修正已通过独立控制与实机核验。完整审查后正式接受 **115／116 行、独立关键40／40、ColorRange12／12**；最后 `MKV.P06.03.up` 的完整播放／保存／指纹／重启行为也已取得行级 PASS，但其串行运行整体仍因 Jellyfin 停服 exit137／无OOM 而 FAIL，不能补计完整验收或 Task PASS。完整Python422＝420 PASS＋2既有SKIP，其他匹配全量保持。Developer仅处理文末同一既有旅程的有界退出／收尾缺口；B保留全部最终门禁及Slice Final责任，不重开已接受的合并准备，不造Task、不提交Closure Packet或关闭Slice。
 
 ## B 合同重判与继续决定（2026-10-21）
 
@@ -1230,7 +1230,7 @@ NEXT ACTION: INDEPENDENT B VERIFIES THIS APPLIED-WRITE/FAILED-READ RESTORE CORRE
 
 B 从现有 `journey_d03/d02` 的既有 HTTP 调用边界独立运行三个控制：① D03 POST204 已提交 false，确认 GET503，恢复 POST204／读回 true，最终仍 RowEvidenceError，保留 disable.status204、原读回错误及 restore；② 同序但恢复两次500，ConfigurationRestoreError／restore FAILED，原值未回来，既有矩阵异常分支停止后续；③ D02 禁用已应用而返回500，经实际 restore helper 重新启用／原生状态 Active，最终仍 RowEvidenceError，保留 disableStatus500。三个控制均符合本项要求，**不是实机503／500或插件故障的证明**。没有构造不存在的入口或放宽成功／恢复断言。
 
-独立新建干净候选检出，Python 3.11.10 全量 discovery **422 项：420 PASS、2 SKIP、0 FAIL，exit0，墙钟22.819秒**（套件22.040秒）；跳过仍为既有归档缺失，不计 PASS。112 项 playback 控制包含在全量中，不另重复模块。固定正式 ZIP SHA-256 仍为 `9641fe917cc8db8d36ec32c841fb968b0149890f39094adce5338a0f28dd9e37`，未为工具修正重新构包；此前同 ZIP 完整 C#205、restore/build/format、prepared plugin／独立合并、baseline、package、scan、batch、configuration 与全部1004项大库门禁未消费改变的入口，继续按此前已记录输入核验复用。原1004项准备库及其保留副本未被本轮命令操作。
+独立新建干净候选检出，Python 3.11.10 全量 discovery **422 项：420 PASS、2 SKIP、0 FAIL，exit0，墙钟22.812秒**（套件22.040秒）；跳过仍为既有归档缺失，不计 PASS。112 项 playback 控制包含在全量中，不另重复模块。固定正式 ZIP SHA-256 仍为 `9641fe917cc8db8d36ec32c841fb968b0149890f39094adce5338a0f28dd9e37`，未为工具修正重新构包；此前同 ZIP 完整 C#205、restore/build/format、prepared plugin／独立合并、baseline、package、scan、batch、configuration 与全部1004项大库门禁未消费改变的入口，继续按此前已记录输入核验复用。原1004项准备库及其保留副本未被本轮命令操作。
 
 **追加接受28行与两行正常反馈：** 原87行中39个未受D03污染的PASS，前次已对154份原生PlaybackInfo、源／URL／Video＋Audio、全部五字段、冻结与重启先读回、失败／恢复作结构审计。本次将余下28行的 **227张原图全部逐张实际打开**并保存摘要／标记／可见错误结论；六个相关URL的完整原生ffprobe命令总数 **39／3／3／4／10／10** 与所有原观察最终累计计数一一相等。P06的B是带标记测试图，画面推进另以原始时间／解码帧核验；F01失败及重试、F02失败均看到原生错误框，恢复／再播／重启均B。原整体FAIL及407图不改写。
 
@@ -1241,3 +1241,46 @@ B 从现有 `journey_d03/d02` 的既有 HTTP 调用边界独立运行三个控�
 稳定本机证据根：`.git/validation-evidence/1ca2ecca58e6551162d97c5b12269692b0de60a3/b-restored-matrix-20261023T122718Z/`。含输入清单／干净检出、全量Python原文／命令、独立控制、227图逐张审阅记录、28行复用／计数核验、运行准备、两个首败与重新执行的原始目录。当前没有新的Developer修正要求；B继续承担余下46行完整旅程、全部原图与关键复现、归属／退出／恢复核验和最终门禁。取消时间预算继续适用，Developer报告中30%口径不作为当前限制。当前不造Task、不提交Closure Packet、不返回Slice Ready或自行关闭。
 
 NEXT ACTION: B COMPLETES BOTH RUNNING NATIVE MATRIX BATCHES AND INDEPENDENT EVIDENCE REVIEW, THEN RECHECKS ALL RO AND SLICE FINAL. NO DEVELOPER FULL-REGRESSION HANDOFF, NEW TASK OR SLICE CLOSE.
+
+
+## B 剩余矩阵完整审查及正常收尾阻塞（2026-10-23）
+
+**Decision：FIX REQUIRED；B53-20261023-2／P1（必要验收交付阻塞，未证实插件缺陷）。** 当前审查 Head `54f402c8739bec8d9f28409ee65ce9daf1bb06ad`，完整范围 `f17fb1fc90dda242eeff9fac7b4f21576b5e6f94..54f402c8739bec8d9f28409ee65ce9daf1bb06ad`；实际修正 `bd1c60510ea9df45b8791cd7e5ebdb9f19fa9aa2`。同一 Slice／Task／Base／Contract，未修改产品、正式工具／测试、依赖、原断言或超时。治理及完整范围diff检查通过；独立审查结合此前完整20文件差异和本次恢复修改、当前运行的完整原文，不以完成报告替代。用户取消时间预算继续适用。
+
+### 剩余46行的原始运行与已接受结果
+
+同一正式 ZIP SHA-256 `9641fe917cc8db8d36ec32c841fb968b0149890f39094adce5338a0f28dd9e37`。当前构建输入重新计算仍为 `f394eabc06a7e5423adefeed0aed34b18078be80d0a7ac9143f46340bb8d98ef`，DLL摘要仍为 `9172e5802e4aadca707a3bae49bb32f66c643f1712b33ca427e3bbf4cb9cb434`。两新归属干净检出／18148、18149，通过已有 `--scenario matrix --rows` 顺序入口执行；首次缺忽略镜像锁的两个容器前预检失败原样保留，补齐同一锁后使用新证据目录，不改断言。以下目录均在本轮稳定证据根下：
+
+| 运行 | 原始逐行结果 | 原始整体／计时与收尾 |
+|---|---|---|
+| Matrix-a-ready，25行 | 24 PASS；MKV.D06重启后Cast sender资源ERR_NETWORK_CHANGED | FAIL，运行器exit1，完整3570.005秒；原生测量至收尾前3568.1秒；双服务exit0／无OOM，CLEAN／CLEANED |
+| Matrix-b-ready，21行 | 20 PASS；MKV.P06.03.up重启后同类Cast错误 | FAIL，原生测量至收尾前3414.5秒；双服务exit0／无OOM，CLEAN／CLEANED；外层记录会话exit143后原始子进程继续完成，原始子进程OS退出码NOT OBSERVED，不以143冒充；原command.json的RUNNING为已注明的过时外层状态 |
+| Matrix-c-cast-replay，单行P06.03.up | 仍为Cast控制台FAIL | FAIL，exit1，472.670秒；最终Jellyfin exit137／无OOM，media exit0，cleanupError；工作区保留 |
+| Matrix-d-d06-replay，单行D06 | 完整行PASS，0／1／0／0，无控制台错误 | PASS，exit0，286.240秒；双服务exit0／无OOM，CLEAN／CLEANED |
+| Matrix-e-cast-serial，单行P06.03.up | 完整行PASS，0／1／0／0，无控制台错误 | 整体仍FAIL，exit1，469.825秒；串行运行，最终Jellyfin exit137／无OOM，media exit0，cleanupError；工作区保留 |
+
+原整体FAIL、Cast首败及其复验、停服137全部保留，不改写为PASS；串行E仅证明本次Cast错误未再出现，不证明其根因就是并行启停。C、D两批实际均结束后才运行E；E没有其他本轮并行实机进程。原有64容器的生命周期／镜像／完整排序挂载与运行前完全相同。当前新增四个自有容器均已停止，两个Jellyfin为137、两个media为0，无OOM；不宣称全部正常退出或清理。原1004项库全部1170文件摘要保持，受支持的库内源仍1004，另外两条旧／不支持控制和一条库外控制不算入1004；大库验收副本、C／E失败工作区及原始资料保留，未操作生产、共享实例或清理保留数据。
+
+B完整审阅新增46行及两个失败复验对应的 **385张截图**，逐图核对A／B、播放器／错误状态及实际播放推进；其中部分按四格逐图展示，每格绑定原图路径／SHA-256与对应展示文件，无抽样，未把四格展示伪称每图单独工具打开。385张含原Cast失败行／失败复验24张；最终46行行为对应361张。另保留此前原28行227张逐张审阅及其他已接受图像记录。当前24＋20行的独立结构审计均无问题，D06复验及串行P06完整行为的独立审计亦无问题；所有成功原始PlaybackInfo、唯一当前源／正确地址／Video＋Audio、完整五字段和重启先只读完整冻结状态均核对。重启后未先播放补写。
+
+A／B完整物理日志分别独立重数 **60／31次ffprobe**（A含1次普通文件路径），过滤归档与完整原生日志一致，所有URL总数与观察最终累计计数完全匹配；C／D／E分别2次，亦逐URL匹配。窗口内探测行1、跳过／再播／重启0符合各行合同；D02／D03／旧STRM保留实际原生委托计数，不强求0。F01首次失败／重试、F02损坏失败各实际500／1，原生同次记录拒绝无有效探测保存结果，完整旧五字段保持；恢复后探测1并实播B，再播／重启保持。Web驱动未保存这些非JSON500正文，本轮不声称有正文；实际状态／路由、完整原生异常与探测日志及错误截图均保留，已接受完整plugin API门禁另外留有5次真实500正文。P01两份原生备份独立只读quick_check=ok，真实ItemId TEXT／StreamType INTEGER，准备前两流及prime-after的局部缺Video前提可对账。
+
+D02／D03修正本身已闭合：MP4.D03与MKV.D03实际disable204／读回false，restore204／读回true且重启后true，配置前后相等；MKV.D02实际disable204、restore204后Restart、重启后Active，配置前后相等。原生关闭窗口无插件事件，旧指纹保持，后续委托／正常行不再受遗留开关污染。原独立写已应用但读回失败／恢复失败即停止控制继续有效。
+
+据此新增正式接受44行及D06复验，共 **115／116、独立关键40／40、C12／12**。最后P06.03.up的四次实播推进5.374／5.440／5.134／5.357秒，解码93／90／84／88帧；新实际Size=8814734、sha1=null，完整五字段／原生流重启先读相等，8张图均已单独实际打开。此为最后一行的完整行为证据；因同次正常收尾未通过，**不将整体矩阵、最后一行完整验收或Task写成PASS**。
+
+### 仅剩的有界修正：已有播放客户端退出与原生收尾
+
+同次C的最后停服日志 **13:36:12.765** 为 `Sending shutdown notifications`，Docker记录Jellyfin于 **13:36:32.861** exit137；串行E为 **13:47:17.067 → 13:47:37.171**，均无OOM。现有 `package_environment.compose("stop")` 固定 `--timeout 20`，`cleanup_instance` 正确拒绝非零退出并保留工作区。不能删掉该检查、接受137或直接延长超时来制造通过。
+
+当前驱动 `playItem` 的finally只解除response监听，`run`最终直接 `browser.close()`，没有明确完成原生播放器正常停止／退出；日志仍可见对应转码会话活动，停服前WebSocket关闭不等于全部原生资源已收尾。**这只是从真实路径得到的待验证原因，不是已证明的插件或驱动根因。** 固定[原生SessionManager源码](https://github.com/jellyfin/jellyfin/blob/ca0f16eb7c195f720a1493ed469a27c4657db0c6/Emby.Server.Implementations/Session/SessionManager.cs#L2068)将上述消息用于原生通知／会话和WebSocket退出；最后一条日志不足以确定阻塞的具体await。
+
+Developer继续同一Task，仅对现有Web Play旅程及必要的退出／收尾做有界取证与最小修正：先核实当前原生客户端实际提供的正常停止／退出行为及同次会话／转码结算，再在已经取得原测量证据之后正确完成退出。复用实际页面／已验证原生调用，不猜路由、选择器或内部回调；未成功开始播放的失败路径不得伪造停止成功或掩盖原500／Cast错误。不改播放测量、至少5秒、解码帧、A／B、源／地址／媒体流／五字段／重启先读和所有原成功／失败条件，不添加客户端Stop→探测取消关联。无需新增Task、通用退出框架或诊断系统，不修改C#／Jellyfin、指纹／并发算法、全局Docker预算或归属保护；若证据要求越出这些边界，先交B，范围变更交A，不自行扩大。
+
+开发反馈只跑实际修改文件直接影响的必要控制、Node语法／适用编译及治理／diff；不写仅镜像实现的测试。以同一ZIP、原矩阵入口提交 **MP4.P06.03.up、MKV.P06.03.up、MKV.F02** 的完整聚焦反馈：前两行验证两格式高码率B的正常退出／重启／收尾；F02验证真实失败路径及恢复的退出不吞原失败。保留本次实际正常停止、客户端退出和转码收尾顺序，记录该反馈各重启的停服状态及最终两个服务exit0／无OOM、完整原始结果与图片。新工作区运行，旧C／E资料保留；不靠增加固定sleep、修改超时、重试转绿或放宽错误分类完成反馈。若原生正常退出路径仍不能满足现有门槛，报告原事实，不先认定需插件修正。
+
+**不要求Developer重跑116行或任何完整门禁。** B收到真实提交后独立审查同一Task Base..新Head，更新受影响完整Python／质量检查，依驱动／工具的真实调用和执行阶段重核旧证据可复用性，再独立完成受影响验收、正常收尾与Slice Final。无C#／构建输入变化时不重新造包。完整C#205、当前Python422（420 PASS＋2归档SKIP，命令记录22.811797秒）、baseline／package／scan／全部1004 large／prepared plugin与独立合并／batch／configuration的输入核验与原文均保留；不机械重跑Final、不重开已接受合并准备、不把全量交给Developer。
+
+稳定本机证据：`.git/validation-evidence/1ca2ecca58e6551162d97c5b12269692b0de60a3/b-restored-matrix-20261023T122718Z/INDEX.md`，含各原始批、精确命令／退出限制、385图审阅记录、原文／完整状态／计数审计、116行为索引（明确不是整体PASS）、源码输入和固定包身份、最终归属与1004项核验及停服原始日志。本轮没有产品／正式工具实施、推送、委派、历史改写、新Task或关闭动作。RO-2／RO-3的行为证据已齐，但AC-6正常收尾及Slice Final未齐，全部RO尚不能签发完成，**不提交Closure Packet、不返回SLICE READY FOR A REVIEW、不自行关闭**。
+
+NEXT ACTION: DEVELOPER CORRECTS ONLY THE EXISTING WEB PLAY EXIT / OWNED SHUTDOWN GAP IN TASK 5.3; B RETAINS FULL FINAL VALIDATION AND INPUT-MATCHED REUSE. NO NEW TASK, PACKAGE REBUILD OR SLICE CLOSE.
