@@ -13,7 +13,7 @@ Test Level: T4
 Planner / Reviewer: B
 ```
 
-最新 B 决定：**FIX REQUIRED（其余必要门禁待 B 补齐）**，继续同一 Task 5.3。完整合并版本／SQLite helper 与带明确准备适配的 plugin 完整入口已 PASS，B53-20261022-8 闭合；不再要求 Developer 修改准备工具。继续同 ZIP 的真实视频验收，全部 12 个 ColorRange 行已完成独立核验，累计矩阵 29／116、独立关键 27／40，完整 baseline、package-all、configuration-all 与全部 1004 项 large-all 已通过；历史 FAIL 保留，剩余矩阵及完整门禁仍由 B 负责。见文末本轮续验记录。
+最新 B 决定：**FIX REQUIRED（其余必要门禁待 B 补齐）**，继续同一 Task 5.3。完整合并版本／SQLite helper 与带明确准备适配的 plugin 完整入口已 PASS，B53-20261022-8 闭合；不再要求 Developer 修改准备工具。继续同 ZIP 的真实视频验收，全部 12 个 ColorRange 行已完成独立核验，累计矩阵 29／116、独立关键 27／40，完整 baseline、package-all、configuration-all、batch-suite 与全部 1004 项 large-all 已通过；历史 FAIL 保留，剩余矩阵及完整门禁仍由 B 负责。见文末本轮续验记录。
 
 ## B 合同重判与继续决定（2026-10-21）
 
@@ -1096,3 +1096,20 @@ NEXT ACTION: B CONTINUES REMAINING 88 MATRIX ROWS / 14 INDEPENDENT KEYS, SCAN-AL
 治理及差异检查 PASS，仅事实报告普通本地提交；未推送、改写历史、提交 Closure Packet／SLICE READY FOR A REVIEW 或关闭 Slice。
 
 NEXT ACTION: B CONTINUES REMAINING 87 MATRIX ROWS / 13 INDEPENDENT KEYS, SCAN-ALL, BATCH-SUITE AND SLICE FINAL; SAME TASK, BASE AND FIXED ZIP, WHOLE-TASK ACCRUED TEST BUDGET.
+
+
+## B 取消预算后的 batch-suite 全量独立验收（2026-10-23）
+
+**Decision：FIX REQUIRED（矩阵／scan-all／Slice Final 尚未齐）；batch-suite 独立 PASS。** 按用户最新取消时间预算的指示，从原既有 `run_isolated_batch_integration.py --scenario suite` 完整入口执行，同候选 B 专属干净检出／已有专属小型开发实例／18124；95 项非报告输入及正式 ZIP DLL 匹配。原断言／原生超时未改，无外部预算中断或重跑。完整命令及停服合计 **466.212 秒、入口与停止均退出 0**，Active。
+
+七段原始结果独立核验：原生手动 Completed、真实定时触发及重启保持，首次信任／变址／旧五字段只改 URL hash／重启地址与重复零探测；停止前实际启动两项，停止后两项均成功提交、一项撤销，收尾期间不启动新轮，排队轮仅处理撤销项、随后未变零探测。batch-first／playback-first 两方向的停止共享均为同源一次实际请求、可靠成功 1，独立播放可在 Cancelling 期间启动；常规双向共享的调用归属与当前唯一源／Video／Audio／地址一致。130 项范围对照取得 133 候选、2 次原生分批读取、多版本 2 源，增删成员本轮／下轮和禁用／切换范围符合原断言。混合并发峰值及配置均为 2，实际批量 calls／success＝2／2；独立 FullRefresh 排队事实本次观察，完成成本沿用已接受 prepared plugin 结果，不新增冷启动成本声明。状态库目录故障真实报告 Failed／无任何新探测，恢复文件并重启后 Completed。
+
+完整原始物理日志按本次精确日期／时段独立重数 **163 次 ffprobe**（含准备、各段及恢复），**0 次媒体转码**；另有 **10 次 lavfi/nullsrc 原生启动能力检查**，明确分列，26 条真实批量汇总保留，不冒充矩阵测量窗口。全部媒体／STRM 文件摘要与前提相同、无临时文件残留；插件配置逐字节恢复，原入口 finally 对全部原生触发器逐项恢复／核验通过，实际最终 21 个触发器文件均为空。观察器误命名的 `trigger-files-before.json` 实际是执行历史，不当作独立触发器前快照；该限制及最初时间格式／FFmpeg 分类纠正留存，无产品重跑或原断言放宽。
+
+本次两专属服务停止 exit0／无 OOM；其余 58 个容器稳定生命周期／镜像／完整排序挂载一致，显式排除同期已声明的两个矩阵／扫描包项目。停止的本机指纹库 quick_check=ok、故障备份无残留；原库全部 1004 项、已接受大库副本和历史 P06 中断工作区保留。此门禁为开发布局 API 回归，无新增严格 Web 截图或矩阵覆盖。
+
+正式矩阵累计仍 **29／116**、独立关键 **27／40**、C **12／12**。同固定 ZIP 的剩余 87 行完整矩阵与 scan-all 正在各自专属包实例运行，完整原文／逐张图审查未齐前不计 PASS；之后还须 Slice Final，均由 B 承担。已接受匹配全量保持复用，没有新 Developer 修正请求、源码／正式工具变更、推送、新 Task、Closure Packet、SLICE READY FOR A REVIEW 或 Slice 关闭。
+
+本机证据：`b-remaining-no-budget-20261023T060031Z/Batch/` 保存原命令／完整 stdout／原始服务器和 Docker 日志／独立行审计／首轮私有审计纠正／恢复及归属对账。所有实际耗时继续记录，已撤销旧测试占比限制，不再按其提前收束完整验证。
+
+NEXT ACTION: B COMPLETES THE RUNNING REMAINING MATRIX AND SCAN-ALL, THEN SLICE FINAL; BATCH-SUITE ACCEPTED, SAME TASK AND FIXED CANDIDATE.
