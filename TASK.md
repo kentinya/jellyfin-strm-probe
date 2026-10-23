@@ -13,7 +13,7 @@ Test Level: T4
 Planner / Reviewer: B
 ```
 
-最新 B 决定：**FIX REQUIRED（其余必要门禁待 B 补齐）**，继续同一 Task 5.3。完整合并版本／SQLite helper 与带明确准备适配的 plugin 完整入口已 PASS，B53-20261022-8 闭合；不再要求 Developer 修改准备工具。继续同 ZIP 的真实视频验收，全部 12 个 ColorRange 行已完成独立核验，累计矩阵 26／116、独立关键 24／40，完整 baseline、package-all、configuration-all 与全部 1004 项 large-all 已通过；历史 FAIL 保留，剩余矩阵及完整门禁仍由 B 负责。见文末本轮续验记录。
+最新 B 决定：**FIX REQUIRED（其余必要门禁待 B 补齐）**，继续同一 Task 5.3。完整合并版本／SQLite helper 与带明确准备适配的 plugin 完整入口已 PASS，B53-20261022-8 闭合；不再要求 Developer 修改准备工具。继续同 ZIP 的真实视频验收，全部 12 个 ColorRange 行已完成独立核验，累计矩阵 27／116、独立关键 25／40，完整 baseline、package-all、configuration-all 与全部 1004 项 large-all 已通过；历史 FAIL 保留，剩余矩阵及完整门禁仍由 B 负责。见文末本轮续验记录。
 
 ## B 合同重判与继续决定（2026-10-21）
 
@@ -1051,3 +1051,16 @@ NEXT ACTION: B RETAINS ALL 91 MATRIX ROWS / 17 INDEPENDENT KEYS INCLUDING BOTH B
 整个 Task 累计测试口径继续保守扣除闲置，计入 P06 原中断及异步停服、P07 完整入口和收尾，不相加重叠墙钟、不重置轮次、不预借未来时间。当前余额不足下一完整旅程及收尾，不空等凑分母。证据在原轮 `P07-one/MP4/`（完整原文、8 图实际查看／独立审计／归属对账）；先前两条 P06 的 BLOCKED、exit137、部分结果及所有首次证据保持。仅事实报告普通本地提交，未推送、造 Task、提交 Closure Packet／SLICE READY FOR A REVIEW 或关闭 Slice。
 
 NEXT ACTION: B CONTINUES REMAINING 90 MATRIX ROWS / 16 INDEPENDENT KEYS, SCAN-ALL, BATCH-SUITE AND SLICE FINAL WITH THE SAME FIXED CANDIDATE AND WHOLE-TASK ACCRUED TEST BUDGET.
+
+
+## B MP4.P08.01 完整独立验收（2026-10-23）
+
+**Decision：FIX REQUIRED（其余必要门禁仍归 B）；MP4.P08.01 独立 PASS。** 从既有矩阵入口运行单行，**292.268 秒、退出 0**，原断言／超时不变，无中断或重跑。独立读取实际 STRM mtime 从 `1792733162717284299` 增至 `1792736914305032491` 纳秒，与原入口 apply 时间相符；前后内容 SHA-256 相同，URL／有效 SHA-1／Size／实际 A 字节不变。首信任／变化／再播／重启 **0／0／0／0**，完整旧五字段保持，原生完整源／流逐阶段相同；重启后任何播放前完整只读状态等于冻结状态。
+
+**8 张原图全部逐张实际打开**，正确 MP4 A 标记／动态测试画面／嵌入时钟与帧号推进、无错误；原始播放推进 **5.348～5.371 秒**、解码 **88～94 帧**，实际媒体读取均 200。原始 PlaybackInfo 的唯一当前源／地址／Video／Audio 与原生响应核对；首次独立辅助断言要求所有展示字段字面相同，实际仅 Audio 四个本地化展示标签为中文／英文，已逐字段明确核对，Video 完整一致，无产品重跑或原验收断言放宽。物理原文独立重数 **1 次 ffprobe（原生准备）／4 次转码**。CLEAN／CLEANED，两专属服务 exit0／无 OOM；其余 **62 个**容器稳定生命周期／镜像／重启次数／完整排序挂载相同，原库全部 1004 项、大库副本及两条 P06 首次中断工作区保留。
+
+累计矩阵 **27／116**、独立关键 **25／40**、C **12／12**；剩余 **89 行／15 个独立关键、scan-all、batch-suite 与 Slice Final**，包括两条预算阻断的 P06.01.up。固定实现／正式 ZIP／合同／Base 不变；已接受匹配证据继续复用，没有新 Developer 修正请求。整个 Task 累计账本继续保守剔除闲置、计入中断及真实收尾，不重置或预借未来测试时间；此前 P07 收束时余额不足的记录保留，此后实际必要审查积累的余额另行核对。
+
+原文、实际 mtime／字节、8 图实际查看、完整原始响应／流与五字段独立审计、原生日志和归属对账在同轮 `P08-one/MP4/`。仅事实报告普通本地提交；没有推送、造 Task、Closure Packet、SLICE READY FOR A REVIEW 或 Slice 关闭。
+
+NEXT ACTION: B CONTINUES REMAINING 89 MATRIX ROWS / 15 INDEPENDENT KEYS, SCAN-ALL, BATCH-SUITE AND SLICE FINAL WITH THE SAME FIXED CANDIDATE AND WHOLE-TASK ACCRUED TEST BUDGET.
