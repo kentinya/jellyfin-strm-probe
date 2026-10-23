@@ -4,7 +4,7 @@
 Slice ID: 5
 Name: 真实播放决策全场景验证与 CI 修复
 Owner: A
-Status: ACTIVE
+Status: READY FOR A REVIEW
 Base SHA: 323a3f310100c38c373ce078767d50f4135e8cf1
 Implementation Head: cab2eb50dbb3d29a58b09d9c63128cbc87545636
 ~~~
@@ -115,7 +115,62 @@ Python 完整回归另在 Python 3.11 干净检出执行。现有 `scripts/run_i
 
 ## Closure Packet
 
-PENDING SLICE FINAL。Task5.3经B完整审查PASS，正式116／116行、独立关键40／40、ColorRange12／12及指定Task全量已满足，正常停服缺口通过同输入反馈与B独立实机闭合。RO-1～RO-4行为证据已齐，停止新Task；B随后运行当前合同Slice Final，才提交完整Closure Packet。Slice仍ACTIVE，A最终审查／关闭未执行；完整复用范围和历史失败限制见TASK.md。
+**B Decision：SLICE READY FOR A REVIEW（2026-10-23）。** 当前合同全部RO与验收义务已有可核验证据；B停止造Task，将最终审查／关闭交A。不是A PASS或Slice关闭。
+
+| 身份 | 检查点 |
+|---|---|
+| Slice／Base | 5／`323a3f310100c38c373ce078767d50f4135e8cf1`，不移动 |
+| Implementation Head | `cab2eb50dbb3d29a58b09d9c63128cbc87545636`，实际最新工具实施；插件实现检查点`4b4d0cca33f37308842710b2a0a70b1919cd0a58` |
+| 当前合同／Task5.3 Base | `68e7bf01e7796fe9972838dfc0d8ed8283aacedd`／`f17fb1fc90dda242eeff9fac7b4f21576b5e6f94` |
+| Task5.3 B PASS | `fc71beacdfe7d0d1ca890326f801c7fb6b72a0fe`；无活动Task入口修正后`e5b7c5064b68454d884f2828cafe4ae7edeaa462`治理通过 |
+| Final实际运行源码 | 干净`e5b7c5064b68454d884f2828cafe4ae7edeaa462`；与429项回归及独立矩阵候选`bdbb4ee1955fb87076ac48f9257821cb31e248e5`仅SLICE／TASK报告不同，95项其余跟踪输入完全匹配 |
+| 唯一正式ZIP | SourceRevision `3a7de052bf089141f76e2f60921de285bd5184c4`；SHA-256 `9641fe917cc8db8d36ec32c841fb968b0149890f39094adce5338a0f28dd9e37` |
+| 包／构建身份 | DLL `9172e5802e4aadca707a3bae49bb32f66c643f1712b33ca427e3bbf4cb9cb434`；build inputs `f394eabc06a7e5423adefeed0aed34b18078be80d0a7ac9143f46340bb8d98ef`；工具修正未重构包 |
+
+### Required Outcomes与用户结果
+
+| RO／验收 | B完成状态与证据 |
+|---|---|
+| RO-1／AC-1 | 满足。自备可控MP4／MKV、真实SHA-1／Size／ffprobe、版本1 STRM、Range／固定URL替换／查询别名／真实404及损坏输入；固定Jellyfin12.2.0／Linux x64，仅指定ZIP部署且Active，归属、原生任务默认无触发及负载摘要核对。Final再次干净安装、生成当次媒体并核对五字段与实际生成记录。 |
+| RO-2／AC-2、AC-3 | 满足。88个P行＋12个C行＋12个D行＋4个F行＝116／116义务接受；独立关键40／40。实际ffprobe、原生Web实播及逐图查看、当前源／URL／Video＋Audio、原生保存／五字段、再播与重启前冻结后先只读核验均齐；D01与B01／B02为已固定的同次别名。计数按规则；原生委托不强求零探测。 |
+| RO-3／AC-4 | 满足。两格式C02／C06的limited／full／unspecified共12／12；同次编码器→成功保存精确匹配，完整33字段返回仅固定版本ColorRange丢失，依据固定版本往返实证有界接受返回null，其他身份字段及探测／保存／地址／Manifest保护保持。相同元数据保存失败、错误／未知源、缺Video、失败／原生取消／变化与恢复的单元及原生门禁保持；有效视频不再误拒绝。 |
+| RO-4／AC-5 | 满足，保留Task5.1已提交B PASS：三个真实Base失败已复现并修复，干净Python3.11、不可变锁／隔离断言保持；已授权修复候选`0d7162c56c3a2ea9a4fa7ffbdfc0e5c9e49bf482`的[Repository quality run 39521097113](https://github.com/kentinya/jellyfin-strm-probe/actions/runs/39521097113)全部必要步骤成功。当前后续提交未推送／未跑新远端，不借此声称cab2eb5有远端绿灯；本Task不新增发布授权或远端门槛。 |
+| AC-6／完整回归、独立审查与收尾 | 满足。B完成完整Task Base..Head审查、指定全量及独立复现；本轮最后一行新完整PASS关闭原停服137缺口。原生成功／失败条件、20秒宽限和探测取消语义保持；无新增框架或未来工具Task。以下Final新跑与匹配复用共同构成本合同最终证据。 |
+
+### Task索引
+
+- Task5.1 PASS：`4c75761982bc16dd1c6bae09bee1c3561da2c178:TASK.md`，CI三处失败修复与匹配远端结果；不证明播放矩阵。
+- Task5.2 PASS：`f17fb1fc90dda242eeff9fac7b4f21576b5e6f94:TASK.md`，指定ZIP隔离安装、MP4／MKV真实基线与重启。
+- Task5.3 PASS：上述B检查点及当前[TASK.md](TASK.md)，完整116义务／独立40／C12、产品误拒绝取证修正、失败恢复／配置恢复／客户端退出与完整门禁。普通后继提交修正无活动Task标题；首次治理失败记录保留，未改治理工具或产品。
+
+### 当前合同Final及完整门禁
+
+**Final新跑：PASS，运行器exit0，含收尾344.078秒。** Task PASS后从上述干净提交执行既有`run_isolated_playback_integration.py --scenario baseline --rows B01,B02`，指定同一ZIP，18151／B专属项目，新工作区；原生准备与测量分开。两行首信任／再播／重启均0／0／0；原生准备另有2次真实ffprobe，完整物理日志与观察计数一致。六个成功窗口推进5.349～5.470秒、87～94解码帧、实际媒体请求成功；12张原图全部逐张实际打开，正确A标记、时钟／帧与运动，无错误。六份原始PlaybackInfo的当前唯一源／正确URL／完整Video字段一致，Audio技术字段一致，仅本地化展示文字差异；完整原生源／流、五字段、STRM与计数的重启先读状态等于冻结状态。六次实际原生Stop204、媒体元素消失，无退出错误或回退路径。部署负载匹配、Active、原生批量任务triggers=[]。只读Docker事件覆盖7次Jellyfin＋7次media退出，全部0／无OOM；最终CLEAN／CLEANED，两服务exit0。既有68容器生命周期／镜像／完整排序挂载保持，未操作生产、共享实例、原1004库或旧失败工作区。
+
+| 完整门禁 | 最终接受证据／复用依据 |
+|---|---|
+| C# locked restore／Release build／test／format | 205项全部通过，SDK10.0.401；src／C#测试／构建／锁输入完全匹配，原始B完整结果可读，复用，不交回Developer。 |
+| 完整Python3.11 | 当前工具候选干净检出429项＝427 PASS＋2既有归档缺失SKIP，exit0；Final纯报告后继输入核对，消费文档的治理另新跑。Node／compileall／diff／提交空白／正式包verify通过。 |
+| 视频全部矩阵／baseline | 116义务、独立40、C12满足。strictPlay测量函数、产品和行决策／状态保护相同，复用已接受逐行测量／原始图片与持久化证据；本轮新独立D03／高码率P06／损坏恢复三行完整1003.796秒PASS，并新跑上述Final。不是当前驱动单次116行，也不声称旧行都有新Stop204；旧FAIL保持。 |
+| package-all | 完整380.501秒PASS；旧2秒非严格消费配置及执行分支逐字节相同，新增Stop／finally均受strict.enabled保护；按分支输入复用。严格Final另按5秒执行。 |
+| scan-all | 完整841.456秒PASS，136源／135项目／128＋8批、完整五字段／原生保存及原触发器恢复；消费输入完全匹配。物理ffprobe原文未观测，不冒充0。 |
+| 现存全部1004项large-all | 完整484.107秒PASS，现存1004候选首次信任／再轮零探测、保存、重启先读与16项播放／选源等原断言满足；消费输入完全匹配。原库和验收副本继续保留，不重建。 |
+| plugin-full／独立合并与SQLite | 带已披露且已接受的原生扫描完成／FullRefresh预热准备适配，完整516.139秒PASS；独立合并＋SQLite151.369秒PASS。原函数／断言／2.5秒阈值不变；不推导冷启动SLA、不称未经适配CLI PASS，不重开已接受的准备决定。 |
+| batch-suite／configuration-all | 完整466.212秒／277.621秒PASS；停止与收尾、双向共享、范围／定时、并发、状态库故障恢复及配置／触发器恢复；57张配置图已全部实际查看。消费输入完全匹配。 |
+
+原库完整1170文件摘要`189b67c66e608833b27fa818de24bb1611788565c87eeffc0568b9eefe958bd2`保持；所选支持版本1源1004，两条旧／不支持及一条库外控制不混计。原1004项、已接受大库副本和旧C／E失败工作区持续保留，未经确认后续不再需要前不清理。
+
+### 业务不变量、限制及交接
+
+完整决策／解析／权限／指纹／保存／源集合／共享与并发控制、原生失败恢复均由C#及实机门禁保持。首次信任不宣称当次探测成功；URL改变仍要求原生探测与保存，失败／取消／变化不覆写可信基线，缺新有效SHA-1不套旧身份。插件只读STRM，SQLite只保存最小历史指纹，未加入生产依赖、控制接口、调度器或新取消关联。
+
+**非阻塞事实与明确排除：** 历史Cast错误、预算中断、旧原生收尾137及所有整体FAIL保留，不反写为PASS；本轮全部正常停服不证明旧阻塞的唯一内部await。beforeunload回退为人工dispatch事件，正常实播全部只走osd-back；失败未伪造停止。Web非JSON500正文未由驱动保存，真实状态／原生日志／错误截图与API完整门禁的5次500正文分别留存，不补造历史。两归档缺失SKIP不计PASS，scan物理ffprobe为NOT OBSERVED。音频STRM和JellyfinProxy按用户已提交范围决定不执行／不计PASS，不承诺其支持；跨版本／全客户端／生产及新远端发布排除。无当前B P0/P1阻塞，无新增延期实施Task。
+
+**稳定本机索引：** `.git/validation-evidence/bdbb4ee1955fb87076ac48f9257821cb31e248e5/b-exit-review-20261023T170342Z/INDEX.md`，含完整Task／Slice差异、输入与ZIP摘要、各全量精确命令／退出码／原文索引、116行映射、两角色50张及Final12张逐图记录、完整字段／物理日志／每次重启收尾审计。旧全量与首败原始索引继续可读；本机原始资料不随Git上传，不声称远程可访问。
+
+**文档协调待A：** A独立审查固定Slice Base..Implementation Head及本Packet后填写A Final Review；通过时才按开发流程协调CURRENT需求／架构／范围、README、Roadmap／Progress、SLICE／TASK及三份角色经验，记录真实Closure Reconciliation与下一步。当前Roadmap仍ACTIVE，Progress不写Slice关闭，A Final Review保留PENDING；不提前代签A决定、推送或关闭。
+
+**SLICE READY FOR A REVIEW。**
 
 ## A Final Review
 
@@ -123,4 +178,4 @@ PENDING SLICE FINAL。Task5.3经B完整审查PASS，正式116／116行、独立�
     Decision: PENDING
     P0/P1 Blockers: NOT ASSESSED
 
-NEXT ACTION: B RUNS CURRENT-CONTRACT SLICE FINAL, THEN SUBMITS CLOSURE PACKET AS SLICE READY FOR A REVIEW; A RETAINS FINAL REVIEW AND CLOSURE.
+NEXT ACTION: A REVIEWS THE COMPLETE SLICE BASE..IMPLEMENTATION HEAD AND CLOSURE PACKET; NO ACTIVE IMPLEMENTATION TASK, NO B SELF-CLOSURE.

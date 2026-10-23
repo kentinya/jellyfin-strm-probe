@@ -1,6 +1,6 @@
 # NO ACTIVE IMPLEMENTATION TASK
 
-Task 5.3 已经 B 审查 PASS；下方保留完整合同、报告和决定。Slice 5 仍为 ACTIVE，B 仅完成当前合同 Slice Final 与 Closure Packet，不新建实施 Task，A 保留最终审查和关闭。
+Task 5.3 已经 B 审查 PASS；下方保留完整合同、报告和决定。Slice 5 已 READY FOR A REVIEW，当前合同 Slice Final 与 Closure Packet 已完成，不新建实施 Task，A 保留最终审查和关闭。
 
 # Task 5.3 — 视频八类决策的真实播放、误判取证与失败恢复
 
@@ -17,7 +17,7 @@ Test Level: T4
 Planner / Reviewer: B
 ```
 
-最新 B 决定：**PASS（B53-20261023-2 正常退出／收尾已独立闭合）**。正式行义务116／116、独立关键40／40、ColorRange12／12及全部指定Task门禁满足；本轮新Python429＝427 PASS＋2既有SKIP，正常收尾全程exit0／无OOM。完整审查、复用边界和历史失败限制见文末。停止造Task，B继续当前合同Slice Final，A保留最终审查和关闭。
+最新 B 决定：**PASS（B53-20261023-2 正常退出／收尾已独立闭合）**。正式行义务116／116、独立关键40／40、ColorRange12／12及全部指定Task门禁满足；本轮新Python429＝427 PASS＋2既有SKIP，正常收尾全程exit0／无OOM。完整审查、复用边界和历史失败限制见文末。停止造Task；当前合同Slice Final已通过、Closure Packet见SLICE.md，A保留最终审查和关闭。
 
 ## B 合同重判与继续决定（2026-10-21）
 
@@ -1348,3 +1348,14 @@ Developer同输入三行反馈的13个窗口／25张图也由B全部独立核对
 **全部RO行为义务已具备证据，停止规划新Task。** 本Task PASS；Slice仍ACTIVE，Slice Final尚待B执行，先不交Closure Packet或关闭。后续只完成当前合同Final和交A审查，不增加实施、非阻塞工具开发或未来重构。
 
 NEXT ACTION: B RUNS CURRENT-CONTRACT SLICE FINAL, THEN SUBMITS CLOSURE PACKET AS SLICE READY FOR A REVIEW; A RETAINS FINAL REVIEW AND CLOSURE.
+
+
+## B Slice Final与交A检查点（2026-10-23）
+
+Task PASS后，在干净`e5b7c5064b68454d884f2828cafe4ae7edeaa462`／同一正式ZIP执行既有baseline B01／B02入口，完整 **344.078秒、exit0、PASS**。两格式六次实播均零额外探测，六次Stop204，完整保存／五字段和重启先读冻结相等；推进5.349～5.470秒、87～94解码帧。**12张原图全部逐张实际打开**，当前源／URL／完整Video字段和Audio技术字段对账；原生准备2次ffprobe另列。七次Jellyfin与七次media退出均0／无OOM，最终CLEAN／CLEANED，原68容器及准备库／历史失败资料保留。精确命令、原文、图片／字段／计数和每次退出审计见同轮`Slice-Final-baseline/`及根索引。
+
+Final仅两个报告文档比当前429项／三行独立复现候选改变，95项其余输入相同；消费文档的治理重跑。匹配完整门禁及按执行阶段接受的116义务、独立40／C12，不机械重跑，也不改写历史FAIL、SKIP或未观测事实。Task PASS初次报告未加无活动Task标题导致治理拒绝，普通后继e5b7c50纠正后治理通过再启动Final；未改工具或重写历史。
+
+全部RO完成，不新造Task。完整Closure Packet已提交[SLICE.md](SLICE.md)，状态 **READY FOR A REVIEW**；A最终审查与关闭仍PENDING，Roadmap／Progress不提前关闭。B至此停止实施／测试，不自动推送或转A自审。
+
+NEXT ACTION: A REVIEWS THE COMPLETE SLICE BASE..IMPLEMENTATION HEAD AND CLOSURE PACKET. SLICE READY FOR A REVIEW; NO ACTIVE IMPLEMENTATION TASK.
