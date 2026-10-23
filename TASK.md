@@ -13,7 +13,7 @@ Test Level: T4
 Planner / Reviewer: B
 ```
 
-最新 B 决定：**FIX REQUIRED（其余必要门禁待 B 补齐）**，继续同一 Task 5.3。完整合并版本／SQLite helper 与带明确准备适配的 plugin 完整入口已 PASS，B53-20261022-8 闭合；不再要求 Developer 修改准备工具。继续同 ZIP 的真实视频验收，全部 12 个 ColorRange 行已完成独立核验，累计矩阵 21／116、独立关键 19／40，完整 baseline 与 package-all 已通过；历史 FAIL 保留，剩余矩阵及完整门禁仍由 B 负责。见文末本轮续验记录。
+最新 B 决定：**FIX REQUIRED（其余必要门禁待 B 补齐）**，继续同一 Task 5.3。完整合并版本／SQLite helper 与带明确准备适配的 plugin 完整入口已 PASS，B53-20261022-8 闭合；不再要求 Developer 修改准备工具。继续同 ZIP 的真实视频验收，全部 12 个 ColorRange 行已完成独立核验，累计矩阵 21／116、独立关键 19／40，完整 baseline、package-all 与 configuration-all 已通过；历史 FAIL 保留，剩余矩阵及完整门禁仍由 B 负责。见文末本轮续验记录。
 
 ## B 合同重判与继续决定（2026-10-21）
 
@@ -978,3 +978,16 @@ NEXT ACTION: B CONTINUES THE FOUR RUNNING P02.01/P03.02 VIDEO ROWS AND ALL REMAI
 本机忽略证据：`b-C06-more-20261022T233155Z/P02-P03-selected/` 的原始完整结果、32 图实际查看、原文／完整状态／字节审计及隔离对账；`Configuration-complete/` 的原始 BLOCKED、精确命令／准备及 459 文件摘要；根目录 INDEX、完整审查差异、固定输入和 `task-cumulative-time.json` 记录累计口径与限制。仅事实文档进入普通本地提交。
 
 NEXT ACTION: B RETAINS THE REMAINING 95 MATRIX ROWS / 21 INDEPENDENT KEYS, SCAN-ALL, ALL-1004 LARGE-ALL, BATCH-SUITE, CONFIGURATION-ALL AND SLICE FINAL. WHOLE-TASK ACCRUED TIME BUDGET APPLIES; NO NEW DEVELOPER FIX REQUEST, TASK OR SLICE CLOSE.
+
+
+## B 配置全量独立验收（2026-10-23）
+
+**Decision：FIX REQUIRED，继续同一 Task 5.3；configuration-all 独立 PASS。** 在补齐固定浏览器工具链后，沿用相同正式负载／95 项非报告输入及 B 专属检出／18124，运行原完整 `scripts/run_isolated_configuration_integration.py --scenario all`，**277.621 秒、退出 0**；原断言／超时未改，无中断。此前准备缺失的 BLOCKED 原文保留。
+
+13 个场景、19 次真实浏览器会话、**57 张原图均逐张实际打开**。独立核对原始 POST／实际配置与重启：保存／重启保持、失效／空范围拒绝、小数／指数／空值／0／9 不提交、1／8／2 成功，提交前失败及拒绝不改变服务器值，响应丢失时真实提交但页面明确未确认、重读恢复；配置／库列表读取失败阻止保存并能恢复。原生任务在部分／全部库、关闭播放检查、禁用、重新启用下的结果分别为 Completed／Completed／Completed／Cancelled／Completed，实际候选 2／5／5／0／6，临时三项目删除。原入口 finally 恢复配置和全部原生任务触发器，重启逐字段／逐触发器核验通过；原入口不另存独立触发器快照，此证据边界保持。
+
+所有浏览器错误原文保留：原生 dashboard/plugins 页共 30 个 pageErrors（2 个 CancelledError、28 个 scrollHandler），另有原生登录 socket403／包列表404 和场景预期注入错误；目标配置页及恢复断言通过，不宣称零错误。全页截图有固定导航覆盖部分输入，数值以原始快照／实际配置共同核对。两个专属服务停止 exit0／无 OOM；其余 58 个容器的稳定生命周期／镜像／重启次数／完整排序挂载不变，独立健康检查的动态历史不作相等断言。原夹具及 STRM 摘要保持，无临时 STRM 残留。
+
+累计矩阵 **21／116**、独立关键 **19／40**、C **12／12**；完整 baseline／package-all／configuration-all 已接受。仍缺 **95 行／21 个关键**、scan-all、全部 1004 项 large-all、batch-suite 及 Slice Final，均由 B 继续；无新增 Developer 修正请求。正式 ZIP、合同／Base／实现不变；不造 Task、不推送、不提交 Closure Packet 或自行关闭。整个 Task 累计测试预算继续适用。原文与独立审计保存在同轮 `Configuration-ready/`，首败在 `Configuration-complete/`。
+
+NEXT ACTION: B CONTINUES REMAINING 95 MATRIX ROWS / 21 INDEPENDENT KEYS, SCAN-ALL, ALL-1004 LARGE-ALL, BATCH-SUITE AND SLICE FINAL WITH THE SAME FIXED CANDIDATE; CONFIGURATION-ALL ACCEPTED.
