@@ -13,7 +13,7 @@ Test Level: T4
 Planner / Reviewer: B
 ```
 
-最新 B 决定：**FIX REQUIRED（其余必要门禁待 B 补齐）**，继续同一 Task 5.3。完整合并版本／SQLite helper 与带明确准备适配的 plugin 完整入口已 PASS，B53-20261022-8 闭合；不再要求 Developer 修改准备工具。继续同 ZIP 的真实视频验收，全部 12 个 ColorRange 行已完成独立核验，累计矩阵 27／116、独立关键 25／40，完整 baseline、package-all、configuration-all 与全部 1004 项 large-all 已通过；历史 FAIL 保留，剩余矩阵及完整门禁仍由 B 负责。见文末本轮续验记录。
+最新 B 决定：**FIX REQUIRED（其余必要门禁待 B 补齐）**，继续同一 Task 5.3。完整合并版本／SQLite helper 与带明确准备适配的 plugin 完整入口已 PASS，B53-20261022-8 闭合；不再要求 Developer 修改准备工具。继续同 ZIP 的真实视频验收，全部 12 个 ColorRange 行已完成独立核验，累计矩阵 28／116、独立关键 26／40，完整 baseline、package-all、configuration-all 与全部 1004 项 large-all 已通过；历史 FAIL 保留，剩余矩阵及完整门禁仍由 B 负责。见文末本轮续验记录。
 
 ## B 合同重判与继续决定（2026-10-21）
 
@@ -1064,3 +1064,18 @@ NEXT ACTION: B CONTINUES REMAINING 90 MATRIX ROWS / 16 INDEPENDENT KEYS, SCAN-AL
 原文、实际 mtime／字节、8 图实际查看、完整原始响应／流与五字段独立审计、原生日志和归属对账在同轮 `P08-one/MP4/`。仅事实报告普通本地提交；没有推送、造 Task、Closure Packet、SLICE READY FOR A REVIEW 或 Slice 关闭。
 
 NEXT ACTION: B CONTINUES REMAINING 89 MATRIX ROWS / 15 INDEPENDENT KEYS, SCAN-ALL, BATCH-SUITE AND SLICE FINAL WITH THE SAME FIXED CANDIDATE AND WHOLE-TASK ACCRUED TEST BUDGET.
+
+
+## B MKV.P07.01 完整独立验收与本轮收束（2026-10-23）
+
+**Decision：FIX REQUIRED（剩余必要验收未齐）；MKV.P07.01 独立 PASS。** P08 必要审查和文档提交后，已实际积累的整个 Task 测试余额足够下一完整正常单行，B 沿用既有矩阵入口／同 ZIP／新归属工作区和 18142，**273.971 秒、退出 0**，无中断或产品重跑，原断言／超时不变。准确输入为同 URL／实际 A 字节保持，旧 SHA-1 有效→新侧缺失、旧 Size 缺失→新侧有效（1,669,928 字节），两组均不可比较。首信任／变化／再播／重启 **0／0／0／0**，完整旧五字段保持，含原有效 SHA-1 与空 Size；没有凭新侧 Size 更新旧基线。
+
+**8 张原图全部逐张实际打开**，正确 MKV A／动态画面／嵌入时钟与帧号、无错误；播放推进 **5.372～5.454 秒**、解码 **90～95 帧**，实际媒体读取均 200。原始 PlaybackInfo、唯一当前源／正确地址／Video／Audio、真实 Manifest 与实际字节摘要逐阶段核对；完整原生流保持，原始 Web 与原生响应仅三个 Audio 本地化标签语言不同，Video 完整一致。重启后任何播放之前，完整原生源／流、五字段、STRM 摘要与探测计数等于冻结状态。物理日志独立重数 **1 次 ffprobe（原生准备）／4 次转码**。CLEAN／CLEANED，本次两专属服务停止 exit0／无 OOM，其余 **62 个**容器稳定生命周期／镜像／重启次数／完整排序挂载不变；原库全部 1004 项、大库副本与 P06 两个首次中断工作区保留。
+
+累计正式矩阵 **28／116**、独立关键 **26／40**、C **12／12**。仍缺 **88 行／14 个独立关键、scan-all、batch-suite 和 Slice Final**，包括此前预算中断的两条 P06.01.up，全部由 B 继续。没有新 Developer 产品／工具修正请求；固定实现／ZIP／合同／Task Base 不变，匹配完整质量、安装、baseline、配置、大库、prepared plugin 和独立合并结论继续复用。完整 Task Base..Head 与后继报告差异已留存，97 项输入仅 TASK 报告变化，另 96 项相同。
+
+本轮新增 MP4／MKV P07.01 和 MP4.P08.01 三行 PASS；两条 P06 的部分结果／外部预算中断／exit137 原文保持 BLOCKED、不计 PASS。整个 Task 累计保守可审计口径仍低于 50%，测试墙钟并集计入全部准备／失败／等待／异步停服与收尾，历史近似／缺失限制保持；闲置剔除、不按“继续”清零，不空等凑分母或预借未来工作时间。收束时不启动超出实际余额的完整旅程，所有剩余门禁保持。
+
+同轮 `P07-mkv/MKV/` 保存精确命令、完整原文、8 图实际查看、字节／Manifest、完整字段独立审计、正常停服和隔离对账；私有辅助审计先后纠正旧 Manifest 空值键与 MP4／MKV 展示标签的假设，未改产品或原验收断言。根目录累计账本及本节最终审查索引记录实际耗时与限制。只提交事实报告，无推送、造 Task、Closure Packet、SLICE READY FOR A REVIEW 或 Slice 关闭。
+
+NEXT ACTION: B CONTINUES REMAINING 88 MATRIX ROWS / 14 INDEPENDENT KEYS, SCAN-ALL, BATCH-SUITE AND SLICE FINAL UNDER THE WHOLE-TASK ACCRUED TEST BUDGET; SAME TASK, BASE AND FIXED ZIP.
