@@ -13,7 +13,7 @@ Test Level: T4
 Planner / Reviewer: B
 ```
 
-最新 B 决定：**FIX REQUIRED（B53-20261023-1 尚缺写入已生效、确认读回失败时的恢复）**。已独立核验 `660d60c` 的三行正常反馈及全部 22 张图，204 正常路径／正常恢复／跨行鉴权修正有效；但现有 D03 调用链的独立异常控制仍复现开关遗留关闭，不能宣称异常恢复完整。干净 Python 3.11 全量 418 项＝416 PASS＋2 个既有归档缺失 SKIP。继续同一 Task，既有接受覆盖 40／116、独立关键 27／40、ColorRange 12／12 不变，B 保留余下全部门禁。Developer 只补该遗漏及直接控制；不重新修改已闭合的合并准备。完整原矩阵 41 原始 PASS／46 FAIL、既有完整门禁与历史失败均保留，具体接受／复用边界见文末 B 复核。
+最新 B 决定：**FIX REQUIRED（实施遗漏已修正，B 剩余完整验收进行中）**。B 已核验 `bd1c60510ea9df45b8791cd7e5ebdb9f19fa9aa2`，独立控制确认 D03 写已生效／读回失败仍恢复原值、无法恢复即停止，D02 同类边界亦恢复且保留原失败。当前干净 Python 全量 422 项＝420 PASS＋2 个既有归档缺失 SKIP。完成原始 PASS 的全部剩余图片／计数审查及两行匹配反馈复用后，正式覆盖 **70／116、独立关键 33／40、ColorRange 12／12**；余下 **46 行由 B 在同一正式 ZIP 上实机复验中**。本次没有新的 Developer 实施请求，不重开已闭合的合并准备。完整门禁、旧 FAIL／BLOCKED 和 Slice Final 责任保留，未签发 Task PASS 或 Slice Ready，详见文末最新 B 复核。
 
 ## B 合同重判与继续决定（2026-10-21）
 
@@ -1222,3 +1222,22 @@ NEXT ACTION: DEVELOPER COMPLETES THE REMAINING B53-20261023-1 APPLIED-WRITE/FAIL
 - **Remaining In-Slice Work：** 本 Task 仍未 PASS。B 需审查 `f17fb1fc90dda242eeff9fac7b4f21576b5e6f94..bd1c605`，重跑当前工具候选的完整 Python 回归，核验本项控制与实际 D03／D02 实机配合，按输入匹配判断既有矩阵／安装／扫描／配置／批量／大库证据的复用范围，并继续补齐未接受行、受污染行复验与独立关键复现。RO-1 有部分交付，RO-2／RO-3 未齐，RO-4 保留 Task 5.1 既有决定。不提交 Closure Packet、不返回 SLICE READY FOR A REVIEW、不关闭 Slice。
 
 NEXT ACTION: INDEPENDENT B VERIFIES THIS APPLIED-WRITE/FAILED-READ RESTORE CORRECTION, RE-RUNS THE CURRENT TOOL CANDIDATE'S FULL PYTHON REGRESSION AND RETAINS EVERY REMAINING TASK 5.3 FULL GATE; NO NEW TASK OR SLICE CLOSE.
+
+
+## B 对 bd1c605 的独立复核与剩余验收（2026-10-23）
+
+**Decision：FIX REQUIRED；本项实施遗漏已修正，B 完整验收尚在运行。** 审查候选 Head `1ca2ecca58e6551162d97c5b12269692b0de60a3`，实施 `bd1c60510ea9df45b8791cd7e5ebdb9f19fa9aa2`，Task Base／合同不变。沿用此前完整 Task Base..Head 审查，本次完整读查两文件修正，核对 97 项输入；只有播放顺序入口、直接测试与 TASK 报告改变，C#／正式包构建输入、驱动、共享媒体服务、其他完整实机入口、依赖与锁均不变。起始工作区干净、治理 PASS；本次不实施被审代码、不委派、不推送或改写历史。
+
+B 从现有 `journey_d03/d02` 的既有 HTTP 调用边界独立运行三个控制：① D03 POST204 已提交 false，确认 GET503，恢复 POST204／读回 true，最终仍 RowEvidenceError，保留 disable.status204、原读回错误及 restore；② 同序但恢复两次500，ConfigurationRestoreError／restore FAILED，原值未回来，既有矩阵异常分支停止后续；③ D02 禁用已应用而返回500，经实际 restore helper 重新启用／原生状态 Active，最终仍 RowEvidenceError，保留 disableStatus500。三个控制均符合本项要求，**不是实机503／500或插件故障的证明**。没有构造不存在的入口或放宽成功／恢复断言。
+
+独立新建干净候选检出，Python 3.11.10 全量 discovery **422 项：420 PASS、2 SKIP、0 FAIL，exit0，墙钟22.819秒**（套件22.040秒）；跳过仍为既有归档缺失，不计 PASS。112 项 playback 控制包含在全量中，不另重复模块。固定正式 ZIP SHA-256 仍为 `9641fe917cc8db8d36ec32c841fb968b0149890f39094adce5338a0f28dd9e37`，未为工具修正重新构包；此前同 ZIP 完整 C#205、restore/build/format、prepared plugin／独立合并、baseline、package、scan、batch、configuration 与全部1004项大库门禁未消费改变的入口，继续按此前已记录输入核验复用。原1004项准备库及其保留副本未被本轮命令操作。
+
+**追加接受28行与两行正常反馈：** 原87行中39个未受D03污染的PASS，前次已对154份原生PlaybackInfo、源／URL／Video＋Audio、全部五字段、冻结与重启先读回、失败／恢复作结构审计。本次将余下28行的 **227张原图全部逐张实际打开**并保存摘要／标记／可见错误结论；六个相关URL的完整原生ffprobe命令总数 **39／3／3／4／10／10** 与所有原观察最终累计计数一一相等。P06的B是带标记测试图，画面推进另以原始时间／解码帧核验；F01失败及重试、F02失败均看到原生错误框，恢复／再播／重启均B。原整体FAIL及407图不改写。
+
+这28行均为MP4：P03.04／05、P04.02／03、P05.02～05、P06五方向的up/down共10行、P07.02～06、P08.02／03、F01／02、D02。AST逐函数核验正常／失败旅程、测量、首次信任、重启与D04入口未变；当前外层只补重新鉴权、只读启用前提及D02／D03异常恢复。原MP4.D02完整成功禁用／两次播放／冻结／重启先读／重启播放／重新启用顺序保持，新finally只增加失败路径恢复；原配置前后完全一致且开启，在旧D03失败之前执行，正常证据可复用，新异常路径由上述独立控制核验，MKV.D02另在当前实机批复验。两个原D05前提未证实，仍排除并重跑。此前Developer最终535.3秒三行中MP4.D04／MKV.P03.01的全部22图及原始数据已由B核验，两行本次未消费改动函数，按匹配证据接受；MP4.D03由当前实机重取，不要求Developer重复正常反馈。
+
+因此正式覆盖由40增加到 **70／116、独立关键33／40、C12／12**；本次增加的是完成审查后的结果，不把无效前提／未看图／原始FAIL计PASS。剩余46行正在两个新归属隔离实例用原 `--scenario matrix --rows`、同ZIP、原断言／超时执行，端口18148／18149，分别25／21行；精确清单和argv在证据plan中。首次新检出缺忽略的本机镜像锁，两个预检均在创建容器前立即失败；保留原首败，将相同锁文件复制并核对后使用新目录重启，两批尚RUNNING，不把已生成观察当完整通过，不隐瞒重试或发明OS退出码。
+
+稳定本机证据根：`.git/validation-evidence/1ca2ecca58e6551162d97c5b12269692b0de60a3/b-restored-matrix-20261023T122718Z/`。含输入清单／干净检出、全量Python原文／命令、独立控制、227图逐张审阅记录、28行复用／计数核验、运行准备、两个首败与重新执行的原始目录。当前没有新的Developer修正要求；B继续承担余下46行完整旅程、全部原图与关键复现、归属／退出／恢复核验和最终门禁。取消时间预算继续适用，Developer报告中30%口径不作为当前限制。当前不造Task、不提交Closure Packet、不返回Slice Ready或自行关闭。
+
+NEXT ACTION: B COMPLETES BOTH RUNNING NATIVE MATRIX BATCHES AND INDEPENDENT EVIDENCE REVIEW, THEN RECHECKS ALL RO AND SLICE FINAL. NO DEVELOPER FULL-REGRESSION HANDOFF, NEW TASK OR SLICE CLOSE.
