@@ -2,6 +2,8 @@
 
 本页说明首版固定组合的本地安装包、配置、备份／恢复、禁用／移除／重装步骤与已验证支持范围。它是 [Slice 4](progress.md#slice-4-closed) RO-1 的交付材料；大库与扫描分别属于 RO-2／RO-3，最终接受范围见 [A Final Review](progress.md#slice-4-closed)，不在本页复制状态。按用户授权不验证 JellyfinProxy，代理未验证、不承诺兼容；原始证据见 [Closure Packet](progress.md#slice-4-closed)。
 
+后续视频结果匹配修正及同一正式ZIP的播放／安装／扫描／大库回归接受范围见[Slice 5最终审查](progress.md#slice-5-closed)；包的来源、摘要和证据复用以该合同为准，安装与恢复步骤不变。
+
 ## 已验证支持范围
 
 | 维度 | 首版实测范围 |

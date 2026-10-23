@@ -8,6 +8,7 @@
 | 2 — 播放检查与历史指纹完整闭环 | `924816a84c74f5d79c107478f2d40e621cb8be8d` | `59fd3f7e4b6623449a691574fb69b817db72c2ae` | PASS / CLOSED；2026-10-14；[关闭范围与证据](#slice-2-closed) |
 | 3 — Jellyfin 原生批量检查任务 | `6da90ab6bd8995d8204ae0b7faf786c823699fe6` | `7c64eb5dcad6e5f20fb7eb41819be2521f65484d` | PASS / CLOSED；2026-10-16；[关闭范围与证据](#slice-3-closed) |
 | 4 — 大规模集成与单版本交付 | `03169b07d110964562f7da31d2c3d7add82e5ff5` | `8573dfbffebb785261668f9cd5c895be937e000e` | PASS / CLOSED；2026-10-20；[关闭范围与证据](#slice-4-closed) |
+| 5 — 真实播放决策全场景验证与 CI 修复 | `323a3f310100c38c373ce078767d50f4135e8cf1` | `cab2eb50dbb3d29a58b09d9c63128cbc87545636` | PASS / CLOSED；2026-10-23；[关闭范围与证据](#slice-5-closed) |
 
 <a id="slice-1-closed"></a>
 ## Slice 1 关闭快照与证据
@@ -54,8 +55,21 @@ Slice 4 交付固定 Jellyfin 12.2.0／Linux x64 的本地 ZIP、完整安装／
 - MP4／MKV 原生 Web 实际播放、安装升级及禁用／移除／重装恢复、现存全部 1004 项首次信任和未变零探测、小集合增量／停止恢复、完整原生扫描重叠、源身份／五字段／原生地址主流的重启前后证明均在本次接受范围。准备库、基线及保留副本持续供后续需要它的开发阶段复用，关闭不清理。
 - P2：正式扫描工具尚未内置完整三阶段重启观察、异步准备私有适配及既有日志／措辞。其他平台／格式／客户端、OpenList 专有行为、指定逐分支及 audio-only 实机、物理数据库保存故障注入、完整镜像构建溯源和线上发布仍不在已验证声明内；不改写历史十万／3000 结果。
 
+<a id="slice-5-closed"></a>
+## Slice 5 关闭范围与证据
+
+Slice 5交付固定Jellyfin 12.2.0／Linux x64下MP4／MKV的八类原生Web播放决策验证、ColorRange结果匹配有界修正与干净检出CI修复。A独立审查完整Base..Implementation Head及Closure Packet后裁定PASS / CLOSED，P0/P1 Blockers为NONE FOUND，保持原Base与全部正确性不变量。
+
+- A审查checkout `cae260cf8bbeea3be97d66f912bb013f72d77eec`为B交A快照；本次关闭提交的根SLICE保留完整合同、Closure Packet、A Final Review及Closure Reconciliation，TASK保留Task 5.3完整报告与B PASS。后续合同切换须保留本次Git关闭快照，不把文档提交冒充实施。
+- Task 5.1／5.2的完整计划、报告与B PASS分别在`4c75761982bc16dd1c6bae09bee1c3561da2c178:TASK.md`、`f17fb1fc90dda242eeff9fac7b4f21576b5e6f94:TASK.md`；Task 5.3 Base为后者，B PASS在`fc71beacdfe7d0d1ca890326f801c7fb6b72a0fe:TASK.md`，无活动任务入口修正及单独Final见B交A快照。历史FIX REQUIRED／FAIL／BLOCKED／NOT RUN保留。
+- 正式视频116行义务、独立关键40行及12个ColorRange场景按输入与执行阶段核验后接受；没有宣称当前驱动单次跑完116行或将旧整体FAIL改为PASS。编码器到成功保存33字段精确匹配，固定版本重读仅ColorRange丢失时有界接受，其他身份、实际成功保存、地址／Manifest及条件提交保护保持。原生Web点击播放、已有静态流权限入口和原生计划任务的真实证据不外推为猜造入口可达。
+- A独立重核逐行原始观测、PlaybackInfo、完整五字段／原生保存及重启先读，接受B完整逐图审阅，另实际打开8张代表原图；核对最终ZIP、构建／工具输入、原始全量门禁与当前独立行／单独Final，明确复用实机结果，没有再次启动原生验收。A另新跑locked restore／Release build／format与205项C#、Python3.11的429项，均通过；本机两项归档输入存在，B干净检出的2项SKIP保留、不倒写。正常退出／每次重启无OOM证据与失败原文分别保留。
+- CI三处Base失败已修复，匹配修复候选`0d7162c56c3a2ea9a4fa7ffbdfc0e5c9e49bf482`的远端run39521097113及必要步骤成功；后续候选未推送、不宣称其远端绿灯。本次关闭不推送或发布。
+- 本机B索引：`.git/validation-evidence/bdbb4ee1955fb87076ac48f9257821cb31e248e5/b-exit-review-20261023T170342Z/INDEX.md`；A索引：`.git/validation-evidence/cab2eb50dbb3d29a58b09d9c63128cbc87545636/a-final-review-20261023/INDEX.md`。均为稳定本机忽略资料，不随Git上传；完整命令、摘要、逐行映射和新跑／复用边界可核验。
+- 旧Cast／137／预算中断、未保存的Web非JSON500正文、scan物理ffprobe未观测和B索引残留收尾前字段保持披露，后者由新完整行与Final原文协调，均不改变当前接受范围。音频STRM与JellyfinProxy按用户范围不执行、不计PASS；其他版本／格式／客户端、OpenList专有行为、物理原生数据库保存故障实机注入、完整镜像构建溯源及通用性能未作支持承诺。现存全部1004项准备库、验收副本与旧失败资料继续保留，不因关闭清理。
+
 ## 当前开发指针
 
-开发依据为 [稳定需求](requirements.md)、维护中的架构及已提交合同，用户范围与原方案退出治理的边界见 [范围说明](scope.md)。上方是四个已完成 A 最终审查的 Slice 账本。
+开发依据为[稳定需求](requirements.md)、维护中的架构及已提交合同，用户范围与原方案退出治理的边界见[范围说明](scope.md)。上方维护各Slice的已完成A最终审查账本。
 
-此前四个 Slice 的接受范围与原始证据见上方固定 Git 快照。2026-10-20 用户新增八类真实播放测试及 GitHub Actions 失败修复需求，确认约束后明确激活 [Slice 5 合同](../SLICE.md)，详细 [执行设计](slice-5-playback-test-plan.md) 与实播／截图／简化工具要求保持；当前实施、测试分工及审查入口见根 [TASK.md](../TASK.md)。新增产品验收与 CI 修复的实际结果由 Task 记录，产品误拒绝取证／修正按 [A 修订合同](../SLICE.md) 及 B 重判执行；历史接受事实不改写，现存全部 1004 项准备库持续保留。
+已授权范围的最终结果、文档协调和真实下一步见[当前Slice](../SLICE.md#a-final-review)；当前没有活动实施Task或待规划的大版本Slice，停止并等待新增需求。详细[播放执行设计](slice-5-playback-test-plan.md)保留观测合同，不自动启动后续工作。小版本bug不自动转入A的大版本规划；现存全部1004项准备库继续保留。

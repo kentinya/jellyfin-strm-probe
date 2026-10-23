@@ -4,12 +4,14 @@
 Slice ID: 5
 Name: 真实播放决策全场景验证与 CI 修复
 Owner: A
-Status: READY FOR A REVIEW
+Status: PASS / CLOSED
 Base SHA: 323a3f310100c38c373ce078767d50f4135e8cf1
 Implementation Head: cab2eb50dbb3d29a58b09d9c63128cbc87545636
 ~~~
 
 ## 用户目标与激活边界
+
+本节及下方合同变更保留激活／修订时的决定；实际完成范围、证据复用与最终裁定见 Closure Packet 和 A Final Review。
 
 2026-10-20 用户要求在下一 Slice 规划八类决策的真实播放测试，自行准备媒体与 STRM、部署 Jellyfin 并安装插件，同时规划 GitHub Actions 失败修复。本合同承接新增需求，详细场景与执行设计见 [播放测试及 CI 计划](docs/slice-5-playback-test-plan.md)。
 
@@ -168,14 +170,34 @@ Python 完整回归另在 Python 3.11 干净检出执行。现有 `scripts/run_i
 
 **稳定本机索引：** `.git/validation-evidence/bdbb4ee1955fb87076ac48f9257821cb31e248e5/b-exit-review-20261023T170342Z/INDEX.md`，含完整Task／Slice差异、输入与ZIP摘要、各全量精确命令／退出码／原文索引、116行映射、两角色50张及Final12张逐图记录、完整字段／物理日志／每次重启收尾审计。旧全量与首败原始索引继续可读；本机原始资料不随Git上传，不声称远程可访问。
 
-**文档协调待A：** A独立审查固定Slice Base..Implementation Head及本Packet后填写A Final Review；通过时才按开发流程协调CURRENT需求／架构／范围、README、Roadmap／Progress、SLICE／TASK及三份角色经验，记录真实Closure Reconciliation与下一步。当前Roadmap仍ACTIVE，Progress不写Slice关闭，A Final Review保留PENDING；不提前代签A决定、推送或关闭。
+**B交接时的文档协调：** B保留A最终审查和关闭职责；本次A决定与已完成协调见下方，不改写B交接时尚未关闭的事实。
 
 **SLICE READY FOR A REVIEW。**
 
 ## A Final Review
 
-    Reviewed Range: NOT SET
-    Decision: PENDING
-    P0/P1 Blockers: NOT ASSESSED
+    Reviewed Range: 323a3f310100c38c373ce078767d50f4135e8cf1..cab2eb50dbb3d29a58b09d9c63128cbc87545636
+    Decision: PASS / CLOSED
+    P0/P1 Blockers: NONE FOUND
 
-NEXT ACTION: A REVIEWS THE COMPLETE SLICE BASE..IMPLEMENTATION HEAD AND CLOSURE PACKET; NO ACTIVE IMPLEMENTATION TASK, NO B SELF-CLOSURE.
+**A独立最终决定（2026-10-23）：接受RO-1～RO-4及AC-1～AC-6，关闭Slice 5。** 审查checkout为`cae260cf8bbeea3be97d66f912bb013f72d77eec`，工作区初始干净；以上真实Base与Implementation Head均可达且为祖先，Head之后只有SLICE／TASK报告变化。本次A未参与被审产品实现，不移动Base、不把关闭文档当作实现，也不启动后续Task。
+
+- **完整实现范围：** 审查Slice全范围的产品、测试、工具及合同差异，并核对B各Task决定。CI修复自备临时输入并保留锁／隔离断言；播放仍由原生Web点击Play、实际PlaybackInfo／静态流／原生计划任务入口触发。固定视频行的顺序编排、Range读取、身份定位、配置恢复及测量后客户端退出服务于这些实际旅程，没有新增运行时接口、控制API、调度器或通用测试框架；没有使用猜造入口取得产品结论。
+- **产品修正与不变量：** A独立读取固定版本原生事务与双向Map源码，摘要与B取证一致；逐行重算全部12个C场景的同次33字段，编码器与成功保存完全一致，明确range重读只丢失ColorRange，未指定对照完全一致。接受仅返回null的有界适配；其他32字段、同源／同URL、实际成功保存、Manifest稳定及条件提交保持，失败与未知源不因此获准提交。DetailedLog沿用默认关闭的脱敏字段诊断，不改变探测或取消语义。
+- **真实用户结果：** A从正式116行索引追到原始观测、完整PlaybackInfo与结果，重新核对454个成功窗口及6个预期失败窗口的进度／解码、ffprobe、当前源／URL／Video＋Audio、五字段及全部重启前冻结与重启先读状态；914张关联原图可读且摘要留存。接受B完整逐行看图记录，A另实际打开8张ColorRange／失败恢复／Final重启原图抽核，未将摘要核验冒充全部逐图查看。各类变化、无Video、跳过、委托、失败旧基线与同目标恢复均满足合同。
+- **完整门禁与Final复用：** 独立核对97项跟踪输入，B当前工具候选仅SLICE／TASK报告不同、其余95项一致；正式ZIP完整verify及摘要匹配。读取并核验13项原始门禁命令／日志及输入闭包，接受上方package／scan／现存全部1004项large／prepared plugin与独立合并／batch／configuration证据及所披露准备适配。按执行阶段接受既有矩阵测量证据，另接受当前驱动三行完整独立复现及Task PASS后的单独Slice Final；没有将历史整体FAIL改为PASS，也没有宣称当前驱动单次跑完116行。A独立重读Docker事件，三行与Final的22／14次双服务退出全部0、无OOM，原20秒收尾门槛不变；没有再次启动实机验收。
+- **A新运行：** 固定SDK的locked restore、Release build、C# test **205／205、0跳过**、format全部exit0；Python3.11完整discovery **429／429、0跳过**、exit0。本工作区具备两项归档测试输入，B干净检出的2项既有SKIP保留原结论，不倒写为B通过。A结果不替代B干净检出或原生验收；文档协调后的治理与链接／空白检查另行核验。
+- **CI与发布边界：** A读取留存的远端原始workflow／job结果，确认Task5.1修复候选`0d7162c56c3a2ea9a4fa7ffbdfc0e5c9e49bf482`对应run39521097113及必要步骤成功；接受RO-4，不声称当前Head有远端绿灯。本次无推送、上架或生产操作。
+
+**非阻塞问题与限制：** B旧行索引中的`formalAcceptedCompleteRows=115`及`remainingGates`是保留的收尾前字段；A以同文件新增的116行事实、最后一行新完整PASS与已完成Final原文裁定，无剩余合同义务。旧Cast／137／预算中断及整体FAIL、Web非JSON500正文缺失、scan物理ffprobe未观测保持历史事实；人工beforeunload回退不称受信浏览器事件，本次接受的正常退出均为osd-back。上述属于证据措辞／工具P2，不延长Slice。音频STRM与代理按用户范围不执行、不计PASS；其他版本／平台／格式／客户端、OpenList专有行为、物理原生数据库保存故障实机注入、镜像整体构建溯源、通用性能及新远端发布未作支持承诺。
+
+**A本机证据：** `.git/validation-evidence/cab2eb50dbb3d29a58b09d9c63128cbc87545636/a-final-review-20261023/INDEX.md`，含完整Slice差异、逐行原文／字段／摘要核验、源码／包／CI／收尾审计、8张实际看图记录和A新运行精确命令／原始输出；只在本机，不随Git上传。首次私有字段审计未识别日志中的JSON字符串引号，修正读取器后核验通过，初次输出保留；不是原生运行失败或另跑探测。
+
+## Closure Reconciliation
+
+- SLICE记录A最终决定并保持Base／Implementation Head；TASK保留B PASS与历史报告、首行为无活动实施任务。Roadmap／Progress同步本次关闭，README入口指向已接受结果，没有自动激活新Slice。
+- CURRENT架构与兼容性写明有证据的ColorRange适配；测试矩阵区分Slice 5新增证据与旧Slice关闭时的NOT RUN；范围／安装／执行设计移除当前尚待实施的误导指针。稳定需求与用户旅程逐项复核，无业务规则或验收含义变更。
+- 三份角色经验均已复盘，只补充可复用方法；未提交凭据、原始日志、数据库或构建产物。原1004项准备库、验收副本与失败资料继续保留，不清理。
+- 当前已授权开发范围全部交付，没有待规划的大版本Slice；停止，等待新增需求。小版本bug不自动触发A规划或新Slice。
+
+Next Action: NONE (CURRENT DEVELOPMENT SCOPE COMPLETE)

@@ -4,6 +4,8 @@
 
 兼容性只声明已经实测的组合和入口；当前验收状态、候选审查和未运行范围见 [Slice 合同](../SLICE.md)、[Task](../TASK.md)、[测试矩阵](test-matrix.md) 与 [关闭账本](progress.md)。固定组合为 Jellyfin／Controller／Model `12.2.0`、`net10.0`、SDK `10.0.401`、Linux x64；不据此承诺跨版本或全格式兼容。播放与批量沿用原生取消语义，只共享已实际开始的探测。
 
+MP4／MKV视频在原生Web入口的八类决策、缺Video、ColorRange三阶段往返、失败与同目标恢复及重启先读已有[Slice 5分层证据](progress.md#slice-5-closed)。该固定版本原生MediaStreamRepository双向Map遗漏ColorRange；插件仍精确关联编码器与成功保存，仅对重读null作有界匹配，不接受其他字段／源冲突或保存失败。证据不构成跨版本适配或音频STRM支持；本页下方早期Slice的未验证事实按其当时范围保留。
+
 下表是早期源码定位候选；当前固定组合的加载／运行事实以上文及关闭证据为准。
 
 | 候选源码 | 已记录标签提交 | 定位用途 |
