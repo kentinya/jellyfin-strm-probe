@@ -13,7 +13,7 @@ Test Level: T4
 Planner / Reviewer: B
 ```
 
-最新 B 决定：**FIX REQUIRED（其余必要门禁待 B 补齐）**，继续同一 Task 5.3。完整合并版本／SQLite helper 与带明确准备适配的 plugin 完整入口已 PASS，B53-20261022-8 闭合；不再要求 Developer 修改准备工具。继续同 ZIP 的真实视频验收，全部 12 个 ColorRange 行已完成独立核验，累计矩阵 23／116、独立关键 21／40，完整 baseline、package-all、configuration-all 与全部 1004 项 large-all 已通过；历史 FAIL 保留，剩余矩阵及完整门禁仍由 B 负责。见文末本轮续验记录。
+最新 B 决定：**FIX REQUIRED（其余必要门禁待 B 补齐）**，继续同一 Task 5.3。完整合并版本／SQLite helper 与带明确准备适配的 plugin 完整入口已 PASS，B53-20261022-8 闭合；不再要求 Developer 修改准备工具。继续同 ZIP 的真实视频验收，全部 12 个 ColorRange 行已完成独立核验，累计矩阵 25／116、独立关键 23／40，完整 baseline、package-all、configuration-all 与全部 1004 项 large-all 已通过；历史 FAIL 保留，剩余矩阵及完整门禁仍由 B 负责。见文末本轮续验记录。
 
 ## B 合同重判与继续决定（2026-10-21）
 
@@ -1006,3 +1006,18 @@ NEXT ACTION: B CONTINUES REMAINING 95 MATRIX ROWS / 21 INDEPENDENT KEYS, SCAN-AL
 累计矩阵 **23／116**、独立关键 **21／40**、C **12／12**。剩余 **93 行／19 个关键**、scan-all、batch-suite 及 Slice Final。整个 Task 累计测试口径继续，闲置间隙已保守剔除，不因“继续”清零或预借未来时间。已积累余额足够后，B 启动既有 P05.01 的 MP4／MKV 两行；本节尚不计通过。无新增 Developer 修正请求、Task／Closure Packet／SLICE READY FOR A REVIEW／关闭或推送。原文、16 图及审计在同轮 `Large-complete/`、`P04-selected/`。
 
 NEXT ACTION: B CONTINUES THE TWO RUNNING P05.01 ROWS, REMAINING MATRIX / INDEPENDENT KEYS, SCAN-ALL, BATCH-SUITE AND SLICE FINAL. ALL-1004 LARGE-ALL ACCEPTED; SAME TASK, BASE AND ZIP.
+
+
+## B P05 独立续验与当前决定（2026-10-23）
+
+**Decision：FIX REQUIRED（尚缺必要验收），同一 Task 5.3 继续。** MP4.P05.01／MKV.P05.01 原矩阵完整入口 **389.570 秒、退出 0**，原断言／超时保持，无重跑。相同 URL、实际 A 字节／有效 Size 不变，仅移除新 Manifest SHA-1；首信任／变化／再播／重启均 **0／0／0／0**，完整旧五字段（包括原可信 SHA-1）保持。实际两格式大小 1,660,446／1,669,928 字节，唯一当前源／正确地址／Video／Audio、原始 PlaybackInfo、Manifest 摘要及重启先只读完整冻结状态逐阶段一致。
+
+**16 张原图均逐张实际打开**，正确 A 标记／画面变化／嵌入时钟、无错误；播放推进 **5.343～5.434 秒**，解码 **87～95 帧**，实际媒体请求齐全。独立物理日志共 **2 次 ffprobe（两项原生准备）／8 次转码**，正式四阶段没有额外探测。CLEAN／CLEANED，原入口两专属服务停止 exit0／无 OOM。该入口重建此前已停止的同 Task 默认包项目；P05 前后其余 60 个容器（含已停止的大库两个服务）稳定生命周期／镜像／完整排序挂载不变，P04 对账排除已声明并行大库后其余 58 个不变。大库新副本和原有全部 1004 项继续保留。
+
+累计正式候选矩阵 **25／116**、独立关键 **23／40**、ColorRange **12／12**；完整 baseline、package-all、configuration-all、全部 1004 项 large-all、带明确准备适配的 plugin-full 和独立原生合并已接受，匹配完整质量证据继续复用。尚缺 **91 行／17 个独立关键**、scan-all、batch-suite 与 Slice Final，均由 B 负责；没有新 Developer 修正请求。Task Base..Head 完整审查及后继报告差异复用关系已留存，97 项输入仅 TASK 变化，另外 96 项相同；固定实现／正式 ZIP／合同／Base 不变。
+
+按用户“整个 Task”累计，可审计保守工作／测试口径约 **35,206／17,506 秒、49.73%**；15 份原始精确账本及历史近似／缺失限制保持披露，不伪称已恢复完整历史精确比例。本次已保守剔除 `00:39:31～04:17:06 UTC` 的继续间隙（含不确定边缘工作）；一个中间计时误把间隙当工作，发现后立即修正，未依该错误余额启动产品测试。当前可用余额不足下一项完整门禁及收尾，不空等凑分母、不预借未来时间，不降低剩余验收。最终账本在同轮 `task-cumulative-time.json`。
+
+原文、16 图实际查看／完整行审计／归属对账在 `b-C06-more-20261022T233155Z/P05-selected/`；本轮大库／配置／P04 证据及最初 BLOCKED／独立审计纠正均保留于同根索引。仅事实报告普通本地提交，无源码／正式工具变更、推送、新 Task、Closure Packet 或 Slice 关闭；RO 未齐，尚不能返回 SLICE READY FOR A REVIEW。
+
+NEXT ACTION: B CONTINUES REMAINING 91 MATRIX ROWS / 17 INDEPENDENT KEYS, SCAN-ALL, BATCH-SUITE AND SLICE FINAL UNDER THE WHOLE-TASK ACCRUED TEST BUDGET; SAME TASK, BASE AND FIXED ZIP.
