@@ -13,7 +13,7 @@ Test Level: T4
 Planner / Reviewer: B
 ```
 
-最新 B 决定：**FIX REQUIRED（其余必要门禁待 B 补齐）**，继续同一 Task 5.3。完整合并版本／SQLite helper 与带明确准备适配的 plugin 完整入口已 PASS，B53-20261022-8 闭合；不再要求 Developer 修改准备工具。继续同 ZIP 的真实视频验收，全部 12 个 ColorRange 行已完成独立核验，累计矩阵 15／116；历史 FAIL 保留，剩余矩阵及完整门禁仍由 B 负责。见文末本轮续验记录。
+最新 B 决定：**FIX REQUIRED（其余必要门禁待 B 补齐）**，继续同一 Task 5.3。完整合并版本／SQLite helper 与带明确准备适配的 plugin 完整入口已 PASS，B53-20261022-8 闭合；不再要求 Developer 修改准备工具。继续同 ZIP 的真实视频验收，全部 12 个 ColorRange 行已完成独立核验，累计矩阵 17／116，完整 baseline 与 package-all 已通过；历史 FAIL 保留，剩余矩阵及完整门禁仍由 B 负责。见文末本轮续验记录。
 
 ## B 合同重判与继续决定（2026-10-21）
 
@@ -933,3 +933,22 @@ B 逐张实际打开 8 张原图：A 后为可辨识 C06UNS（长标记两端略
 本机忽略证据：`.git/validation-evidence/4b4d0cca33f37308842710b2a0a70b1919cd0a58/b-C06-more-20261022T233155Z/MKV-C06-three/`，含原始完整结果／日志／响应、实际媒体摘要与 Manifest、33 字段原文及逐字段表、24 图实际查看记录、全部冻结状态及隔离对账、精确命令和累计时间账本。该目录及数据库／凭据不进入普通提交。
 
 NEXT ACTION: B COMPLETES THE RUNNING FULL BASELINE, REMAINING FIXED-CANDIDATE MATRIX AND SPECIFIED FULL GATES. ALL 12 COLORRANGE ROWS ACCEPTED; SAME TASK, BASE AND ZIP. NO DEVELOPER TOOLING PREREQUISITE OR SLICE CLOSE.
+
+
+## B 完整 baseline 与 package-all（2026-10-23 00:00～00:13 UTC）
+
+**Decision：FIX REQUIRED，剩余必要门禁由 B 继续。** 审查 Head `09bd8776b672d36071f06f54b25400d65f4df566`，97 项输入比对仅 SLICE／TASK 事实文档变化，另 95 项相同；实现与正式 ZIP 保持。以下结果不代替尚缺的矩阵、独立关键、scan-all、large-all、batch-suite、configuration-all 或 Slice Final。
+
+**完整 baseline B01＋B02：独立 PASS，302.463 秒、退出 0。** 同一既有 baseline CLI、固定 ZIP、新工作区／18132。插件停用下分别原生准备且实际 ffprobe 正计数 1、Video／Audio 已保存、首次信任前无旧指纹；启用后的首次信任／再播／重启后均 **0／0／0**，FirstTrust 不宣称本次探测成功。B 逐阶段核对实际字节／内容 SHA-1／Size、唯一当前源／地址／Video／Audio、原始 PlaybackInfo 和完整五字段；重启前冻结与任何播放前只读完整状态相同。MP4 播放推进 **5.405／5.386／5.404 秒**、解码 **95／90／93 帧**；MKV **5.393／5.368／5.391 秒**、**89／89／94 帧**。**12 张原图逐张实际打开**，A 标记／画面／嵌入时钟和帧号均正确推进，无错误。原始物理日志独立重数 **2 次 ffprobe／6 次 FFmpeg 转码**。事前已登记 B01＝MP4.D01、B02＝MKV.D01，按合同同次证据覆盖，不重复运行。
+
+**完整 package-all：独立 PASS，380.501 秒、退出 0。** 保持指定 `all` 入口及全部原断言，使用与此前已接受版本逐字节相同的本机观察包装：既有私有子网适配、保存每阶段原始日志及每次浏览器输出，最后调用原有归属清理。新工作区／18133；未变更产品判断、超时、用例或预热待测播放。四阶段全部实际到达：11 类无效包拒绝且有效安装负载保持；仅归档安装 Active、8 个负载文件与正式 ZIP 匹配；MP4／MKV 保存流和原生 Web 播放；相同内容 SHA-1／Size 换地址仍只探测 1 次并保存／提交、重启复用；从指定 Slice 3 `7c64eb5dcad6e5f20fb7eb41819be2521f65484d` 升级，旧配置和指纹保持、未变项目跳过、待处理变化接受；配置与指纹备份／恢复摘要分别完全相同，缺失备份拒绝；禁用、卸载、重装三段原生播放／恢复均通过。
+
+B 另核对干净安装及升级的两组完整五字段：只变 URL hash，内容 SHA-1／实际 Size／项目及源关联保持；源文件及替代路径实际逐字节相同。配置原始 initial 为并发 2／详细日志关闭，编辑后 4／开启、保存成功、重启读取相同；3 张配置原图均实际查看。包入口保留既有 **两秒非 strict Web 模式**，不冒充上述五秒 baseline／矩阵；两格式媒体请求全为 200，5 条既有原生 Web 警告原文保留、按未修改分类器无意外错误。原包入口未开启原生 ffprobe debug 命令日志，**未观察到不等于零次探测**；包内探测断言来自原生调用事件，物理计数由独立 baseline／矩阵分别证明。本次归档去重可见 2 次原生 FFmpeg 转码。
+
+两批均正常收尾 CLEAN／CLEANED，专属服务 exit 0／无 OOM，实际挂载及网络只属本轮；各批其余 58 容器的状态／StartedAt／镜像／完整排序挂载不变。仅清理本批拥有的小型工作区；现存全部 1004 项源库及历史副本保持。没有操作共享、运行中或生产服务。
+
+当前矩阵 **17／116**、独立关键 **15／40**、C **12／12**；完整 baseline、package-all 已补齐。累计可审计时间口径仍严格低于整个 Task 的 50%，近似／缺失及保留额度单列；实际已积累余额足够后，继续既有矩阵入口的 `MP4.P02.01,MKV.P02.01,MP4.P03.02,MKV.P03.02`，此中间检查点尚未接受这四行。无新增 Developer 修正请求，不造新 Task、不推送、不提交 Closure Packet／SLICE READY FOR A REVIEW、不关闭 Slice。
+
+本机忽略证据仍在 `b-C06-more-20261022T233155Z/`：`Baseline-complete/` 的原始结果／12 图实际查看／原文独立审计，`Package-complete/` 的精确命令与实际运行身份／隔离对账，`package-all/` 的四阶段原始日志、完整结果、原浏览器输出、3 图实际查看／独立审计／双服务清理；正式 ZIP 身份与累计时间账本保持。所有原始敏感资料仅本机保留。
+
+NEXT ACTION: B CONTINUES THE FOUR RUNNING P02.01/P03.02 VIDEO ROWS AND ALL REMAINING FIXED-CANDIDATE GATES. FULL BASELINE AND PACKAGE-ALL ACCEPTED; SAME TASK, BASE AND FORMAL ZIP.
