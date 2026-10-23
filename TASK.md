@@ -13,7 +13,7 @@ Test Level: T4
 Planner / Reviewer: B
 ```
 
-最新 B 决定：**FIX REQUIRED（其余必要门禁待 B 补齐）**，继续同一 Task 5.3。完整合并版本／SQLite helper 与带明确准备适配的 plugin 完整入口已 PASS，B53-20261022-8 闭合；不再要求 Developer 修改准备工具。继续同 ZIP 的真实视频验收，全部 12 个 ColorRange 行已完成独立核验，累计矩阵 21／116、独立关键 19／40，完整 baseline、package-all 与 configuration-all 已通过；历史 FAIL 保留，剩余矩阵及完整门禁仍由 B 负责。见文末本轮续验记录。
+最新 B 决定：**FIX REQUIRED（其余必要门禁待 B 补齐）**，继续同一 Task 5.3。完整合并版本／SQLite helper 与带明确准备适配的 plugin 完整入口已 PASS，B53-20261022-8 闭合；不再要求 Developer 修改准备工具。继续同 ZIP 的真实视频验收，全部 12 个 ColorRange 行已完成独立核验，累计矩阵 23／116、独立关键 21／40，完整 baseline、package-all、configuration-all 与全部 1004 项 large-all 已通过；历史 FAIL 保留，剩余矩阵及完整门禁仍由 B 负责。见文末本轮续验记录。
 
 ## B 合同重判与继续决定（2026-10-21）
 
@@ -991,3 +991,18 @@ NEXT ACTION: B RETAINS THE REMAINING 95 MATRIX ROWS / 21 INDEPENDENT KEYS, SCAN-
 累计矩阵 **21／116**、独立关键 **19／40**、C **12／12**；完整 baseline／package-all／configuration-all 已接受。仍缺 **95 行／21 个关键**、scan-all、全部 1004 项 large-all、batch-suite 及 Slice Final，均由 B 继续；无新增 Developer 修正请求。正式 ZIP、合同／Base／实现不变；不造 Task、不推送、不提交 Closure Packet 或自行关闭。整个 Task 累计测试预算继续适用。原文与独立审计保存在同轮 `Configuration-ready/`，首败在 `Configuration-complete/`。
 
 NEXT ACTION: B CONTINUES REMAINING 95 MATRIX ROWS / 21 INDEPENDENT KEYS, SCAN-ALL, ALL-1004 LARGE-ALL, BATCH-SUITE AND SLICE FINAL WITH THE SAME FIXED CANDIDATE; CONFIGURATION-ALL ACCEPTED.
+
+
+## B 全部 1004 项大库与 P04 续验（2026-10-23）
+
+**Decision：FIX REQUIRED，剩余门禁仍归 B；本节大库完整入口及两行 P04 独立 PASS。** 审查 Head `056c880`，95 项非报告输入及固定正式 ZIP 不变。使用既有完整入口和原断言／超时；大库仅复用已有显式独占子网适配，不改原验收函数。
+
+**large-all：484.107 秒、退出 0。** 复制现存全部 1004 项至新专属副本，显式仅重置副本指纹，原库／副本保留，无重建或截取。首次信任 1004、探测 0，未变 0；增量 need／calls／success＝16／16／16。查询阶段停止沿用原最多三次自然尝试，第三次真实观察到、未进入对象读取；在途两项完成并提交，停止轮 Cancelled／进度不到 100%，收尾期间重复请求未启动新轮；剩余两项恢复，随后两轮未变均 0。新增四个缺主流对照后 1008 项的完整五字段及原生源摘要，在任何重启后 PlaybackInfo 前与冻结状态完全相等；随后 16 源正确选择／地址读取均 200、额外插件探测 0。B 独立核对全部原始行／状态、21 个任务触发器恢复、295 份资源样本及 3 次明确重启采样间隙、CLEAN 输入对账。双服务停止 exit0／无 OOM，原库 1170 文件摘要仍为 `189b67c66e608833b27fa818de24bb1611788565c87eeffc0568b9eefe958bd2`。大库原生读取不替代矩阵 Web／33 字段义务。
+
+**MP4.P04.01／MKV.P04.01：376.813 秒、退出 0。** 相同 URL、A／B 实际字节数相同（1,660,446／1,669,928），有效内容 SHA-1 不同；各行首信任／变化／再播／重启计数 **0／1／0／0**，五字段仅 SHA-1 改变。完整原生源／流、原始 PlaybackInfo／地址、Manifest、重启先只读完整状态逐阶段核对；同次 33 字段编码器＝成功保存，返回仅 ColorRange tv→null。**16 张原图全部逐张实际打开**，正确 A／P4B 标记、无错误；B 是静态色条，不宣称有嵌入时钟或画面运动，原始播放推进 5.280～5.417 秒、解码 87～94 帧及媒体请求共同证明实播。独立物理计数 4 次 ffprobe（2 准备＋2 变化）／8 次转码。CLEAN／CLEANED、两服务 exit0／无 OOM。
+
+大库与 P04 分属隔离实例。P04 原入口重建的是此前已停止、同 Task 拥有的默认包项目两服务（旧挂载 `b-p02-p03-four-20261023`），已明确作为并行自有资源对账；其余 **58 个**容器稳定生命周期／镜像／完整挂载不变。未操作共享／生产或原库。独立审计初次错误地要求停止快照的原生期望全列表相等，实际原函数有意只冻结未探测的 1006 项；已按原合同核对该完整子集、两项已启动结果及全部 1008 个五字段，无产品重跑／断言放宽。
+
+累计矩阵 **23／116**、独立关键 **21／40**、C **12／12**。剩余 **93 行／19 个关键**、scan-all、batch-suite 及 Slice Final。整个 Task 累计测试口径继续，闲置间隙已保守剔除，不因“继续”清零或预借未来时间。已积累余额足够后，B 启动既有 P05.01 的 MP4／MKV 两行；本节尚不计通过。无新增 Developer 修正请求、Task／Closure Packet／SLICE READY FOR A REVIEW／关闭或推送。原文、16 图及审计在同轮 `Large-complete/`、`P04-selected/`。
+
+NEXT ACTION: B CONTINUES THE TWO RUNNING P05.01 ROWS, REMAINING MATRIX / INDEPENDENT KEYS, SCAN-ALL, BATCH-SUITE AND SLICE FINAL. ALL-1004 LARGE-ALL ACCEPTED; SAME TASK, BASE AND ZIP.
