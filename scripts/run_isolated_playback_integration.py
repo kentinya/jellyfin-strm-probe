@@ -103,6 +103,27 @@ class BaselineError(RuntimeError):
     """A baseline precondition or acceptance check failed."""
 
 
+class RowEvidenceError(BaselineError):
+    """A row failed after it already reached recordable stages.
+
+    The partial ``result`` (reached stages plus the recorded restore) is carried along so the matrix
+    keeps the real HTTP statuses and read-backs of a failing row instead of replacing them with a
+    bare message.
+    """
+
+    def __init__(self, message: str, result: dict) -> None:
+        super().__init__(message)
+        self.result = result
+
+
+class ConfigurationRestoreError(RowEvidenceError):
+    """A row changed server configuration and could not restore it.
+
+    The row's own failure stays in ``result`` (with the failed restoration recorded next to it), and
+    the matrix must not run later rows against a server whose configuration is still changed.
+    """
+
+
 def require(condition: bool, message: str) -> None:
     if not condition:
         raise BaselineError(message)
@@ -2124,6 +2145,73 @@ def set_plugin_configuration(auth: str, changes: dict) -> int:
     return status
 
 
+# The pinned server answers the plugin configuration POST with 204 No Content; the accepted
+# complete configuration gate records exactly ``serverStatus: 204`` for the same route. 200 with a
+# body is the other documented success, so both are accepted and the real status is recorded.
+CONFIGURATION_ACCEPTED_STATUSES = (200, 204)
+
+
+def apply_plugin_configuration(auth: str, changes: dict) -> dict:
+    """Apply one configuration change, accept only a native success, and verify the read-back.
+
+    The returned record carries the actual HTTP status and the read-back of every changed field, so
+    a status-only assertion can never stand in for a change the server did not really apply.
+    """
+    status = set_plugin_configuration(auth, changes)
+    record: dict[str, object] = {"changes": dict(changes), "status": status}
+    require(status in CONFIGURATION_ACCEPTED_STATUSES,
+            f"The plugin configuration change {changes} failed with HTTP {status}.")
+    observed = plugin_configuration(auth)
+    readback = {name: observed.get(name) for name in changes}
+    record["observed"] = readback
+    mismatched = {name: readback[name] for name, value in changes.items() if readback[name] != value}
+    require(not mismatched, f"The plugin configuration change {changes} was not applied ({mismatched}).")
+    return record
+
+
+def restore_plugin_configuration(changes: dict) -> dict:
+    """Restore changed configuration after a failed row and verify it really took effect.
+
+    A real Web Play revokes the API token the journey held, so every attempt authenticates again;
+    a failure is reported instead of being turned into a passing row.
+    """
+    attempts: list[dict] = []
+    last_error = None
+    for attempt in (1, 2):
+        try:
+            auth = refresh_auth()
+            status = set_plugin_configuration(auth, changes)
+            observed = plugin_configuration(auth)
+            readback = {name: observed.get(name) for name in changes}
+            attempts.append({"attempt": attempt, "status": status, "observed": readback})
+            if status in CONFIGURATION_ACCEPTED_STATUSES and readback == {k: v for k, v in changes.items()}:
+                return {"status": "restored", "attempts": attempts, "observed": readback}
+            last_error = f"HTTP {status} with read-back {readback}"
+        except (BaselineError, RuntimeError, OSError, subprocess.SubprocessError) as error:
+            last_error = f"{type(error).__name__}: {error}"
+            attempts.append({"attempt": attempt, "error": last_error})
+    return {"status": "FAILED", "attempts": attempts, "error": last_error}
+
+
+def restore_plugin_enabled() -> dict:
+    """Re-enable the whole plugin after a failed D02 and verify the real plugin status."""
+    attempts: list[dict] = []
+    last_error = None
+    for attempt in (1, 2):
+        try:
+            auth = refresh_auth()
+            status = pkg.plugin_action(auth, True)
+            observed = str(pkg.plugin_status(auth))
+            attempts.append({"attempt": attempt, "status": status, "pluginStatus": observed})
+            if status in CONFIGURATION_ACCEPTED_STATUSES and observed.lower() not in {"disabled"}:
+                return {"status": "restored", "attempts": attempts, "pluginStatus": observed}
+            last_error = f"HTTP {status} with plugin status {observed!r}"
+        except (BaselineError, RuntimeError, OSError, subprocess.SubprocessError) as error:
+            last_error = f"{type(error).__name__}: {error}"
+            attempts.append({"attempt": attempt, "error": last_error})
+    return {"status": "FAILED", "attempts": attempts, "error": last_error}
+
+
 def native_static_stream_read(auth: str, item_id: str, head_bytes: int = 256 * 1024) -> dict:
     """The existing native read-only entry with no probe permission: static stream transfer."""
     base = credentials()["base_url"]
@@ -2598,45 +2686,74 @@ def journey_d02(auth: str, row: dict, evidence_dir: Path) -> dict:
     """Whole plugin disabled: native playback of the versioned STRM, fingerprint preserved.
 
     The whole required journey — first native play, second play, freeze, restart, read-only
-    comparison and the post-restart play — runs with the plugin still disabled. The configuration
-    is restored only after that journey, so the evidence really proves native delegation instead of
-    a re-enabled plugin.
+    comparison and the post-restart play — runs with the plugin still disabled. The plugin is
+    re-enabled (and its real status verified) only after that journey, in a ``finally`` so a failed
+    window inside the disabled phase still restores the server for later rows.
     """
     result: dict[str, object] = {"journey": "d02"}
-    result["firstTrust"] = trust_play(auth, row, evidence_dir)
-    auth = refresh_auth()
-    result["configBefore"] = plugin_configuration(auth)
-    require(pkg.plugin_action(auth, False) == 204, f"{row['id']}: the plugin disable failed.")
-    pkg.restart()
-    auth = refresh_auth()
-    status = str(pkg.plugin_status(auth)).lower()
-    require(status not in {"active", "0"}, f"{row['id']}: the plugin remained active after disable.")
-    obs = play_once(auth, row, "native-play", evidence_dir, relax_console=True)
-    assert_playback(row, obs, counter_validated=True, expected_delta=None)
-    require(obs["fingerprint"] == row["trust_fp"],
-            f"{row['id']}: native playback with the plugin disabled changed the fingerprint.")
-    result["nativePlay"] = {"ffprobe": obs["ffprobe"], "events": obs["pluginEvents"],
-                            "advancedSeconds": obs["playback"].get("advancedSeconds"),
-                            "note": "the native probe count is the real value; zero is not required"}
-    auth = refresh_auth()
-    second = play_once(auth, row, "native-play-second", evidence_dir, relax_console=True)
-    assert_playback(row, second, counter_validated=True, expected_delta=None)
-    require(second["fingerprint"] == row["trust_fp"],
-            f"{row['id']}: the second native playback with the plugin disabled changed the fingerprint.")
-    result["nativePlaySecond"] = {"ffprobe": second["ffprobe"], "events": second["pluginEvents"],
-                                  "advancedSeconds": second["playback"].get("advancedSeconds")}
-    auth = refresh_auth()
-    d_row_restart(auth, row, evidence_dir, result)
-    auth = refresh_auth()
-    status = str(pkg.plugin_status(auth)).lower()
-    require(status not in {"active", "0"},
-            f"{row['id']}: the plugin was active before the restart playback finished.")
-    require(pkg.plugin_action(auth, True) == 204, f"{row['id']}: the plugin re-enable failed.")
-    pkg.restart()
-    auth = refresh_auth()
-    require(str(pkg.plugin_status(auth)).lower() not in {"disabled"},
-            f"{row['id']}: the plugin was not active again after the restore.")
-    result["configAfter"] = plugin_configuration(auth)
+    disable_status = None
+    disabled = False
+    try:
+        result["firstTrust"] = trust_play(auth, row, evidence_dir)
+        auth = refresh_auth()
+        result["configBefore"] = plugin_configuration(auth)
+        disable_status = pkg.plugin_action(auth, False)
+        require(disable_status in CONFIGURATION_ACCEPTED_STATUSES,
+                f"{row['id']}: the plugin disable failed with HTTP {disable_status}.")
+        disabled = True
+        pkg.restart()
+        auth = refresh_auth()
+        status = str(pkg.plugin_status(auth)).lower()
+        require(status not in {"active", "0"}, f"{row['id']}: the plugin remained active after disable.")
+        obs = play_once(auth, row, "native-play", evidence_dir, relax_console=True)
+        assert_playback(row, obs, counter_validated=True, expected_delta=None)
+        require(obs["fingerprint"] == row["trust_fp"],
+                f"{row['id']}: native playback with the plugin disabled changed the fingerprint.")
+        result["nativePlay"] = {"ffprobe": obs["ffprobe"], "events": obs["pluginEvents"],
+                                "advancedSeconds": obs["playback"].get("advancedSeconds"),
+                                "note": "the native probe count is the real value; zero is not required"}
+        auth = refresh_auth()
+        second = play_once(auth, row, "native-play-second", evidence_dir, relax_console=True)
+        assert_playback(row, second, counter_validated=True, expected_delta=None)
+        require(second["fingerprint"] == row["trust_fp"],
+                f"{row['id']}: the second native playback with the plugin disabled changed the fingerprint.")
+        result["nativePlaySecond"] = {"ffprobe": second["ffprobe"], "events": second["pluginEvents"],
+                                      "advancedSeconds": second["playback"].get("advancedSeconds")}
+        auth = refresh_auth()
+        d_row_restart(auth, row, evidence_dir, result)
+        auth = refresh_auth()
+        status = str(pkg.plugin_status(auth)).lower()
+        require(status not in {"active", "0"},
+                f"{row['id']}: the plugin was active before the restart playback finished.")
+    finally:
+        # The disabled phase must never leak into the next row, even when a window inside it failed.
+        failure = sys.exc_info()[1]
+        if not disabled:
+            # Nothing was switched, so there is nothing to restore and no restart is warranted.
+            if failure is not None:
+                result["failure"] = f"{type(failure).__name__}: {failure}"
+                raise RowEvidenceError(f"{row['id']}: {result['failure']}", result) from failure
+        else:
+            restored = restore_plugin_enabled()
+            result["restore"] = restored
+            if failure is not None:
+                result["failure"] = f"{type(failure).__name__}: {failure}"
+            if restored.get("status") != "restored":
+                raise ConfigurationRestoreError(
+                    f"{row['id']}: the plugin could not be re-enabled after the disabled journey "
+                    f"({restored.get('error')})" + (f"; the row itself failed with {result['failure']}"
+                                                     if failure is not None else "") + ".", result)
+            pkg.restart()
+            restored["pluginStatusAfterRestart"] = str(pkg.plugin_status(refresh_auth()))
+            if restored["pluginStatusAfterRestart"].lower() in {"disabled"}:
+                raise ConfigurationRestoreError(
+                    f"{row['id']}: the plugin was disabled again after the restore restart.", result)
+            if failure is not None:
+                # The switch was restored, but this row still failed: keep its reached stages and the
+                # restore record, and never report it as passing.
+                raise RowEvidenceError(f"{row['id']}: {result['failure']}", result) from failure
+    result["disableStatus"] = disable_status
+    result["configAfter"] = plugin_configuration(refresh_auth())
     result["status"] = "PASS"
     return result
 
@@ -2645,49 +2762,77 @@ def journey_d03(auth: str, row: dict, evidence_dir: Path) -> dict:
     """Only the playback auto-check is off: native playback, no optimization commit.
 
     As with D02 the second play, the freeze, the restart, the read-only comparison and the
-    post-restart play all run while the auto-check is still off; the configuration is restored
-    afterwards.
+    post-restart play all run while the auto-check is still off; the auto-check is restored to the
+    value the row started with afterwards, in a ``finally`` so a failed window cannot leave the
+    next row running against a changed switch.
     """
     result: dict[str, object] = {"journey": "d03"}
+    auth = refresh_auth()
+    before = plugin_configuration(auth)
+    original = before.get("PlaybackAutoCheck")
+    require(isinstance(original, bool),
+            f"{row['id']}: the playback auto-check value was not readable ({original!r}).")
+    result["configBefore"] = before
     result["firstTrust"] = trust_play(auth, row, evidence_dir)
-    auth = refresh_auth()
-    require(set_plugin_configuration(auth, {"PlaybackAutoCheck": False}) == 200,
-            f"{row['id']}: the playback-auto-check toggle failed.")
-    pkg.restart()
-    auth = refresh_auth()
-    require(plugin_configuration(auth).get("PlaybackAutoCheck") is False,
-            f"{row['id']}: the playback auto-check was not off after the restart.")
-    before_events = plugin_event_lines()
-    obs = play_once(auth, row, "native-play", evidence_dir, relax_console=True)
-    assert_playback(row, obs, counter_validated=True, expected_delta=None)
-    require(plugin_event_delta(before_events) == [],
-            f"{row['id']}: plugin events were emitted while the auto-check was off.")
-    require(obs["fingerprint"] == row["trust_fp"],
-            f"{row['id']}: the disabled auto-check changed the fingerprint.")
-    result["nativePlay"] = {"ffprobe": obs["ffprobe"],
-                            "advancedSeconds": obs["playback"].get("advancedSeconds")}
-    auth = refresh_auth()
-    before_events = plugin_event_lines()
-    second = play_once(auth, row, "native-play-second", evidence_dir, relax_console=True)
-    assert_playback(row, second, counter_validated=True, expected_delta=None)
-    require(plugin_event_delta(before_events) == [],
-            f"{row['id']}: plugin events were emitted on the second play while the auto-check was off.")
-    require(second["fingerprint"] == row["trust_fp"],
-            f"{row['id']}: the second native playback changed the fingerprint.")
-    result["nativePlaySecond"] = {"ffprobe": second["ffprobe"],
-                                  "advancedSeconds": second["playback"].get("advancedSeconds")}
-    auth = refresh_auth()
-    d_row_restart(auth, row, evidence_dir, result)
-    auth = refresh_auth()
-    require(plugin_configuration(auth).get("PlaybackAutoCheck") is False,
-            f"{row['id']}: the auto-check was restored before the restart playback finished.")
-    require(set_plugin_configuration(auth, {"PlaybackAutoCheck": True}) == 200,
-            f"{row['id']}: the configuration restore failed.")
-    pkg.restart()
-    auth = refresh_auth()
-    require(plugin_configuration(auth).get("PlaybackAutoCheck") is True,
-            f"{row['id']}: the playback auto-check was not restored.")
-    result["configAfter"] = plugin_configuration(auth)
+    switched = False
+    try:
+        result["disable"] = apply_plugin_configuration(refresh_auth(), {"PlaybackAutoCheck": False})
+        switched = True
+        pkg.restart()
+        auth = refresh_auth()
+        require(plugin_configuration(auth).get("PlaybackAutoCheck") is False,
+                f"{row['id']}: the playback auto-check was not off after the restart.")
+        before_events = plugin_event_lines()
+        obs = play_once(auth, row, "native-play", evidence_dir, relax_console=True)
+        assert_playback(row, obs, counter_validated=True, expected_delta=None)
+        require(plugin_event_delta(before_events) == [],
+                f"{row['id']}: plugin events were emitted while the auto-check was off.")
+        require(obs["fingerprint"] == row["trust_fp"],
+                f"{row['id']}: the disabled auto-check changed the fingerprint.")
+        result["nativePlay"] = {"ffprobe": obs["ffprobe"],
+                                "advancedSeconds": obs["playback"].get("advancedSeconds")}
+        auth = refresh_auth()
+        before_events = plugin_event_lines()
+        second = play_once(auth, row, "native-play-second", evidence_dir, relax_console=True)
+        assert_playback(row, second, counter_validated=True, expected_delta=None)
+        require(plugin_event_delta(before_events) == [],
+                f"{row['id']}: plugin events were emitted on the second play while the auto-check was off.")
+        require(second["fingerprint"] == row["trust_fp"],
+                f"{row['id']}: the second native playback changed the fingerprint.")
+        result["nativePlaySecond"] = {"ffprobe": second["ffprobe"],
+                                      "advancedSeconds": second["playback"].get("advancedSeconds")}
+        auth = refresh_auth()
+        d_row_restart(auth, row, evidence_dir, result)
+        auth = refresh_auth()
+        require(plugin_configuration(auth).get("PlaybackAutoCheck") is False,
+                f"{row['id']}: the auto-check was restored before the restart playback finished.")
+    finally:
+        failure = sys.exc_info()[1]
+        if not switched:
+            # The switch never took effect, so the server is already in its original configuration.
+            if failure is not None:
+                result["failure"] = f"{type(failure).__name__}: {failure}"
+                raise RowEvidenceError(f"{row['id']}: {result['failure']}", result) from failure
+        else:
+            restored = restore_plugin_configuration({"PlaybackAutoCheck": original})
+            result["restore"] = restored
+            if failure is not None:
+                result["failure"] = f"{type(failure).__name__}: {failure}"
+            if restored.get("status") != "restored":
+                raise ConfigurationRestoreError(
+                    f"{row['id']}: the playback auto-check could not be restored to {original!r} "
+                    f"({restored.get('error')})" + (f"; the row itself failed with {result['failure']}"
+                                                     if failure is not None else "") + ".", result)
+            pkg.restart()
+            observed = plugin_configuration(refresh_auth()).get("PlaybackAutoCheck")
+            restored["observedAfterRestart"] = observed
+            if observed is not original:
+                raise ConfigurationRestoreError(
+                    f"{row['id']}: the playback auto-check read back {observed!r} after the restore "
+                    f"restart instead of {original!r}.", result)
+            if failure is not None:
+                raise RowEvidenceError(f"{row['id']}: {result['failure']}", result) from failure
+    result["configAfter"] = plugin_configuration(refresh_auth())
     result["status"] = "PASS"
     return result
 
@@ -2895,7 +3040,22 @@ def scenario_matrix(package: Path, evidence_dir: Path, selected: list[str],
                 "f02": journey_f02, "d02": journey_d02, "d03": journey_d03, "d04": journey_d04,
                 "d05": journey_d05, "d06": journey_d06}
     for row in rows:
+        # Every row starts from live credentials: a real Web Play in the previous row revoked the
+        # token that journey held, so reusing it for this row's first native read would fail with an
+        # unrelated error and hide the row's real behaviour.
+        auth = refresh_auth()
         try:
+            # The intentionally-disabled D02/D03 windows restore their own switch; every other row
+            # needs the plugin enabled with its playback auto-check on, so a leaked change cannot be
+            # mistaken for a passing native-delegation result.
+            if row["journey"] not in ("d02", "d03"):
+                precondition = plugin_configuration(auth)
+                require(precondition.get("Enabled") is True,
+                        f"{row['id']}: the plugin was not enabled before the row (Enabled="
+                        f"{precondition.get('Enabled')!r}).")
+                require(precondition.get("PlaybackAutoCheck") is True,
+                        f"{row['id']}: the playback auto-check was not enabled before the row "
+                        f"(PlaybackAutoCheck={precondition.get('PlaybackAutoCheck')!r}).")
             # The switch URL belongs to this row: a shared partner file must survive the previous
             # row in the batch, so every fixed-URL row re-establishes its own A baseline bytes
             # before its journey starts and the window switches them to the partner through a
@@ -2906,8 +3066,30 @@ def scenario_matrix(package: Path, evidence_dir: Path, selected: list[str],
             journey_result["mediaReset"] = reset
             results[row["id"]] = journey_result
             auth = refresh_auth()
+        except ConfigurationRestoreError as error:
+            # The row failed and its configuration could not be restored: record both and stop the
+            # batch instead of reporting later rows that ran against a changed server.
+            failed_result = dict(error.result)
+            failed_result.setdefault("status", "FAIL")
+            failed_result["status"] = "FAIL"
+            failed_result["error"] = f"{type(error).__name__}: {error}"
+            failed_result["configurationRestored"] = False
+            results[row["id"]] = failed_result
+            summary["rowsResult"] = results
+            summary["abortedAfter"] = row["id"]
+            raise BaselineError(
+                f"Matrix stopped after {row['id']}: the server configuration could not be restored "
+                f"({error}).") from error
+        except RowEvidenceError as error:
+            # A failing row whose configuration was restored keeps its reached stages and statuses.
+            failed_result = dict(error.result)
+            failed_result["status"] = "FAIL"
+            failed_result["error"] = f"{type(error).__name__}: {error}"
+            results[row["id"]] = failed_result
+            auth = refresh_auth()
         except (BaselineError, RuntimeError, OSError, subprocess.SubprocessError) as error:
             results[row["id"]] = {"status": "FAIL", "error": f"{type(error).__name__}: {error}"}
+            auth = refresh_auth()
     summary["rowsResult"] = results
     failed = [row_id for row_id, result in results.items() if result.get("status") != "PASS"]
     if failed:

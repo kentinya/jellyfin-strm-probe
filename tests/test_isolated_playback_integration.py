@@ -936,13 +936,165 @@ class DelegationJourneyAuthTests(unittest.TestCase):
 
     def test_d02_and_d03_restore_the_configuration_only_after_the_restart_journey(self):
         source = (ROOT / "scripts" / "run_isolated_playback_integration.py").read_text(encoding="utf-8")
-        for journey, restore in (("journey_d02", 'plugin_action(auth, True)'),
-                                 ("journey_d03", '"PlaybackAutoCheck": True')):
+        for journey, restore in (("journey_d02", 'restore_plugin_enabled()'),
+                                 ("journey_d03", 'restore_plugin_configuration(')):
             start = source.index(f"def {journey}(")
             end = source.index("\ndef ", start + 10)
             body = source[start:end]
             self.assertLess(body.index("d_row_restart"), body.index(restore),
                             f"{journey}: the configuration was restored before the restart journey")
+            # The restore runs from the ``finally`` so a failed window cannot leak the switch.
+            self.assertIn("finally:", body, journey)
+            self.assertLess(body.index("d_row_restart"), body.index("finally:"), journey)
+
+
+class ConfigurationBoundaryTests(unittest.TestCase):
+    """B53-20261023-1: a native 204 is success, a failed row still restores, and nothing leaks.
+
+    The pinned server answers the plugin configuration POST with 204 No Content (the accepted
+    configuration gate records ``serverStatus: 204``), so requiring 200 made a successful toggle
+    fail *after* the server had already applied it. Combined with the missing restore this left the
+    next rows running against a changed switch and with a revoked token.
+    """
+
+    def _row(self):
+        return {"id": "MP4.D03", "fmt": "MP4", "strm_name": "Matrix MP4 D03",
+                "item": {"Id": ITEM_ID}, "media_type": "video", "apply_kind": "d03",
+                "url": URL, "journey": "d03"}
+
+    def test_a_native_204_is_success_and_the_read_back_is_verified(self):
+        from unittest.mock import patch
+        posts: list[dict] = []
+
+        def fake_configuration(auth):
+            return {"Enabled": True, "PlaybackAutoCheck": posts[-1]["PlaybackAutoCheck"] if posts else True}
+
+        def fake_set(auth, changes):
+            posts.append(dict(changes))
+            return 204
+
+        with patch.object(playback, "plugin_configuration", fake_configuration), \
+                patch.object(playback, "set_plugin_configuration", fake_set):
+            record = playback.apply_plugin_configuration("auth", {"PlaybackAutoCheck": False})
+        self.assertEqual(record["status"], 204)
+        self.assertEqual(record["observed"], {"PlaybackAutoCheck": False})
+
+    def test_a_change_the_server_did_not_apply_is_refused_even_on_204(self):
+        from unittest.mock import patch
+        with patch.object(playback, "plugin_configuration", lambda auth: {"PlaybackAutoCheck": True}), \
+                patch.object(playback, "set_plugin_configuration", lambda auth, changes: 204):
+            with self.assertRaises(playback.BaselineError) as raised:
+                playback.apply_plugin_configuration("auth", {"PlaybackAutoCheck": False})
+        self.assertIn("was not applied", str(raised.exception))
+
+    def test_a_rejected_status_is_not_success(self):
+        from unittest.mock import patch
+        with patch.object(playback, "plugin_configuration", lambda auth: {"PlaybackAutoCheck": True}), \
+                patch.object(playback, "set_plugin_configuration", lambda auth, changes: 400):
+            with self.assertRaises(playback.BaselineError):
+                playback.apply_plugin_configuration("auth", {"PlaybackAutoCheck": False})
+
+    def test_a_failed_window_after_the_switch_still_restores_the_real_original_value(self):
+        from unittest.mock import patch
+        state = {"PlaybackAutoCheck": True}
+
+        def fake_configuration(auth):
+            return dict(state)
+
+        def fake_set(auth, changes):
+            state.update(changes)
+            return 204
+
+        def failing_play(*args, **kwargs):
+            raise playback.BaselineError("MP4.D03 native-play: the playback window failed")
+
+        with patch.object(playback, "plugin_configuration", fake_configuration), \
+                patch.object(playback, "set_plugin_configuration", fake_set), \
+                patch.object(playback, "refresh_auth", lambda: "fresh-token"), \
+                patch.object(playback, "pkg") as fake_pkg, \
+                patch.object(playback, "trust_play", lambda *a: {"ffprobe": {}}), \
+                patch.object(playback, "play_once", failing_play):
+            fake_pkg.restart.return_value = ""
+            with self.assertRaises(playback.RowEvidenceError) as raised:
+                playback.journey_d03("old-auth", self._row(), Path(tempfile.gettempdir()))
+        # The switch was really applied, the window failed, and the original value came back.
+        self.assertIs(state["PlaybackAutoCheck"], True)
+        # The row keeps its reached stages and restore record; it is never reported as PASS.
+        self.assertNotEqual(raised.exception.result.get("status"), "PASS")
+        self.assertEqual(raised.exception.result["restore"]["status"], "restored")
+        self.assertIn("native-play: the playback window failed", str(raised.exception))
+
+    def test_a_restore_that_cannot_be_verified_stops_the_row_instead_of_passing(self):
+        from unittest.mock import patch
+        state = {"PlaybackAutoCheck": True}
+        calls: list[dict] = []
+
+        def fake_configuration(auth):
+            return dict(state)
+
+        def fake_set(auth, changes):
+            calls.append(dict(changes))
+            # The first (disabling) change really applies; every restore attempt is rejected, so the
+            # switch stays changed on the server.
+            if len(calls) == 1:
+                state.update(changes)
+                return 204
+            return 500
+
+        with patch.object(playback, "plugin_configuration", fake_configuration), \
+                patch.object(playback, "set_plugin_configuration", fake_set), \
+                patch.object(playback, "refresh_auth", lambda: "fresh-token"), \
+                patch.object(playback, "pkg") as fake_pkg, \
+                patch.object(playback, "trust_play", lambda *a: {"ffprobe": {}}):
+            fake_pkg.restart.return_value = ""
+            with self.assertRaises(playback.ConfigurationRestoreError) as raised:
+                playback.journey_d03("old-auth", self._row(), Path(tempfile.gettempdir()))
+        self.assertIn("could not be restored", str(raised.exception))
+        self.assertIn("MP4.D03", str(raised.exception))
+        self.assertEqual(raised.exception.result["restore"]["status"], "FAILED")
+        # The change really was applied before the failure, so the row must not claim a clean state.
+        self.assertIs(state["PlaybackAutoCheck"], False)
+
+    def test_the_restore_records_every_attempt_and_refuses_an_unverified_read_back(self):
+        from unittest.mock import patch
+        statuses: list[int] = []
+
+        def fake_set(auth, changes):
+            statuses.append(204)
+            return 204
+
+        with patch.object(playback, "plugin_configuration", lambda auth: {"PlaybackAutoCheck": True}), \
+                patch.object(playback, "set_plugin_configuration", fake_set), \
+                patch.object(playback, "refresh_auth", lambda: "fresh-token"):
+            restored = playback.restore_plugin_configuration({"PlaybackAutoCheck": False})
+        self.assertEqual(restored["status"], "FAILED")
+        self.assertEqual(len(restored["attempts"]), 2)
+        self.assertEqual(statuses, [204, 204])
+
+    def _matrix_loop(self) -> str:
+        source = (ROOT / "scripts" / "run_isolated_playback_integration.py").read_text(encoding="utf-8")
+        start = source.index("    for row in rows:\n        # Every row starts from live credentials")
+        end = source.index("    failed = [row_id for row_id, result in results.items()", start)
+        return source[start:end]
+
+    def test_the_failure_path_reauthenticates_before_the_next_row_reads(self):
+        loop = self._matrix_loop()
+        # A fresh login precedes every row and follows a failed row, so the revoked token is never
+        # reused for the next row's first native read.
+        self.assertLess(loop.index("auth = refresh_auth()"), loop.index("try:"))
+        failure_handler = loop[loop.index("except (BaselineError"):]
+        self.assertIn("auth = refresh_auth()", failure_handler)
+
+    def test_a_changed_switch_cannot_silently_host_the_next_delegation_row(self):
+        loop = self._matrix_loop()
+        self.assertIn('precondition.get("PlaybackAutoCheck") is True', loop)
+        self.assertIn('precondition.get("Enabled") is True', loop)
+        self.assertIn('if row["journey"] not in ("d02", "d03")', loop)
+        # A row whose configuration could not be restored aborts the batch; it is never reported as
+        # PASS and later rows are not run against the changed server.
+        self.assertIn("ConfigurationRestoreError", loop)
+        self.assertIn("configurationRestored", loop)
+        self.assertIn("abortedAfter", loop)
 
 class RawScanDiagnosticTests(unittest.TestCase):
     ITEM_ID = "8" * 8 + "-1111-2222-3333-" + "a" * 12
