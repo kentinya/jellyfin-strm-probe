@@ -13,7 +13,7 @@ Test Level: T4
 Planner / Reviewer: B
 ```
 
-最新 B 决定：**FIX REQUIRED（其余必要门禁待 B 补齐）**，继续同一 Task 5.3。完整合并版本／SQLite helper 与带明确准备适配的 plugin 完整入口已 PASS，B53-20261022-8 闭合；不再要求 Developer 修改准备工具。继续同 ZIP 的真实视频验收，全部 12 个 ColorRange 行已完成独立核验，累计矩阵 29／116、独立关键 27／40，完整 baseline、package-all、scan-all、configuration-all、batch-suite 与全部 1004 项 large-all 已通过；历史 FAIL 保留，剩余矩阵及完整门禁仍由 B 负责。见文末本轮续验记录。
+最新 B 决定：**FIX REQUIRED（B53-20261023-1：矩阵 D03 返回码／失败恢复及跨行鉴权）**，继续同一 Task 5.3。剩余 87 行原矩阵已完整结束，原始结果 41 PASS／46 FAIL，不能整体通过；本轮新增独立接受 11 行，累计矩阵 40／116、独立关键 27／40、ColorRange 12／12。Developer 只修下文指定的既有播放工具与直接测试，B 保留余下全部复验和最终门禁。完整合并版本／SQLite helper、带明确准备适配的 plugin、baseline、package-all、scan-all、configuration-all、batch-suite 与全部 1004 项 large-all 的匹配通过证据保留。B53-20261022-8 已闭合，不重新要求修改合并准备。见文末本轮决定；历史失败不覆盖。
 
 ## B 合同重判与继续决定（2026-10-21）
 
@@ -1130,3 +1130,42 @@ NEXT ACTION: B COMPLETES THE RUNNING REMAINING MATRIX AND SCAN-ALL, THEN SLICE F
 矩阵累计接受仍 **29／116**、独立关键 **27／40**、C **12／12**；剩余 87 行完整原矩阵进程继续。已发现 `MP4.P02.02` 首信任 Web 的 Cast sender 资源 `net::ERR_NETWORK_CHANGED`，原行仅取得首信任观察，尚无完整旅程，不计 PASS；保留原始控制台／图片及最终首败，待本批结束后按相同入口单行复验，不改分类器或断言。没有新增 Developer 修正请求、源码变更、推送、新 Task、Closure Packet、SLICE READY FOR A REVIEW 或 Slice 关闭；取消时间预算继续适用。
 
 NEXT ACTION: B COMPLETES THE RUNNING REMAINING MATRIX, RETAINS FIRST FAILURES AND REPLAYS ONLY REQUIRED INCOMPLETE ROWS, THEN RUNS SLICE FINAL. SCAN-ALL AND BATCH-SUITE ACCEPTED.
+
+## B 剩余 87 行完整矩阵审查与修正交接（2026-10-23）
+
+**Decision：FIX REQUIRED。B53-20261023-1／P1，继续同一 Task。** 本轮审查 Head `fe0476d5da49f501c89aca234e08ef306146128f`，完整 Task 审查范围仍为 `f17fb1fc90dda242eeff9fac7b4f21576b5e6f94..Head`；沿用此前完整差异审查，重新检查本次暴露的顺序入口、D02／D03／D04、鉴权与对应测试。97 项输入相对启动检查点仅 TASK 报告改变，95 项非报告输入全部匹配；产品实现 `4b4d0cca33f37308842710b2a0a70b1919cd0a58`、合同／Base 与正式 ZIP 均不变。工作区起始干净，治理 PASS；未实施产品或正式工具修正，未委派、推送、改写历史或操作生产。
+
+### 完整运行及独立接受范围
+
+本轮稳定本机证据根：`.git/validation-evidence/4b4d0cca33f37308842710b2a0a70b1919cd0a58/b-remaining-no-budget-20261023T060031Z/`。完整原始矩阵在 `Matrix/original/matrix-result.json`，精确 argv／环境见 `Matrix/plan.json` 和原 `command.json`；使用原有 `--scenario matrix --rows <剩余87行>`、18144 和事前登记的专属包项目。全部 87 个原注册行已结束，**41 原始 PASS／46 原始 FAIL，整体 FAIL**；没有外部时间预算，原生断言／超时未改。原入口计时 **7152.8 秒**（最终清理前），原结果写盘前墙钟约 **7154.756 秒**，本轮两个服务于 08:00 UTC 正常退出，exit0／无 OOM，原生 CLEAN／CLEANED。
+
+会话中断使父观察器未保存 OS 退出码，`Matrix/command.json` 的 RUNNING 是过时记录；不是原矩阵仍运行，也不能据此声称跑了四小时。保留该记录及 `command-observer-interrupted.json`，以原始最终 FAIL、写盘时刻和服务收尾为准；**进程 OS 退出码 NOT OBSERVED**，不把原程序按 FAIL 返回 1 的代码推断冒充实测退出码。
+
+B 对 39 个未受后续 D03 前提污染的原始 PASS 行完成了结构资料审计：154 份原生 PlaybackInfo 正文、实际源 ID／URL／Video＋Audio、至少 5 秒及解码帧、完整指纹五字段、保留／提交方向和全部重启前冻结状态与先读回相等；F 行另核对失败不前进、失败／重试保留旧基线及同 URL 恢复。结果见 `independent-structured-review.json`；这不是 39 行全部接受。完整服务器日志与归档的 **163 条真实 ffprobe 启动命令**逐行一致，本次已完整审查行所涉及 URL 的原生命令总数与所有原观察的最终累计计数一致，未把 ffmpeg 能力检查计为 ffprobe。
+
+本轮只新增接受以下 **11 行**：`MP4.P01.01`、`MP4.P01.02`、`MP4.P01.03`、`MP4.P02.03`～`MP4.P02.08`、`MP4.P03.01`、`MP4.P03.03`。这 11 行的 **84 张原图**均已逐张实际打开并核对摘要／可见 A 或 B 画面；P02.04 的 B 是正常静态测试图，不声称画面中的时钟移动。P01 原生 schema／限定删除／缺 Video 前提及有指纹行的再次删流保留原始记录，探测窗 1、再播／重启 0；URL 变化行提交新地址和对应五字段，跳过行保留旧五字段。全部在后续 D03 开关动作之前完成，按原输入接受，详见 `accepted-subset-review.json`。
+
+全部 **407 张**原图和摘要清单仍保留；目前实际逐张打开 **86 张**（上述 84 张加首败 MP4.P02.02 的 2 张），**321 张尚未审查**，不作已查看声明。其余 **28 个原始 PASS** 暂不计正式通过；两个 D05 虽原始 PASS，但位于 D03 失败之后，未证明自动检查开启前提，必须在正确前提下复验。正式覆盖现在 **40／116、独立关键 27／40、ColorRange 12／12**；尚未接受 **76 行＝46 原始 FAIL＋2 个 D05 前提待复验＋28 个原始 PASS 待完成独立图片审查**。
+
+### B53-20261023-1：具体缺陷、事实边界及最小修正
+
+- **配置保存返回码与固定原生行为不符。** `scripts/run_isolated_playback_integration.py:2654` 及 2689 附近，D03 关闭／恢复 PlaybackAutoCheck 均要求 `== 200`；该入口本身使用已经验证的 `POST /Plugins/{id}/Configuration`。同固定 Jellyfin 的已接受完整配置门禁实际记录 `serverStatus:204`／`postApplied:1`（旧轮 `Configuration-ready/browser/05-lost-save-response/driver-result.json`），该配置工具的实际 API 准备也要求 204；矩阵诊断配置已允许 200／204。原矩阵 MP4.D03 首信任 0 探测且有效指纹，随后报 toggle failed。**原 D03 未保存这一次 POST 的实际返回码，不把 204 当作该次已有 HTTP 原文**；修正应使用已验证的原生成功码，并记录实际状态和配置读回，不能新猜路由或放宽产品断言。
+- **失败会遗留改变的开关。** `journey_d03` 没有覆盖开关变更的 `finally`；即使 POST 已成功应用，仅返回码断言就会提前退出，后续恢复不会执行。`scenario_matrix` 捕获行失败后继续，未核验下一行的配置前提。后续 MKV 多行出现 1 次原生探测、无插件事件且无指纹，与自动检查关闭污染相符；**原轮最终配置随正常清理删除，缺乏同次配置读回，不将关联追认为已直接证明的唯一根因或插件缺陷**。Developer 应按本行开始前的真实配置恢复、核验，保证正常旅程仍在关闭状态完成再播／重启；失败时同样恢复。恢复无法完成则保留主失败与恢复失败并停止受污染的后续执行，不生成假 PASS。不增加通用环境／恢复框架。
+- **错误路径未刷新跨行鉴权。** `scenario_matrix:2897` 附近只在旅程成功后 `refresh_auth()`，异常路径继续沿用旧 token。Web Play 之后旧 API token 被替换的边界已在现有控制／代码注释记录；MP4.D03 已完成真实首信任，随后失败，紧接 MP4.D04 报 item read failed。MKV P01 两行亦报 saved-stream read failed；原结果未保留这些读取的具体 HTTP 状态，**不伪称已观察 401**。修正行入口／失败后边界，确保后续真实读取使用新凭据；真实读取错误仍必须失败。只记录脱敏状态／错误，不输出 token 或完整私有地址。
+- **污染前提不能通过委托对照。** MP4／MKV.D05 位于上述失败之后，虽然无事件／无指纹且能播放，仍不能证明插件开启且播放自动检查开启时会委托旧 STRM。在有意关闭的 D02／D03 窗口之外，正常行应核验既定启用前提；不得默默打开开关、只改最终统计或把污染后的 native-only 结果算成优化验收。D02 本次 configBefore／configAfter 全部一致且 Enabled／PlaybackAutoCheck 均为 true，不据此扩展为已证明 D03 恢复成功。
+
+另有独立首败 `MP4.P02.02`：首信任画面推进 5.375 秒／87 解码帧、正确 A／当前源／五字段，但 Cast sender 的 `/cv/js/sender/v1/cast_sender.js` 报 `net::ERR_NETWORK_CHANGED`，原严格控制台断言拒绝。原行没有进入换地址、再播或重启，保持 FAIL；不改错误分类器、不放宽原断言，不将并行实例推断为已确认原因。B 在配置／鉴权修正后用同一既有单行入口复验，保留首败。
+
+### Developer 受影响反馈与 B 后续门禁
+
+Developer 在同一 Task 内只修改现有 `scripts/run_isolated_playback_integration.py` 与直接测试 `tests/test_isolated_playback_integration.py`，无需改 C#、共享媒体服务、包／扫描／大库／批量工具或通用治理工具。现有测试检查委托旅程的部分鉴权／正常恢复时序，但没有证明“POST 204 已应用后返回码断言失败”与“行异常后的恢复／下一行鉴权”，本轮反馈必须覆盖这些实际可达的边界。
+
+受影响验证：运行完整 playback Python 模块 discovery、修改文件编译、治理与 diff 检查；控制验证 204 成功、开关已改变后异常仍恢复真实原配置、恢复失败不继续污染、前行 Web 后失败时下一行读取使用新 token，且真实 HTTP／读取失败仍失败。假对象只证明编排控制，不能冒充真实产品故障。再用同一固定 ZIP 和原有矩阵入口完成小批 `--rows MP4.D03,MP4.D04,MKV.P03.01`，核对实际注册执行顺序、D03 关闭窗口／再播／重启及原配置恢复、D04 原生委托、后续 MKV 首信任 0 和正常 0 探测旅程。保留原始 HTTP 状态／配置前后读回、日志、计数及截图。只交这组直接受影响反馈和真实提交 SHA，未运行完整门禁逐项报告，**不要求 Developer 重跑 87／116 行或任何完整实机套件**。
+
+B 收到可审阅修正后独立审查同一 Task Base..新 Head，重跑当前工具候选的完整 Python 回归及适用检查，核验该小批和异常控制，按真实依赖／函数影响核对旧证据输入；工具源码改变不自动保留原矩阵结论，也不自动废弃未消费改动文件、同 ZIP／同运行前提的完整门禁，复用范围必须另记录。继续补齐所有未接受行／原图、受污染的全部行和独立关键复现，必要时重取受影响已接受行；旧 FAIL／BLOCKED 及所有图片保留。固定包无实现／构建输入变化时不为工具文档重新造包。完整 C#／质量、prepared plugin／独立合并、baseline、安装／扫描／配置／批量／全部 1004 项大库证据均仍保存，是否跨修正复用由 B 作输入匹配决定，不能让 Developer 代跑全量或自行省略。
+
+B 本次只读收尾核对三组已登记项目的 6 个服务均已停止、exit0／无 OOM；58 个无关容器的镜像与进程状态／起止时刻未变，其中 5 个持续运行的 Health 日志正常滚动，健康状态均 healthy。前后原文及初步全 State 比较的修正说明均保留，不把 Health 日志变化说成重启；原 1004 项准备库和已接受复用副本未被本批命令操作。证据中的状态库／媒体／凭据不进入普通提交。
+
+当前尚无 Task PASS，RO 未齐；不启动 Slice Final、不造 Task、不提交 Closure Packet／SLICE READY FOR A REVIEW，也不自行关闭。取消时间预算继续适用，所有原生正确性门槛和 B 全量责任保持。
+
+NEXT ACTION: DEVELOPER CORRECTS B53-20261023-1 WITH DIRECTLY AFFECTED PLAYBACK FEEDBACK IN TASK 5.3; B RETAINS ALL COMPLETE GATES AND INDEPENDENT REVIEW. NO NEW TASK OR SLICE CLOSE.
