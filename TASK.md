@@ -13,7 +13,7 @@ Test Level: T4
 Planner / Reviewer: B
 ```
 
-最新 B 决定：**FIX REQUIRED（B53-20261023-1：矩阵 D03 返回码／失败恢复及跨行鉴权）**，继续同一 Task 5.3。剩余 87 行原矩阵已完整结束，原始结果 41 PASS／46 FAIL，不能整体通过；本轮新增独立接受 11 行，累计矩阵 40／116、独立关键 27／40、ColorRange 12／12。Developer 只修下文指定的既有播放工具与直接测试，B 保留余下全部复验和最终门禁。完整合并版本／SQLite helper、带明确准备适配的 plugin、baseline、package-all、scan-all、configuration-all、batch-suite 与全部 1004 项 large-all 的匹配通过证据保留。B53-20261022-8 已闭合，不重新要求修改合并准备。见文末本轮决定；历史失败不覆盖。
+最新 B 决定：**FIX REQUIRED（B53-20261023-1 尚缺写入已生效、确认读回失败时的恢复）**。已独立核验 `660d60c` 的三行正常反馈及全部 22 张图，204 正常路径／正常恢复／跨行鉴权修正有效；但现有 D03 调用链的独立异常控制仍复现开关遗留关闭，不能宣称异常恢复完整。干净 Python 3.11 全量 418 项＝416 PASS＋2 个既有归档缺失 SKIP。继续同一 Task，既有接受覆盖 40／116、独立关键 27／40、ColorRange 12／12 不变，B 保留余下全部门禁。Developer 只补该遗漏及直接控制；不重新修改已闭合的合并准备。完整原矩阵 41 原始 PASS／46 FAIL、既有完整门禁与历史失败均保留，具体接受／复用边界见文末 B 复核。
 
 ## B 合同重判与继续决定（2026-10-21）
 
@@ -1189,3 +1189,21 @@ NEXT ACTION: DEVELOPER CORRECTS B53-20261023-1 WITH DIRECTLY AFFECTED PLAYBACK F
 - **Remaining In-Slice Work：** 本 Task 仍未 PASS。B 需审查同一 Task Base..新 Head 并重跑当前工具候选的完整 Python 回归，核验本批三行与异常控制，按实际依赖判断既有矩阵／安装／扫描／配置／批量／大库证据的复用范围，继续补齐所有未接受行、受污染行复验（含 D03 之后的 MKV D05 等）与独立关键复现。RO-1 有部分交付，RO-2／RO-3 未齐，RO-4 保留 Task 5.1 既有决定。不提交 Closure Packet、不返回 SLICE READY FOR A REVIEW、不关闭 Slice。
 
 NEXT ACTION: INDEPENDENT B VERIFIES THIS B53-20261023-1 CORRECTION, RE-RUNS THE CURRENT TOOL CANDIDATE'S FULL PYTHON REGRESSION AND RETAINS EVERY REMAINING TASK 5.3 FULL GATE; NO NEW TASK OR SLICE CLOSE.
+
+## B 对 660d60c 修正的独立复核（2026-10-23）
+
+**Decision：FIX REQUIRED；B53-20261023-1 部分修正，剩余同一失败恢复边界。** 真实 Task 审查范围 `f17fb1fc90dda242eeff9fac7b4f21576b5e6f94..8c3504cb8cb4e8e2c568155da4b1ca3b7153448e`；保留既往完整审查，本次完整读查 `30d51c9733f11d36909e9cbb5585d23510807f6b..8c3504cb8cb4e8e2c568155da4b1ca3b7153448e` 的两处源码／测试差异及报告。起始工作区干净，治理 PASS，97 项输入只有播放顺序入口、其测试和 TASK 改变；未改插件源码／构建输入、驱动、共享服务、其他完整实机入口或合同／Base。正式 ZIP 摘要仍 `9641fe917cc8db8d36ec32c841fb968b0149890f39094adce5338a0f28dd9e37`。未实施本次被审代码、不签发自己的独立实现 PASS。
+
+**先核对交付结果：** Developer 的最终匹配三行原文可信：实际执行顺序为 `MP4.D03 → MP4.D04 → MKV.P03.01`，535.3 秒、原始 PASS、CLEAN／CLEANED、两个本轮服务 exit0／无 OOM。B 比对最终两文件 SHA-256，读取全部 11 个 observation／11 份原始 PlaybackInfo、当前源／地址／Video＋Audio、五字段及整个冻结状态与重启先读回；实际逐张打开 **22／22 张**原图，A 标记／播放器正确，嵌入时钟和帧号在开始／推进图之间变化，无可见错误。D03 真实 disable204／读回 false、restore204／读回 true／重启后 true、配置前后完全一致；首信任在开启状态，随后三个原生窗口在关闭状态，各实际探测 1，不把首信任也说成关闭状态。D04 无指纹／无插件事件，三次实播正确；MKV.P03.01 四窗 0 且保留全部旧五字段。正常路径修正确认有效，保留本批，不要求 Developer 重跑同样的九分钟正常旅程。该正常批没有经过“先失败再进入下一行”，不能作为异常路径已证明的证据。
+
+**B 完整回归：** 从真实当前 HEAD 新建独立干净检出，Python **3.11.10** 完整 `unittest discover -s tests -v` 发现 **418 项：416 PASS、2 SKIP、0 FAIL**，exit0，进程墙钟 **22.843 秒**（套件 22.065 秒）。两项跳过仍为缺已发布归档的 assembly version 控制，不计 PASS；当前 108 项 playback 控制包含在全量内，不机械另跑。修改文件 py_compile、Node 语法、治理、diff 检查通过。无 C#／包或相关输入改变，既有完整 C# 205 项／restore／build／format、同 ZIP package／scan／1004 large、prepared plugin／独立合并、batch／configuration 证据保留；本轮不重复这些未消费改动文件的匹配门禁。矩阵入口已改变，本轮不凭正常小批自动确认所有旧矩阵跨变更复用或增加正式覆盖；既有接受 40／116、独立关键 27／40、C12／12 及剩余行／原图责任保持。当前尚有明确阻塞，未运行剩余真实矩阵与 Slice Final，不计 PASS。
+
+**当前唯一实施阻塞（仍属 B53-20261023-1）：** `scripts/run_isolated_playback_integration.py:2779` 调用 `apply_plugin_configuration(...)` 完整返回后才执行 `switched = True`。但该 helper 在 2159～2169 行已经先调用真实 POST，再读取配置并可能抛错；若 POST 已应用、随后的 GET 失败，helper 没有返回，`switched` 仍为 false。2811 行于是走“没有切换、不必恢复”的分支，抛 `RowEvidenceError` 而非进入恢复／无法恢复即停止的分支。POST 204 和具体失败读回也没有写入该行 `result["disable"]`，因为这次赋值尚未完成。与原要求“开关已改变后异常仍恢复真实原配置，无法核实恢复则停止”不符。
+
+B 在**现有 `journey_d03 → apply_plugin_configuration → set_plugin_configuration → pe.request_json` 入口**独立复现这个顺序，只在既有 HTTP 边界作确定性控制：前置 GET200／true → POST204 已提交 false → 后续确认 GET503。原代码实际输出 RowEvidenceError，终态仍 false，恢复 POST 次数 0，失败行无 restore／disable 状态记录。没有猜路由、绕开入口或运行产品操作；此为**脚本异常控制，不是实机 503、网络故障或插件回归的证明**。这与本轮新增“写后读回”的实际分支及既定异常恢复合同直接对应，不新增产品故障场景。现有新增测试只在 helper 已完整返回后令播放窗口失败，因此 418 项绿灯没有覆盖本遗漏。
+
+Developer 仅补当前写后确认失败路径及直接控制：写请求已经发出／结果未确认时，不能仅凭局部标志尚未置位断言服务器未改变；按原值执行恢复并核验，不能核验则记录原失败＋恢复失败、停止后续受污染行；保留已收到的真实 POST 状态及读回错误，即使 helper 未完整返回。检查 D02 同类写请求边界即可，不增建恢复框架或修改插件。新增上述现有 HTTP 边界的控制，证明恢复成功时原值回来且行仍 FAIL，恢复不能确认时 ConfigurationRestoreError／本批停止，且 POST204／读回失败记录仍可审阅；继续证明真实读取错误不被吞掉。只运行直接影响的 playback 模块 discovery、修改文件编译、治理／diff 并交真实修正 SHA。**不要求 Developer 再跑三行正常反馈、整矩阵或任何全量实机门禁；B 仍负责后续完整回归、必要实播、全部剩余行及独立验收。** 修正后按实际输入确定本批及旧证据复用，不自动承诺全部保留或全部重跑。
+
+本轮证据稳定保存在 `.git/validation-evidence/8c3504cb8cb4e8e2c568155da4b1ca3b7153448e/b-correction-review-20261023T114013Z/`：独立干净检出与全量日志、源输入清单、`independent-d03-applied-then-read-failed.json` 及可复现控制、正常批独立审计、22 图实际查看记录。原始 Developer 两批、原 87 行失败及所有旧证据均保留。B 本轮未启动／停止容器或改动原 1004 项准备库／复用副本；未委派、推送、改变 Base、造新 Task、提交 Closure Packet 或关闭 Slice。Developer 报告中的“超过 30% 上限”不作为本轮问题：会话最新明确取消时间预算，以该指示为准；正确性门槛不变。
+
+NEXT ACTION: DEVELOPER COMPLETES THE REMAINING B53-20261023-1 APPLIED-WRITE/FAILED-READ RESTORE AND EVIDENCE BOUNDARY IN TASK 5.3; B RETAINS ALL FULL GATES. NO NEW TASK OR SLICE CLOSE.
