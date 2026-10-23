@@ -109,7 +109,7 @@ Base 为规划前干净 main 的真实 HEAD，不随后续文档提交移动。�
     python3 scripts/check_governance.py
     git diff --check
 
-Python 完整回归另在 Python 3.11 干净检出执行。现有 `scripts/run_isolated_playback_integration.py --scenario baseline`／`--scenario matrix` 是已实现入口，准确参数、全部固定视频行、预算和证据目录由 B 在同一 Task 固定。本次授权触及插件共用探测链，B 必须承担完整 C#／Python、真实原生播放／批量／配置，以及同一最终 ZIP 的 baseline／全部视频矩阵／package／scan／现存全部 1004 项 large 门禁和独立关键复现；Developer 仅跑改动直接影响的反馈。任务已列的完整门槛不因授权调整而省略，匹配证据按流程核验复用，文档后继不机械重跑 Final。按用户最新澄清“整个 Task”，测试墙钟并集严格小于该 Task 累计实际工作时间 50%，跨轮去重累计、不因“继续”清零，不计轮间闲置，不空等或预借后续工作时间；历史近似／缺失计时单列，不追写为精确记录。
+Python 完整回归另在 Python 3.11 干净检出执行。现有 `scripts/run_isolated_playback_integration.py --scenario baseline`／`--scenario matrix` 是已实现入口，准确参数、全部固定视频行、预算和证据目录由 B 在同一 Task 固定。本次授权触及插件共用探测链，B 必须承担完整 C#／Python、真实原生播放／批量／配置，以及同一最终 ZIP 的 baseline／全部视频矩阵／package／scan／现存全部 1004 项 large 门禁和独立关键复现；Developer 仅跑改动直接影响的反馈。任务已列的完整门槛不因授权调整而省略，匹配证据按流程核验复用，文档后继不机械重跑 Final。按用户 2026-10-23 最新指示“不考虑时间预算了，继续跑剩余验证”，本次续验取消此前整个 Task 测试占比及外部预算收束限制；原生超时、正确性断言、全部验收和审查责任保持。既往累计计时及预算阻断保留为历史，不改写为通过。
 
 证据绑定源码与工作区内容身份、SDK／Python／镜像／锁／浏览器、媒体／STRM、ZIP 与部署摘要，保留精确命令、退出码、时序、逐行计数、响应／状态／播放进度、截图及实际查看结论、首败与重跑。状态恢复与只清理本轮专用资源单列；远端发布／运行以届时明确授权为准，本规划不自动推送。
 
