@@ -1501,5 +1501,79 @@ class DriverContractTests(unittest.TestCase):
         self.assertNotIn("rawBodyFile", legacy_block)
         self.assertNotIn("requestErrorShot", legacy_block)
 
+class PlaybackStopTests(unittest.TestCase):
+    """The client's own stop must end each measured playback.
+
+    B53-20261023-2 was a real owned-shutdown failure: the driver closed the browser with the playback
+    still running, so the owned transcode job outlived the window, and stopping the instance afterwards
+    consumed the compose grace period (Jellyfin exit 137, no OOM). These controls pin the acceptance
+    of that stop record; they cannot and do not claim whether a real client reports it.
+    """
+    advanced = {"advanced": True}
+
+    def test_a_reported_accepted_stop_is_accepted(self):
+        stop = {"stopReported": True, "stopStatuses": [204],
+                "attempts": [{"action": "osd-back", "navigated": True}]}
+        self.assertEqual(playback.playback_stop_failures(self.advanced, stop), [])
+
+    def test_a_missing_stop_record_is_refused(self):
+        self.assertEqual(playback.playback_stop_failures(self.advanced, None),
+                         ["the client playback stop was not recorded"])
+        self.assertEqual(playback.playback_stop_failures(self.advanced, {}),
+                         ["the client playback stop was not recorded"])
+
+    def test_a_stop_the_client_never_reported_is_refused(self):
+        stop = {"stopReported": False, "attempts": [{"action": "osd-back", "navigated": True}]}
+        failures = playback.playback_stop_failures(self.advanced, stop)
+        self.assertEqual(len(failures), 1)
+        self.assertIn("never reported its playback stop", failures[0])
+
+    def test_a_stop_the_server_did_not_accept_is_refused(self):
+        for statuses in ([], [500], [401]):
+            stop = {"stopReported": True, "stopStatuses": statuses}
+            failures = playback.playback_stop_failures(self.advanced, stop)
+            self.assertEqual(failures,
+                             [f"the client playback stop was not accepted natively (statuses {statuses!r})"])
+
+    def test_a_window_that_never_played_is_not_turned_into_a_stop_result(self):
+        # F rows and the real native 500 windows never start a playback: their own failure stands and
+        # this check must neither invent nor hide a stop.
+        self.assertEqual(playback.playback_stop_failures({"advanced": False}, None), [])
+        self.assertEqual(playback.playback_stop_failures({}, None), [])
+        self.assertEqual(playback.playback_stop_failures(None, None), [])
+
+    def test_assert_playback_refuses_a_running_playback_stop(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            observation = {
+                "row": "MP4.P06.03.up", "phase": "window", "itemId": ITEM_ID,
+                "expectedSourceId": SOURCE_ID, "url": URL,
+                "playback": PlaybackObservationTests._entry(self, Path(tmp)),
+                "playbackStop": {"stopReported": False, "attempts": []},
+                "pluginEvents": [], "pluginProbeCalls": [],
+                "ffprobe": {"before": 1, "after": 2, "delta": 1},
+                "mediaServerRequests": {"before": 0, "after": 1, "delta": 1},
+                "fingerprint": None, "nativeSources": {"sources": []}, "readErrors": {},
+            }
+            with self.assertRaises(playback.BaselineError) as caught:
+                playback.assert_playback({"id": "MP4.P06.03.up", "media_type": "video"}, observation,
+                                         counter_validated=True, expected_delta=1)
+            self.assertIn("never reported its playback stop", str(caught.exception))
+
+    def test_the_driver_stops_through_real_client_navigation_only(self):
+        driver = (ROOT / "scripts" / "package_playback_driver.mjs").read_text(encoding="utf-8")
+        # Only the executable lines are checked: prose may name the client's own functions.
+        code = "\n".join(line for line in driver.splitlines()
+                         if not line.lstrip().startswith("//"))
+        # The stop must be the client's own report, reached through real navigations.
+        self.assertIn("Sessions\\/Playing\\/Stopped", code)
+        self.assertIn("page.goBack", code)
+        self.assertIn("'beforeunload'", code)
+        # It must never reach into internal playback functions or synthesise a stop.
+        for forbidden in ("window.playbackManager", "playbackManager.", "reportPlaybackStopped"):
+            self.assertNotIn(forbidden, code)
+        # The recorded stop must not be counted as a row console error.
+        self.assertIn("playbackStop.consoleErrors", code)
+
+
 if __name__ == "__main__":
     unittest.main()

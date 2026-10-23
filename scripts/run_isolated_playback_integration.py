@@ -984,10 +984,16 @@ def play_once(auth: str, row: dict, phase: str, evidence_dir: Path, relax_consol
 
     fingerprint = read_state("fingerprint", lambda: fingerprint_row_for_item(auth, item["Id"], row["sourceKey"]), None)
     native_sources = read_state("nativeSources", lambda: native_source_snapshot(auth, item["Id"]), {})
+    # The driver's own record of the client playback stop: the pinned web client reports
+    # ``Sessions/Playing/Stopped`` from the OSD page's viewbeforehide handler and the app-close
+    # handler, and the server turns that report into KillTranscodingJobs. Without it the owned
+    # transcode job outlived the window and the owned instance's stop hit the compose grace period.
+    playback_stop = entry.get("playbackStop") if isinstance(entry, dict) else None
     observation = {
         "row": row["id"], "phase": phase, "itemId": item["Id"], "expectedSourceId": row["sourceKey"],
         "url": url,
         "playback": entry, "consoleErrors": console_errors,
+        "playbackStop": playback_stop,
         "pluginEvents": events,
         "pluginProbeCalls": [pkg.probe_calls(event) for event in events],
         "ffprobe": {"before": before_probes, "after": after_probes, "delta": after_probes - before_probes},
@@ -1006,6 +1012,27 @@ def play_once(auth: str, row: dict, phase: str, evidence_dir: Path, relax_consol
     require(len(entries) == 1, f"{row['id']} {phase}: expected exactly one playback result.")
     require(not read_errors, f"{row['id']} {phase}: read-only state unavailable: {read_errors}")
     return observation
+
+
+def playback_stop_failures(entry: dict | None, playback_stop: dict | None) -> list[str]:
+    """Return the reasons the client playback stop was not completed by the client itself.
+
+    The contract's playback evidence does not change: a window is judged on its measurement. This
+    check only refuses a window whose playback was left running, because the owned instance would
+    then be stopped with a live transcode job and the owned shutdown would be killed by the compose
+    grace period instead of completing natively.
+    """
+    if not isinstance(entry, dict) or entry.get("advanced") is not True:
+        # A window that never started a playback has nothing to stop; its own failure stands.
+        return []
+    if not isinstance(playback_stop, dict) or not playback_stop:
+        return ["the client playback stop was not recorded"]
+    if playback_stop.get("stopReported") is not True:
+        return [f"the client never reported its playback stop (attempts {playback_stop.get('attempts')!r})"]
+    statuses = playback_stop.get("stopStatuses") or []
+    if not any(status == 204 for status in statuses):
+        return [f"the client playback stop was not accepted natively (statuses {statuses!r})"]
+    return []
 
 
 def assert_playback(row: dict, observation: dict, *, counter_validated: bool,
@@ -1030,6 +1057,7 @@ def assert_playback(row: dict, observation: dict, *, counter_validated: bool,
                                      expected_delta=expected_delta)
     if not allow_missing_media_fetch and observation["mediaServerRequests"]["delta"] < 1:
         failures.append(f"{row['id']} {phase}: the server never fetched the fixture from the media service")
+    failures += playback_stop_failures(observation["playback"], observation.get("playbackStop"))
     # The saved source set after the playback must still carry the expected source id, the expected
     # address and the required stream; a playback that silently resolved another source is refused.
     sources = (observation.get("nativeSources") or {}).get("sources") or []

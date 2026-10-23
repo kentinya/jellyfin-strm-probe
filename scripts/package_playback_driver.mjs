@@ -191,6 +191,93 @@ async function pictureSample(page, element) {
   }, element);
 }
 
+// End the playback through the client's own stop path before the browser goes away.
+//
+// The pinned web client stops a playback from the video OSD page's own ``viewbeforehide`` handler and
+// from the app's ``beforeunload`` handler; both reach ``playbackManager.stop()``, which posts
+// ``Sessions/Playing/Stopped``. The server turns that report into ``KillTranscodingJobs``
+// (``Jellyfin.Api/Controllers/PlaystateController.cs``). Closing the browser without it left the owned
+// transcode job alive until its own 60 s kill timer, so stopping the owned instance afterwards
+// consumed the compose grace period and exited 137. This only performs real client navigations (the
+// same route changes the OSD back button and the native back command trigger) and records what the
+// client actually did; it never calls internal playback functions and never turns a window that
+// failed to start playback into a stop success.
+async function endPlaybackLikeTheClient(page, budgetMs) {
+  const stopReports = [];
+  const onResponse = (response) => {
+    if (/\/Sessions\/Playing\/Stopped/i.test(response.url())) {
+      stopReports.push({ status: response.status(), method: response.request().method(),
+        path: redactUrl(response.url()) });
+    }
+  };
+  const attempts = [];
+  page.on('response', onResponse);
+  let mediaElement = null;
+  try {
+    const navigate = async (action, operation) => {
+      try {
+        await operation();
+        attempts.push({ action, navigated: true });
+        return true;
+      } catch (error) {
+        attempts.push({ action, error: String(error && error.message ? error.message : error).slice(0, 160) });
+        return false;
+      }
+    };
+    // 1) The route change the OSD back button performs: the client's router hides the video OSD page,
+    //    and that page's own viewbeforehide handler stops the player.
+    await navigate('osd-back', () => page.goBack({ waitUntil: 'domcontentloaded', timeout: budgetMs }));
+    let reported = await waitForStopReports(stopReports, 15000);
+    if (!reported) {
+      // 2) A second real client route: loading the app home route hides the OSD page the same way, so
+      //    the identical client stop handler runs.
+      await navigate('client-route-home', () => page.goto(cfg.baseUrl + '/web/index.html#/home.html',
+        { waitUntil: 'domcontentloaded', timeout: budgetMs }));
+      reported = await waitForStopReports(stopReports, 15000);
+    }
+    if (!reported) {
+      // 3) The app's own beforeunload handler stops a playing media element; dispatch the real event
+      //    the browser fires when the page is left.
+      try {
+        await page.evaluate(() => window.dispatchEvent(new Event('beforeunload', { cancelable: true })));
+        attempts.push({ action: 'beforeunload', navigated: false });
+      } catch (error) {
+        attempts.push({ action: 'beforeunload', error: String(error && error.message ? error.message : error).slice(0, 160) });
+      }
+      reported = await waitForStopReports(stopReports, 15000);
+    }
+    mediaElement = await page.evaluate(() => {
+      const video = document.querySelector('video');
+      const audio = document.querySelector('audio');
+      const media = video || audio;
+      return media
+        ? { present: true, element: video ? 'video' : 'audio', paused: media.paused,
+            currentTime: Number(media.currentTime) }
+        : { present: false };
+    }).catch(() => null);
+  } finally {
+    page.off('response', onResponse);
+  }
+  return {
+    stopReports,
+    stopReported: stopReports.length > 0,
+    stopStatuses: stopReports.map((report) => report.status),
+    attempts,
+    mediaElementAfterStop: mediaElement,
+  };
+}
+
+async function waitForStopReports(stopReports, budgetMs) {
+  const deadline = Date.now() + budgetMs;
+  while (Date.now() < deadline) {
+    if (stopReports.length > 0) {
+      return true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  return stopReports.length > 0;
+}
+
 async function strictPlay(page, item, strict) {
   const slug = safeName(item.id || item.name);
   mkdirSync(strict.screenshotDir, { recursive: true });
@@ -240,10 +327,12 @@ async function strictPlay(page, item, strict) {
     advancedSeconds };
 }
 
-async function playItem(page, item, strict) {
+async function playItem(page, item, strict, consoleErrors) {
   const mediaRequests = [];
   const playbackInfo = [];
   let requestErrorShot = null;
+  let playbackStop = null;
+  let consoleBookmark = consoleErrors ? consoleErrors.length : 0;
   if (strict.enabled) {
     mkdirSync(strict.screenshotDir, { recursive: true });
   }
@@ -290,6 +379,19 @@ async function playItem(page, item, strict) {
       for (let index = 0; index < 10 && playbackInfo.length === 0; index += 1) {
         await page.waitForTimeout(200);
       }
+      // End the client playback now that this window's measurement evidence is complete, so the owned
+      // transcode job is released through the client's own stop before the instance is stopped. Console
+      // entries produced by that teardown navigation belong to the stop record, not to the measured
+      // window, so the row's own console evidence stays exactly what the playback produced.
+      consoleBookmark = consoleErrors ? consoleErrors.length : 0;
+      try {
+        playbackStop = await endPlaybackLikeTheClient(page, 30000);
+      } catch (error) {
+        playbackStop = { stopReported: false, error: String(error && error.message ? error.message : error).slice(0, 160) };
+      }
+      if (consoleErrors) {
+        playbackStop.consoleErrors = consoleErrors.splice(consoleBookmark);
+      }
       return {
         name: item.name,
         itemId: item.id,
@@ -316,6 +418,7 @@ async function playItem(page, item, strict) {
         mediaRequests: mediaRequests.slice(0, 40),
         requestErrorScreenshot: requestErrorShot,
         playbackInfo: playbackInfo.slice(0, 10),
+        playbackStop,
       };
     }
     let observed = null;
@@ -344,6 +447,19 @@ async function playItem(page, item, strict) {
     };
   } finally {
     page.off('response', onResponse);
+    // A window that never reached the strict measurement result (for example a real 500 before any
+    // playback) has no successful playback to stop; its failure is preserved untouched.
+    if (strict.enabled && playbackStop === null) {
+      consoleBookmark = consoleErrors ? consoleErrors.length : 0;
+      try {
+        playbackStop = await endPlaybackLikeTheClient(page, 30000);
+      } catch (error) {
+        playbackStop = { stopReported: false, error: String(error && error.message ? error.message : error).slice(0, 160) };
+      }
+      if (consoleErrors) {
+        playbackStop.consoleErrors = consoleErrors.splice(consoleBookmark);
+      }
+    }
   }
 }
 
@@ -377,7 +493,7 @@ async function run() {
   try {
     await login(page);
     for (const item of cfg.items) {
-      result.results.push(await playItem(page, item, strict));
+      result.results.push(await playItem(page, item, strict, consoleErrors));
     }
   } catch (error) {
     result.error = String(error && error.message ? error.message : error);
