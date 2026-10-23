@@ -13,7 +13,7 @@ Test Level: T4
 Planner / Reviewer: B
 ```
 
-最新 B 决定：**FIX REQUIRED（其余必要门禁待 B 补齐）**，继续同一 Task 5.3。完整合并版本／SQLite helper 与带明确准备适配的 plugin 完整入口已 PASS，B53-20261022-8 闭合；不再要求 Developer 修改准备工具。继续同 ZIP 的真实视频验收，全部 12 个 ColorRange 行已完成独立核验，累计矩阵 25／116、独立关键 23／40，完整 baseline、package-all、configuration-all 与全部 1004 项 large-all 已通过；历史 FAIL 保留，剩余矩阵及完整门禁仍由 B 负责。见文末本轮续验记录。
+最新 B 决定：**FIX REQUIRED（其余必要门禁待 B 补齐）**，继续同一 Task 5.3。完整合并版本／SQLite helper 与带明确准备适配的 plugin 完整入口已 PASS，B53-20261022-8 闭合；不再要求 Developer 修改准备工具。继续同 ZIP 的真实视频验收，全部 12 个 ColorRange 行已完成独立核验，累计矩阵 26／116、独立关键 24／40，完整 baseline、package-all、configuration-all 与全部 1004 项 large-all 已通过；历史 FAIL 保留，剩余矩阵及完整门禁仍由 B 负责。见文末本轮续验记录。
 
 ## B 合同重判与继续决定（2026-10-21）
 
@@ -1038,3 +1038,16 @@ Docker 的停止收尾在观察进程结束后仍继续，两个 Jellyfin 实际
 证据位于同轮 `P06-up-next/`：两项精确命令、外部中断、实际字节／运行身份、12 图查看、三阶段／同次字段独立审计、原始日志、异步收尾计时和隔离对账均保留。只提交事实报告，无推送、历史改写、Closure Packet、SLICE READY FOR A REVIEW 或自行关闭。
 
 NEXT ACTION: B RETAINS ALL 91 MATRIX ROWS / 17 INDEPENDENT KEYS INCLUDING BOTH BUDGET-BLOCKED P06.01.UP ROWS, SCAN-ALL, BATCH-SUITE AND SLICE FINAL. SAME TASK, BASE AND FIXED ZIP; NO NEW DEVELOPER FIX REQUEST.
+
+
+## B MP4.P07.01 完整独立验收（2026-10-23）
+
+**Decision：FIX REQUIRED（余下验收未齐）；MP4.P07.01 独立 PASS。** 完成 P06 首次中断的审查后，实际累计余额足够一条原有正常旅程，B 从既有矩阵入口运行该行，**273.381 秒、退出 0**，未改断言／原生超时，无中断或重跑。准确方向为旧 SHA-1 有效→新侧缺失，旧 Size 缺失→新侧有效；同 URL／实际 A 字节不变，两组均不可比较。首信任／变化／再播／重启 **0／0／0／0**，完整旧五字段保持（含有效旧 SHA-1 和空 Size），未凭新 Manifest 的有效 Size 改写可信基线。
+
+原始 PlaybackInfo、唯一当前源／正确地址／Video／Audio、Manifest 摘要及重启后任何播放之前的完整只读冻结状态均独立核验。**8 张原图全部逐张实际打开**，正确 A 标记／画面和嵌入时钟推进、无错误；播放推进 **5.339～5.398 秒**、解码 **89～92 帧**。物理日志共 **1 次 ffprobe（原生准备）／4 次转码**，正式四阶段无额外探测。CLEAN／CLEANED，两个本次服务停止 exit0／无 OOM，其余 **62 个**容器稳定生命周期／镜像／重启次数／完整排序挂载不变；原库全部 1004 项、已接受大库副本和两项中断工作区继续保留。
+
+累计矩阵 **26／116**、独立关键 **24／40**、C **12／12**。剩余 **90 行／16 个独立关键、scan-all、batch-suite 和 Slice Final**，包括两条预算阻断的 P06.01.up，均继续由 B 负责；没有新 Developer 修正请求。已接受的完整质量／baseline／安装／配置／大库／prepared plugin／独立合并只在输入匹配范围复用，不机械重跑 Final。完整 Task Base..Head 及后继报告差异审查关系保留；固定实现／ZIP／合同／Base 不变。
+
+整个 Task 累计测试口径继续保守扣除闲置，计入 P06 原中断及异步停服、P07 完整入口和收尾，不相加重叠墙钟、不重置轮次、不预借未来时间。当前余额不足下一完整旅程及收尾，不空等凑分母。证据在原轮 `P07-one/MP4/`（完整原文、8 图实际查看／独立审计／归属对账）；先前两条 P06 的 BLOCKED、exit137、部分结果及所有首次证据保持。仅事实报告普通本地提交，未推送、造 Task、提交 Closure Packet／SLICE READY FOR A REVIEW 或关闭 Slice。
+
+NEXT ACTION: B CONTINUES REMAINING 90 MATRIX ROWS / 16 INDEPENDENT KEYS, SCAN-ALL, BATCH-SUITE AND SLICE FINAL WITH THE SAME FIXED CANDIDATE AND WHOLE-TASK ACCRUED TEST BUDGET.
