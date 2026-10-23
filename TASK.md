@@ -1021,3 +1021,20 @@ NEXT ACTION: B CONTINUES THE TWO RUNNING P05.01 ROWS, REMAINING MATRIX / INDEPEN
 原文、16 图实际查看／完整行审计／归属对账在 `b-C06-more-20261022T233155Z/P05-selected/`；本轮大库／配置／P04 证据及最初 BLOCKED／独立审计纠正均保留于同根索引。仅事实报告普通本地提交，无源码／正式工具变更、推送、新 Task、Closure Packet 或 Slice 关闭；RO 未齐，尚不能返回 SLICE READY FOR A REVIEW。
 
 NEXT ACTION: B CONTINUES REMAINING 91 MATRIX ROWS / 17 INDEPENDENT KEYS, SCAN-ALL, BATCH-SUITE AND SLICE FINAL UNDER THE WHOLE-TASK ACCRUED TEST BUDGET; SAME TASK, BASE AND FIXED ZIP.
+
+
+## B P06.01.up 本次执行预算阻断（2026-10-23）
+
+**Decision：FIX REQUIRED，覆盖仍为 25／116、独立关键 23／40、C 12／12；本次两行 BLOCKED，不计 PASS。** 仓库干净，治理通过，固定正式 ZIP 及两个 B 专属检出的 95 项非报告输入一致。分别从原既有矩阵入口运行 MP4.P06.01.up／MKV.P06.01.up，使用独立包项目／18138、18139；仅复用原有子网适配，没有改产品、原生断言或原生超时。
+
+两行各完成首信任／变化／再播 **0／1／0**。实际 A→B 大小分别为 **1,660,446→8,834,168**、**1,669,928→8,814,734** 字节，新 Manifest 无 SHA-1，成功指纹为新 Size／SHA-1 空值，未套用旧哈希。三阶段原始 PlaybackInfo、唯一当前源／地址／Video／Audio／五字段及同次 33 字段独立核验：编码器＝成功保存，返回仅 ColorRange tv→null。已有 **12 张原图全部逐张实际打开**，正确 A／P06UP 标记、无错误；B 有动态噪声、不宣称嵌入时钟，实际推进 **5.143～5.392 秒**、解码 **86～93 帧**。各有 2 次真实 ffprobe（准备＋变化）、4 次转码启动；第四次属于未完成的重启阶段，不算成功实播。
+
+B 将本次外部观察预算设为 390 秒＋15 秒收尾，依据近期正常／C 行估计完整单行 300 秒，启动前已核对整个 Task 实际累计余额及并行剩余并集。该估计偏紧：两进程均在外部预算到达后中断，15 秒后仍未退出而被杀，**各 405.008 秒、退出 -9**。没有重启后 observation／成对截图、完整冻结读回对账、原完整 result 或正常退出证据，不能把前三阶段成功提升为整行 PASS；不归为插件 FAIL，也不据此要求 Developer 修工具。
+
+Docker 的停止收尾在观察进程结束后仍继续，两个 Jellyfin 实际 **exit137／无 OOM**，两个媒体服务 **exit0／无 OOM**；随后仅核对／停止精确归属的四服务，已全停止，不冒称正常退出。原始物理／Docker 日志、三阶段原文、全部小型工作区及首轮中断保留。测试并集保守计至真实退出和停止状态核验完成，约 **478.607 秒**，没有只算观察进程或相加并行耗时。其余 **60 个**容器稳定生命周期／镜像／重启次数／完整排序挂载不变；原有全部 1004 项及新大库副本未操作、继续保留。
+
+当前仍缺 **91 行／17 个独立关键、scan-all、batch-suite 和 Slice Final**，均由 B 继续；没有新增 Developer 修正请求、Task 或范围变更。下一完整 P06 运行须在启动前覆盖本次已观察到的较长旅程及正常收尾，保留本次 BLOCKED；不修改正确性断言或为凑预算空等。整个 Task 时间口径保留历史近似／缺失限制，04:43:29.806498～04:58:25 的闲置间隙剔除，实际新增工作单列；最新保守账本在原轮 `task-cumulative-time.json`。本次已积累余额不足下一完整运行及收尾，停止新增昂贵测试。
+
+证据位于同轮 `P06-up-next/`：两项精确命令、外部中断、实际字节／运行身份、12 图查看、三阶段／同次字段独立审计、原始日志、异步收尾计时和隔离对账均保留。只提交事实报告，无推送、历史改写、Closure Packet、SLICE READY FOR A REVIEW 或自行关闭。
+
+NEXT ACTION: B RETAINS ALL 91 MATRIX ROWS / 17 INDEPENDENT KEYS INCLUDING BOTH BUDGET-BLOCKED P06.01.UP ROWS, SCAN-ALL, BATCH-SUITE AND SLICE FINAL. SAME TASK, BASE AND FIXED ZIP; NO NEW DEVELOPER FIX REQUEST.
