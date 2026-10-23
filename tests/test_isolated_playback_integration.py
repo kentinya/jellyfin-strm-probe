@@ -991,8 +991,11 @@ class ConfigurationBoundaryTests(unittest.TestCase):
         from unittest.mock import patch
         with patch.object(playback, "plugin_configuration", lambda auth: {"PlaybackAutoCheck": True}), \
                 patch.object(playback, "set_plugin_configuration", lambda auth, changes: 400):
-            with self.assertRaises(playback.BaselineError):
+            with self.assertRaises(playback.BaselineError) as raised:
                 playback.apply_plugin_configuration("auth", {"PlaybackAutoCheck": False})
+        # The real status stays on the record instead of being replaced by a bare message.
+        self.assertEqual(raised.exception.result["status"], 400)
+        self.assertIn("HTTP 400", str(raised.exception))
 
     def test_a_failed_window_after_the_switch_still_restores_the_real_original_value(self):
         from unittest.mock import patch
@@ -1070,6 +1073,118 @@ class ConfigurationBoundaryTests(unittest.TestCase):
         self.assertEqual(restored["status"], "FAILED")
         self.assertEqual(len(restored["attempts"]), 2)
         self.assertEqual(statuses, [204, 204])
+
+    def _d03_boundary(self, mode: str):
+        """Drive journey_d03 through the existing HTTP boundary: POST applies, read-back fails.
+
+        This reproduces the real ordering (disable POST accepted first, confirming read-back after
+        it, exactly as ``set_plugin_configuration`` -> ``pe.request_json`` is reached in a real
+        run). ``mode`` decides whether the following restore can be verified.
+        """
+        from unittest.mock import patch
+        state = {"Enabled": True, "PlaybackAutoCheck": True}
+        events: list[dict] = []
+        script = {"failed_read_pending": 0, "disable_posted": False}
+
+        def api(method, path, **kwargs):
+            if method == "POST":
+                body = dict(kwargs.get("body") or {})
+                changes = {name: body[name] for name in ("PlaybackAutoCheck", "Enabled", "DetailedLog")
+                           if name in body}
+                restoring = script["disable_posted"] and changes.get("PlaybackAutoCheck") is True
+                if restoring and mode == "restore-unverifiable":
+                    events.append({"method": method, "status": 500, "changes": changes})
+                    return 500, {}
+                state.update(changes)
+                events.append({"method": method, "status": 204, "changes": changes})
+                if changes.get("PlaybackAutoCheck") is False:
+                    script["disable_posted"] = True
+                    script["failed_read_pending"] = 1
+                return 204, {}
+            if script["failed_read_pending"]:
+                script["failed_read_pending"] -= 1
+                events.append({"method": method, "status": 503})
+                return 503, {}
+            events.append({"method": method, "status": 200})
+            return 200, dict(state)
+
+        with patch.object(playback.pe, "request_json", api), \
+                patch.object(playback, "refresh_auth", lambda: "fresh-token"), \
+                patch.object(playback.pkg, "restart", lambda: "restart"), \
+                patch.object(playback, "trust_play", lambda *a, **k: {"ffprobe": {}}):
+            try:
+                playback.journey_d03("old-auth", self._row(), Path(tempfile.gettempdir()))
+                raised = None
+            except Exception as error:  # noqa: BLE001 - the control asserts the real type below
+                raised = error
+        return state, events, raised
+
+    def test_a_write_whose_read_back_fails_is_still_restored_and_the_row_still_fails(self):
+        state, events, raised = self._d03_boundary("restore-ok")
+        # The disable POST really applied before the read-back failed, so the state changed...
+        statuses = [event["status"] for event in events]
+        self.assertIn(204, statuses)
+        self.assertIn(503, statuses)
+        self.assertTrue(any(event.get("changes", {}).get("PlaybackAutoCheck") is False
+                            for event in events if event["method"] == "POST"))
+        # ...and the original value came back instead of leaking into the next row.
+        self.assertIs(state["PlaybackAutoCheck"], True)
+        self.assertIsNotNone(raised)
+        self.assertIsInstance(raised, playback.RowEvidenceError)
+        self.assertNotIsInstance(raised, playback.ConfigurationRestoreError)
+        self.assertNotEqual(raised.result.get("status"), "PASS")
+        self.assertEqual(raised.result["restore"]["status"], "restored")
+        # The real POST status and the read-back error stay auditable on the failed row.
+        self.assertEqual(raised.result["disable"]["status"], 204)
+        self.assertIn("configuration read failed", raised.result["disable"]["error"])
+        self.assertIsNone(raised.result["disable"]["observed"])
+        self.assertIn("configuration read failed", str(raised))
+
+    def test_a_write_whose_read_back_fails_and_cannot_be_restored_stops_the_batch(self):
+        state, _events, raised = self._d03_boundary("restore-unverifiable")
+        self.assertIs(state["PlaybackAutoCheck"], False)
+        self.assertIsInstance(raised, playback.ConfigurationRestoreError)
+        self.assertEqual(raised.result["restore"]["status"], "FAILED")
+        self.assertEqual(raised.result["disable"]["status"], 204)
+        self.assertIn("could not be restored", str(raised))
+
+    def test_a_really_failing_read_back_is_never_swallowed_or_reported_as_pass(self):
+        from unittest.mock import patch
+        with patch.object(playback, "plugin_configuration", lambda auth: {"PlaybackAutoCheck": True}):
+            def unreadable(auth, changes):
+                raise RuntimeError("The plugin configuration read failed with HTTP 503.")
+            with patch.object(playback, "set_plugin_configuration", unreadable):
+                with self.assertRaises(playback.ConfigurationApplyError) as raised:
+                    playback.apply_plugin_configuration("auth", {"PlaybackAutoCheck": False})
+        self.assertIn("HTTP 503", str(raised.exception))
+        self.assertEqual(raised.exception.result["status"], None)
+        self.assertIn("HTTP 503", raised.exception.result["error"])
+
+    def test_the_d02_disable_request_is_treated_as_applied_once_sent(self):
+        from unittest.mock import patch
+        state = {"Enabled": True, "PlaybackAutoCheck": True}
+
+        def fake_configuration(auth):
+            return dict(state)
+
+        def fake_action(auth, enabled):
+            state["Enabled"] = bool(enabled)
+            return 500  # the disable was issued and applied, but the status is not a success one
+
+        with patch.object(playback, "plugin_configuration", fake_configuration), \
+                patch.object(playback.pkg, "plugin_action", fake_action), \
+                patch.object(playback, "restore_plugin_enabled",
+                             lambda: {"status": "restored", "attempts": [], "pluginStatus": "Active"}), \
+                patch.object(playback, "refresh_auth", lambda: "fresh-token"), \
+                patch.object(playback.pkg, "plugin_status", lambda auth: "Active"), \
+                patch.object(playback.pkg, "restart", lambda: "restart"), \
+                patch.object(playback, "trust_play", lambda *a, **k: {"ffprobe": {}}):
+            with self.assertRaises(playback.RowEvidenceError) as raised:
+                playback.journey_d02("old-auth", self._row(), Path(tempfile.gettempdir()))
+        # The failed status still restores the plugin instead of leaving it disabled.
+        self.assertEqual(raised.exception.result["restore"]["status"], "restored")
+        self.assertEqual(raised.exception.result["disableStatus"], 500)
+        self.assertIn("disable failed with HTTP 500", str(raised.exception))
 
     def _matrix_loop(self) -> str:
         source = (ROOT / "scripts" / "run_isolated_playback_integration.py").read_text(encoding="utf-8")

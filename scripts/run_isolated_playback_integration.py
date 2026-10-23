@@ -124,6 +124,20 @@ class ConfigurationRestoreError(RowEvidenceError):
     """
 
 
+class ConfigurationApplyError(BaselineError):
+    """A configuration change was issued but its success could not be confirmed.
+
+    The native write is sent before the confirming read-back, so an error here never proves the
+    server kept its old value. The partially built record (the real POST status, any read-back and
+    the error) travels with the exception so the row keeps that evidence and still restores the
+    original value.
+    """
+
+    def __init__(self, message: str, record: dict) -> None:
+        super().__init__(message)
+        self.result = record
+
+
 def require(condition: bool, message: str) -> None:
     if not condition:
         raise BaselineError(message)
@@ -2156,16 +2170,27 @@ def apply_plugin_configuration(auth: str, changes: dict) -> dict:
 
     The returned record carries the actual HTTP status and the read-back of every changed field, so
     a status-only assertion can never stand in for a change the server did not really apply.
+
+    The write is issued before that confirming read-back, so from the moment this helper is entered
+    the server may already hold the new value. A failure therefore raises ``ConfigurationApplyError``
+    with the record built so far — the real POST status and the read-back error stay auditable, and
+    the caller still has to restore the original value instead of assuming nothing changed.
     """
-    status = set_plugin_configuration(auth, changes)
-    record: dict[str, object] = {"changes": dict(changes), "status": status}
-    require(status in CONFIGURATION_ACCEPTED_STATUSES,
-            f"The plugin configuration change {changes} failed with HTTP {status}.")
-    observed = plugin_configuration(auth)
-    readback = {name: observed.get(name) for name in changes}
-    record["observed"] = readback
-    mismatched = {name: readback[name] for name, value in changes.items() if readback[name] != value}
-    require(not mismatched, f"The plugin configuration change {changes} was not applied ({mismatched}).")
+    record: dict[str, object] = {"changes": dict(changes), "status": None, "observed": None}
+    try:
+        status = set_plugin_configuration(auth, changes)
+        record["status"] = status
+        require(status in CONFIGURATION_ACCEPTED_STATUSES,
+                f"The plugin configuration change {changes} failed with HTTP {status}.")
+        observed = plugin_configuration(auth)
+        readback = {name: observed.get(name) for name in changes}
+        record["observed"] = readback
+        mismatched = {name: readback[name] for name, value in changes.items() if readback[name] != value}
+        require(not mismatched,
+                f"The plugin configuration change {changes} was not applied ({mismatched}).")
+    except (BaselineError, RuntimeError, OSError, subprocess.SubprocessError) as error:
+        record["error"] = f"{type(error).__name__}: {error}"
+        raise ConfigurationApplyError(str(error), record) from error
     return record
 
 
@@ -2691,16 +2716,18 @@ def journey_d02(auth: str, row: dict, evidence_dir: Path) -> dict:
     window inside the disabled phase still restores the server for later rows.
     """
     result: dict[str, object] = {"journey": "d02"}
-    disable_status = None
-    disabled = False
+    # A write is treated as applied from the moment it is sent: the native call can commit before its
+    # status/read-back is observed, so the restore below must run for a sent-but-failed disable.
+    disable_sent = False
     try:
         result["firstTrust"] = trust_play(auth, row, evidence_dir)
         auth = refresh_auth()
         result["configBefore"] = plugin_configuration(auth)
+        disable_sent = True
         disable_status = pkg.plugin_action(auth, False)
+        result["disableStatus"] = disable_status
         require(disable_status in CONFIGURATION_ACCEPTED_STATUSES,
                 f"{row['id']}: the plugin disable failed with HTTP {disable_status}.")
-        disabled = True
         pkg.restart()
         auth = refresh_auth()
         status = str(pkg.plugin_status(auth)).lower()
@@ -2728,12 +2755,7 @@ def journey_d02(auth: str, row: dict, evidence_dir: Path) -> dict:
     finally:
         # The disabled phase must never leak into the next row, even when a window inside it failed.
         failure = sys.exc_info()[1]
-        if not disabled:
-            # Nothing was switched, so there is nothing to restore and no restart is warranted.
-            if failure is not None:
-                result["failure"] = f"{type(failure).__name__}: {failure}"
-                raise RowEvidenceError(f"{row['id']}: {result['failure']}", result) from failure
-        else:
+        if disable_sent:
             restored = restore_plugin_enabled()
             result["restore"] = restored
             if failure is not None:
@@ -2752,7 +2774,10 @@ def journey_d02(auth: str, row: dict, evidence_dir: Path) -> dict:
                 # The switch was restored, but this row still failed: keep its reached stages and the
                 # restore record, and never report it as passing.
                 raise RowEvidenceError(f"{row['id']}: {result['failure']}", result) from failure
-    result["disableStatus"] = disable_status
+        elif failure is not None:
+            # The disable write was never issued, so this row cannot have left the plugin disabled.
+            result["failure"] = f"{type(failure).__name__}: {failure}"
+            raise RowEvidenceError(f"{row['id']}: {result['failure']}", result) from failure
     result["configAfter"] = plugin_configuration(refresh_auth())
     result["status"] = "PASS"
     return result
@@ -2774,10 +2799,12 @@ def journey_d03(auth: str, row: dict, evidence_dir: Path) -> dict:
             f"{row['id']}: the playback auto-check value was not readable ({original!r}).")
     result["configBefore"] = before
     result["firstTrust"] = trust_play(auth, row, evidence_dir)
-    switched = False
+    # The disable write is issued before its confirming read-back, so from the first statement in
+    # the ``try`` the server may already hold the new value.  The restore therefore always runs from
+    # ``finally`` — even when the change helper failed before it could return — and a row that fails
+    # here is never reported as passing.
     try:
         result["disable"] = apply_plugin_configuration(refresh_auth(), {"PlaybackAutoCheck": False})
-        switched = True
         pkg.restart()
         auth = refresh_auth()
         require(plugin_configuration(auth).get("PlaybackAutoCheck") is False,
@@ -2806,32 +2833,31 @@ def journey_d03(auth: str, row: dict, evidence_dir: Path) -> dict:
         auth = refresh_auth()
         require(plugin_configuration(auth).get("PlaybackAutoCheck") is False,
                 f"{row['id']}: the auto-check was restored before the restart playback finished.")
+    except ConfigurationApplyError as error:
+        # The write may already have been applied even though the helper never returned: keep the
+        # real POST status and read-back error, then let the finally block restore the original.
+        result["disable"] = dict(error.result)
+        raise
     finally:
         failure = sys.exc_info()[1]
-        if not switched:
-            # The switch never took effect, so the server is already in its original configuration.
-            if failure is not None:
-                result["failure"] = f"{type(failure).__name__}: {failure}"
-                raise RowEvidenceError(f"{row['id']}: {result['failure']}", result) from failure
-        else:
-            restored = restore_plugin_configuration({"PlaybackAutoCheck": original})
-            result["restore"] = restored
-            if failure is not None:
-                result["failure"] = f"{type(failure).__name__}: {failure}"
-            if restored.get("status") != "restored":
-                raise ConfigurationRestoreError(
-                    f"{row['id']}: the playback auto-check could not be restored to {original!r} "
-                    f"({restored.get('error')})" + (f"; the row itself failed with {result['failure']}"
-                                                     if failure is not None else "") + ".", result)
-            pkg.restart()
-            observed = plugin_configuration(refresh_auth()).get("PlaybackAutoCheck")
-            restored["observedAfterRestart"] = observed
-            if observed is not original:
-                raise ConfigurationRestoreError(
-                    f"{row['id']}: the playback auto-check read back {observed!r} after the restore "
-                    f"restart instead of {original!r}.", result)
-            if failure is not None:
-                raise RowEvidenceError(f"{row['id']}: {result['failure']}", result) from failure
+        restored = restore_plugin_configuration({"PlaybackAutoCheck": original})
+        result["restore"] = restored
+        if failure is not None:
+            result["failure"] = f"{type(failure).__name__}: {failure}"
+        if restored.get("status") != "restored":
+            raise ConfigurationRestoreError(
+                f"{row['id']}: the playback auto-check could not be restored to {original!r} "
+                f"({restored.get('error')})" + (f"; the row itself failed with {result['failure']}"
+                                                 if failure is not None else "") + ".", result)
+        pkg.restart()
+        observed = plugin_configuration(refresh_auth()).get("PlaybackAutoCheck")
+        restored["observedAfterRestart"] = observed
+        if observed is not original:
+            raise ConfigurationRestoreError(
+                f"{row['id']}: the playback auto-check read back {observed!r} after the restore "
+                f"restart instead of {original!r}.", result)
+        if failure is not None:
+            raise RowEvidenceError(f"{row['id']}: {result['failure']}", result) from failure
     result["configAfter"] = plugin_configuration(refresh_auth())
     result["status"] = "PASS"
     return result
