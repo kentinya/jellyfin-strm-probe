@@ -13,7 +13,7 @@ Test Level: T4
 Planner / Reviewer: B
 ```
 
-最新 B 决定：**FIX REQUIRED（其余必要门禁待 B 补齐）**，继续同一 Task 5.3。完整合并版本／SQLite helper 与带明确准备适配的 plugin 完整入口已 PASS，B53-20261022-8 闭合；不再要求 Developer 修改准备工具。继续同 ZIP 的真实视频验收，六个 C02 行及全部三个 MP4.C06 行已完成独立核验，累计矩阵 12／116；历史 FAIL 保留，剩余矩阵及完整门禁仍由 B 负责。见文末本轮续验记录。
+最新 B 决定：**FIX REQUIRED（其余必要门禁待 B 补齐）**，继续同一 Task 5.3。完整合并版本／SQLite helper 与带明确准备适配的 plugin 完整入口已 PASS，B53-20261022-8 闭合；不再要求 Developer 修改准备工具。继续同 ZIP 的真实视频验收，全部 12 个 ColorRange 行已完成独立核验，累计矩阵 15／116；历史 FAIL 保留，剩余矩阵及完整门禁仍由 B 负责。见文末本轮续验记录。
 
 ## B 合同重判与继续决定（2026-10-21）
 
@@ -910,3 +910,26 @@ B 逐张实际打开 8 张原图：A 后为可辨识 C06UNS（长标记两端略
 当前累计矩阵 **12／116**、独立关键 **12／40**、C **9／12**。剩余三个 MKV C06、其余 **104 行／28 个独立关键**及全部尚缺完整门禁继续由 B 承担。未将全量退交 Developer，未新增 Task、推送、提交 Closure Packet 或关闭 Slice。本节是中间检查点，下一批仍在同一授权内继续。
 
 本机忽略证据：`.git/validation-evidence/4b4d0cca33f37308842710b2a0a70b1919cd0a58/b-C06-more-20261022T233155Z/INDEX.md`，包括原文／33 字段／8 张图逐张记录、实际输入／源库摘要与完整差异、精确命令／身份／收尾、原始时间账本及 `task-cumulative-time.json` 的保守口径与限制。当前只同步事实文档，继续同一固定候选。
+
+
+## B MKV C06 三行续验（2026-10-22 23:51 UTC～2026-10-23 00:00 UTC）
+
+**Decision：FIX REQUIRED，必要门禁仍未齐，继续同一 Task 5.3。** 审查 Head `3111105`，产品实现、Task／Slice Base、合同与正式 ZIP 保持。完整 Base..Head 审查按匹配输入复用，另将本批同次字段／指纹结果与有界 ColorRange 返回规范化、成功保存及当前源保护逐项对照；未发现新的 Developer 修正项。此前已接受的原生扫描结算后合并决定、完整 prepared plugin／独立合并证据保持，不重跑匹配全量、不增加准备工具前提。
+
+**MKV.C06.limited／full／unspecified：三行独立 PASS。** 同一已有 `--scenario matrix` 入口／固定正式 ZIP，新专属工作区、18131；完整批次 **511.504 秒**、退出 0、无预算中断／重跑／调试器／播放预热／断言变化。B 独立核对实际生成及切换字节：A **1,669,928** 字节，B 分别 **1,454,486／1,525,993／1,487,869** 字节、真实哈希不同；URL 保持，STRM 移除新 SHA-1、填写真实减小后的大小。每行首次信任／变化／再播／重启探测增量均为 **0／1／0／0**，新五字段 **sha1=null**，没有沿用 A 的旧有效内容哈希。
+
+| 行 | 四阶段播放推进（秒） | 解码帧 |
+|---|---|---|
+| MKV.C06.limited | 5.411／5.408／5.399／5.421 | 95／88／93／94 |
+| MKV.C06.full | 5.352／5.357／5.376／5.429 | 89／93／95／93 |
+| MKV.C06.unspecified | 5.343／5.462／5.383／5.412 | 87／94／91／95 |
+
+每个阶段的唯一当前源／地址／Video／Audio、原始 PlaybackInfo、完整五字段均重核；重启先只读的完整原生流／指纹／STRM／计数状态等于冻结状态，再实播仍零探测。B **逐张实际打开 24 张原图**，均有正确 A／C06LIM／C06FULL／C06UNS 标记、真实测试画面变化及至少 5 秒嵌入时钟推进、无错误；长标记边缘略裁切不影响辨认。原生实际输入范围为 tv／pc／缺失；同次每组三阶段 **33 字段编码器＝成功保存**，返回仅 tv／pc 的 ColorRange 缺失，unspecified 全部 33 字段相同。原始物理日志独立重数 **6 次 ffprobe／12 次 FFmpeg 转码**，启动 lavfi 能力检查另列；没有另跑探测补写字段。
+
+实际运行的挂载全部属于新工作区、网络成员只有本批两服务。CLEAN／CLEANED，两服务 exit 0／无 OOM；只重建本入口自身此前已停止的两个容器，其余 58 个容器的状态／StartedAt／镜像／完整排序挂载内容不变。共享、运行中、生产及全部 1004 项准备源库未操作、继续保留。
+
+累计正式候选矩阵 **15／116**、独立关键 **15／40**、ColorRange **12／12**。完整 baseline B01／B02 已按事前登记启动，尚待全部原文及 12 张图核验；其同次 D01 别名未在本节提前计 PASS。其余矩阵、package-all／scan-all／全部 1004 项 large-all／batch-suite／configuration-all 和 Slice Final 仍属 B。按整个 Task 实际工作／测试墙钟并集累计，保守可审计口径仍低于 50%，近似／缺失限制保持披露；不按本轮重置，不空等或预借未来时间。未新增 Task、推送、提交 Closure Packet 或关闭 Slice。
+
+本机忽略证据：`.git/validation-evidence/4b4d0cca33f37308842710b2a0a70b1919cd0a58/b-C06-more-20261022T233155Z/MKV-C06-three/`，含原始完整结果／日志／响应、实际媒体摘要与 Manifest、33 字段原文及逐字段表、24 图实际查看记录、全部冻结状态及隔离对账、精确命令和累计时间账本。该目录及数据库／凭据不进入普通提交。
+
+NEXT ACTION: B COMPLETES THE RUNNING FULL BASELINE, REMAINING FIXED-CANDIDATE MATRIX AND SPECIFIED FULL GATES. ALL 12 COLORRANGE ROWS ACCEPTED; SAME TASK, BASE AND ZIP. NO DEVELOPER TOOLING PREREQUISITE OR SLICE CLOSE.
