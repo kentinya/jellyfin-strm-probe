@@ -74,7 +74,7 @@ Slice 5交付固定Jellyfin 12.2.0／Linux x64下MP4／MKV的八类原生Web播�
 
 Slice 6 复用同一 v0.1.0 Release ZIP，在固定 Jellyfin 12.3.0／Linux x64 完成六组针对性兼容回归。A 独立审查完整 Base..Implementation Head 与原始证据，裁定 PASS / CLOSED，P0/P1 Blockers 为 NONE FOUND；插件源码、依赖、ABI、schema、原包、附件和标签未变。
 
-- A 审查 checkout 为 `6639a637c0781784e2a359cc38aafdab7b7600ed`；当前根 `SLICE.md` 保留完整合同、Closure Packet、A Final Review 与 Closure Reconciliation。Task 6.1 Base／Contract Checkpoint 为 `fa74d6db1d788e21284aa9ad50190e81d4d4f12b`，完整计划、Developer 报告、首轮 FIX REQUIRED 和 B PASS 在 `3e1817206f388cf514b5be1d5fc80e55fef0dc86:TASK.md`；单独 Final 与交 A 快照为上述 checkout。Base 与历史决定保持，关闭不自动推送或启动下一 Slice。
+- A 审查 checkout 为 `6639a637c0781784e2a359cc38aafdab7b7600ed`；A 关闭检查点为 `e09fef919ff82048f84ff9f1d5b486d7660f8217`，其 `SLICE.md` 保留完整合同、Closure Packet、A Final Review 与 Closure Reconciliation，通过 `git show e09fef919ff82048f84ff9f1d5b486d7660f8217:SLICE.md` 读取。Task 6.1 Base／Contract Checkpoint 为 `fa74d6db1d788e21284aa9ad50190e81d4d4f12b`，完整计划、Developer 报告、首轮 FIX REQUIRED 和 B PASS 在 `3e1817206f388cf514b5be1d5fc80e55fef0dc86:TASK.md`；单独 Final 与交 A 快照为上述 checkout。Base 与历史决定保持，关闭不自动推送或启动下一 Slice。
 - 接受公开索引原生安装／确认／Active、非空 12.2 升级先读保持、八类代表的双格式实播／首次信任、三类 ColorRange、404 首败／再试与同目标恢复、全部接受状态统一重启先读／多源选源，以及小库范围／混合／进度／停止收尾恢复／真实 Web 同源共享／默认并发／权限。12.2 全量与 12.3 针对性结果分列，不宣称 12.3 全部子矩阵、千项容量或全扫描通过。
 - A 重算执行／包／C# 输入，独立核对逐行原文、三阶段主流、五字段及重启，接受 B 全部逐图审阅并另实际打开十张代表原图。完整 Python／C# 门槛、B 独立关键旅程及 Task PASS 后新跑的单独 Final 经输入核验明确复用；A 未再次运行实机或替换 DLL。历史失败、旧零计数不采纳与 Developer 耗时偏差保持披露，不改写为 PASS／合规。
 - B 本机索引：`.git/validation-evidence/947f70319ef290300814d1019875a65f42f39a74/b-review-20261024T124707Z/INDEX.md`；A 本机索引：同 Implementation Head 下的 `a-final-review-20261024/INDEX.md`。均只在本机、不随 Git 上传；原 1004 项准备库、归属副本和全部首败资料继续保留，不因关闭清理。
