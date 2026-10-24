@@ -1,0 +1,166 @@
+name: Build and Publish Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Verify and publish Linux x64 package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    env:
+      # Slice 5's accepted package, not a new product build or compatibility claim.
+      APPROVED_SOURCE: 3a7de052bf089141f76e2f60921de285bd5184c4
+      APPROVED_INPUTS: f394eabc06a7e5423adefeed0aed34b18078be80d0a7ac9143f46340bb8d98ef
+      APPROVED_ZIP: 9641fe917cc8db8d36ec32c841fb968b0149890f39094adce5338a0f28dd9e37
+      APPROVED_MANIFEST: fc8a83a2257ddaa5691d81174d96b8c80594d15e7e33e0179edb6735f7d66e98
+      APPROVED_DLL: 9172e5802e4aadca707a3bae49bb32f66c643f1712b33ca427e3bbf4cb9cb434
+      # Logical debug/source-map prefix only; no access to this historical path.
+      ACCEPTED_DEBUG_ROOT: /opt/jellyfin-strm-probe/.git/validation-evidence/3a7de052bf089141f76e2f60921de285bd5184c4/b-review-20261022T113530Z/clean-checkout
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Verify release tag and accepted build inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os, subprocess, sys, xml.etree.ElementTree as ET
+          sys.path.insert(0, 'scripts')
+          import package_plugin as package
+          version = ET.parse(package.PROJECT_FILE).findtext('./PropertyGroup/Version')
+          if os.environ['GITHUB_REF_NAME'] != 'v0.1.0' or version != '0.1.0':
+              raise SystemExit('This workflow approves v0.1.0 only; review new release inputs first.')
+          if package.build_input_digest() != os.environ['APPROVED_INPUTS']:
+              raise SystemExit('Tag build inputs differ from the accepted package.')
+          subprocess.run(['git', 'merge-base', '--is-ancestor', os.environ['APPROVED_SOURCE'], 'HEAD'], check=True)
+          PY
+          python3 scripts/check_governance.py
+          python3 -m unittest discover -s tests -v
+          git show --format= --check HEAD
+      - name: Check out accepted package source
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.APPROVED_SOURCE }}
+          path: accepted-source
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install checksum-locked SDK and run C# regression
+        working-directory: accepted-source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/development_environment.py sdk
+          bash scripts/dotnet-local restore Jellyfin.Plugin.StrmProbeOptimizer.sln --locked-mode
+          bash scripts/dotnet-local test Jellyfin.Plugin.StrmProbeOptimizer.sln --configuration Release --no-restore
+          bash scripts/dotnet-local format Jellyfin.Plugin.StrmProbeOptimizer.sln --verify-no-changes --no-restore
+      - name: Reproduce and verify the accepted package
+        working-directory: accepted-source
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PathMap="$PWD=$ACCEPTED_DEBUG_ROOT"
+          export EnableSourceLink=false
+          export SourceLink="$RUNNER_TEMP/accepted.sourcelink.json"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          source_url = 'https://raw.githubusercontent.com/kentinya/jellyfin-strm-probe/' + os.environ['APPROVED_SOURCE'] + '/*'
+          mapping = {'documents': {os.environ['ACCEPTED_DEBUG_ROOT'] + '/*': source_url}}
+          Path(os.environ['SourceLink']).write_text(json.dumps(mapping, separators=(',', ':')), encoding='utf-8')
+          PY
+          python3 scripts/package_plugin.py --configuration Release --runtime linux-x64 \
+            --source-revision "$APPROVED_SOURCE" --output-dir ../dist
+          python3 scripts/package_plugin.py --verify ../dist/Jellyfin.Plugin.StrmProbeOptimizer_linux-x64.zip
+          python3 - <<'PY'
+          import hashlib, json, os, zipfile
+          from pathlib import Path
+          root = Path('../dist')
+          archive = root / 'Jellyfin.Plugin.StrmProbeOptimizer_linux-x64.zip'
+          manifest = root / 'Jellyfin.Plugin.StrmProbeOptimizer_linux-x64.manifest.json'
+          for path, key in [(archive, 'APPROVED_ZIP'), (manifest, 'APPROVED_MANIFEST')]:
+              if hashlib.sha256(path.read_bytes()).hexdigest() != os.environ[key]:
+                  raise SystemExit(f'{path.name} differs from the accepted artifact.')
+          metadata = json.loads(manifest.read_text())
+          if metadata['sourceRevision'] != os.environ['APPROVED_SOURCE'] or metadata['buildInputsSha256'] != os.environ['APPROVED_INPUTS']:
+              raise SystemExit('Package provenance differs from the accepted inputs.')
+          with zipfile.ZipFile(archive) as package:
+              dll = next(name for name in package.namelist() if name.endswith('/Jellyfin.Plugin.StrmProbeOptimizer.dll'))
+              if hashlib.sha256(package.read(dll)).hexdigest() != os.environ['APPROVED_DLL']:
+                  raise SystemExit('Plugin DLL differs from the accepted artifact.')
+          paths = sorted(root.iterdir())
+          if len(paths) != 3 or any(not path.is_file() for path in paths):
+              raise SystemExit('Unexpected release payload.')
+          (root / 'SHA256SUMS.txt').write_text(''.join(
+              hashlib.sha256(path.read_bytes()).hexdigest() + '  ' + path.name + '\n' for path in paths
+          ), encoding='utf-8')
+          PY
+          cd ../dist
+          sha256sum -c SHA256SUMS.txt
+          sha256sum -c Jellyfin.Plugin.StrmProbeOptimizer_linux-x64.zip.sha256
+      - name: Retain verified release assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ github.ref_name }}
+          path: dist/*
+          if-no-files-found: error
+      - name: Refuse to modify an already published release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          published="$(gh api "repos/$GH_REPO/releases" --paginate \
+            --jq '.[] | select(.tag_name == "v0.1.0" and .draft == false) | .html_url')"
+          if [[ -n "$published" ]]; then
+            echo 'This version is already published; leave it unchanged.' >&2
+            exit 1
+          fi
+      - name: Upload draft release
+        uses: softprops/action-gh-release@v3
+        with:
+          name: STRM Probe Optimizer v0.1.0
+          body_path: docs/releases/v0.1.0.md
+          draft: true
+          prerelease: false
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          overwrite_files: false
+          files: |
+            dist/Jellyfin.Plugin.StrmProbeOptimizer_linux-x64.zip
+            dist/Jellyfin.Plugin.StrmProbeOptimizer_linux-x64.manifest.json
+            dist/Jellyfin.Plugin.StrmProbeOptimizer_linux-x64.zip.sha256
+            dist/SHA256SUMS.txt
+      - name: Verify uploaded assets and publish
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh release download "$GITHUB_REF_NAME" --dir downloaded
+          python3 - <<'PY'
+          from pathlib import Path
+          expected = {path.name: path.read_bytes() for path in Path('dist').iterdir()}
+          actual = {path.name: path.read_bytes() for path in Path('downloaded').iterdir()}
+          if actual != expected:
+              raise SystemExit('Uploaded release assets differ; keep the release as a draft.')
+          PY
+          (cd downloaded && sha256sum -c SHA256SUMS.txt)
+          gh release edit "$GITHUB_REF_NAME" --draft=false --latest --verify-tag

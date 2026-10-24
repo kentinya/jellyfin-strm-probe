@@ -20,7 +20,9 @@
 
 ## 取得安装包
 
-打包入口从固定 Release 输出与已锁依赖生成归档：
+首版从 [GitHub Release v0.1.0](https://github.com/kentinya/jellyfin-strm-probe/releases/tag/v0.1.0) 下载插件 ZIP、来源清单、`.zip.sha256` 和 `SHA256SUMS.txt`。附件与已验收包保持一致；下载全部附件后在同一目录执行 `sha256sum -c SHA256SUMS.txt`。Jellyfin 12.3 尚未实机验证。
+
+开发者也可本地打包；从其他提交或普通构建路径生成的包不自动等同于 Release 附件，来源及路径复现规则见[发布流程](release-process.md)。打包入口从固定 Release 输出与已锁依赖生成归档：
 
 ```bash
 bash scripts/dotnet-local restore Jellyfin.Plugin.StrmProbeOptimizer.sln --locked-mode
@@ -102,4 +104,4 @@ URL 变化必探测、SHA-1／Size 决策、Modified 忽略与权限边界是固
 
 ## 交付与未验证边界
 
-RO-2 大库／RO-3 扫描的证据与本地 ZIP 安装证据分别接受，见 [Closure Packet](progress.md#slice-4-closed) 与 [A 最终决定](progress.md#slice-4-closed)，不由本页安装步骤代替。安装交付只提供本地包和说明，线上发布／上架未执行。JellyfinProxy 专属验收按用户授权撤出，历史 NOT RUN、不宣称兼容；真实 OpenList 专有行为及其他未测组合仍未验证。
+RO-2 大库／RO-3 扫描的证据与本地 ZIP 安装证据分别接受，见 [Closure Packet](progress.md#slice-4-closed) 与 [A 最终决定](progress.md#slice-4-closed)，不由本页安装步骤代替。按 2026-10-24 用户授权，首版另通过 [GitHub Release](https://github.com/kentinya/jellyfin-strm-probe/releases/tag/v0.1.0) 分发同一已验收安装包；发布流程见[发布说明](release-process.md)，插件仓库自动上架未执行。JellyfinProxy 专属验收按用户授权撤出，历史 NOT RUN、不宣称兼容；真实 OpenList 专有行为及其他未测组合仍未验证。
