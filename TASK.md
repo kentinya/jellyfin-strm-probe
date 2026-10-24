@@ -3,7 +3,7 @@
 ```text
 Task ID: 6.1
 Parent Slice: 6
-Status: FIX REQUIRED
+Status: READY FOR B REVIEW
 Task Base: fa74d6db1d788e21284aa9ad50190e81d4d4f12b
 Contract Checkpoint: fa74d6db1d788e21284aa9ad50190e81d4d4f12b
 Difficulty: High
@@ -228,7 +228,29 @@ python3 scripts/run_isolated_playback_integration.py --server-version 12.3 --sce
 - Decisions：只复用现有函数与必要顺序编排，不新增框架／DSL／环境管理器；升级来源选定 `artifacts/package-env/runs/run-20261021-024723-d4668c5b`（2 条可信指纹、无事务旁文件、无符号链接）；被检出的两条 12.2 来源因存在 `jellyfin.db-wal/-shm` 被拒绝，且工具改为只读副本读取指纹库，不再在原库创建旁文件。native 安装后的负载比较按固定 12.3 `InstallationManager` 的真实目录布局读取。
 - Remaining In-Slice Work：B 的完整回归、独立复现、逐图／原文核验与 Slice Final；A 最终审查。
 - Risks / Deviations：小库阶段使用已验收的 24 秒合成样本（包内 2 秒样本不足以完成 5 秒进度门槛）；小库混合轮候选为 5（所选库 5 个源），另有 1 个未选库源用于范围对照；`MKV.C06.full` 为 `yuvj420p`／颜色范围 `pc`，属真实输出；显式 `MP4.C02.unspecified` 三阶段字段中 `ColorRange` 为 `null`，符合既有有界返回规则。首轮实机尝试的失败与重跑记录保留在同一证据目录（`web-install*`、`diag*`）。
-- Head SHA：`0e17186d31d1f47cbfebee9f85c2ba5cfabcb4e0`（实现提交；本报告为紧随其后的文档提交）。
+- Head SHA：`0e171869272c27c9de3faeb2d6499fcab713011c`（实现提交；本报告为紧随其后的文档提交）。上一版报告写的 `0e17186d31d1f47cbfebee9f85c2ba5cfabcb4e0` 不可达，已按真实 Git 身份更正。
+
+## Developer Correction Report（B61-1～5，同一 Task 6.1）
+
+本轮从 `c11017a`（B 的修复指引）开始，Task Base／Contract Checkpoint／同一 Release ZIP 均未移动。实现检查点：`966800e`（五个阻塞项）与 `947f703`（Web 共享计数窗口，见下）。证据索引在忽略目录 `.git/validation-evidence/dev-fix-611/INDEX.md`，计时账本同目录 `timing-ledger.json`。
+
+- Changed Files（本轮）：`scripts/run_isolated_package_integration.py`、`scripts/run_isolated_playback_integration.py`、`tests/test_isolated_package_integration.py`、`tests/test_isolated_playback_integration.py`、`tests/test_isolated_configuration_integration.py`。未改 `src/`、C# 测试／项目／依赖锁、版本／ABI／schema、Release／标签／附件。
+- **B61-1 locale 守卫**：`test_driver_declares_the_five_editable_fields_and_no_second_run_entry` 改为断言驱动真实默认 `locale: cfg.locale || 'zh-CN'`；新增 `test_only_the_install_scenario_overrides_the_default_locale` 固定“只有安装阶段显式 en-US”。未删断言、未用注释凑字符串。
+- **B61-2 统一重启**：`run_isolated_playback_integration.unified_restart()` 由 `scenario_matrix` 在 14 行全部 PASS 后调用：逐行 `freeze_state`（地址、完整主流集合、五字段指纹、ffprobe 计数）→ 一次 `pkg.restart()` → 全部行 `read_only_state` + `restart_readback_failures` 先读比较 → 之后才逐行 `play_once`，要求 `ffprobe delta 0`、指纹不变、真实媒体请求。小库侧新增 `small_library_unified_restart()`：冻结 S1、S2、S3、S4（合并项目**两条**源与两条指纹）、O1 及配置 → 一次重启 → 全部先读 → 再显式选源实播且 `probe delta 0`。测试守卫固定“一次 restart、先读在所有 `play_once` 之前”。
+- **B61-3 Web 同源共享**：新增 `stage_web_sharing()`：受控延迟源改地址 → 原生任务真实开始（观察到该延迟请求开始）→ 真实 Web Play 加入同一源 → 插件自身日志出现 `Native STRM probe started` **1** 次且 `Joined a running native probe` **1** 次 → 批摘要 `need probe 1 / reliable success 1` → 新地址已提交 → Web 实际推进 ≥5 s。随后 `stage_sharing_concurrency()` 让两个独立变化源同轮运行并核对峰值 = 2、各探测恰好一次。API 级 `scenario_sharing` 结果单独记录为 `"PlaybackInfo HTTP call, not a Web Play"`，不再充当 Web 证据。
+- **B61-4 公开安装**：删除本地索引发布器，新增 `fetch_public_catalog()` 先读并校验公开索引（guid、版本、ABI、下载地址、MD5），`stage_web_install` 用 `https://raw.githubusercontent.com/kentinya/jellyfin-strm-probe/main/manifest.json` 完成原生仓库添加／确认安装／重启 Active／负载比对。未改远端索引、Release 或标签。
+- **B61-5 输入与原始证据**：`run_compat_stage` 在每阶段结束时（含失败路径）把该阶段自己的服务器日志、ffprobe 行与容器状态写入 `server-logs-<stage>/` 与 `server-ffprobe-lines-<stage>.log`，早于下一阶段 reset；顶层新增 `invocation`（argv、字面命令、解释器、cwd、开始时间）与 `toolInputs`（脚本及 12.3 规格／两版锁摘要），并写 `elapsedSeconds`／`startedAt`／`finishedAt`。`--upgrade-source-workspace` 缺失时在任何实例启动前拒绝，不再把升级记 SKIPPED 后整体 PASS。新增结构守卫发现并修掉 `nativeInstall` 记录多余尾逗号（曾使 JSON 变成单元素数组），同时新增“记录必须是映射”的 AST 守卫。
+- 实现细节修正：`947f703` 把 Web 共享的 start／join 计数改为**本轮事件增量**（此前读整份日志，在小库前序阶段也已探测的实例上会多计）。
+- Tests and Results（Developer 聚焦，Python 3.11.10）：
+  - `-p test_isolated_configuration_integration.py` → 10→11 passed；`-p test_isolated_package_integration.py` → 49→55 passed；`-p test_isolated_playback_integration.py` → 125→126 passed；`-p test_isolated_batch_integration.py` → 42 passed；`-p test_development_environment.py` → 6 passed。
+  - `python3 -m compileall -q scripts tests`、两个 `node --check`、`scripts/check_governance.py`、`git diff --check` 通过。
+  - 12.3 实机（同一原 ZIP `9641fe91…9e37`，镜像 digest `720ad289…`）：公开索引安装 PASS（158.8 s）、12.2→12.3 升级保持 PASS（46.5 s）、14 行统一重启 PASS（513.5 s）、Web 共享＋多源＋小库统一重启 PASS（497.7 s，最终工具上重跑 `dfc1d475…` 再 PASS 520.5 s）。每次运行都记录 `instanceReconciliation: CLEAN`、容器 `exited 0 / oom_killed false`。
+  - 已实际打开核验截图：共享窗口 `MP4 A` 色条 + 时间码、小库统一重启 `MKV A` 5.8 s、矩阵 `MP4 LIM` 5.733 s、F01 恢复后 `MP4 P4B`、公开安装的 Available／确认对话框／安装成功页。
+  - 未运行（B 负责）：完整 Python discovery、完整 C# restore/build/test/format、B 独立关键复现与单独 Slice Final。
+- 复用边界（交 B 决定）：14 行与 12.2 升级的实机观察来自本轮新工作区；矩阵 12.3 工作区按只读复制并在前后比较摘要。播放工具摘要在所有运行中均为最终提交值 `90923c1d…`；package 工具最后两处改动只影响安装记录形状与共享计数窗口，因此 `47ffad27…` 那次安装结果与 `6d7cdc33…` 那次的升级结果**未**在最新摘要上重跑，是否复用请 B 明确判断（未默认声称有效）。
+- Risks / Deviations：本轮第一个缺口序列有 4 次失败重跑（692 s）与一次因计数窗口缺陷的整体重跑（521 s），因此测试／实机墙钟约占总用时 **48.7%**，高于用户本轮要求的 30%，但仍在 Task 的 50% 以内；超出部分全部为上述失败／重跑，没有削减任何门槛。发现计数缺陷后未再启动新的昂贵运行。
+- 结论：B61-1～5 均已有对应修正、聚焦测试与实机／原文证据；“升级来源缺失即拒绝”为新增硬性拒绝，公开安装为本轮真实新证据。其余（License 一致、失败保留、收尾）如实列出。
+- Head SHA：`966800e`（五个阻塞项）、`947f703`（计数窗口修正）；本报告为紧随其后的文档提交。
 
 ## B Review Result
 
