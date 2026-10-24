@@ -4,7 +4,7 @@
 Slice ID: 6
 Name: Jellyfin 12.3 最小兼容性实机验证
 Owner: A
-Status: READY FOR A REVIEW
+Status: PASS / CLOSED
 Base SHA: 1379ff0e6f3e572d1d843c835a2d8af250c49ec7
 Implementation Head: 947f70319ef290300814d1019875a65f42f39a74
 ~~~
@@ -15,7 +15,7 @@ Implementation Head: 947f70319ef290300814d1019875a65f42f39a74
 
 用户结果是：使用现有 v0.1.0 Release ZIP，在固定 Jellyfin 12.3.0／Linux x64 上完成六组针对性兼容回归，取得可审查的安装、播放、保存、恢复、重启与批量证据。通过后只声明此组合与本合同覆盖范围；12.2 的完整验收与新 12.3 的针对性结果分别报告。
 
-Slice 1～5 的 Base、实现与关闭决定保持。Slice 5 完整合同／A 最终审查及 Task 报告保存在 `c2ce9bd0ac0baf8d95bbc8c89c746907462ebf1b:SLICE.md`、同提交 `TASK.md` 与[关闭账本](docs/progress.md#slice-5-closed)。本轮只提交 A 合同及协调入口；B 读取已提交合同后规划 Task，Developer 才能实施，不把本次激活算作测试通过。
+Slice 1～5 的 Base、实现与关闭决定保持。Slice 5 完整合同／A 最终审查及 Task 报告保存在 `c2ce9bd0ac0baf8d95bbc8c89c746907462ebf1b:SLICE.md`、同提交 `TASK.md` 与[关闭账本](docs/progress.md#slice-5-closed)。激活检查点仅提交 A 合同及协调入口，B 随后规划、Developer 再实施；本次激活本身不算测试通过。后续实施与最终接受见下方 Closure Packet／A Final Review。
 
 ## 架构边界与允许实施
 
@@ -115,18 +115,18 @@ ColorRange 三类、失败恢复、选源、升级与重启允许和以上行交
 不升级插件运行时依赖、不新建 Release、不替换附件或改标签、不改源码／成功门槛／状态 schema。若证据说明目标或正确性条件必须调整，由 A 提交合同变更、B 重判 Task 后再实施；不以“最小测试”为理由删掉当前失败义务。原生测试全部满足前，不提前更新对外 12.3 支持声明；本次激活不推送。
 
 <a id="handoff-b"></a>
-## 交接 B
+## 激活时交接 B（历史）
 
-A 本次只激活合同及同步文档，无活动实施 Task、无 12.3 运行或兼容 PASS。B 首先运行治理检查、读取 `HEAD:SLICE.md`，记录真实 Contract Checkpoint，核对原 ZIP 与现有入口、12.3 镜像／源码、升级副本与各组覆盖；据此规划最大合理完整 Task。六个结果组不等于六个 Task，不为分组或非阻塞润色造任务。
+以下保留激活时的交接约束，不代表当前待执行计划。当时 A 只激活合同及同步文档，无活动实施 Task、无 12.3 运行或兼容 PASS。B 首先运行治理检查、读取 `HEAD:SLICE.md`，记录真实 Contract Checkpoint，核对原 ZIP 与现有入口、12.3 镜像／源码、升级副本与各组覆盖；据此规划最大合理完整 Task。六个结果组不等于六个 Task，不为分组或非阻塞润色造任务。
 
 B 的 Task 必须固定实际镜像 digest、真实 Task Base、允许改动、代表行／格式与交叉覆盖、必要工具适配、开发反馈／完整门槛／独立验收／Final、新跑及复用身份、失败保留与收尾。先提交 B 计划，Developer 才能开始工具实施与本合同隔离测试；角色交接不授权启动其他代理。
 
 ## Closure Packet
 
-B 决定：**SLICE READY FOR A REVIEW**。Task 6.1 与单独 Final 均 PASS，未发现产品 P0／P1；本合同全部 RO／AC 重新核对完成，不增加 Task。A 最终审查仍未开始。
+B 交接决定：**SLICE READY FOR A REVIEW**。Task 6.1 与单独 Final 均 PASS，未发现产品 P0／P1；本合同全部 RO／AC 重新核对完成，不增加 Task。以下保留 B 的交接事实；A 最终决定见下方。
 
 - Slice Base：`1379ff0e6f3e572d1d843c835a2d8af250c49ec7`；Implementation Head：`947f70319ef290300814d1019875a65f42f39a74`。Task Base／Contract Checkpoint 均保持 `fa74d6db1d788e21284aa9ad50190e81d4d4f12b`。B 完整 Task 审查至报告 Head `35e6eb459c5c1477eb7a69bb9f4bdb48b755bc9d`；后继仅报告／协调，执行输入未变。
-- Task 索引：唯一 Task 6.1；完整计划、Developer 初交／修正、首轮 FIX REQUIRED 与本轮 PASS 留在 [TASK.md](TASK.md#b-review-result)，Task PASS 检查点 `3e1817206f388cf514b5be1d5fc80e55fef0dc86`。根 Task 已无活动实施，不移动任何 Base。
+- Task 索引：唯一 Task 6.1；完整计划、Developer 初交／修正、首轮 FIX REQUIRED 与本轮 PASS 保存在 [TASK.md 定位的完整 Git 快照](TASK.md)，Task PASS 检查点 `3e1817206f388cf514b5be1d5fc80e55fef0dc86`。根 Task 已无活动实施，不移动任何 Base。
 - 实现只增加既有隔离工具的明确 12.3 规格／锁／版本断言、原生安装／选源与必要场景顺序、直接相关测试和阶段原始日志。插件源码、C# 项目／依赖、GUID、版本、ABI、schema 和原 Release ZIP／附件均未变。
 
 | 结果／验收 | B 重评与可核验证据 |
@@ -150,15 +150,27 @@ B 决定：**SLICE READY FOR A REVIEW**。Task 6.1 与单独 Final 均 PASS，�
 ## A Final Review
 
 ~~~text
-Reviewed Range: NOT STARTED
-Decision: NOT REVIEWED
-P0/P1 Blockers: NOT ASSESSED
+Reviewed Range: 1379ff0e6f3e572d1d843c835a2d8af250c49ec7..947f70319ef290300814d1019875a65f42f39a74
+Decision: PASS / CLOSED
+P0/P1 Blockers: NONE FOUND
 ~~~
 
-A 尚未审查实现，不提前填写 PASS 或关闭。
+A 于 2026-10-24 在干净检查点 `6639a637c0781784e2a359cc38aafdab7b7600ed` 独立审查完整累计差异、Task 6.1 首轮拒绝／修正／B PASS 与单独 Final，接受 RO-1～RO-6／AC-1～AC-7。Slice／Task Base 和 Implementation Head 保持，关闭不启动新实施。
+
+- **实现与输入。** 全范围为既有隔离工具的成套版本／锁选择、原生网页安装／选源及必要场景编排、直接相关测试与合同文档。插件源码、C# 测试／项目／锁、版本、GUID、ABI、schema 和发布 ZIP／附件未变；实现之后至交 A 检查点只有 Markdown。A 逐项重算 49 个执行输入摘要、39 个 C# 输入与原已接受源码字节，另核对原 ZIP／DLL 身份及 C# 原始门槛日志，明确接受匹配复用。
+- **真实用户结果。** 公开索引安装／确认 204、同包八项负载与 meta 身份、重启 Active／首次信任／配置成立；最终工具的非空 12.2→12.3 新升级在播放前读回配置、全部源与两条视频可信指纹，来源摘要未变。14 个代表覆盖八类、双格式探测／跳过、首次信任、三类 ColorRange 与真实失败恢复。A 独立读取 71 份原始 observation，复核行预期、探测数、正确源／地址、五字段及解码推进；三类 ColorRange 的 33 字段 encoder==saved，返回仅有已知有界差异。F01 首败／再试保护旧基线，在同一 404 目标恢复为 P4B 后成功提交并再播零探测。
+- **重启与批量。** 14 行统一冻结值与先前各行正确结束状态相符；执行脚本在所有播放前比较完整原生地址／主流／指纹，随后各行再播均零探测。小库五个可见项目／六源、合并项目两条指纹及配置先读相等，原生明确选中 S5 返回 MKV 内容。混合／选库／进度、停止收尾后恢复、任务先实际开始再由 Web 同源加入均有原文；start=1／join=1／可靠成功=1，Web 推进超过五秒，独立源峰值实际为 2。false 采用日志完整的真实静态流 D06 与随后允许的 Web 请求，禁用委托单列，不伪造 PlaybackInfo 权限参数。
+- **最终门槛与独立性。** A 读取 B 完整 Python 3.11.10 原始日志（466 通过、零失败／跳过）、语法／Node 结果，以及匹配复用的 restore／Release build／test／format 原文（均退出 0，205 项 C# 通过）。B 的独立关键旅程与 Task PASS 后另新执行的 Final 相互独立；后者重新固定 A，再换 limited URL，五个窗口探测为 1／1／0／0／0，重启先读正确，归属容器正常退出 0、无 OOM。A 接受这些实机证据，未再次启动原生验收。A 核对全部 170 张交付图摘要及 B 完整逐图记录，另实际打开 10 张代表原图，覆盖安装确认、三类 ColorRange、首败／恢复、Web 共享、多源统一重启及 Final；除预期失败窗口外未见可见错误。
+- **保留事实与限制。** 历史 SIGTERM 143、DNS／短脚本失败、Developer 首次失败／重跑与耗时超出其报告的 30% 要求均保留，不改写为通过或合规。旧小库 INFO 日志下的零物理探测摘要不被接受，D06 的完整替代证据已闭合义务；这不要求另建小版本修饰 Task。原 12.2 全量证据不转记为 12.3 全量；本次没有 116 行全部子矩阵、千项容量／全扫描、音频 STRM、代理、其他格式／客户端或生产验证。
+
+A 本机审查索引：`.git/validation-evidence/947f70319ef290300814d1019875a65f42f39a74/a-final-review-20261024/INDEX.md`，包含完整差异、独立输入／原文核验与实际查看图片记录；仅本机，不随 Git 上传。通过范围只允许声明：**同一 v0.1.0 包在 Jellyfin 12.3.0／Linux x64 完成本合同针对性兼容回归**。
 
 ## Closure Reconciliation
 
-待 A 最终审查接受后协调 CURRENT、公开支持范围及真实下一步。当前为 READY FOR A REVIEW，B Task／Final 已完成，尚未取得 A 的兼容接受；Base 和历史审查决定不变。
+本关闭检查点协调 SLICE、无活动 TASK 入口、Roadmap／Progress、README、CURRENT 架构、兼容／环境／测试矩阵、安装／发布／范围说明与仓库索引描述。公开索引只同步针对性实证范围，下载 URL／MD5／版本／ABI 不变；原 Release ZIP、附件与标签不变。激活时交接 B 的文字保留为历史合同，不自动启动规划。
 
-Next Action: A FINAL REVIEW OF SLICE 6
+三份角色经验已审阅，仅补充本轮可复用的证据复用、Web 入口与计数经验。原 1004 项准备库、归属副本与全部首败原文继续保留；本轮关闭不启停／清理任何实例、不推送。原始回归与实机按上述核验复用，关闭另执行治理、文档／链接、索引同包校验和差异检查，不把这些检查当产品新验收。
+
+当前授权开发范围已交付，没有待规划的大 Slice；停止并等待新增需求。
+
+Next Action: NONE (CURRENT DEVELOPMENT SCOPE COMPLETE)

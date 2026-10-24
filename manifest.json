@@ -3,9 +3,9 @@
     "category": "General",
     "guid": "b061643e-d17d-4c6e-8ba2-6b57e286bd20",
     "name": "STRM Probe Optimizer",
-    "description": "Optimize native probing for versioned video STRM files. Linux x64 only; tested on Jellyfin 12.2.0. Jellyfin 12.3 is not runtime-validated.",
+    "description": "Optimize native probing for versioned video STRM files. Linux x64 only. The same v0.1.0 ZIP passed full validation on Jellyfin 12.2.0 and targeted compatibility regression on 12.3.0; no 12.3 capacity or full-format claim.",
     "owner": "kentinya",
-    "overview": "STRM probe optimization — Linux x64 / Jellyfin 12.2",
+    "overview": "STRM probe optimization — Linux x64 / Jellyfin 12.2.0; targeted 12.3.0 regression",
     "versions": [
       {
         "version": "0.1.0.0",

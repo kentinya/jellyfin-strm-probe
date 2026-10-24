@@ -8,7 +8,7 @@
 
 | 维度 | 首版实测范围 |
 |---|---|
-| Jellyfin | `12.2.0`（官方镜像 `12.2`，digest 见 [环境交接](development-environment.md)） |
+| Jellyfin | `12.2.0` 原完整验收；同一 v0.1.0 ZIP 在 `12.3.0` 完成六组针对性兼容回归（版本／digest 见 [环境交接](development-environment.md)） |
 | 操作系统／架构 | Linux x64 |
 | 目标框架 | `net10.0`；SDK `10.0.401` |
 | 插件 ABI | `targetAbi` `12.2.0.0`；GUID `b061643e-d17d-4c6e-8ba2-6b57e286bd20` |
@@ -16,7 +16,7 @@
 | 客户端 | Jellyfin 原生 Web 客户端实际播放 |
 | 代理 | JellyfinProxy 未验证；按用户授权不执行，不属于当前交付兼容承诺 |
 
-固定组合之外的 Jellyfin 版本、操作系统、CPU 架构、其他封装／编解码、第三方客户端与转码模式不在首版支持声明内。安装包不包含 Jellyfin 核心运行库、另一套 FFmpeg 或非 Linux x64 的 native 依赖。
+12.3 的针对性实证范围见 [Slice 6 最终接受](progress.md#slice-6-closed)，未重跑千项容量、完整扫描及全部子矩阵。上述组合之外的 Jellyfin 版本、操作系统、CPU 架构、其他封装／编解码、第三方客户端与转码模式不在首版支持声明内。安装包不包含 Jellyfin 核心运行库、另一套 FFmpeg 或非 Linux x64 的 native 依赖。
 
 ## 网页安装
 
@@ -28,13 +28,13 @@ https://raw.githubusercontent.com/kentinya/jellyfin-strm-probe/main/manifest.jso
 
 保存并保持仓库启用，返回插件页，在“全部／可用”（旧版界面为“目录”）找到 `STRM Probe Optimizer`，打开详情，选择 `0.1.0.0` 并安装，在原生安装确认框中确认。完成后重启 Jellyfin，在已安装插件中确认 Active，再打开插件设置。服务器须能访问 `raw.githubusercontent.com` 以及 GitHub Release 的下载／重定向地址。
 
-索引只提供 Linux x64 包，当前实测组合仍为上表的 Jellyfin 12.2.0。`targetAbi` 是原生目录筛选的最低版本，较旧 Jellyfin 不会显示该版本；它不代表所有更新版本已通过实机兼容验证，12.3 尚未实机验证。
+索引只提供同一 Linux x64 包，12.2 原完整验收与 12.3 针对性实证按上表分别报告。`targetAbi` 是原生目录筛选的最低版本，较旧 Jellyfin 不会显示该版本；它不代表所有更新版本已通过实机兼容验证。
 
 根 `manifest.json` 是给 Jellyfin 读取的仓库索引，内含版本、ABI、Release 下载地址与原生安装器需要的 MD5。Release 附件中的 `.manifest.json` 是来源／逐文件 SHA-256 清单，不能填作仓库 URL。网页安装复用同一已验收 ZIP，既有四个 Release 附件与标签保持；仓库 CI 另核对包身份、MD5、原验收 SHA-256 和归档完整性。
 
 ## 取得安装包
 
-首版从 [GitHub Release v0.1.0](https://github.com/kentinya/jellyfin-strm-probe/releases/tag/v0.1.0) 下载插件 ZIP、来源清单、`.zip.sha256` 和 `SHA256SUMS.txt`。附件与已验收包保持一致；下载全部附件后在同一目录执行 `sha256sum -c SHA256SUMS.txt`。Jellyfin 12.3 尚未实机验证。
+首版从 [GitHub Release v0.1.0](https://github.com/kentinya/jellyfin-strm-probe/releases/tag/v0.1.0) 下载插件 ZIP、来源清单、`.zip.sha256` 和 `SHA256SUMS.txt`。附件与已验收包保持一致；下载全部附件后在同一目录执行 `sha256sum -c SHA256SUMS.txt`。12.3 针对性验证复用该原 ZIP，没有重建或替换 Release 附件。
 
 开发者也可本地打包；从其他提交或普通构建路径生成的包不自动等同于 Release 附件，来源及路径复现规则见[发布流程](release-process.md)。打包入口从固定 Release 输出与已锁依赖生成归档：
 

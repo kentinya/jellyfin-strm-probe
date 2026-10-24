@@ -6,7 +6,7 @@
 
 开发与维护状态从[当前开发指针](docs/progress.md#当前开发指针)进入；当前能力合同、任务入口和不可变历史分别由 [SLICE.md](SLICE.md)、[TASK.md](TASK.md) 与关闭账本维护。本 README 提供项目入口和可执行命令，不复制 Task 状态或审查计数。
 
-八类播放决策、ColorRange结果匹配及干净检出CI修复的已接受范围见[最终审查](docs/progress.md#slice-5-closed)，输入与观测设计见[播放测试计划](docs/slice-5-playback-test-plan.md)。当前授权范围的交付与下一步统一由合同和关闭账本维护。2026-10-24 用户新增的 Jellyfin 12.3 最小兼容性验证见[Slice 6](SLICE.md)，实施单元与交接见[当前 Task](TASK.md)；既有包的 12.3 支持声明仍待实证与最终审查。
+八类播放决策、ColorRange结果匹配及干净检出CI修复的已接受范围见[最终审查](docs/progress.md#slice-5-closed)，输入与观测设计见[播放测试计划](docs/slice-5-playback-test-plan.md)。同一 v0.1.0 包在 Jellyfin 12.3.0／Linux x64 的针对性兼容实证见[Slice 6 最终审查](SLICE.md#a-final-review)；原 12.2 全量验收与 12.3 最小回归分别报告。当前授权范围的交付与下一步统一由合同和关闭账本维护。
 
 ## 开发基准与范围
 
@@ -37,7 +37,7 @@
 
 ## 下载与安装包
 
-固定组合（Jellyfin `12.2.0`／Linux x64）的可交接安装包由仓库内工具生成并验证；当前已接受包的身份、原生播放／大库／扫描证据和限制见[A最终审查](docs/progress.md#slice-5-closed)，具体安装步骤见[安装包说明](docs/package-installation.md)。发布下载见 [GitHub Releases](https://github.com/kentinya/jellyfin-strm-probe/releases)，首版为 [v0.1.0](https://github.com/kentinya/jellyfin-strm-probe/releases/tag/v0.1.0)。插件 ZIP、来源清单和 SHA-256 校验文件由[发布工作流](docs/release-process.md)构建核验；提供自托管插件仓库，安装步骤如下。Jellyfin 12.3 尚未实机验证。
+首版 v0.1.0／Linux x64 包已在 Jellyfin `12.2.0` 完成原完整验收，并以同一 ZIP 在 `12.3.0` 完成六组针对性兼容回归。包身份、12.2 原生播放／大库／扫描及 12.3 最小实证的区别见[兼容性](docs/compatibility.md)，具体安装步骤见[安装包说明](docs/package-installation.md)。发布下载见 [GitHub Releases](https://github.com/kentinya/jellyfin-strm-probe/releases)，首版为 [v0.1.0](https://github.com/kentinya/jellyfin-strm-probe/releases/tag/v0.1.0)。插件 ZIP、来源清单和 SHA-256 校验文件由[发布工作流](docs/release-process.md)构建核验；提供自托管插件仓库，安装步骤如下。
 
 网页安装：打开「控制台 → 插件 → 管理仓库」，新增仓库（名称可填 `STRM Probe Optimizer — Linux x64`），地址为：
 

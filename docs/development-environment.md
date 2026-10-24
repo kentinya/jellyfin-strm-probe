@@ -24,9 +24,9 @@
 | 工具 | Git、Python 3、Docker Engine／Compose、curl、tar；浏览器场景另需 Node.js／npm、固定 Playwright 1.55.0 和 Chromium 1187，实际版本／路径在新运行记录 |
 | 资源 | 在新主机记录 CPU／内存／swap／磁盘／inode，运行前制定预算；旧服务器限额和空闲量不适用 |
 
-## 12.3 验证目标与既有默认环境
+## 12.3 隔离验证与既有默认环境
 
-[Slice 6](../SLICE.md) 授权新增 12.3.0 的最小隔离验证；上表及已提交环境规格仍是原 12.2 默认，不要直接覆盖其镜像锁或删除健康／版本断言。B 先在 Task 固定实际 12.3 Linux amd64 digest、升级前 12.2 基线、现有工具的成套受控版本选择与精确命令，再由 Developer 实施；目前不存在可直接宣称已支持的 12.3 CLI 参数。新规格只服务隔离测试，不改变原 ZIP、Controller／Model、SDK 或 targetAbi；不接管生产／现存实例，不重建原 1004 项库。
+[Slice 6 的针对性实证](progress.md#slice-6-closed)复用原 v0.1.0 ZIP，独立使用 [12.3 规格](../dev/environment-spec-12.3.json)和[不可变镜像锁](../dev/images-12.3.lock.json)。package／playback 两个现有入口新增 `--server-version 12.3`；默认仍为 12.2，上表及原镜像锁不覆盖，错版／错锁仍拒绝。新机按锁中 digest 拉取 Linux amd64 镜像后使用；package 的 `--scenario compatibility` 同时要求证据目录及合格的 `--upgrade-source-workspace`，来源缺失时拒绝完整验收。准确命令、来源核验及最小观察集见[已完成 Task 快照](../TASK.md)，不因命令存在自动启动新运行。新规格只服务隔离测试，不改变原 ZIP、Controller／Model、SDK 或 targetAbi；不接管生产／现存实例，不重建原 1004 项库。
 
 ## 克隆与准备
 

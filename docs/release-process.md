@@ -2,7 +2,7 @@
 
 2026-10-24 用户授权参照 [STRM-Generator-GO 的发布流程](https://github.com/kentinya/STRM-Generator-GO/blob/main/.github/workflows/release.yml) 发布本项目首版。采用版本标签触发、固定工具链构建、生成校验和、GitHub Release 附件的流程；本项目仅发布已验收的 Linux x64 插件包。
 
-本次是已关闭能力的交付发布，允许提交发布工作流／说明、普通推送 main、创建并推送 `v0.1.0`、发布 Release；不激活新 Slice／Task、不移动 Base 或改变产品支持范围。Jellyfin 12.3 尚未实机验证，首版支持范围仍为 Jellyfin 12.2.0／Linux x64。当时未包含插件仓库索引；用户同日随后要求实现网页安装，追加交付见下节。
+当时是已关闭能力的交付发布，允许提交发布工作流／说明、普通推送 main、创建并推送 `v0.1.0`、发布 Release；未激活新 Slice／Task、移动 Base 或改变产品支持范围。发布时只验收了 Jellyfin 12.2.0／Linux x64；同一原 ZIP 随后在 [Slice 6](progress.md#slice-6-closed) 完成 12.3.0／Linux x64 针对性兼容回归，原标签、附件及构建输入保持，不倒写发布时的实测事实。当时未包含插件仓库索引；用户同日随后要求实现网页安装，追加交付见下节。
 
 ## 自托管插件仓库
 

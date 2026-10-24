@@ -9,6 +9,7 @@
 | 3 — Jellyfin 原生批量检查任务 | `6da90ab6bd8995d8204ae0b7faf786c823699fe6` | `7c64eb5dcad6e5f20fb7eb41819be2521f65484d` | PASS / CLOSED；2026-10-16；[关闭范围与证据](#slice-3-closed) |
 | 4 — 大规模集成与单版本交付 | `03169b07d110964562f7da31d2c3d7add82e5ff5` | `8573dfbffebb785261668f9cd5c895be937e000e` | PASS / CLOSED；2026-10-20；[关闭范围与证据](#slice-4-closed) |
 | 5 — 真实播放决策全场景验证与 CI 修复 | `323a3f310100c38c373ce078767d50f4135e8cf1` | `cab2eb50dbb3d29a58b09d9c63128cbc87545636` | PASS / CLOSED；2026-10-23；[关闭范围与证据](#slice-5-closed) |
+| 6 — Jellyfin 12.3 最小兼容性实机验证 | `1379ff0e6f3e572d1d843c835a2d8af250c49ec7` | `947f70319ef290300814d1019875a65f42f39a74` | PASS / CLOSED；2026-10-24；[关闭范围与证据](#slice-6-closed) |
 
 <a id="slice-1-closed"></a>
 ## Slice 1 关闭快照与证据
@@ -68,8 +69,19 @@ Slice 5交付固定Jellyfin 12.2.0／Linux x64下MP4／MKV的八类原生Web播�
 - 本机B索引：`.git/validation-evidence/bdbb4ee1955fb87076ac48f9257821cb31e248e5/b-exit-review-20261023T170342Z/INDEX.md`；A索引：`.git/validation-evidence/cab2eb50dbb3d29a58b09d9c63128cbc87545636/a-final-review-20261023/INDEX.md`。均为稳定本机忽略资料，不随Git上传；完整命令、摘要、逐行映射和新跑／复用边界可核验。
 - 旧Cast／137／预算中断、未保存的Web非JSON500正文、scan物理ffprobe未观测和B索引残留收尾前字段保持披露，后者由新完整行与Final原文协调，均不改变当前接受范围。音频STRM与JellyfinProxy按用户范围不执行、不计PASS；其他版本／格式／客户端、OpenList专有行为、物理原生数据库保存故障实机注入、完整镜像构建溯源及通用性能未作支持承诺。现存全部1004项准备库、验收副本与旧失败资料继续保留，不因关闭清理。
 
+<a id="slice-6-closed"></a>
+## Slice 6 关闭范围与证据
+
+Slice 6 复用同一 v0.1.0 Release ZIP，在固定 Jellyfin 12.3.0／Linux x64 完成六组针对性兼容回归。A 独立审查完整 Base..Implementation Head 与原始证据，裁定 PASS / CLOSED，P0/P1 Blockers 为 NONE FOUND；插件源码、依赖、ABI、schema、原包、附件和标签未变。
+
+- A 审查 checkout 为 `6639a637c0781784e2a359cc38aafdab7b7600ed`；当前根 `SLICE.md` 保留完整合同、Closure Packet、A Final Review 与 Closure Reconciliation。Task 6.1 Base／Contract Checkpoint 为 `fa74d6db1d788e21284aa9ad50190e81d4d4f12b`，完整计划、Developer 报告、首轮 FIX REQUIRED 和 B PASS 在 `3e1817206f388cf514b5be1d5fc80e55fef0dc86:TASK.md`；单独 Final 与交 A 快照为上述 checkout。Base 与历史决定保持，关闭不自动推送或启动下一 Slice。
+- 接受公开索引原生安装／确认／Active、非空 12.2 升级先读保持、八类代表的双格式实播／首次信任、三类 ColorRange、404 首败／再试与同目标恢复、全部接受状态统一重启先读／多源选源，以及小库范围／混合／进度／停止收尾恢复／真实 Web 同源共享／默认并发／权限。12.2 全量与 12.3 针对性结果分列，不宣称 12.3 全部子矩阵、千项容量或全扫描通过。
+- A 重算执行／包／C# 输入，独立核对逐行原文、三阶段主流、五字段及重启，接受 B 全部逐图审阅并另实际打开十张代表原图。完整 Python／C# 门槛、B 独立关键旅程及 Task PASS 后新跑的单独 Final 经输入核验明确复用；A 未再次运行实机或替换 DLL。历史失败、旧零计数不采纳与 Developer 耗时偏差保持披露，不改写为 PASS／合规。
+- B 本机索引：`.git/validation-evidence/947f70319ef290300814d1019875a65f42f39a74/b-review-20261024T124707Z/INDEX.md`；A 本机索引：同 Implementation Head 下的 `a-final-review-20261024/INDEX.md`。均只在本机、不随 Git 上传；原 1004 项准备库、归属副本和全部首败资料继续保留，不因关闭清理。
+- 音频 STRM、JellyfinProxy、其他格式／客户端／平台、OpenList 专有行为、物理原生数据库保存故障实机注入与通用性能仍无支持承诺。A 只协调针对性版本说明与文档入口，不改发布产物或治理中的业务不变量。
+
 ## 当前开发指针
 
 开发依据为[稳定需求](requirements.md)、维护中的架构及已提交合同，用户范围与原方案退出治理的边界见[范围说明](scope.md)。上方维护各Slice的已完成A最终审查账本。
 
-用户于 2026-10-24 要求开启 Slice 6「Jellyfin 12.3 最小兼容性实机验证」。A 已按[当前合同](../SLICE.md)激活，真实 Base 为 `1379ff0e6f3e572d1d843c835a2d8af250c49ec7`，B 已完成 Task 6.1 全部结果重评、完整回归、独立复现与单独 Final，Implementation Head 为 `947f70319ef290300814d1019875a65f42f39a74`，当前 READY FOR A REVIEW，尚未 A 接受或关闭；证据与范围见 [Closure Packet](../SLICE.md#closure-packet)，完整 Task 记录与交接统一见[当前 Task](../TASK.md)。Slice 1～5 的关闭身份／证据不变；旧[播放设计](slice-5-playback-test-plan.md)仅供复用既有场景，不自动展开全量。小版本 bug 不自动转入 A 的大版本规划，现存全部 1004 项准备库及旧资料继续保留。
+当前授权开发范围的 Slice 1～6 均已完成 A 最终审查；最新接受范围见[Slice 6 关闭记录](#slice-6-closed)及[完整关闭合同](../SLICE.md)。[根 Task](../TASK.md)无活动实施，当前没有待规划的大 Slice，等待新增需求。旧[播放设计](slice-5-playback-test-plan.md)仅供复用既有场景，不自动展开全量；小版本 bug 无需 A 介入。现存全部 1004 项准备库及旧资料继续保留。

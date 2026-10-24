@@ -2,7 +2,7 @@
 
 ## CURRENT
 
-本页描述已接受实现的模块边界和目标架构，不重复当前状态、Task 审查或测试计数；这些内容统一见 [Slice](../SLICE.md)、[Task](../TASK.md)、[进度账本](progress.md) 和 [测试矩阵](test-matrix.md)。固定验证组合为 Jellyfin `12.2.0`、源码 `ca0f16eb7c195f720a1493ed469a27c4657db0c6`、`net10.0`／SDK `10.0.401`，不构成跨版本兼容承诺。
+本页描述已接受实现的模块边界和目标架构，不重复当前状态、Task 审查或测试计数；这些内容统一见 [Slice](../SLICE.md)、[Task](../TASK.md)、[进度账本](progress.md) 和 [测试矩阵](test-matrix.md)。原完整验证组合为 Jellyfin `12.2.0`、源码 `ca0f16eb7c195f720a1493ed469a27c4657db0c6`、`net10.0`／SDK `10.0.401`；同一 v0.1.0 包另在 `12.3.0`／Linux x64 完成针对性兼容回归，范围见下文，不构成跨版本通用兼容承诺。
 
 - 只读版本 1 解析及完整决策矩阵、原生所属项目／MediaSourceInfo.Id 的稳定多版本身份、五字段 SQLite 和 expectedPrevious 原子条件提交已接受。失败、原生自身取消异常、文件变化及过期结果保护可信基线；SQLite 异常停止优化，保留原权限与旧库，修复后重启重新检查。
 - 共用 `CheckSourceAsync` 使用已有原生探测／事务保存关联；每个取得许可的 owner 先读本调用者当前源，再核对 Manifest／指纹／启停后行动，立即获许可也重判。首次信任核对当前 Manifest 与原生地址，不称为本次探测成功。
@@ -153,9 +153,9 @@ SQLite 运行时异常停止优化并尽可能原生委托，批量报告不可�
 
 插件保留原生 PlaybackInfo／MediaSourceId→URL 和已保存媒体流的正确性，MP4／MKV／原生 Web 是实际验证的代表组合。JellyfinProxy 是当前交付范围外、未验证的外部组件，按用户授权不作为必要验收 Surface，不宣称兼容；受控后端不改变插件只读及无 OpenList 元数据 API 的边界。
 
-## TARGET — Jellyfin 12.3 最小兼容验证
+## CURRENT — Jellyfin 12.3 针对性兼容验证
 
-当前已接受运行组合仍为 12.2。用户新增的 [Slice 6](../SLICE.md) 只复用原 ZIP，在 12.3.0／Linux x64 验证六组最小用户旅程，允许对既有隔离工具增加成套版本／不可变锁选择，保留 12.2 默认守卫；不改原生接入、决策、SQLite、Coordinator、依赖或 ABI。新增环境工具输入与历史包输入分别记录；尚未实机验证，不把此 TARGET 写成 CURRENT 支持。
+同一 v0.1.0 ZIP 在 12.3.0／Linux x64 的六组最小用户旅程已有[最终接受证据](progress.md#slice-6-closed)。既有隔离工具提供显式的成套版本／不可变锁选择，保留 12.2 默认守卫；原生接入、决策、SQLite、Coordinator、依赖及 ABI 未改。新增环境工具输入与历史包输入分别记录，原 12.2 全量与 12.3 针对性结果分列；12.3 千项容量、全扫描、全格式／全客户端未验证。
 
 ## TARGET — 范围外与未验证边界
 
