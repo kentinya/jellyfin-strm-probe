@@ -33,7 +33,7 @@ Slice 3 的批量实现包含：
 
 已实现的原生计划任务停止 token 仅用于候选获取边界、后续批次和未实际开始的工作，不传给已开始探测，也不否决其满足全部成功条件后的提交。已开始工作正常收尾，即使没有其他等待者。用户停止／共享规则已由 A 作为 [Slice 2 Material Contract Change 记录](progress.md#slice-2-closed) 同步；Slice 2 取消人为可取消执行实机门槛，原生取消异常仍保留基线并传播，Slice 3 已验证并接受实际批量停止与收尾。固定版本入口见 [兼容性](compatibility.md#播放与批量取消语义)。
 
-GitHub Release 交付采用标签触发的固定 SDK 构建，核对已验收源码／输入及 ZIP／DLL／清单摘要，下载比对草稿附件后发布；它不改变运行时架构或支持组合，详见[发布流程](release-process.md)。
+GitHub Release 交付采用标签触发的固定 SDK 构建，核对已验收源码／输入及 ZIP／DLL／清单摘要，下载比对草稿附件后发布；根插件仓库索引指向同一 Release ZIP，原生网页安装沿用 Jellyfin 的目录、校验与加载器；它不改变运行时架构或支持组合，详见[发布流程](release-process.md)。
 
 ## 已实现的批量与播放结构
 

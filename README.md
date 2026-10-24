@@ -37,7 +37,17 @@
 
 ## 下载与安装包
 
-固定组合（Jellyfin `12.2.0`／Linux x64）的可交接安装包由仓库内工具生成并验证；当前已接受包的身份、原生播放／大库／扫描证据和限制见[A最终审查](docs/progress.md#slice-5-closed)，具体安装步骤见[安装包说明](docs/package-installation.md)。发布下载见 [GitHub Releases](https://github.com/kentinya/jellyfin-strm-probe/releases)，首版为 [v0.1.0](https://github.com/kentinya/jellyfin-strm-probe/releases/tag/v0.1.0)。插件 ZIP、来源清单和 SHA-256 校验文件由[发布工作流](docs/release-process.md)构建核验；未提供插件仓库自动上架。Jellyfin 12.3 尚未实机验证。
+固定组合（Jellyfin `12.2.0`／Linux x64）的可交接安装包由仓库内工具生成并验证；当前已接受包的身份、原生播放／大库／扫描证据和限制见[A最终审查](docs/progress.md#slice-5-closed)，具体安装步骤见[安装包说明](docs/package-installation.md)。发布下载见 [GitHub Releases](https://github.com/kentinya/jellyfin-strm-probe/releases)，首版为 [v0.1.0](https://github.com/kentinya/jellyfin-strm-probe/releases/tag/v0.1.0)。插件 ZIP、来源清单和 SHA-256 校验文件由[发布工作流](docs/release-process.md)构建核验；提供自托管插件仓库，安装步骤如下。Jellyfin 12.3 尚未实机验证。
+
+网页安装：打开「控制台 → 插件 → 管理仓库」，新增仓库（名称可填 `STRM Probe Optimizer — Linux x64`），地址为：
+
+```text
+https://raw.githubusercontent.com/kentinya/jellyfin-strm-probe/main/manifest.json
+```
+
+保存后返回插件页，在“全部／可用”（旧版界面为“目录”）找到 `STRM Probe Optimizer`，安装 `0.1.0.0`，在原生安装确认框确认后重启 Jellyfin；在已安装插件中确认 Active。网页安装与手动安装使用同一 Release ZIP，详细范围及恢复见[安装说明](docs/package-installation.md)。
+
+开发者本地打包与隔离验收：
 
 ```bash
 python3 scripts/package_plugin.py --configuration Release --runtime linux-x64 --output-dir artifacts/releases

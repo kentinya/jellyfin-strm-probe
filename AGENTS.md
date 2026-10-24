@@ -28,6 +28,8 @@
 
 2026-10-24 用户明确要求参照 STRM-Generator-GO 的 Release 流程发布首版，授权相关工作流／说明、普通推送、`v0.1.0` 标签和 GitHub Release；仅交付同一已验收 Linux x64 包与来源／校验附件，不启动新 Slice／Task、不移动 Base，不包含 Jellyfin 12.3 兼容实施或插件仓库自动上架。具体入口见 [发布流程](docs/release-process.md)。
 
+2026-10-24 用户随后明确要求实现网页安装，追加授权提供自托管 Jellyfin 插件仓库索引、必要校验／说明、普通推送及隔离原生网页安装／重启验证；可复用已验收 Release ZIP，不改写既有发布附件或标签，不改变插件运行逻辑、支持组合或已关闭 Slice／Task。具体入口见 [安装说明](docs/package-installation.md)。
+
 ## 文档职责
 
 1. 本文件维护长期业务、架构和范围约束。

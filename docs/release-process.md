@@ -2,7 +2,15 @@
 
 2026-10-24 用户授权参照 [STRM-Generator-GO 的发布流程](https://github.com/kentinya/STRM-Generator-GO/blob/main/.github/workflows/release.yml) 发布本项目首版。采用版本标签触发、固定工具链构建、生成校验和、GitHub Release 附件的流程；本项目仅发布已验收的 Linux x64 插件包。
 
-本次是已关闭能力的交付发布，允许提交发布工作流／说明、普通推送 main、创建并推送 `v0.1.0`、发布 Release；不激活新 Slice／Task、不移动 Base 或改变产品支持范围。Jellyfin 12.3 尚未实机验证，首版支持范围仍为 Jellyfin 12.2.0／Linux x64。线上插件仓库索引／自动上架不在本次交付内。
+本次是已关闭能力的交付发布，允许提交发布工作流／说明、普通推送 main、创建并推送 `v0.1.0`、发布 Release；不激活新 Slice／Task、不移动 Base 或改变产品支持范围。Jellyfin 12.3 尚未实机验证，首版支持范围仍为 Jellyfin 12.2.0／Linux x64。当时未包含插件仓库索引；用户同日随后要求实现网页安装，追加交付见下节。
+
+## 自托管插件仓库
+
+用户追加授权后，根 [manifest.json](../manifest.json) 提供 Jellyfin 原生仓库索引，公开地址与网页操作见[安装说明](package-installation.md#网页安装)。它直接指向 `v0.1.0` 的原 ZIP；不重新打包、不替换既有 Release 附件或标签，不改变插件版本、ABI 或支持范围。固定 Jellyfin 的[安装器](https://github.com/jellyfin/jellyfin/blob/ca0f16eb7c195f720a1493ed469a27c4657db0c6/Emby.Server.Implementations/Updates/InstallationManager.cs)自行建立版本目录，[加载器](https://github.com/jellyfin/jellyfin/blob/ca0f16eb7c195f720a1493ed469a27c4657db0c6/Emby.Server.Implementations/Plugins/PluginManager.cs)递归查找 DLL，原 ZIP 已通过真实网页安装及重启 Active 验证。
+
+原生目录 `checksum` 使用 MD5，来源清单及验收继续使用 SHA-256。`python3 scripts/check_plugin_repository.py` 下载已发布 ZIP（也可用 `--package` 指定下载副本），核对索引身份、版本／ABI、固定下载地址、原生 MD5、已验收 SHA-256 与原有包结构检查；Repository quality 的独立 job 执行同一检查。索引不等同于 Release 的来源清单。
+
+后续发布需在新版本获得验收、Release 附件可公开下载后，按对应身份更新索引和批准的检查输入，再执行原生网页安装验证并普通推送；不提交含凭据的运行记录。不申请官方仓库收录，也不修改已关闭 Slice／Task。
 
 ## 自动流程
 

@@ -18,6 +18,20 @@
 
 固定组合之外的 Jellyfin 版本、操作系统、CPU 架构、其他封装／编解码、第三方客户端与转码模式不在首版支持声明内。安装包不包含 Jellyfin 核心运行库、另一套 FFmpeg 或非 Linux x64 的 native 依赖。
 
+## 网页安装
+
+当前提供自托管 Jellyfin 插件仓库。管理员打开「控制台 → 插件 → 管理仓库」，点击“新建仓库／添加”，名称可填 `STRM Probe Optimizer — Linux x64`，仓库 URL 填：
+
+```text
+https://raw.githubusercontent.com/kentinya/jellyfin-strm-probe/main/manifest.json
+```
+
+保存并保持仓库启用，返回插件页，在“全部／可用”（旧版界面为“目录”）找到 `STRM Probe Optimizer`，打开详情，选择 `0.1.0.0` 并安装，在原生安装确认框中确认。完成后重启 Jellyfin，在已安装插件中确认 Active，再打开插件设置。服务器须能访问 `raw.githubusercontent.com` 以及 GitHub Release 的下载／重定向地址。
+
+索引只提供 Linux x64 包，当前实测组合仍为上表的 Jellyfin 12.2.0。`targetAbi` 是原生目录筛选的最低版本，较旧 Jellyfin 不会显示该版本；它不代表所有更新版本已通过实机兼容验证，12.3 尚未实机验证。
+
+根 `manifest.json` 是给 Jellyfin 读取的仓库索引，内含版本、ABI、Release 下载地址与原生安装器需要的 MD5。Release 附件中的 `.manifest.json` 是来源／逐文件 SHA-256 清单，不能填作仓库 URL。网页安装复用同一已验收 ZIP，既有四个 Release 附件与标签保持；仓库 CI 另核对包身份、MD5、原验收 SHA-256 和归档完整性。
+
 ## 取得安装包
 
 首版从 [GitHub Release v0.1.0](https://github.com/kentinya/jellyfin-strm-probe/releases/tag/v0.1.0) 下载插件 ZIP、来源清单、`.zip.sha256` 和 `SHA256SUMS.txt`。附件与已验收包保持一致；下载全部附件后在同一目录执行 `sha256sum -c SHA256SUMS.txt`。Jellyfin 12.3 尚未实机验证。
@@ -104,4 +118,4 @@ URL 变化必探测、SHA-1／Size 决策、Modified 忽略与权限边界是固
 
 ## 交付与未验证边界
 
-RO-2 大库／RO-3 扫描的证据与本地 ZIP 安装证据分别接受，见 [Closure Packet](progress.md#slice-4-closed) 与 [A 最终决定](progress.md#slice-4-closed)，不由本页安装步骤代替。按 2026-10-24 用户授权，首版另通过 [GitHub Release](https://github.com/kentinya/jellyfin-strm-probe/releases/tag/v0.1.0) 分发同一已验收安装包；发布流程见[发布说明](release-process.md)，插件仓库自动上架未执行。JellyfinProxy 专属验收按用户授权撤出，历史 NOT RUN、不宣称兼容；真实 OpenList 专有行为及其他未测组合仍未验证。
+RO-2 大库／RO-3 扫描的证据与本地 ZIP 安装证据分别接受，见 [Closure Packet](progress.md#slice-4-closed) 与 [A 最终决定](progress.md#slice-4-closed)，不由本页安装步骤代替。按 2026-10-24 用户授权，首版另通过 [GitHub Release](https://github.com/kentinya/jellyfin-strm-probe/releases/tag/v0.1.0) 分发同一已验收安装包；发布流程见[发布说明](release-process.md)，随后按用户要求补充上述自托管仓库网页安装入口；未申请官方仓库收录。JellyfinProxy 专属验收按用户授权撤出，历史 NOT RUN、不宣称兼容；真实 OpenList 专有行为及其他未测组合仍未验证。

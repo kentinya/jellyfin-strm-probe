@@ -40,6 +40,8 @@
 
 用户要求借鉴 STRM-Generator-GO 的 Release 流程发布一版。允许为已验收首版增加发布工作流／说明、普通提交与推送、版本标签和 GitHub Release，发布同一验收 ZIP 及校验／来源附件。不启动新产品 Slice／Task、不改变已有合同／Base／审查，不包含 Jellyfin 12.3 兼容实施或插件仓库自动上架；支持范围和产物身份见[发布流程](release-process.md)。
 
+用户同日随后要求支持网页安装，追加授权提供自托管 Jellyfin 仓库索引、发布校验／说明及隔离原生安装验证。它补充首版的交付入口，不改变既有 Slice／Task、产品行为或平台／版本支持，不申请官方插件仓库收录；入口见[安装说明](package-installation.md)。
+
 ## 包含
 
 - 只读解析受支持的 STRM 协议、URL、有效内容 SHA-1 和字节 Size。

@@ -8,6 +8,18 @@ permissions:
   contents: read
 
 jobs:
+  plugin-repository:
+    name: Verify published plugin repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Verify catalog identity and published ZIP checksums
+        run: python3 scripts/check_plugin_repository.py
   governance:
     runs-on: ubuntu-latest
     steps:
