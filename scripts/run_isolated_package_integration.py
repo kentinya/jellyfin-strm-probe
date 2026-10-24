@@ -1715,6 +1715,9 @@ def stage_web_sharing(evidence_dir: Path | None) -> dict:
     summary: dict[str, object] = {"itemId": item["Id"], "address": changed["url"],
                                   "before": before_row, "delayRequestId": request_id}
     before = batch.slow_request_counts(media_container)
+    # Only this round's own plugin events are evidence: earlier small-library stages also probe,
+    # so the start/join counters are the delta since this round began.
+    before_events = playback.plugin_event_lines()
     task_id = batch.task_id_for(api)
     status, _ = api.request_response("/ScheduledTasks/Running/" + task_id, method="POST")
     require(status == 204, "Jellyfin did not accept the sharing round's native task start.")
@@ -1748,10 +1751,9 @@ def stage_web_sharing(evidence_dir: Path | None) -> dict:
     # The physical probe count comes from the plugin's own start/join lines: the probe route is
     # also read by the transcode job the Web Play starts, so a raw media-request counter would
     # count playback reads as extra probes.
-    lines = playback.plugin_event_lines()
-    started_events = [batch.base.safe_event(line) for line in lines if "Native STRM probe started" in line]
-    joined_events = [batch.base.safe_event(line) for line in lines
-                     if "joined a running native probe" in line.lower()]
+    delta = playback.plugin_event_delta(before_events)
+    started_events = [event for event in delta if "Native STRM probe started" in event]
+    joined_events = [event for event in delta if "joined a running native probe" in event.lower()]
     summary["physicalProbes"] = {"started": len(started_events), "joined": len(joined_events),
                                  "slowRouteHits": slow_hits, "startedLines": started_events[-3:],
                                  "joinedLines": joined_events[-3:]}
