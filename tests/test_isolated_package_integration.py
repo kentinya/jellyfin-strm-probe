@@ -406,7 +406,17 @@ class PackageRunOwnershipTests(unittest.TestCase):
         return builder.build_valid_archive_with_sidecar(directory)
 
     def _run_main(self, argv: list[str]) -> int:
-        with patch.object(sys, "argv", ["run_isolated_package_integration", *argv]):
+        # Model a clean checkout even on a provisioned developer host. Ownership and cleanup
+        # checks mock the native scenario, so they must not depend on an ignored host image lock.
+        read_bytes = Path.read_bytes
+
+        def without_host_image_lock(path):
+            if path == ROOT / "artifacts" / "dev-env" / "images.lock.json":
+                raise FileNotFoundError("The clean checkout has no provisioned image lock.")
+            return read_bytes(path)
+
+        with patch.object(sys, "argv", ["run_isolated_package_integration", *argv]), \
+                patch.object(Path, "read_bytes", without_host_image_lock):
             return integration.main()
 
     def _digests(self, directory: Path) -> dict[str, str]:
@@ -475,9 +485,10 @@ class PackageRunOwnershipTests(unittest.TestCase):
                 patch.object(package_environment, "compose"), \
                 patch.object(integration, "scenario_invalid", return_value={}), \
                 patch.object(package_environment, "cleanup_instance",
-                             side_effect=package_environment.PackageEnvironmentError("cleanup failed")):
+                             side_effect=package_environment.PackageEnvironmentError("cleanup failed")) as cleanup:
             code = self._run_main(["--package", str(package), "--scenario", "invalid"])
         self.assertEqual(code, 1)
+        cleanup.assert_called_once()
 
     def test_keep_workspace_leaves_the_fresh_workspace(self):
         base = Path(tempfile.mkdtemp())

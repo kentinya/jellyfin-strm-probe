@@ -2434,7 +2434,9 @@ def main() -> int:
             require(args.upgrade_source_workspace is not None,
                     "The compatibility scenario requires --upgrade-source-workspace: the non-empty 12.2 "
                     "upgrade preservation is a required result and is never reported as skipped.")
-        summary["toolInputs"] = tool_input_identity()
+            # Capture compatibility-only provenance here; legacy scenarios keep their existing
+            # workspace and environment setup order.
+            summary["toolInputs"] = tool_input_identity()
         workspace = pe.select_workspace(args.workspace)
         summary["workspace"] = str(workspace)
         before_state = pe.capture_instance_state()
