@@ -3,7 +3,7 @@
 ```text
 Task ID: 6.1
 Parent Slice: 6
-Status: PLANNED
+Status: READY FOR B REVIEW
 Task Base: fa74d6db1d788e21284aa9ad50190e81d4d4f12b
 Contract Checkpoint: fa74d6db1d788e21284aa9ad50190e81d4d4f12b
 Difficulty: High
@@ -160,21 +160,31 @@ python3 scripts/run_isolated_playback_integration.py --server-version 12.3 --sce
 
 ## Developer Completion Report
 
-- Changed Files：NOT STARTED。
-- Implemented：NOT STARTED。
-- Tests and Results：六组 12.3 实机、完整回归、独立复现及 Final 均 NOT RUN；规划前治理不计产品验收。
-- Decisions：原 Release ZIP；默认 12.2 守卫保留。
-- Remaining In-Slice Work：RO-1～RO-6 全部待验证。
-- Risks / Deviations：升级来源待一致性／归属认证；新增接口未实现；12.3 兼容性未验证。
-- Head SHA：NOT SET。
+- Changed Files:
+  - 版本选择与锁：`dev/environment-spec-12.3.json`、`dev/images-12.3.lock.json`（新增）；`scripts/package_environment.py`（`SERVER_VERSIONS`／`select_server_version`／`server_public_version`／`server_identity`／`verify_server_image`／`lock_file`，`wait_healthy` 改用所选版本，`prepare_clean_instance` 可建两库）。
+  - 运行入口：`scripts/run_isolated_package_integration.py` 新增 `--server-version`、`--scenario compatibility`、`--upgrade-source-workspace` 及三阶段编排；`scripts/run_isolated_playback_integration.py` 新增 `--server-version` 并把版本断言换成所选版本。
+  - 复用适配：`scripts/run_isolated_batch_integration.py` 增加 `DevInstance`／`PackageInstance` 与 `configure_instance`，只参数化实例路径／API／重启／计数器；`scripts/package_playback_driver.mjs` 增加原生 `.selectSource` 显式选源；`scripts/configuration_page_driver.mjs` 增加 `web_install`（原生仓库 + 目录安装）与可选 `locale`。
+  - 测试：`tests/test_isolated_package_integration.py`（版本选择／锁／镜像平台／升级来源与保持判定／驱动声明守卫）、`test_isolated_playback_integration.py`（版本路由与选源守卫）、`test_isolated_batch_integration.py`（实例适配守卫）。
+- Implemented：12.3 版本／镜像 digest／锁的显式选择与错版错锁拒绝；原 ZIP 原生网页仓库安装；非空 12.2 副本按只读核验→复制→12.2 冻结→12.3 升级→升级后先读比较；6 源 2 库小库编排（混合轮、复用原生停止／共享／并发轮、真实 `static=true` 与禁用委托窗口、S4/S5 合并后显式选源＋重启先读再播）。顶层 `src/`、C# 测试、依赖锁、版本、GUID、targetAbi、SQLite schema 与原 ZIP 均未改动。
+- Tests and Results:
+  - `python3 -m unittest discover -s tests -p test_isolated_package_integration.py` → 49 passed。
+  - `... -p test_isolated_playback_integration.py` → 125 passed；`... -p test_isolated_batch_integration.py` → 42 passed；`... -p test_development_environment.py` → 6 passed；`... -p test_governance.py` → 27 passed。
+  - `python3 -m compileall -q scripts tests`、`node --check` 两个驱动、`python3 scripts/check_governance.py`、`git diff --check` 均通过。
+  - 12.3 实机（同一原 ZIP，`9641fe91…9e37`）：`--scenario compatibility` 三阶段 PASS；14 行 matrix PASS。原始结果与截图保存在忽略目录 `.git/validation-evidence/<sha>/task61-dev-20261024T055611Z/`（`package-compat-final/`、`matrix14/`、`single-row/`，含 `INDEX.md`）。
+  - 已逐一打开并核验代表性截图：C02.limited 显示“MP4 LIM”且时间码 5.867s、C06.full 显示“MKV C06FUL”5.933s、C02.unspecified 显示“MP4 UNS”5.600s；F01 失败窗口显示原生“播放错误／处理请求时发生错误”。
+  - 未运行：完整 Python 全量 discovery、完整 C# restore/build/test/format、B 独立复现与 Slice Final（均由 B 负责）。
+- Decisions：只复用现有函数与必要顺序编排，不新增框架／DSL／环境管理器；升级来源选定 `artifacts/package-env/runs/run-20261021-024723-d4668c5b`（2 条可信指纹、无事务旁文件、无符号链接）；被检出的两条 12.2 来源因存在 `jellyfin.db-wal/-shm` 被拒绝，且工具改为只读副本读取指纹库，不再在原库创建旁文件。native 安装后的负载比较按固定 12.3 `InstallationManager` 的真实目录布局读取。
+- Remaining In-Slice Work：B 的完整回归、独立复现、逐图／原文核验与 Slice Final；A 最终审查。
+- Risks / Deviations：小库阶段使用已验收的 24 秒合成样本（包内 2 秒样本不足以完成 5 秒进度门槛）；小库混合轮候选为 5（所选库 5 个源），另有 1 个未选库源用于范围对照；`MKV.C06.full` 为 `yuvj420p`／颜色范围 `pc`，属真实输出；显式 `MP4.C02.unspecified` 三阶段字段中 `ColorRange` 为 `null`，符合既有有界返回规则。首轮实机尝试的失败与重跑记录保留在同一证据目录（`web-install*`、`diag*`）。
+- Head SHA：`0e17186d31d1f47cbfebee9f85c2ba5cfabcb4e0`（实现提交；本报告为紧随其后的文档提交）。
 
 ## B Review Result
 
 ```text
-Reviewed: NOT SET (no Developer implementation delivered)
+Reviewed: NOT SET (Developer delivery awaits B review)
 Decision: PENDING
-Slice Required Outcomes all satisfied: NO — RO-1..RO-6 NOT RUN
-Next: DEVELOPER IMPLEMENTS TASK 6.1 FROM THIS COMMITTED PLAN
+Slice Required Outcomes all satisfied: NO — B RE-EVALUATION REQUIRED
+Next: B REVIEWS TASK 6.1 (fa74d6db1d788e21284aa9ad50190e81d4d4f12b..Head)
 ```
 
 交付后审查完整 `fa74d6db1d788e21284aa9ad50190e81d4d4f12b..Head`，只返回 PASS 或 FIX REQUIRED。通过后重评全部 Slice 义务、单独 Final 后交 A。历史 Task／关闭身份从[关闭账本](docs/progress.md)和真实 Git 快照读取。
