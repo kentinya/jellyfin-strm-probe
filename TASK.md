@@ -1,6 +1,6 @@
 # NO ACTIVE IMPLEMENTATION TASK
 
-Task 6.1 经下方 B Review Result 判定 PASS；全部 RO 已满足，B 继续合同规定的单独 Slice Final，再交 A。保留完整 Task 计划、开发报告和首轮拒绝以便审查；不启动新实施。
+Task 6.1 经下方 B Review Result 判定 PASS；全部 RO 与单独 Slice Final 已完成，交 A 最终审查。保留完整 Task 计划、开发报告和首轮拒绝以便审查；不启动新实施。
 
 # Task 6.1 — 原发布包在 Jellyfin 12.3 的最小兼容闭环
 
@@ -329,4 +329,6 @@ B 于 2026-10-24 独立审阅完整累计 17 文件差异及原始资料。五�
 - 本机 B 原文：`.git/validation-evidence/947f70319ef290300814d1019875a65f42f39a74/b-review-20261024T124707Z/INDEX.md`；包含完整 diff、输入审计、C# 复用日志指针、全量回归、逐图映射、独立续跑／升级新跑和首败。原始资料仅本机，不随 Git 上传。
 - Developer 历史耗时偏差保持：自报实际开工口径 42.4%，证据标记口径 53.1%，超过其报告的 30% 要求；账本顶层总秒数使用标记口径，与 start 字段不同。B 不替其改写历史或以重跑补成合规。B 本轮另记实际墙钟并计入失败、检查、准备和收尾，最终数值见 Closure Packet／本机 timing-ledger.json。
 
-全部 RO 重新评估已满足，不新增 Task；单独 Final 尚待本次新执行完成，Task PASS 不代替 A 的 Slice 最终接受或对外 12.3 支持声明。
+全部 RO 重新评估已满足，不新增 Task。Task PASS 后已在同一原 ZIP／最终工具上另新执行 Final，207.805 秒 PASS；A 基线探测 1、换 URL／limited 探测 1、再播／两次重启后实播均 0，先读状态相等，全部 10 张图实际查看，正常 exit 0／OOM false。详见 [Closure Packet](SLICE.md#closure-packet)。Task PASS 不代替 A 的 Slice 最终接受或对外 12.3 支持声明。
+
+补充复用精度：旧小库权限摘要 afterStaticWebPlay 的物理计数 0 缺 DEBUG 过程日志，与同窗原文插件 call=1 不一致，不采纳为零物理探测证明。false 权限完整验收采用相同候选输入的 matrix14／MP4.D06：真实 static 后旧指纹不变且计数不增，后续 Web 实测 1、再播／重启 0。该替代已有完整证据，无需另造工具修正 Task。

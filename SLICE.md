@@ -4,9 +4,9 @@
 Slice ID: 6
 Name: Jellyfin 12.3 最小兼容性实机验证
 Owner: A
-Status: ACTIVE
+Status: READY FOR A REVIEW
 Base SHA: 1379ff0e6f3e572d1d843c835a2d8af250c49ec7
-Implementation Head: NOT SET
+Implementation Head: 947f70319ef290300814d1019875a65f42f39a74
 ~~~
 
 ## 用户目标与激活边界
@@ -123,7 +123,29 @@ B 的 Task 必须固定实际镜像 digest、真实 Task Base、允许改动、�
 
 ## Closure Packet
 
-未就绪。待 B 交付各 RO／AC、真实实施 Head、完整 Task 索引、回归与实机证据、复用边界、独立复现／Final、遗留问题与 `SLICE READY FOR A REVIEW` 决定。
+B 决定：**SLICE READY FOR A REVIEW**。Task 6.1 与单独 Final 均 PASS，未发现产品 P0／P1；本合同全部 RO／AC 重新核对完成，不增加 Task。A 最终审查仍未开始。
+
+- Slice Base：`1379ff0e6f3e572d1d843c835a2d8af250c49ec7`；Implementation Head：`947f70319ef290300814d1019875a65f42f39a74`。Task Base／Contract Checkpoint 均保持 `fa74d6db1d788e21284aa9ad50190e81d4d4f12b`。B 完整 Task 审查至报告 Head `35e6eb459c5c1477eb7a69bb9f4bdb48b755bc9d`；后继仅报告／协调，执行输入未变。
+- Task 索引：唯一 Task 6.1；完整计划、Developer 初交／修正、首轮 FIX REQUIRED 与本轮 PASS 留在 [TASK.md](TASK.md#b-review-result)，Task PASS 检查点 `3e1817206f388cf514b5be1d5fc80e55fef0dc86`。根 Task 已无活动实施，不移动任何 Base。
+- 实现只增加既有隔离工具的明确 12.3 规格／锁／版本断言、原生安装／选源与必要场景顺序、直接相关测试和阶段原始日志。插件源码、C# 项目／依赖、GUID、版本、ABI、schema 和原 Release ZIP／附件均未变。
+
+| 结果／验收 | B 重评与可核验证据 |
+|---|---|
+| RO-1／AC-1 PASS | 最终工具 run2/gaps：固定公开索引原生安装／确认 204、八项负载及 meta、原 ZIP、重启 12.3.0 Active，首次信任 0、配置保存重读恢复。B 又用最终候选仅新跑升级 42.3 秒，非空 12.2 来源两条视频可信指纹及配置／全部源升级后先读相等，来源摘要不变、原始日志完整。 |
+| RO-2／AC-2 PASS | 14 个固定代表覆盖八类和首次信任，两格式均有实际探测／跳过。逐行原始计数、地址／主流、五字段、解码推进与截图成立。执行旅程未改部分按函数和全部相关输入核验复用；不是旧 12.2 结果冒充。 |
+| RO-3／AC-3 PASS | limited／full／未指定的同次 33 字段 encoder==saved；显式返回仅 ColorRange 丢失，未指定全为 null。换 URL 与同 URL／无可比 SHA-1 Size 变化各有窗口。B 新 limited 窗口独立证明探测／保存／提交及可见 MP4 LIM。 |
+| RO-4／AC-4 PASS | 真实 F01 404 首败和再试保持旧基线；在同一 missing-f01 地址修复后探测 1、P4B 内容实播成功、再播 0；原生错误与恢复图实际查看。 |
+| RO-5／AC-5 PASS | 新统一重启覆盖全部 14 个已接受状态，冻结值独立对照原正确结束状态，全部项目在任何 PlaybackInfo 前先读一致，再播均 0。小库全部六源与合并项目两条指纹、配置先读一致，明确选 S5 后 MKV 内容／地址正确。 |
+| RO-6／AC-6 PASS | 原生混合轮 4 跳过／1 成功、下一轮 0；范围、进度、停止／已开始工作收尾与恢复成立。最终工具真实 Web 同源共享 start=1／join=1／可靠成功=1，5.412 秒解码；独立源默认峰值 2。false 权限采纳有完整探测日志的矩阵 D06：真实 static 读不探测／不改旧指纹，随后 Web 探测 1，再播／重启 0；禁用原生计数另列。 |
+| AC-7 PASS | B 全量 Python 3.11.10 466／0 fail／0 skip、compileall／Node 通过；C# 39 个实际输入匹配已接受检查点，原始 restore／build／test／format 日志均 0、205 passed。B 已独立新跑关键旅程，并在 Task PASS 后另新执行 Final。证据复用、失败、归属与范围见下。 |
+
+**单独 Final。** 在 `3e1817206f388cf514b5be1d5fc80e55fef0dc86`（仅 Task 报告变化）上，以原 ZIP／最终工具复用 B 本轮归属准备数据，实际 Web 重新固定 A（探测／提交 1），再新执行 A→显式 limited URL（1）→再播（0）→冻结重启、播放前先读相等→实播（0），并另核验统一重启（0）。独立目录 `slice-final`，207.805 秒，换地址窗口推进 5.393 秒，五个窗口均有媒体 GET／解码，B 实际打开全部 10 图：A 后变 MP4 LIM，无可见错误。最终 Jellyfin／media 均 exit 0、OOM false、无收尾错误；没有用独立复现的旧播放代替 Final。完整回归相同执行输入本轮已通过，未机械重复同一套件。
+
+**证据索引与复用。** 本机 `.git/validation-evidence/947f70319ef290300814d1019875a65f42f39a74/b-review-20261024T124707Z/INDEX.md` 包含完整 diff、输入摘要／AST 比较、完整回归、39 项 C# 复用审计、71 份 observation 检查、170 张交付图的原路径／SHA／43 张实际打开审阅页，以及 B 独立／新升级／Final 原文。原 Developer 矩阵／混合／停止的有效部分复用，公开安装和 Web 共享采纳最终工具 run2；中间摘要升级另新跑。原始资料仅本机、不随 Git 上传；A 必须读取原文，缺失时按规则补对应门槛。
+
+**失败及非阻塞事项。** 首次 B CLI 收到 SIGTERM 143，无完成报告，未计整次 PASS；已完成窗口原文保留。第一次续跑有本轮短脚本 sourceKey 遗漏，亦遇容器 media DNS 别名丢失而连接拒绝；记 FAIL，保留首败。只修正一次性脚本身份、重建本轮容器／网络并保留 bind 数据，之后新统一重启／实播 PASS。没有修改产品／候选工具或操作生产来消除失败。旧小库权限摘要的 afterStaticWebPlay 物理计数 0 缺 MediaEncoder DEBUG 日志，与同窗插件 call=1 不一致，**不接受该零值为物理探测证明**；RO-6 用输入匹配且日志完整的既有 D06，故不增加工具修饰 Task。Developer 自报测试耗时实际起点 42.4%／标记起点 53.1%，超过其报告的 30% 要求；顶层账本分母口径不一致均保留，不能改写为合规。B 本轮从 12:47:07 UTC 连续计时，失败／准备／检查／收尾计入、重叠取并集，最终数字见本机 timing-ledger.json。
+
+**业务不变量、排除与文档协调。** URL 优先、有效 SHA-1／Size、首次信任例外、同次探测／成功持久化／稳定 STRM 才提交、失败保留、正在执行同源共享、默认并发 2、原生 false 和禁用委托均保持。未重跑 116 行、千项容量／全扫描、代理、音频 STRM、其他格式／客户端或生产；这些保持 NOT RUN／原排除，不计 PASS。原 1004 项与全部来源／首败数据保留；本轮只有归属测试实例启停并保留副本。A 接受前 README／公开索引／安装支持说明仍保持 12.3 未验证；若接受，只协调为本合同覆盖的 v0.1.0＋12.3.0／Linux x64 针对性实证，不宣称全量兼容，不改包／附件／标签，不推送。
 
 ## A Final Review
 
@@ -137,6 +159,6 @@ A 尚未审查实现，不提前填写 PASS 或关闭。
 
 ## Closure Reconciliation
 
-待最终审查接受后协调 CURRENT、支持范围及真实下一步；当前保留 ACTIVE。Developer 已交付 12.3 开发观察，独立复核结果与未完成义务统一见 [Task 6.1](TASK.md#b-review-result)，尚未取得兼容接受，不移动 Base。
+待 A 最终审查接受后协调 CURRENT、公开支持范围及真实下一步。当前为 READY FOR A REVIEW，B Task／Final 已完成，尚未取得 A 的兼容接受；Base 和历史审查决定不变。
 
-Next Action: DEVELOPER CORRECTS TASK 6.1 AFTER B FIX REQUIRED
+Next Action: A FINAL REVIEW OF SLICE 6
