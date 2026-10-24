@@ -499,6 +499,255 @@ class PackageRunOwnershipTests(unittest.TestCase):
         self.assertTrue(created["workspace"].is_dir())
 
 
+def valid_archive(directory: Path) -> Path:
+    import tests.test_package_plugin as builder
+
+    directory.mkdir(parents=True, exist_ok=True)
+    return builder.build_valid_archive_with_sidecar(directory)
+
+
+def run_main(argv: list[str]) -> int:
+    with patch.object(sys, "argv", ["run_isolated_package_integration", *argv]):
+        return integration.main()
+
+
+class ServerVersionSelectionTests(unittest.TestCase):
+    """The two-version selector must never fall back to the other server."""
+
+    def setUp(self):
+        self.original = (package_environment.SERVER_VERSION, package_environment.SPEC,
+                         package_environment.LOCK_RELATIVE)
+
+    def tearDown(self):
+        (package_environment.SERVER_VERSION, package_environment.SPEC,
+         package_environment.LOCK_RELATIVE) = self.original
+
+    def test_default_version_is_still_12_2(self):
+        self.assertEqual(package_environment.SERVER_VERSION, "12.2")
+        self.assertEqual(package_environment.SERVER_VERSIONS["12.2"]["spec"], "dev/environment-spec.json")
+        self.assertEqual(package_environment.SERVER_VERSIONS["12.2"]["lock"],
+                         "artifacts/dev-env/images.lock.json")
+
+    def test_selecting_12_3_switches_to_its_own_spec_and_lock(self):
+        identity = package_environment.select_server_version("12.3")
+        self.assertEqual(identity["version"], "12.3")
+        self.assertEqual(identity["publicVersion"], "12.3.0")
+        self.assertEqual(identity["sourceSha"], "06de749d435e2d0be0c5119a41f2300fdd7143e5")
+        self.assertEqual(identity["specFile"], "dev/environment-spec-12.3.json")
+        self.assertEqual(identity["lockFile"], "dev/images-12.3.lock.json")
+        self.assertEqual(package_environment.SPEC["server"]["version"], "12.3")
+        images = package_environment.load_image_lock()
+        self.assertEqual(images["server"],
+                         "jellyfin/jellyfin@sha256:720ad28968e040f1ea049749f4ce546b28c7251244a6eb8aacf9147d8afbc24d")
+        self.assertEqual(images["media"],
+                         "python@sha256:0a310eeecf4e1f5a0743f9a6520c90c88d089c903ca5fd283f501e3a805f5f89")
+
+    def test_unknown_version_is_refused_without_changing_the_selection(self):
+        with self.assertRaisesRegex(package_environment.PackageEnvironmentError, "Unknown server version"):
+            package_environment.select_server_version("12.4")
+        self.assertEqual(package_environment.SERVER_VERSION, "12.2")
+        self.assertEqual(package_environment.LOCK_RELATIVE, "artifacts/dev-env/images.lock.json")
+
+    def test_a_spec_that_declares_another_version_is_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "dev").mkdir()
+            spec = json.loads((ROOT / "dev" / "environment-spec-12.3.json").read_text())
+            spec["server"]["version"] = "12.2"
+            (root / "dev" / "environment-spec-12.3.json").write_text(json.dumps(spec))
+            with patch.object(package_environment, "ROOT", root):
+                with self.assertRaisesRegex(package_environment.PackageEnvironmentError,
+                                            "does not declare server version"):
+                    package_environment.select_server_version("12.3")
+
+    def test_the_12_3_lock_cannot_be_used_by_the_12_2_spec(self):
+        """A wrong lock must fail before anything is measured, not be silently ignored."""
+        data = json.loads((ROOT / "dev" / "images-12.3.lock.json").read_text())
+        data["spec"]["server"]["version"] = "12.2"
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "dev").mkdir()
+            (root / "dev" / "images-12.3.lock.json").write_text(json.dumps(data))
+            with patch.object(package_environment, "ROOT", root), \
+                    patch.object(package_environment, "SERVER_VERSION", "12.3"), \
+                    patch.object(package_environment, "LOCK_RELATIVE", "dev/images-12.3.lock.json"), \
+                    patch.object(package_environment, "SPEC", dict(package_environment.SPEC,
+                                                                  server={"version": "12.3"})):
+                with self.assertRaisesRegex(package_environment.PackageEnvironmentError,
+                                            "belongs to a different environment specification"):
+                    package_environment.load_image_lock()
+
+    def test_a_missing_12_3_lock_is_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "dev").mkdir()
+            (root / "dev" / "environment-spec-12.3.json").write_text(
+                (ROOT / "dev" / "environment-spec-12.3.json").read_text())
+            with patch.object(package_environment, "ROOT", root):
+                package_environment.select_server_version("12.3")
+                with self.assertRaisesRegex(package_environment.PackageEnvironmentError,
+                                            "immutable image lock is missing"):
+                    package_environment.load_image_lock()
+
+    def test_a_mutable_or_foreign_12_3_lock_is_refused(self):
+        original = json.loads((ROOT / "dev" / "images-12.3.lock.json").read_text())
+        cases = {
+            "mutable tag": "jellyfin/jellyfin:12.3",
+            "wrong repository": "python@sha256:" + "a" * 64,
+            "short digest": "jellyfin/jellyfin@sha256:abc",
+        }
+        for label, server in cases.items():
+            with self.subTest(label), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                (root / "dev").mkdir()
+                (root / "dev" / "environment-spec-12.3.json").write_text(
+                    (ROOT / "dev" / "environment-spec-12.3.json").read_text())
+                data = json.loads(json.dumps(original))
+                data["images"]["server"] = server
+                (root / "dev" / "images-12.3.lock.json").write_text(json.dumps(data))
+                with patch.object(package_environment, "ROOT", root):
+                    package_environment.select_server_version("12.3")
+                    with self.assertRaises(package_environment.PackageEnvironmentError):
+                        package_environment.load_image_lock()
+
+    def test_the_locked_server_image_platform_is_verified_before_a_start(self):
+        """A digest that is not present, or not linux/amd64, must stop the start."""
+        images = {"server": "jellyfin/jellyfin@sha256:" + "a" * 64,
+                  "media": "python@sha256:" + "b" * 64}
+        missing = subprocess.CompletedProcess([], 1, stdout="", stderr="No such image")
+        with patch.object(package_environment, "run", return_value=missing):
+            with self.assertRaisesRegex(package_environment.PackageEnvironmentError,
+                                        "not present locally"):
+                package_environment.verify_server_image(images)
+        foreign = subprocess.CompletedProcess(
+            [], 0, stdout='linux/arm64 sha256:fff ["jellyfin/jellyfin@sha256:%s"]' % ("a" * 64),
+            stderr="")
+        with patch.object(package_environment, "run", return_value=foreign):
+            with self.assertRaisesRegex(package_environment.PackageEnvironmentError, "linux/amd64"):
+                package_environment.verify_server_image(images)
+        other = subprocess.CompletedProcess(
+            [], 0, stdout='linux/amd64 sha256:fff ["other/image@sha256:%s"]' % ("c" * 64), stderr="")
+        with patch.object(package_environment, "run", return_value=other):
+            with self.assertRaisesRegex(package_environment.PackageEnvironmentError,
+                                        "does not match the locked digest"):
+                package_environment.verify_server_image(images)
+        good = subprocess.CompletedProcess(
+            [], 0, stdout='linux/amd64 sha256:fff ["jellyfin/jellyfin@sha256:%s"]' % ("a" * 64),
+            stderr="")
+        with patch.object(package_environment, "run", return_value=good):
+            identity = package_environment.verify_server_image(images)
+        self.assertEqual(identity["platform"], "linux/amd64")
+
+    def test_the_public_version_assertion_follows_the_selected_version(self):
+        package_environment.select_server_version("12.3")
+        self.assertEqual(package_environment.server_public_version(), "12.3.0")
+        package_environment.select_server_version("12.2")
+        self.assertEqual(package_environment.server_public_version(), "12.2.0")
+
+
+class CompatibilityScenarioGuardTests(unittest.TestCase):
+    """Structural guards for the compatibility sequencing; these are not real Jellyfin acceptance."""
+
+    def test_the_compatibility_scenario_requires_the_fixed_12_3_target(self):
+        base = Path(tempfile.mkdtemp())
+        package = valid_archive(base / "pkg")
+        before = sorted(str(path) for path in base.rglob("*"))
+        with patch.object(package_environment, "BASE", base), \
+                patch.object(package_environment, "compose") as compose:
+            code = run_main(["--package", str(package), "--scenario", "compatibility"])
+        self.assertEqual(code, 1)
+        compose.assert_not_called()
+        self.assertEqual(sorted(str(path) for path in base.rglob("*")), before)
+
+    def test_an_adopted_upgrade_source_must_be_an_owned_run_workspace(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            candidate = root / "runs" / "run-1"
+            candidate.mkdir(parents=True)
+            with patch.object(package_environment, "BASE", root):
+                with self.assertRaisesRegex(RuntimeError, "no run marker"):
+                    integration.verify_upgrade_source(candidate)
+
+    def test_an_upgrade_source_with_transaction_side_files_is_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "runs" / "run-1"
+            (source / "config").mkdir(parents=True)
+            (source / package_environment.RUN_MARKER).write_text("token\n")
+            (source / "config" / "jellyfin.db-wal").write_bytes(b"")
+            with patch.object(package_environment, "BASE", root):
+                with self.assertRaisesRegex(RuntimeError, "transaction side files"):
+                    integration.verify_upgrade_source(source)
+
+    def test_an_upgrade_source_with_a_symlink_is_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "runs" / "run-1"
+            source.mkdir(parents=True)
+            (source / package_environment.RUN_MARKER).write_text("token\n")
+            (source / "link").symlink_to(source / package_environment.RUN_MARKER)
+            with patch.object(package_environment, "BASE", root):
+                with self.assertRaisesRegex(RuntimeError, "symbolic links"):
+                    integration.verify_upgrade_source(source)
+
+    def test_an_empty_prepared_copy_is_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "runs" / "run-1"
+            (source / "config").mkdir(parents=True)
+            (source / package_environment.RUN_MARKER).write_text("token\n")
+            with patch.object(package_environment, "BASE", root):
+                with self.assertRaisesRegex(RuntimeError, "no plugin fingerprint store"):
+                    integration.verify_upgrade_source(source)
+
+    def test_upgrade_preservation_reports_every_required_difference(self):
+        before = {"configuration": {"MaxConcurrentProbes": 3},
+                  "configurationFileSha256": "a",
+                  "items": {"A": {"itemId": "1", "sources": [{"id": "s", "pathHash": "h"}],
+                                  "fingerprint": {"url_hash": "u"}, "itemPathHash": "p"}}}
+        after = {"configuration": {"MaxConcurrentProbes": 2},
+                 "configurationFileSha256": "b",
+                 "items": {"A": {"itemId": "1", "sources": [{"id": "s", "pathHash": "other"}],
+                                 "fingerprint": None, "itemPathHash": "p"},
+                           "B": {"itemId": "2", "sources": [], "fingerprint": None, "itemPathHash": "q"}}}
+        failures = integration.upgrade_preservation_failures(before, after)
+        joined = " | ".join(failures)
+        for expected in ("effective plugin configuration changed", "persisted configuration bytes",
+                         "STRM item set changed", "saved native address/streams changed",
+                         "trusted fingerprint changed", "trusted fingerprint was lost"):
+            self.assertIn(expected, joined)
+        self.assertEqual(integration.upgrade_preservation_failures(before, before), [])
+
+    def test_the_fingerprint_store_schema_check_is_exact(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp)
+            plugin_dir = workspace / "config" / "data" / "plugins" / integration.FLAT_PLUGIN_ID
+            plugin_dir.mkdir(parents=True)
+            database = plugin_dir / "strm-fingerprints.db"
+            import sqlite3 as sqlite
+
+            with sqlite.connect(database) as connection:
+                connection.execute("CREATE TABLE strm_fingerprint (item_id TEXT, source_key TEXT, "
+                                   "url_hash TEXT, sha1 TEXT, file_size INTEGER, extra TEXT)")
+            with patch.object(package_environment, "WORK", workspace):
+                with self.assertRaisesRegex(RuntimeError, "five-field schema"):
+                    integration.fingerprint_store_report()
+
+    def test_the_playback_driver_declares_the_explicit_source_selection(self):
+        driver = (ROOT / "scripts" / "package_playback_driver.mjs").read_text()
+        self.assertIn("async function chooseSource(page, item)", driver)
+        self.assertIn(".selectSource", driver)
+        self.assertIn("selectedSourceId", driver)
+        self.assertIn("alternateVersionLoaded", driver)
+
+    def test_the_configuration_driver_declares_the_native_repository_install(self):
+        driver = (ROOT / "scripts" / "configuration_page_driver.mjs").read_text()
+        self.assertIn("async function addPluginRepository(page)", driver)
+        self.assertIn("Manage Repositories", driver)
+        self.assertIn("Confirm Plugin Installation", driver)
+        self.assertIn("async web_install(page)", driver)
+
+
 class IntegrationHelperTests(unittest.TestCase):
     def test_source_for_url_matches_by_hashed_path(self):
         url = "http://media:8080/package-mp4.mp4"

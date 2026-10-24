@@ -494,5 +494,79 @@ class NativeScanSettlementTests(unittest.TestCase):
             self.assertIn(recovery, stop_body)
 
 
+class PackageInstanceAdaptationTests(unittest.TestCase):
+    """The batch scenarios may run on the run-owned package instance without a second measure."""
+
+    def test_the_default_instance_is_still_the_development_instance(self):
+        batch.configure_instance(batch.DevInstance())
+        self.assertEqual(batch.INSTANCE.kind, "dev-env")
+        self.assertIsNone(batch.STRM_DIR)
+        self.assertEqual(batch.strm_dir(), batch.ROOT / "artifacts" / "dev-env" / "strm")
+        self.assertEqual(batch.media_dir(), batch.ROOT / "artifacts" / "dev-env" / "media")
+
+    def test_the_package_instance_publishes_its_own_paths(self):
+        class FakeEnv:
+            WORK = Path("/tmp/package-run")
+            MEDIA_MP4 = "package-mp4.mp4"
+
+        batch.configure_instance(batch.PackageInstance(FakeEnv, template_media="baseline-mp4-a.mp4",
+                                                       alternate_media="baseline-mp4-a-copy.mp4"))
+        try:
+            self.assertEqual(batch.INSTANCE.kind, "package-env")
+            self.assertEqual(batch.strm_dir(), Path("/tmp/package-run/strm"))
+            self.assertEqual(batch.media_dir(), Path("/tmp/package-run/media"))
+            self.assertEqual(batch.FIXTURE, Path("/tmp/package-run/strm/Batch Template.strm"))
+            self.assertEqual(batch.PLAIN_URL, "http://media:8080/baseline-mp4-a.mp4")
+            self.assertEqual(batch.FINGERPRINT_DATABASE,
+                             Path("/tmp/package-run/config/data/plugins/"
+                                  "b061643ed17d4c6e8ba26b57e286bd20/strm-fingerprints.db"))
+        finally:
+            batch.configure_instance(batch.DevInstance())
+
+    def test_the_media_routes_keep_the_requested_file(self):
+        self.assertEqual(batch.slow_url("http://media:8080/package-mp4.mp4", "abc"),
+                         "http://media:8080/slow/abc/package-mp4.mp4")
+        self.assertEqual(batch.delay_url("http://media:8080/package-mkv.mkv", 8, "def"),
+                         "http://media:8080/delay/8/def/package-mkv.mkv")
+
+    def test_the_expected_public_version_follows_the_instance(self):
+        self.assertEqual(batch.expected_public_version(), "12.2.0")
+
+        class FakeEnv:
+            WORK = Path("/tmp/package-run")
+            MEDIA_MP4 = "package-mp4.mp4"
+
+            @staticmethod
+            def server_public_version():
+                return "12.3.0"
+
+        batch.configure_instance(batch.PackageInstance(FakeEnv))
+        try:
+            self.assertEqual(batch.expected_public_version(), "12.3.0")
+        finally:
+            batch.configure_instance(batch.DevInstance())
+
+    def test_a_package_media_counter_keys_this_instances_own_files(self):
+        logs = type("Logs", (), {
+            "returncode": 0,
+            "stdout": "MEDIA_REQUEST GET baseline-mp4-a.mp4\n"
+                      "MEDIA_REQUEST GET baseline-mp4-a.mp4\n"
+                      "SLOW_MEDIA_REQUEST_STARTED abc\n"
+                      "MEDIA_REQUEST GET baseline-mp4-a-copy.mp4\n",
+            "stderr": ""})()
+
+        class FakeEnv:
+            WORK = Path("/tmp/package-run")
+            MEDIA_MP4 = "package-mp4.mp4"
+
+        instance = batch.PackageInstance(FakeEnv, template_media="baseline-mp4-a.mp4",
+                                          alternate_media="baseline-mp4-a-copy.mp4")
+        with patch.object(batch.base, "run", return_value=logs):
+            counts = instance.media_request_counts("media")
+        self.assertEqual(counts["fixture"], 2)
+        self.assertEqual(counts["fixture_alt"], 1)
+        self.assertEqual(counts["slow_requests_started"], 1)
+
+
 if __name__ == "__main__":
     unittest.main()

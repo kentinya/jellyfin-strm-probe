@@ -43,14 +43,152 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import run_isolated_plugin_integration as base  # noqa: E402
 
 ROOT = base.ROOT
-FIXTURE = base.FIXTURE
-FINGERPRINT_DATABASE = base.FINGERPRINT_DATABASE
-CONFIGURATION_FILE = base.CONFIGURATION_FILE
 PLUGIN_ID = base.PLUGIN_ID
 TASK_NAME = "STRM 媒体信息检查"
-TASK_DATA_DIRECTORY = ROOT / "artifacts" / "dev-env" / "config" / "config" / "ScheduledTasks"
 MAX_WAIT_SECONDS = 120
 TASK_KEY = "StrmProbeOptimizerBatchCheck"
+
+
+class DevInstance:
+    """The long-lived repository development instance (the historical default)."""
+
+    kind = "dev-env"
+    template_name = "Batch Template.strm"
+
+    def api(self) -> "base.JellyfinApi":
+        return base.JellyfinApi()
+
+    def restart(self) -> str:
+        return base.restart_isolated_server()
+
+    def container(self) -> str:
+        return base.isolated_container_name()
+
+    def media_container(self) -> str:
+        return base.isolated_media_container_name()
+
+    def media_bytes(self) -> tuple[bytes, str]:
+        media = (ROOT / "artifacts" / "dev-env" / "media" / "fixture.mp4").read_bytes()
+        return media, hashlib.sha1(media).hexdigest()
+
+    def media_request_counts(self, container: str) -> dict[str, int]:
+        return base.media_request_counts(container)
+
+
+class PackageInstance:
+    """The run-owned package (ZIP) instance of ``package_environment``.
+
+    It adapts only what these scenarios use: the native API client with this workspace's
+    credentials, the restart/container lookups inside the package workspace, and the media request
+    counters of the package media service. The instance data paths are published as the module
+    globals below, so the existing guard tests keep exercising the same names.
+    """
+
+    kind = "package-env"
+    template_name = "Batch Template.strm"
+
+    def __init__(self, package_env, template_media: str = "baseline-mp4-a.mp4",
+                 alternate_media: str = "baseline-mp4-a-copy.mp4") -> None:
+        self.pe = package_env
+        # The media file the run-owned batch template points at, and its byte-identical partner.
+        self.template_media = template_media
+        self.alternate_media = alternate_media
+
+    def api(self) -> "base.JellyfinApi":
+        return base.JellyfinApi(credentials_path=self.pe.credentials_path())
+
+    def restart(self) -> str:
+        self.pe.compose("stop")
+        self.pe.compose("up")
+        return self.pe.wait_healthy()
+
+    def container(self) -> str:
+        return self.pe.container_name("jellyfin")
+
+    def media_container(self) -> str:
+        return self.pe.container_name("media")
+
+    def media_bytes(self) -> tuple[bytes, str]:
+        media = (self.pe.WORK / "media" / self.template_media).read_bytes()
+        return media, hashlib.sha1(media).hexdigest()
+
+    def media_request_counts(self, container: str) -> dict[str, int]:
+        """Every media-service request of this instance, keyed per request and file."""
+        logs = base.run(["docker", "logs", "--tail", "5000", container], timeout=20)
+        base.require(logs.returncode == 0, "Could not read the media-service request counters.")
+        counts: dict[str, int] = {}
+        for line in (logs.stdout + logs.stderr).splitlines():
+            if "SLOW_MEDIA_REQUEST_STARTED " in line:
+                counts["slow_requests_started"] = counts.get("slow_requests_started", 0) + 1
+                continue
+            match = re.search(r"MEDIA_REQUEST (\w+) (\S+)", line)
+            if not match:
+                continue
+            key = f"{match.group(1)} {match.group(2)}"
+            counts[key] = counts.get(key, 0) + 1
+        # The reused scenarios compare the dev counter's three fixed keys; map them onto this
+        # instance's own template media instead of inventing a different measure of a media request.
+        counts["fixture"] = counts.get("GET " + self.template_media, 0)
+        counts["fixture_alt"] = counts.get("GET " + self.alternate_media, 0)
+        counts["slow_requests_started"] = counts.get("slow_requests_started", 0)
+        return counts
+
+
+INSTANCE: "DevInstance | PackageInstance" = DevInstance()
+# Instance data paths for the currently configured instance. They stay module globals so the
+# existing guard tests can patch them exactly as before.
+FIXTURE = Path(ROOT / "artifacts" / "dev-env" / "strm" / "Environment Fixture.strm")
+# Instance directory overrides. ``None`` keeps the development layout derived from ``ROOT`` on every
+# use, so a caller (or a guard test) that patches ROOT always gets that root's own directories.
+STRM_DIR: Path | None = None
+MEDIA_DIR: Path | None = None
+FINGERPRINT_DATABASE = base.FINGERPRINT_DATABASE
+CONFIGURATION_FILE = base.CONFIGURATION_FILE
+PLAIN_URL = "http://media:8080/fixture.mp4"
+
+
+def strm_dir() -> Path:
+    return STRM_DIR if STRM_DIR is not None else ROOT / "artifacts" / "dev-env" / "strm"
+
+
+def media_dir() -> Path:
+    return MEDIA_DIR if MEDIA_DIR is not None else ROOT / "artifacts" / "dev-env" / "media"
+
+
+def configure_instance(instance: "DevInstance | PackageInstance") -> None:
+    """Select which owned instance these scenarios operate on (default: the dev instance)."""
+    global INSTANCE, FIXTURE, STRM_DIR, MEDIA_DIR, FINGERPRINT_DATABASE, CONFIGURATION_FILE, PLAIN_URL
+    INSTANCE = instance
+    if isinstance(instance, PackageInstance):
+        work = instance.pe.WORK
+        FIXTURE = work / "strm" / instance.template_name
+        STRM_DIR = work / "strm"
+        MEDIA_DIR = work / "media"
+        FINGERPRINT_DATABASE = work / "config" / "data" / "plugins" / "b061643ed17d4c6e8ba26b57e286bd20" / "strm-fingerprints.db"
+        CONFIGURATION_FILE = work / "config" / "plugins" / "configurations" / "Jellyfin.Plugin.StrmProbeOptimizer.xml"
+        PLAIN_URL = "http://media:8080/" + instance.template_media
+    else:
+        FIXTURE = Path(ROOT / "artifacts" / "dev-env" / "strm" / "Environment Fixture.strm")
+        STRM_DIR = None
+        MEDIA_DIR = None
+        FINGERPRINT_DATABASE = base.FINGERPRINT_DATABASE
+        CONFIGURATION_FILE = base.CONFIGURATION_FILE
+        PLAIN_URL = "http://media:8080/fixture.mp4"
+
+
+def expected_public_version() -> str:
+    """The exact public version of the instance this process operates on."""
+    if isinstance(INSTANCE, PackageInstance):
+        return INSTANCE.pe.server_public_version()
+    return "12.2.0"
+
+
+def require_instance_ready() -> None:
+    """Refuse to start a scenario whose instance has no usable versioned STRM template."""
+    if not FIXTURE.is_file():
+        raise RuntimeError(
+            "The instance has no versioned STRM template; the scenario cannot write its temporary fixtures.")
+
 
 # Cleanup failures (temporary library entries that could not be removed or a restore that could not be verified)
 # are recorded here and turned into a final failure in main(). A shared STRM/config restore succeeding does not
@@ -560,15 +698,17 @@ def task_summary(task: dict) -> dict:
 
 
 def fingerprint_count() -> int:
-    base.require(FINGERPRINT_DATABASE.is_file(), "The plugin fingerprint database is missing.")
-    uri = FINGERPRINT_DATABASE.as_posix() + "?mode=ro"
+    database = FINGERPRINT_DATABASE
+    base.require(database.is_file(), "The plugin fingerprint database is missing.")
+    uri = database.as_posix() + "?mode=ro"
     with sqlite3.connect("file:" + uri, uri=True, timeout=10) as connection:
         return int(connection.execute("SELECT COUNT(*) FROM strm_fingerprint").fetchone()[0])
 
 
 def fingerprint_row(item_id: str) -> dict | None:
-    base.require(FINGERPRINT_DATABASE.is_file(), "The plugin fingerprint database is missing.")
-    uri = FINGERPRINT_DATABASE.as_posix() + "?mode=ro"
+    database = FINGERPRINT_DATABASE
+    base.require(database.is_file(), "The plugin fingerprint database is missing.")
+    uri = database.as_posix() + "?mode=ro"
     with sqlite3.connect("file:" + uri, uri=True, timeout=10) as connection:
         connection.row_factory = sqlite3.Row
         row = connection.execute(
@@ -579,7 +719,7 @@ def fingerprint_row(item_id: str) -> dict | None:
 
 
 def temporary_fixture(name: str, url: str, sha1: str, size: int) -> Path:
-    path = ROOT / "artifacts" / "dev-env" / "strm" / (name + ".strm")
+    path = strm_dir() / (name + ".strm")
     source = FIXTURE.read_bytes()
     with path.open("xb") as fixture:
         fixture.write(base.write_versioned_fixture(source, url, sha1, size))
@@ -595,20 +735,25 @@ def temporary_fixture_in(directory: Path, name: str, url: str, sha1: str, size: 
     return path
 
 
+def media_leaf_of(current_url: str) -> str:
+    """The file name behind a media URL, so the special routes keep serving this instance's media."""
+    return urlsplit(current_url).path.rsplit("/", 1)[-1]
+
+
 def slow_url(current_url: str, request_id: str) -> str:
     parts = urlsplit(current_url)
-    return urlunsplit((parts.scheme, parts.netloc, f"/slow/{request_id}/fixture.mp4", "", ""))
+    return urlunsplit((parts.scheme, parts.netloc, f"/slow/{request_id}/{media_leaf_of(current_url)}", "", ""))
 
 
 def delay_url(current_url: str, seconds: float, request_id: str) -> str:
     """A parameterized delay route so a scenario can hold a probe open for a deterministic settlement window."""
     parts = urlsplit(current_url)
-    return urlunsplit((parts.scheme, parts.netloc, f"/delay/{seconds:g}/{request_id}/fixture.mp4", "", ""))
+    leaf = media_leaf_of(current_url)
+    return urlunsplit((parts.scheme, parts.netloc, f"/delay/{seconds:g}/{request_id}/{leaf}", "", ""))
 
 
 def media_bytes() -> tuple[bytes, str]:
-    media = (ROOT / "artifacts" / "dev-env" / "media" / "fixture.mp4").read_bytes()
-    return media, hashlib.sha1(media).hexdigest()
+    return INSTANCE.media_bytes()
 
 
 def configuration_payload_from_xml(data: bytes) -> dict:
@@ -644,7 +789,7 @@ def restore_state(original_configuration: bytes, trigger_snapshot: dict[str, lis
         problems.append("configuration file not restored")
 
     try:
-        api = base.JellyfinApi()
+        api = INSTANCE.api()
         if original_configuration:
             payload = configuration_payload_from_xml(original_configuration)
             status = configure(api, payload)
@@ -664,8 +809,8 @@ def restore_state(original_configuration: bytes, trigger_snapshot: dict[str, lis
     # Restart and read the effective configuration back, so a scope-only file restore cannot leave a different
     # in-memory scope. A restart failure is reported, not swallowed.
     try:
-        base.restart_isolated_server()
-        api = base.JellyfinApi()
+        INSTANCE.restart()
+        api = INSTANCE.api()
         effective = current_configuration(api)
         expected = configuration_payload_from_xml(original_configuration) if original_configuration else None
         if expected is not None:
@@ -721,8 +866,8 @@ def scenario_all(api: base.JellyfinApi, container: str) -> dict:
     trigger_ticks = future_time_of_day_ticks(seconds_ahead=70)
     status = set_triggers(api, task_id, [{"Type": "DailyTrigger", "TimeOfDayTicks": trigger_ticks}])
     base.require(status == 204, "Jellyfin did not accept the administrator trigger.")
-    container = base.restart_isolated_server()
-    api = base.JellyfinApi()
+    container = INSTANCE.restart()
+    api = INSTANCE.api()
     after_restart = find_task(api)
     base.require(len(after_restart.get("Triggers") or []) == 1, "The administrator trigger did not persist across a real restart.")
     fired = wait_for_trigger_fire(api, before_trigger_start, timeout=180)
@@ -735,7 +880,7 @@ def scenario_all(api: base.JellyfinApi, container: str) -> dict:
     # unchanged repeat run performs no new probe. Each step is reconciled against the previous fingerprint row.
     media, sha1 = media_bytes()
     name = "Batch Change Control " + uuid.uuid4().hex[:10]
-    url = "http://media:8080/fixture.mp4"
+    url = PLAIN_URL
     path = temporary_fixture(name, url, sha1, len(media))
     result: dict = {}
     try:
@@ -768,8 +913,8 @@ def scenario_all(api: base.JellyfinApi, container: str) -> dict:
         base.require((repeat_fields.get("candidate_set_estimated_bytes") or 0) > 0, f"The run did not report the O(N) candidate identity size estimate: {summary_line}.")
 
         # Restart and prove the persisted fingerprint and the native address survive.
-        container = base.restart_isolated_server()
-        api = base.JellyfinApi()
+        container = INSTANCE.restart()
+        api = INSTANCE.api()
         after_restart_row = fingerprint_row(item["Id"])
         base.require(after_restart_row == changed, "The changed-URL fingerprint did not survive a real restart.")
         playback = base.call_playback(api, container, item["Id"], changed_url)
@@ -847,7 +992,7 @@ def scenario_stop(api: base.JellyfinApi, container: str, media_container: str) -
     paths: list[Path] = []
     try:
         media, sha1 = media_bytes()
-        plain_url = "http://media:8080/fixture.mp4"
+        plain_url = PLAIN_URL
         for name in names:
             paths.append(temporary_fixture(name, plain_url, sha1, len(media)))
         api.refresh_library()
@@ -874,7 +1019,7 @@ def scenario_stop(api: base.JellyfinApi, container: str, media_container: str) -
         native_settlement = wait_for_native_scan_settled(api, container)
         task = find_task(api)
         task_id = task["Id"]
-        before_counts = base.media_request_counts(media_container)
+        before_counts = INSTANCE.media_request_counts(media_container)
         before_id_counts = slow_request_counts(media_container)
         armed_before = len(trigger_arm_times(container))
         round_started_at = now_time_of_day_seconds()
@@ -1048,10 +1193,10 @@ def scenario_sharing(api: base.JellyfinApi, container: str, media_container: str
 def _sharing_direction(api: base.JellyfinApi, container: str, media_container: str, *, playback_first: bool) -> dict:
     nonce = uuid.uuid4().hex[:8]
     name = f"Batch Share {nonce}"
-    path = ROOT / "artifacts" / "dev-env" / "strm" / (name + ".strm")
+    path = strm_dir() / (name + ".strm")
     try:
         media, sha1 = media_bytes()
-        plain_url = "http://media:8080/fixture.mp4"
+        plain_url = PLAIN_URL
         target_url = slow_url(plain_url, uuid.uuid4().hex)
         with path.open("xb") as fixture:
             fixture.write(base.write_versioned_fixture(FIXTURE.read_bytes(), plain_url, sha1, len(media)))
@@ -1060,7 +1205,7 @@ def _sharing_direction(api: base.JellyfinApi, container: str, media_container: s
         run_task(api)  # baseline first trust on the plain URL
         path.write_bytes(base.write_versioned_fixture(path.read_bytes(), target_url, sha1, len(media)))
 
-        before_counts = base.media_request_counts(media_container)
+        before_counts = INSTANCE.media_request_counts(media_container)
         playback_holder: dict = {}
 
         def playback() -> None:
@@ -1088,7 +1233,7 @@ def _sharing_direction(api: base.JellyfinApi, container: str, media_container: s
             wait_for_idle(api, timeout=MAX_WAIT_SECONDS)
 
         base.require("error" not in playback_holder, "The sharing playback failed outside the HTTP path.")
-        after_counts = base.media_request_counts(media_container)
+        after_counts = INSTANCE.media_request_counts(media_container)
         slow_delta = after_counts["slow_requests_started"] - before_counts["slow_requests_started"]
         base.require(slow_delta == 1, f"The batch and playback must share one actually running probe, observed {slow_delta} slow probe requests.")
         final = wait_for_idle(api, timeout=MAX_WAIT_SECONDS)
@@ -1123,7 +1268,7 @@ def _sharing_direction(api: base.JellyfinApi, container: str, media_container: s
 def wait_for_slow_start(media_container: str, before_counts: dict[str, int], timeout: int = 60) -> None:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        if base.media_request_counts(media_container)["slow_requests_started"] > before_counts["slow_requests_started"]:
+        if INSTANCE.media_request_counts(media_container)["slow_requests_started"] > before_counts["slow_requests_started"]:
             return
         time.sleep(0.2)
     raise RuntimeError("The batch/playback sharing scenario never reached a real slow probe request.")
@@ -1153,15 +1298,15 @@ def scenario_scope(api: base.JellyfinApi, container: str, media_container: str) 
     base.require(strm_library != local_library, "The STRM and local candidates must come from distinct libraries.")
 
     media, sha1 = media_bytes()
-    plain_url = "http://media:8080/fixture.mp4"
-    strm_dir = ROOT / "artifacts" / "dev-env" / "strm"
-    local_dir = ROOT / "artifacts" / "dev-env" / "media"
+    plain_url = PLAIN_URL
+    strm_dir_path = strm_dir()
+    local_dir = media_dir()
     nonce = uuid.uuid4().hex[:8]
     # More than one fixed batch (128) of candidates in the STRM library forces a real multi-batch read.
     bulk_count = 130
     bulk_names = [f"Batch Scope Bulk {nonce} {index:03d}" for index in range(bulk_count)]
     bulk_paths = [
-        temporary_fixture_in(strm_dir, name, base.unique_query_url(plain_url, f"{nonce}-{index}"), sha1, len(media))
+        temporary_fixture_in(strm_dir_path, name, base.unique_query_url(plain_url, f"{nonce}-{index}"), sha1, len(media))
         for index, name in enumerate(bulk_names)
     ]
     # A versioned STRM inside the local library proves an explicit partial scope does not touch the other library.
@@ -1170,11 +1315,11 @@ def scenario_scope(api: base.JellyfinApi, container: str, media_container: str) 
     # A native multi-version pair inside the STRM library proves both versions are checked by source identity.
     mv_primary_name = f"Batch Scope MV A {nonce}"
     mv_alt_name = f"Batch Scope MV B {nonce}"
-    mv_primary_path = temporary_fixture_in(strm_dir, mv_primary_name, base.unique_query_url(plain_url, nonce + "mva"), sha1, len(media))
-    mv_alt_path = temporary_fixture_in(strm_dir, mv_alt_name, base.unique_query_url(plain_url, nonce + "mvb"), sha1, len(media))
+    mv_primary_path = temporary_fixture_in(strm_dir_path, mv_primary_name, base.unique_query_url(plain_url, nonce + "mva"), sha1, len(media))
+    mv_alt_path = temporary_fixture_in(strm_dir_path, mv_alt_name, base.unique_query_url(plain_url, nonce + "mvb"), sha1, len(media))
     # A STRM added after the fixed set to prove the next round re-queries and discovers new items.
     incremental_name = f"Batch Scope Increment {nonce}"
-    incremental_path = strm_dir / (incremental_name + ".strm")
+    incremental_path = strm_dir_path / (incremental_name + ".strm")
     all_paths = [*bulk_paths, local_strm_path, mv_primary_path, mv_alt_path]
     result: dict = {}
     try:
@@ -1197,7 +1342,7 @@ def scenario_scope(api: base.JellyfinApi, container: str, media_container: str) 
         # Explicit partial scope = the STRM library only.
         accepted = configure(api, {"Enabled": True, "PlaybackAutoCheck": True, "MaxConcurrentProbes": 2, "DetailedLog": False, "BatchAllLibraries": False, "BatchLibraryIds": strm_library})
         base.require(accepted == 204, f"Jellyfin rejected a valid explicit single-library scope ({accepted}).")
-        before_counts = base.media_request_counts(media_container)
+        before_counts = INSTANCE.media_request_counts(media_container)
         run_task(api)
         summary_line = latest_batch_summary(container)["line"]
         fields = summary_fields(summary_line)
@@ -1219,7 +1364,7 @@ def scenario_scope(api: base.JellyfinApi, container: str, media_container: str) 
             "Both versions of one project must share one canonical item_id (canonical item_id + source_key uniqueness).",
         )
         base.require(mv_primary_after["source_key"] != mv_alt_after["source_key"], "The two versions must keep distinct source keys under the shared project.")
-        after_counts = base.media_request_counts(media_container)
+        after_counts = INSTANCE.media_request_counts(media_container)
         # This isolated environment has no pre-probed primary stream for the new fixtures, so every candidate is
         # correctly decided to need a probe rather than first-trusted. Reconcile the real branch instead of
         # asserting an unprobed first trust: every need-probe candidate must have produced exactly one actual call,
@@ -1242,7 +1387,7 @@ def scenario_scope(api: base.JellyfinApi, container: str, media_container: str) 
         # round (the fixed set was already captured) and the deleted candidate must settle safely without failing
         # the run. The next round must then discover the added item and converge.
         in_round_names = [f"Batch Scope InRound {nonce} {index}" for index in range(2)]
-        in_round_paths = [temporary_fixture_in(strm_dir, name, plain_url, sha1, len(media)) for name in in_round_names]
+        in_round_paths = [temporary_fixture_in(strm_dir_path, name, plain_url, sha1, len(media)) for name in in_round_names]
         all_paths.extend(in_round_paths)
         api.refresh_library()
         in_round_items = {name: api.wait_for_named_library_item(name) for name in in_round_names}
@@ -1250,7 +1395,7 @@ def scenario_scope(api: base.JellyfinApi, container: str, media_container: str) 
         for name, path in zip(in_round_names, in_round_paths):
             path.write_bytes(base.write_versioned_fixture(path.read_bytes(), delay_url(plain_url, 8, in_round_ids[name]), sha1, len(media)))
         in_round_added_name = f"Batch Scope InRound Added {nonce}"
-        in_round_added_path = strm_dir / (in_round_added_name + ".strm")
+        in_round_added_path = strm_dir_path / (in_round_added_name + ".strm")
         before_in_round = slow_request_counts(media_container)
         status, _ = api.request_response("/ScheduledTasks/Running/" + task_id_for(api), method="POST")
         base.require(status == 204, "Jellyfin did not accept the in-round batch start.")
@@ -1292,17 +1437,13 @@ def scenario_scope(api: base.JellyfinApi, container: str, media_container: str) 
         # Disabling the plugin must stop the batch before it starts new probes. The check covers every media
         # route (ordinary fixture, alternate and delayed), not only the slow counter.
         configure(api, {"Enabled": False, "PlaybackAutoCheck": True, "MaxConcurrentProbes": 2, "DetailedLog": False, "BatchAllLibraries": False, "BatchLibraryIds": strm_library})
-        before_disabled = base.media_request_counts(media_container)
+        before_disabled = INSTANCE.media_request_counts(media_container)
         before_disabled_ids = slow_request_counts(media_container)
         run_task(api)
-        after_disabled = base.media_request_counts(media_container)
+        after_disabled = INSTANCE.media_request_counts(media_container)
         after_disabled_ids = slow_request_counts(media_container)
-        base.require(
-            after_disabled["fixture"] == before_disabled["fixture"]
-            and after_disabled["fixture_alt"] == before_disabled["fixture_alt"]
-            and after_disabled["slow_requests_started"] == before_disabled["slow_requests_started"],
-            "A disabled plugin still started a new batch media request.",
-        )
+        base.require(after_disabled == before_disabled,
+                     "A disabled plugin still started a new batch media request.")
         base.require(after_disabled_ids == before_disabled_ids, "A disabled plugin still started a new delayed probe request.")
 
         result = {
@@ -1364,14 +1505,14 @@ def _shared_stop_direction(api: base.JellyfinApi, container: str, media_containe
     nonce = uuid.uuid4().hex[:8]
     name = f"Batch Shared Stop {nonce}"
     other_name = f"Batch Shared Stop Other {nonce}"
-    path = ROOT / "artifacts" / "dev-env" / "strm" / (name + ".strm")
-    other_path = ROOT / "artifacts" / "dev-env" / "media" / (other_name + ".strm")
+    path = strm_dir() / (name + ".strm")
+    other_path = media_dir() / (other_name + ".strm")
     libraries = library_ids_by_suffix(api)
     base.require("strm" in libraries and "local" in libraries, f"The isolated environment must expose strm and local libraries: {libraries}.")
     strm_library = libraries["strm"]
     try:
         media, sha1 = media_bytes()
-        plain_url = "http://media:8080/fixture.mp4"
+        plain_url = PLAIN_URL
         # A long delay keeps the shared probe running while the batch is stopped, so the joined started probe is
         # still settling when the stop is confirmed.
         target_url = delay_url(plain_url, 8, uuid.uuid4().hex)
@@ -1395,7 +1536,7 @@ def _shared_stop_direction(api: base.JellyfinApi, container: str, media_containe
         path.write_bytes(base.write_versioned_fixture(path.read_bytes(), target_url, sha1, len(media)))
         other_path.write_bytes(base.write_versioned_fixture(other_path.read_bytes(), other_url, sha1, len(media)))
 
-        before_counts = base.media_request_counts(media_container)
+        before_counts = INSTANCE.media_request_counts(media_container)
         before_id_counts = slow_request_counts(media_container)
         playback_holder: dict = {}
         other_holder: dict = {}
@@ -1545,13 +1686,13 @@ def scenario_mixed(api: base.JellyfinApi, container: str, media_container: str) 
     batch_names = [f"Batch Mixed {index} {nonce}" for index in range(2)]
     playback_name = f"Batch Mixed Playback {nonce}"
     batch_paths: list[Path] = []
-    playback_path = ROOT / "artifacts" / "dev-env" / "media" / (playback_name + ".strm")
+    playback_path = media_dir() / (playback_name + ".strm")
     libraries = library_ids_by_suffix(api)
     base.require("strm" in libraries and "local" in libraries, f"The isolated environment must expose strm and local libraries: {libraries}.")
     strm_library = libraries["strm"]
     try:
         media, sha1 = media_bytes()
-        plain_url = "http://media:8080/fixture.mp4"
+        plain_url = PLAIN_URL
         for name in batch_names:
             batch_paths.append(temporary_fixture(name, plain_url, sha1, len(media)))
         with playback_path.open("xb") as fixture:
@@ -1577,7 +1718,7 @@ def scenario_mixed(api: base.JellyfinApi, container: str, media_container: str) 
         playback_url = delay_url(plain_url, 4, playback_id)
         playback_path.write_bytes(base.write_versioned_fixture(playback_path.read_bytes(), playback_url, sha1, len(media)))
 
-        before_counts = base.media_request_counts(media_container)
+        before_counts = INSTANCE.media_request_counts(media_container)
         before_id_counts = slow_request_counts(media_container)
         mixed_started_epoch = time.time()
         playback_holder: dict = {}
@@ -1676,20 +1817,21 @@ def scenario_failure(api: base.JellyfinApi, container: str) -> dict:
     # The plugin must latch the store as unavailable, the native task must fail (not report Completed), and no new
     # probe of any kind may start. The database is restored and the server restarted to clear the latch before the
     # recovery run.
-    base.require(FINGERPRINT_DATABASE.is_file(), "The plugin fingerprint database is missing.")
-    backup = FINGERPRINT_DATABASE.with_suffix(".db.bak-" + uuid.uuid4().hex[:8])
-    shutil.copy2(FINGERPRINT_DATABASE, backup)
+    database = FINGERPRINT_DATABASE
+    base.require(database.is_file(), "The plugin fingerprint database is missing.")
+    backup = database.with_suffix(".db.bak-" + uuid.uuid4().hex[:8])
+    shutil.copy2(database, backup)
     result: dict = {}
     try:
-        FINGERPRINT_DATABASE.unlink()
-        FINGERPRINT_DATABASE.mkdir()
+        database.unlink()
+        database.mkdir()
         media_container = base.isolated_media_container_name()
-        before_counts = base.media_request_counts(media_container)
+        before_counts = INSTANCE.media_request_counts(media_container)
         before_started = slow_request_ids_started(media_container)
         final = run_task(api)
         status_value = str((final.get("LastExecutionResult") or {}).get("Status", "")).lower()
         summary_line = latest_batch_summary(container)["line"]
-        after_counts = base.media_request_counts(media_container)
+        after_counts = INSTANCE.media_request_counts(media_container)
         after_started = slow_request_ids_started(media_container)
         base.require(status_value in {"failed", "3"}, f"An unavailable fingerprint store did not fail the batch task: {status_value}.")
         base.require("store unavailable True" in (summary_line or ""), f"The batch summary did not report the store as unavailable: {summary_line}.")
@@ -1703,13 +1845,13 @@ def scenario_failure(api: base.JellyfinApi, container: str) -> dict:
         base.require(after_started == before_started, "An unavailable fingerprint store still started a delayed probe request.")
         result = {"task_status": status_value, "summary_line": summary_line, "store_unavailable_reported": True, "no_new_probe": True}
     finally:
-        if FINGERPRINT_DATABASE.is_dir():
-            FINGERPRINT_DATABASE.rmdir()
-        shutil.move(str(backup), str(FINGERPRINT_DATABASE))
+        if database.is_dir():
+            database.rmdir()
+        shutil.move(str(backup), str(database))
 
     # The store fault latches until restart; restart, then prove the batch task is usable again.
-    container = base.restart_isolated_server()
-    api = base.JellyfinApi()
+    container = INSTANCE.restart()
+    api = INSTANCE.api()
     recovered = run_task(api)
     result["recovered_status"] = str((recovered.get("LastExecutionResult") or {}).get("Status", "")).lower()
     base.require(result["recovered_status"] in {"completed", "0"}, "The batch task did not recover after the store was restored.")
@@ -1718,7 +1860,8 @@ def scenario_failure(api: base.JellyfinApi, container: str) -> dict:
 
 def restore_fixture(item_id: str | None, original: bytes) -> str:
     """Restore the shared fixture and retry the Jellyfin address sync while the restarted server settles."""
-    FIXTURE.write_bytes(original)
+    if INSTANCE.kind == "dev-env":
+        FIXTURE.write_bytes(original)
     if item_id is None:
         return "fixture restored; Jellyfin address sync not available"
     url, _, _ = base.parse_manifest(original)
@@ -1726,8 +1869,8 @@ def restore_fixture(item_id: str | None, original: bytes) -> str:
     last_error: str | None = None
     while time.monotonic() < deadline:
         try:
-            api = base.JellyfinApi()
-            container = base.isolated_container_name()
+            api = INSTANCE.api()
+            container = INSTANCE.container()
             result = base.call_playback(api, container, item_id, url)
             if result["http_status"] == 200 and result["path_matches_manifest"]:
                 return "fixture restored and Jellyfin address synchronized"
@@ -1742,24 +1885,27 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--scenario", choices=["suite", "discovery", "stop", "sharing", "scope", "failure", "shared_stop", "mixed"], default="suite")
     args = parser.parse_args()
+    require_instance_ready()
 
-    base.require(FIXTURE.is_file(), "The isolated STRM fixture is missing.")
     original = FIXTURE.read_bytes()
-    original_configuration = CONFIGURATION_FILE.read_bytes() if CONFIGURATION_FILE.is_file() else b""
+    original_configuration = (CONFIGURATION_FILE.read_bytes()
+                              if CONFIGURATION_FILE.is_file() else b"")
     api: base.JellyfinApi | None = None
     container: str | None = None
     media_container: str | None = None
     fixture_item_id: str | None = None
     trigger_snapshot: dict[str, list[dict]] = {}
-    summary: dict = {"fixture_restoration": "not needed"}
+    summary: dict = {"fixture_restoration": "not needed", "instance": INSTANCE.kind}
     exit_code = 1
     try:
-        summary["deployment"] = base.deploy_plugin()
-        container = base.restart_isolated_server()
-        api = base.JellyfinApi()
-        base.require(api.public_info().get("Version") == "12.2.0", "The active isolated Jellyfin version is not 12.2.0.")
+        if INSTANCE.kind == "dev-env":
+            summary["deployment"] = base.deploy_plugin()
+        container = INSTANCE.restart()
+        api = INSTANCE.api()
+        base.require(api.public_info().get("Version") == expected_public_version(),
+                     f"The active isolated Jellyfin version is not {expected_public_version()}.")
         summary["plugin_status"] = api.plugin_status()
-        media_container = base.isolated_media_container_name()
+        media_container = INSTANCE.media_container()
         trigger_snapshot = snapshot_triggers(api)
         try:
             fixture_item_id = api.fixture_item()["Id"]
@@ -1770,9 +1916,9 @@ def main() -> int:
             summary["scenario_discovery"] = scenario_all(api, container)
             # The discovery scenario restarts the isolated server; re-authenticate and re-resolve the container so
             # the following scenarios never reuse a stale session.
-            api = base.JellyfinApi()
-            container = base.isolated_container_name()
-            media_container = base.isolated_media_container_name()
+            api = INSTANCE.api()
+            container = INSTANCE.container()
+            media_container = INSTANCE.media_container()
         if args.scenario in {"suite", "stop"}:
             summary["scenario_stop"] = scenario_stop(api, container, media_container)
         if args.scenario in {"suite", "shared_stop"}:

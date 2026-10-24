@@ -105,6 +105,96 @@ async function setLibraryCheckbox(page, rawValue, desired) {
   throw new Error(`The library checkbox ${rawValue} was not rendered on the page.`);
 }
 
+// Add the self-hosted plugin repository through the native dashboard, exactly as an administrator
+// does: Control Panel -> Plugins -> Manage Repositories -> New Repository -> name + URL -> Add. It
+// only performs the real UI actions and records the native responses; it never calls an API route
+// directly and never claims success without the native POST response and the listed repository.
+async function addPluginRepository(page) {
+  if (!cfg.repositoryUrl) {
+    throw new Error('the install scenario requires cfg.repositoryUrl');
+  }
+  const responses = [];
+  const onResponse = (response) => {
+    const url = new URL(response.url());
+    if (/\/(Repositories|Packages|Plugins)(\/|$)/.test(url.pathname)) {
+      responses.push({ method: response.request().method(), path: url.pathname, status: response.status() });
+    }
+  };
+  page.on('response', onResponse);
+  try {
+    await page.goto(cfg.baseUrl + '/web/index.html#/dashboard/plugins', { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await page.waitForLoadState('networkidle', { timeout: 60000 });
+    await page.getByRole('link', { name: 'Manage Repositories', exact: true }).click();
+    await page.waitForURL(/dashboard\/plugins\/repositories/, { timeout: 60000 });
+    await page.waitForLoadState('networkidle', { timeout: 60000 });
+    await page.getByRole('button', { name: 'New Repository', exact: true }).click();
+    const dialog = page.getByRole('dialog');
+    await dialog.waitFor({ timeout: 60000 });
+    await dialog.getByLabel('Repository Name', { exact: true }).fill(cfg.repositoryName || 'STRM Probe Optimizer — Linux x64');
+    await dialog.getByLabel('Repository URL', { exact: true }).fill(cfg.repositoryUrl);
+    const posted = page.waitForResponse((response) => new URL(response.url()).pathname === '/Repositories'
+      && response.request().method() === 'POST', { timeout: 120000 });
+    await dialog.getByRole('button', { name: 'Add', exact: true }).click();
+    const added = await posted;
+    const status = added.status();
+    await dialog.waitFor({ state: 'hidden', timeout: 60000 });
+    // The native catalog must actually list the repository's package before an install is attempted.
+    await page.getByRole('link', { name: 'Plugins', exact: true }).click();
+    await page.waitForLoadState('networkidle', { timeout: 60000 });
+    await page.getByText('Available', { exact: true }).click();
+    await page.getByText(cfg.pluginName || 'STRM Probe Optimizer', { exact: true }).first().waitFor({ timeout: 120000 });
+    const screenshot = await capture(page, 'repository-added');
+    return { repositoryPostStatus: status, repositoryAdded: status === 204,
+             catalogListed: true, responses, screenshots: [screenshot] };
+  } finally {
+    page.off('response', onResponse);
+  }
+}
+
+// Install the catalog version through the native plugin detail page and its confirmation dialog,
+// then report the native install response. The archive the server really downloaded is verified
+// separately by the runner from the deployed payload.
+async function installFromCatalog(page) {
+  const normalizedId = cfg.pluginId.replace(/-/g, '').toLowerCase();
+  const responses = [];
+  const onResponse = (response) => {
+    const url = new URL(response.url());
+    if (/\/(Repositories|Packages|Plugins)(\/|$)/.test(url.pathname)) {
+      responses.push({ method: response.request().method(), path: url.pathname, status: response.status() });
+    }
+  };
+  page.on('response', onResponse);
+  try {
+    await page.goto(cfg.baseUrl + '/web/index.html#/dashboard/plugins', { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await page.waitForLoadState('networkidle', { timeout: 60000 });
+    await page.getByText('Available', { exact: true }).click();
+    const link = page.locator(`a[href*="/plugins/${normalizedId}?"]`).first();
+    await link.waitFor({ timeout: 120000 });
+    await link.click();
+    await page.waitForLoadState('networkidle', { timeout: 60000 });
+    const detailScreenshot = await capture(page, 'install-detail');
+    const installed = page.waitForResponse((response) => new URL(response.url()).pathname
+      .startsWith('/Packages/Installed/') && response.request().method() === 'POST', { timeout: 180000 });
+    // The detail page offers the install action both in its own side panel and in the revision
+    // history; the side panel's button comes first and is what an administrator clicks.
+    await page.getByRole('button', { name: 'Install', exact: true }).first().click();
+    const dialog = page.getByRole('dialog');
+    await dialog.waitFor({ timeout: 60000 });
+    await dialog.getByText('Confirm Plugin Installation', { exact: true }).waitFor({ timeout: 60000 });
+    const confirmationScreenshot = await capture(page, 'install-confirmation');
+    // The confirmation dialog's own confirm button carries the same "Install" label.
+    await dialog.getByRole('button', { name: 'Install', exact: true }).click();
+    const response = await installed;
+    await page.waitForLoadState('networkidle', { timeout: 120000 });
+    const installedScreenshot = await capture(page, 'install-complete');
+    return { installPostStatus: response.status(), installConfirmed: response.status() === 204,
+             detailScreenshot, confirmationScreenshot, screenshots: [detailScreenshot, confirmationScreenshot, installedScreenshot],
+             responses };
+  } finally {
+    page.off('response', onResponse);
+  }
+}
+
 async function openPage(page) {
   // Open the native plugin entry and follow its configuration link, exactly like an administrator would. The
   // dashboard plugin card uses the id without dashes, so match the normalized id.
@@ -270,6 +360,15 @@ async function withServerConfig(page, mutate) {
 }
 
 const scenarios = {
+  // RO-1: add the self-hosted repository and install the released ZIP through the native dashboard.
+  // Nothing here is a fake route: every step is a real click on the native page.
+  async web_install(page) {
+    const repository = await addPluginRepository(page);
+    const install = await installFromCatalog(page);
+    return { repository, install, final: await readState(page).catch(() => null),
+             screenshots: [...repository.screenshots, ...install.screenshots] };
+  },
+
   // AC-U1: open the page from the plugin entry; the five effective values and the real library list load.
   async inspect(page) {
     await openPage(page);
@@ -628,7 +727,10 @@ async function run() {
   const browser = await chromium.launch({ headless: true });
   // Pin a real locale so headless Chromium never inherits the host's POSIX locale (which makes Jellyfin's
   // number formatting throw "Invalid language tag: en-us@posix" during web-component upgrades).
-  const context = await browser.newContext({ viewport: { width: 1400, height: 1000 }, locale: 'zh-CN', timezoneId: 'Asia/Shanghai' });
+  // A scenario may pin the browser's UI language. The default stays the locale every existing scenario was
+  // accepted with; the native-install scenario asks for en-US so the administrator-facing labels it clicks are
+  // the ones the shipped English catalogue defines.
+  const context = await browser.newContext({ viewport: { width: 1400, height: 1000 }, locale: cfg.locale || 'zh-CN', timezoneId: 'Asia/Shanghai' });
   const page = await context.newPage();
   const consoleErrors = [];
   const pageErrors = [];

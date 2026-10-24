@@ -31,7 +31,22 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 ENVIRONMENT = ROOT / "scripts" / "development_environment.py"
-SPEC = json.loads((ROOT / "dev" / "environment-spec.json").read_text())
+# Only the explicitly selected server version is ever used. 12.2 keeps its existing default spec and
+# host-provisioned lock; 12.3 has its own committed spec plus an immutable digest lock, so a version
+# selection can never silently fall back to the other server.
+SERVER_VERSIONS = {
+    "12.2": {"spec": "dev/environment-spec.json", "lock": "artifacts/dev-env/images.lock.json"},
+    "12.3": {"spec": "dev/environment-spec-12.3.json", "lock": "dev/images-12.3.lock.json"},
+}
+SERVER_VERSION = "12.2"
+SPEC = json.loads((ROOT / SERVER_VERSIONS[SERVER_VERSION]["spec"]).read_text())
+# The spec and lock are resolved from ``ROOT`` on every use, so a caller (or a guard test) that
+# patches ROOT always gets that root's own files.
+LOCK_RELATIVE = SERVER_VERSIONS[SERVER_VERSION]["lock"]
+
+
+def lock_file() -> Path:
+    return ROOT / LOCK_RELATIVE
 BASE = ROOT / "artifacts" / "package-env"
 WORK = BASE
 PROJECT = "jf-strm-probe-package-" + hashlib.sha256(str(ROOT).encode()).hexdigest()[:10]
@@ -41,6 +56,10 @@ DOCKER = ["docker", "--host", "unix:///var/run/docker.sock"]
 SERVICE_RESOURCE_LIMITS: dict[str, dict[str, int | float]] = {}
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
 STRM_LIBRARY = "Package STRM Fixtures"
+# A second real library over the same owned instance, used only where an explicit partial batch scope
+# needs two native libraries. Its files are ordinary local media, not STRM.
+LOCAL_LIBRARY = "Package Local Fixtures"
+LOCAL_LIBRARY_PATH = "/media/local"
 # Distinct basenames so Jellyfin never groups them as alternate versions of one another.
 MEDIA_MP4 = "package-mp4.mp4"
 MEDIA_MKV = "package-mkv.mkv"
@@ -212,8 +231,43 @@ def copy_owned(source: Path, target: Path, *, label: str) -> Path:
     return owned
 
 
+def select_server_version(version: str) -> dict:
+    """Select exactly one server version and its own spec plus immutable lock.
+
+    Unknown versions are refused before anything is measured, and the previous selection's spec/lock
+    is never used as a fallback.
+    """
+    global SPEC, LOCK_RELATIVE, SERVER_VERSION
+    require(version in SERVER_VERSIONS, f"Unknown server version {version!r}; supported: {sorted(SERVER_VERSIONS)}.")
+    spec_path = ROOT / SERVER_VERSIONS[version]["spec"]
+    require(spec_path.is_file(), f"The server version {version} specification is missing: {spec_path}")
+    candidate = json.loads(spec_path.read_text())
+    require(str(candidate.get("server", {}).get("version")) == version,
+            f"The environment specification {spec_path.name} does not declare server version {version}.")
+    SERVER_VERSION = version
+    SPEC = candidate
+    LOCK_RELATIVE = SERVER_VERSIONS[version]["lock"]
+    return server_identity()
+
+
+def server_public_version() -> str:
+    """The exact ``/System/Info/Public`` version the selected server must report."""
+    server = SPEC["server"]
+    return str(server.get("public_version") or str(server["version"]) + ".0")
+
+
+def server_identity() -> dict:
+    """The selected server's fixed identity, recorded in every run index."""
+    server = SPEC["server"]
+    return {"version": SERVER_VERSION, "publicVersion": server_public_version(),
+            "image": server.get("image"), "source": server.get("source"),
+            "sourceSha": server.get("source_sha"),
+            "imageIndexDigest": server.get("image_index_digest"),
+            "lockFile": LOCK_RELATIVE, "specFile": SERVER_VERSIONS[SERVER_VERSION]["spec"]}
+
+
 def load_image_lock() -> dict[str, str]:
-    lock_path = ROOT / "artifacts" / "dev-env" / "images.lock.json"
+    lock_path = lock_file()
     require(lock_path.is_file(), "The immutable image lock is missing; provision the environment first.")
     data = json.loads(lock_path.read_text())
     require(data.get("spec") == SPEC, "The image lock belongs to a different environment specification.")
@@ -224,6 +278,31 @@ def load_image_lock() -> dict[str, str]:
         require(value.startswith(prefix) and DIGEST.fullmatch(value[len(prefix):]),
                 f"The image lock has no immutable {name} digest.")
     return images
+
+
+def verify_server_image(images: dict[str, str] | None = None) -> dict:
+    """Prove the locked server digest is present locally as a Linux amd64 image.
+
+    The measurement must run on the digest the contract fixed, not on whatever a mutable tag now
+    resolves to, so a missing or foreign image stops the run before any instance starts.
+    """
+    images = images or load_image_lock()
+    server = images["server"]
+    inspected = run(*DOCKER, "image", "inspect", server,
+                    "--format", "{{.Os}}/{{.Architecture}} {{.Id}} {{json .RepoDigests}}")
+    require(inspected.returncode == 0,
+            f"The pinned server image {server} is not present locally; pull that digest before measuring.")
+    fields = inspected.stdout.strip().split(maxsplit=2)
+    require(len(fields) >= 2, "The pinned server image inspection returned no platform identity.")
+    require(fields[0] == "linux/amd64",
+            f"The pinned server image is {fields[0]!r}, not the required linux/amd64 platform.")
+    digests = json.loads(fields[2]) if len(fields) > 2 and fields[2].startswith("[") else []
+    expected_digest = server.split("@", 1)[1]
+    require(server in digests or fields[1] == expected_digest,
+            f"The locally present image does not match the locked digest {server} (repo digests {digests}).")
+    identity = server_identity()
+    identity.update({"imageId": fields[1], "repoDigests": digests, "platform": fields[0]})
+    return identity
 
 
 def write_compose() -> Path:
@@ -323,6 +402,9 @@ def compose(action: str, *, timeout: int = 180) -> None:
     stage_media_server()
     require(run(*DOCKER, "info", "--format", "{{.ServerVersion}}").returncode == 0, "The Docker daemon is unavailable.")
     guard_containers()
+    if action == "up":
+        # A start must use the selected version's own locked digest on the required platform.
+        verify_server_image()
     path = write_compose()
     base = [*DOCKER, "compose", "--project-name", PROJECT, "--file", str(path)]
     if action == "up":
@@ -408,7 +490,7 @@ def wait_healthy(timeout: int = 150) -> str:
             try:
                 with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/System/Info/Public", timeout=10) as response:
                     info = json.load(response)
-                if info.get("Version") == "12.2.0":
+                if info.get("Version") == server_public_version():
                     return container
             except (OSError, urllib.error.URLError, json.JSONDecodeError):
                 pass
@@ -465,8 +547,8 @@ def write_credentials(base_url: str, username: str, password: str) -> None:
     credentials.chmod(0o600)
 
 
-def prepare_clean_instance() -> dict:
-    """Start a fresh instance, complete setup, add the two libraries and record credentials."""
+def prepare_clean_instance(libraries: list[tuple[str, list[str]]] | None = None) -> dict:
+    """Start a fresh instance, complete setup, add the given libraries and record credentials."""
     workspace()
     ensure_media()
     compose("stop")
@@ -487,8 +569,11 @@ def prepare_clean_instance() -> dict:
     write_credentials(f"http://127.0.0.1:{PORT}", username, password)
     # The library is created through the authenticated API, so authenticate first.
     token = login(username, password)
-    add_library_authenticated(token, STRM_LIBRARY, ["/media/strm"])
-    return {"container": container, "port": PORT, "credentials": str(credentials_path())}
+    for name, paths in (libraries or [(STRM_LIBRARY, ["/media/strm"])]):
+        add_library_authenticated(token, name, paths)
+    return {"container": container, "port": PORT, "credentials": str(credentials_path()),
+            "libraries": [name for name, _ in (libraries or [(STRM_LIBRARY, ["/media/strm"])])],
+            "server": server_identity()}
 
 
 def login(username: str, password: str) -> str:

@@ -1,0 +1,23 @@
+{
+  "spec": {
+    "sdk": {
+      "version": "10.0.401",
+      "rid": "linux-x64",
+      "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.401/dotnet-sdk-10.0.401-linux-x64.tar.gz",
+      "sha512": "51c8b999af9e8dd9998c9edc5944e19a90788862068acd38694e098889054ce8c23d4f0c5cccfa16bf187d044562359e5ee69a9f8ad0bbe913ba90311fbce25b"
+    },
+    "server": {
+      "version": "12.3",
+      "public_version": "12.3.0",
+      "image": "jellyfin/jellyfin:12.3",
+      "image_index_digest": "sha256:2038fe038ab3876a80f6e7b7e0aef6607b032c7dc0c9b3ad3296d0b2eba3bbb5",
+      "source": "https://github.com/jellyfin/jellyfin.git",
+      "source_sha": "06de749d435e2d0be0c5119a41f2300fdd7143e5"
+    },
+    "media_image": "python:3.11-slim-bookworm"
+  },
+  "images": {
+    "server": "jellyfin/jellyfin@sha256:720ad28968e040f1ea049749f4ce546b28c7251244a6eb8aacf9147d8afbc24d",
+    "media": "python@sha256:0a310eeecf4e1f5a0743f9a6520c90c88d089c903ca5fd283f501e3a805f5f89"
+  }
+}

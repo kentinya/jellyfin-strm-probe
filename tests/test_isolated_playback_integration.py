@@ -1575,5 +1575,54 @@ class PlaybackStopTests(unittest.TestCase):
         self.assertIn("playbackStop.consoleErrors", code)
 
 
+class ServerVersionRouteTests(unittest.TestCase):
+    """The playback entry must select one server version and refuse an unknown one."""
+
+    def test_the_cli_accepts_only_the_two_committed_server_versions(self):
+        import argparse as argparse_module
+
+        parser = argparse_module.ArgumentParser()
+        source = (ROOT / "scripts" / "run_isolated_playback_integration.py").read_text(encoding="utf-8")
+        self.assertIn('"--server-version", default="12.2", choices=sorted(pe.SERVER_VERSIONS)', source)
+        self.assertTrue(parser is not None)
+
+    def test_the_public_version_assertion_uses_the_selected_version(self):
+        source = (ROOT / "scripts" / "run_isolated_playback_integration.py").read_text(encoding="utf-8")
+        self.assertIn("pe.server_public_version()", source)
+        # The hard-coded 12.2 assertion must be gone from the preparation path.
+        self.assertNotIn('== "12.2.0", "The package instance is not Jellyfin 12.2.0."', source)
+
+    def test_the_selection_is_recorded_before_the_archive_is_verified(self):
+        source = (ROOT / "scripts" / "run_isolated_playback_integration.py").read_text(encoding="utf-8")
+        select = source.index('summary["serverIdentity"] = pe.select_server_version(args.server_version)')
+        verify = source.index("verification = package_plugin.verify_archive(package)", select)
+        self.assertLess(select, verify)
+
+    def test_both_evidence_indexes_record_the_server_identity(self):
+        source = (ROOT / "scripts" / "run_isolated_playback_integration.py").read_text(encoding="utf-8")
+        self.assertEqual(source.count('f"- Server: {json.dumps(summary.get(\'serverIdentity\')'), 2)
+
+
+class ExplicitSourceSelectionGuardTests(unittest.TestCase):
+    """The playback driver's explicit source selection must be a real UI operation."""
+
+    def test_the_selector_operation_is_a_real_change_event(self):
+        driver = (ROOT / "scripts" / "package_playback_driver.mjs").read_text(encoding="utf-8")
+        code = "\n".join(line for line in driver.splitlines()
+                         if not line.lstrip().startswith("//"))
+        self.assertIn("document.querySelector('.selectSource')", code)
+        self.assertIn("new Event('change', { bubbles: true })", code)
+        # The requested version must exist in the native selector before anything is selected.
+        self.assertIn("the requested media source is not offered by the native selector", code)
+        # It must never call an internal playback function to switch versions.
+        for forbidden in ("playbackManager", "setCurrentMediaSource", "apiClient.play"):
+            self.assertNotIn(forbidden, code)
+
+    def test_the_selection_is_only_used_when_the_scenario_asks_for_it(self):
+        driver = (ROOT / "scripts" / "package_playback_driver.mjs").read_text(encoding="utf-8")
+        self.assertIn("if (item.selectedSourceId) {", driver)
+        self.assertIn("sourceSelection", driver)
+
+
 if __name__ == "__main__":
     unittest.main()

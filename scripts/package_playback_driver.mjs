@@ -327,6 +327,55 @@ async function strictPlay(page, item, strict) {
     advancedSeconds };
 }
 
+// Choose one native media source (version) through the details page's own source selector.
+//
+// The pinned web client renders an emby-select `.selectSource` only when the item really has more
+// than one MediaSource, and it loads the chosen version in its own `change` handler. This performs
+// the same real selection an administrator makes: it refuses a selector that is missing or does not
+// offer the requested id, fires the client's own `change` event, waits for the client's alternate
+// version request, and re-reads the selection. It never calls an internal playback function.
+async function chooseSource(page, item) {
+  const wanted = String(item.selectedSourceId);
+  const marker = String(item.selectedSourceIdProgressMarker || '');
+  const select = page.locator('.selectSource');
+  await select.waitFor({ state: 'attached', timeout: 30000 });
+  const options = await page.evaluate(() => Array.from(document.querySelectorAll('.selectSource option'))
+    .map((option) => ({ value: String(option.value), text: String(option.textContent || '') })));
+  const matching = options.filter((option) => option.value.replace(/-/g, '').toLowerCase()
+    === wanted.replace(/-/g, '').toLowerCase());
+  if (matching.length !== 1) {
+    return { requested: wanted, options, error: 'the requested media source is not offered by the native selector' };
+  }
+  const value = matching[0].value;
+  const alternate = page.waitForResponse((response) => {
+    const path = new URL(response.url()).pathname.replace(/-/g, '').toLowerCase();
+    return path.includes(value.replace(/-/g, '').toLowerCase()) && response.status() < 400;
+  }, { timeout: 60000 }).catch(() => null);
+  await page.evaluate((selected) => {
+    const element = document.querySelector('.selectSource');
+    element.value = selected;
+    element.dispatchEvent(new Event('change', { bubbles: true }));
+  }, value);
+  const alternateResponse = await alternate;
+  await page.waitForFunction((selected) => {
+    const element = document.querySelector('.selectSource');
+    return !!element && element.value === selected;
+  }, value, { timeout: 30000 });
+  const observed = await page.evaluate(() => {
+    const element = document.querySelector('.selectSource');
+    return { value: element ? element.value : null, text: element && element.selectedOptions[0] ? element.selectedOptions[0].textContent : null };
+  });
+  return {
+    requested: wanted,
+    options,
+    selected: observed.value,
+    selectedText: observed.text,
+    alternateVersionLoaded: !!alternateResponse,
+    alternateVersionStatus: alternateResponse ? alternateResponse.status() : null,
+    markerMatched: marker ? String(observed.text || '').includes(marker) : null,
+  };
+}
+
 async function playItem(page, item, strict, consoleErrors) {
   const mediaRequests = [];
   const playbackInfo = [];
@@ -368,6 +417,14 @@ async function playItem(page, item, strict, consoleErrors) {
   try {
     await page.goto(cfg.baseUrl + '/web/index.html#/details?id=' + item.id, { waitUntil: 'domcontentloaded', timeout: 60000 });
     await page.waitForSelector('.btnPlay', { timeout: 45000 });
+    let sourceSelection = null;
+    if (item.selectedSourceId) {
+      sourceSelection = await chooseSource(page, item);
+      if (sourceSelection.error) {
+        return { name: item.name, itemId: item.id, mediaType: item.mediaType, advanced: false,
+          sourceSelection };
+      }
+    }
     await page.click('.btnPlay');
     if (strict.enabled) {
       const strictResult = await strictPlay(page, item, strict);
@@ -419,6 +476,7 @@ async function playItem(page, item, strict, consoleErrors) {
         requestErrorScreenshot: requestErrorShot,
         playbackInfo: playbackInfo.slice(0, 10),
         playbackStop,
+        sourceSelection,
       };
     }
     let observed = null;

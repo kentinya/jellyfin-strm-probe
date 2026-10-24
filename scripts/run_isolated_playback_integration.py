@@ -1162,7 +1162,8 @@ def prepare_instance(package: Path) -> dict:
     summary["deployment"] = pe.deploy_archive(package)
     pkg.restart()
     auth = refresh_auth()
-    require(pe.public_info().get("Version") == "12.2.0", "The package instance is not Jellyfin 12.2.0.")
+    require(pe.public_info().get("Version") == pe.server_public_version(),
+            f"The package instance is not Jellyfin {pe.server_public_version()}.")
     summary["pluginStatus"] = pkg.plugin_status(auth)
     require(str(summary["pluginStatus"]).lower() in {"active", "0"},
             "The plugin is not Active after archive-only install.")
@@ -1321,6 +1322,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--package", type=Path, required=True)
+    parser.add_argument("--server-version", default="12.2", choices=sorted(pe.SERVER_VERSIONS),
+                        help="Select one server version and its own committed spec/lock (default: 12.2).")
     parser.add_argument("--scenario", default="baseline", choices=["baseline", "matrix"])
     parser.add_argument("--evidence-dir", type=Path, required=True)
     parser.add_argument("--rows", default=",".join(BASELINE_ROW_IDS),
@@ -1348,6 +1351,9 @@ def main() -> int:
     workspace = None
     started = time.time()
     try:
+        # The server version is fixed before the archive is even verified, so a requested and an
+        # actually started version can never diverge.
+        summary["serverIdentity"] = pe.select_server_version(args.server_version)
         verification = package_plugin.verify_archive(package)
         summary["packageIdentity"] = {
             "archiveSha256": verification["archiveSha256"], "version": verification["version"],
@@ -1418,6 +1424,7 @@ def main() -> int:
 def render_index(summary: dict) -> str:
     lines = ["# Slice 5 baseline evidence index", "",
              f"- Status: **{summary.get('status')}**",
+             f"- Server: {json.dumps(summary.get('serverIdentity') or {}, sort_keys=True)}",
              f"- Scenario: {summary.get('scenario')}",
              f"- Rows: {', '.join(summary.get('rows') or [])}",
              f"- Package: `{summary.get('package')}`",
@@ -3153,6 +3160,7 @@ def scenario_matrix(package: Path, evidence_dir: Path, selected: list[str],
 def render_matrix_index(summary: dict) -> str:
     lines = ["# Slice 5 matrix evidence index", "",
              f"- Status: **{summary.get('status')}**",
+             f"- Server: {json.dumps(summary.get('serverIdentity') or {}, sort_keys=True)}",
              f"- Scenario: {summary.get('scenario')}",
              f"- Rows: {', '.join(summary.get('rows') or [])}",
              f"- Package: `{summary.get('package')}`",
