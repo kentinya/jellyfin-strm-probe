@@ -117,8 +117,22 @@ class ConfigurationScriptGuardTests(unittest.TestCase):
             self.assertIn(field, driver)
         self.assertNotIn("ScheduledTasks/Running", driver)
         self.assertNotIn("updatePluginConfiguration(pluginUniqueId, config).then(function (result)", driver)
-        # The driver pins a real locale so headless Chromium never inherits a POSIX locale that breaks Jellyfin.
-        self.assertIn("locale: 'zh-CN'", driver)
+        # The driver still pins its accepted default locale so headless Chromium never inherits a
+        # POSIX locale that breaks Jellyfin; a scenario may only override it explicitly.
+        self.assertIn("locale: cfg.locale || 'zh-CN'", driver)
+
+    def test_only_the_install_scenario_overrides_the_default_locale(self):
+        driver = (ROOT / "scripts" / "configuration_page_driver.mjs").read_text(encoding="utf-8")
+        # Every scenario keeps the accepted zh-CN default unless it passes its own locale.
+        self.assertNotIn("cfg.locale || 'en-US'", driver)
+        self.assertNotIn("locale: 'en-US'", driver)
+        # The native-install scenario is the one explicit override: it clicks the shipped English
+        # catalogue labels. No other runner scenario may replace the default.
+        runner = (ROOT / "scripts" / "run_isolated_package_integration.py").read_text(encoding="utf-8")
+        install = runner[runner.index("def stage_web_install("):runner.index("def first_trust_after_install(")]
+        self.assertIn('"locale": "en-US"', install)
+        self.assertEqual(runner.count('"locale": "en-US"'), 1)
+        self.assertNotIn('"locale": "zh-CN"', runner)
 
     def test_runner_asserts_the_stale_scope_and_unconfirmed_save_behaviour(self):
         runner = (ROOT / "scripts" / "run_isolated_configuration_integration.py").read_text(encoding="utf-8")

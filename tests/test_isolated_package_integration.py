@@ -659,6 +659,112 @@ class CompatibilityScenarioGuardTests(unittest.TestCase):
         compose.assert_not_called()
         self.assertEqual(sorted(str(path) for path in base.rglob("*")), before)
 
+    def test_a_compatibility_run_without_an_upgrade_source_is_refused_not_skipped(self):
+        # The non-empty 12.2 upgrade preservation is a Required Outcome: an omitted source must fail
+        # before any instance starts instead of being recorded as SKIPPED inside a passing run.
+        base = Path(tempfile.mkdtemp())
+        package = valid_archive(base / "pkg")
+        evidence = base / "evidence"
+        with patch.object(package_environment, "BASE", base), \
+                patch.object(package_environment, "select_workspace") as workspace, \
+                patch.object(package_environment, "compose") as compose:
+            code = run_main(["--package", str(package), "--server-version", "12.3",
+                             "--scenario", "compatibility", "--evidence-dir", str(evidence)])
+        self.assertEqual(code, 1)
+        workspace.assert_not_called()
+        compose.assert_not_called()
+        result = json.loads((evidence / "package-integration-result.json").read_text())
+        self.assertEqual(result["status"], "FAIL")
+        self.assertIn("--upgrade-source-workspace", result["error"])
+
+    def test_the_public_repository_index_must_serve_the_archive_under_test(self):
+        class Response:
+            status = 200
+
+            def __init__(self, payload):
+                self.payload = payload
+
+            def read(self):
+                return self.payload
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+        base = Path(tempfile.mkdtemp())
+        package = valid_archive(base / "pkg")
+        md5 = hashlib.md5(package.read_bytes(), usedforsecurity=False).hexdigest()
+        good = [{"guid": integration.PLUGIN_ID, "name": "STRM Probe Optimizer",
+                 "versions": [{"version": "0.1.0.0", "targetAbi": "12.2.0.0",
+                               "sourceUrl": integration.PUBLIC_RELEASE_URL, "checksum": md5}]}]
+        with patch.object(integration.urllib.request, "urlopen",
+                          lambda *a, **kw: Response(json.dumps(good).encode())):
+            result = integration.fetch_public_catalog(package)
+        self.assertEqual(result["repositoryUrl"], integration.PUBLIC_REPOSITORY_URL)
+        self.assertEqual(result["catalog"]["versions"][0]["sourceUrl"], integration.PUBLIC_RELEASE_URL)
+        for wrong in ({**good[0], "guid": "00000000-0000-0000-0000-000000000000"},
+                      {**good[0], "versions": [{**good[0]["versions"][0], "checksum": "0" * 32}]},
+                      {**good[0], "versions": [{**good[0]["versions"][0], "sourceUrl": "http://media:8080/x.zip"}]}):
+            with patch.object(integration.urllib.request, "urlopen",
+                              lambda *a, **kw: Response(json.dumps([wrong]).encode())):
+                with self.assertRaises(RuntimeError):
+                    integration.fetch_public_catalog(package)
+
+    def test_the_install_scenario_uses_the_public_index_not_a_local_one(self):
+        source = (ROOT / "scripts" / "run_isolated_package_integration.py").read_text(encoding="utf-8")
+        install = source[source.index("def stage_web_install("):
+                                     source.index("def first_trust_after_install(")]
+        self.assertIn('summary["publicRepository"] = fetch_public_catalog(package)', install)
+        self.assertIn('summary["publicRepository"]["repositoryUrl"]', install)
+        self.assertNotIn("publish_local_repository", source)
+
+    def test_each_compatibility_stage_archives_its_own_runtime_log(self):
+        source = (ROOT / "scripts" / "run_isolated_package_integration.py").read_text(encoding="utf-8")
+        stage = source[source.index("def run_compat_stage("):source.index("def iso_now(")]
+        self.assertEqual(stage.count("archive_stage_runtime(name, stage, evidence_dir)"), 2)
+        self.assertIn('f"server-logs-{name}"', source)
+        self.assertIn('f"server-ffprobe-lines-{name}.log"', source)
+        # The run records its exact command, interpreter and tool inputs, not only a summary label.
+        self.assertIn('summary["invocation"] = run_invocation(args)', source)
+        self.assertIn('summary["toolInputs"] = tool_input_identity()', source)
+
+    def test_the_native_install_record_is_a_mapping_not_an_accidental_tuple(self):
+        # A trailing comma after a multi-line dict literal silently turns the record into a tuple;
+        # the shape is checked structurally so recorded evidence keeps its documented keys.
+        import ast
+
+        tree = ast.parse((ROOT / "scripts" / "run_isolated_package_integration.py").read_text(encoding="utf-8"))
+        keys = {"nativeInstall", "publicRepository", "invocation", "toolInputs", "runtimeArchive"}
+        assignments = [node for node in ast.walk(tree) if isinstance(node, ast.Assign)
+                       and any(isinstance(target, ast.Subscript)
+                               and isinstance(target.slice, ast.Constant)
+                               and target.slice.value in keys
+                               for target in node.targets)]
+        self.assertTrue(assignments, "The compatibility record assignments were not found.")
+        for node in assignments:
+            self.assertIsInstance(node.value, (ast.Dict, ast.Call, ast.Name, ast.Attribute),
+                                  f"{ast.dump(node.targets[0])[:80]} is not a mapping-valued record")
+
+    def test_the_web_sharing_stage_uses_the_plugin_start_and_join_counters(self):
+        import ast
+
+        source = (ROOT / "scripts" / "run_isolated_package_integration.py").read_text(encoding="utf-8")
+        sharing = source[source.index("def stage_web_sharing("):source.index("def stage_sharing_concurrency(")]
+        # The physical probe is the plugin's own start/join line, never a raw media-request counter:
+        # the Web Play's transcode job reads the same probe route.
+        self.assertIn('"Native STRM probe started"', sharing)
+        self.assertIn("joined a running native probe", sharing)
+        self.assertNotIn("physicalProbeRequests", sharing)
+        # The API-level PlaybackInfo sharing is reported as what it is, not as a Web Play.
+        rounds = source[source.index("def stage_small_library_native_rounds("):
+                              source.index("def stage_web_sharing(")]
+        self.assertIn('"kind": "PlaybackInfo HTTP call, not a Web Play"', rounds)
+        check = ast.parse(sharing)
+        self.assertTrue(any(isinstance(node, ast.FunctionDef) and node.name == "stage_web_sharing"
+                            for node in check.body))
+
     def test_an_adopted_upgrade_source_must_be_an_owned_run_workspace(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

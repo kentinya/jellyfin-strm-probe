@@ -32,6 +32,7 @@ import sys
 import tempfile
 import time
 import urllib.parse
+import urllib.request
 import uuid
 import zipfile
 from pathlib import Path
@@ -1012,52 +1013,58 @@ def fingerprint_row_by_item(item_id: str) -> dict | None:
 
 # --- Stage 1: native web repository install -------------------------------------------------------------
 
+# The publicly served plugin repository this Task's Required Surface names. The native installer
+# must download the released archive from this index; a locally served copy is not the contract's
+# surface and cannot stand in for it.
+PUBLIC_REPOSITORY_URL = (
+    "https://raw.githubusercontent.com/kentinya/jellyfin-strm-probe/main/manifest.json"
+)
+PUBLIC_RELEASE_URL = (
+    "https://github.com/kentinya/jellyfin-strm-probe/releases/download/v0.1.0/"
+    "Jellyfin.Plugin.StrmProbeOptimizer_linux-x64.zip"
+)
 
-def publish_local_repository(package: Path) -> dict:
-    """Publish the archive under test as a native Jellyfin repository inside the owned instance.
 
-    The index is a real catalog document served by the instance's own media service and its
-    ``sourceUrl`` is the archive under test, so the native installer downloads and installs exactly
-    that archive. The checksum field is the MD5 the fixed server's ``InstallationManager`` consumes.
+def fetch_public_catalog(expected_archive: Path) -> dict:
+    """Read the public index and prove it serves exactly the archive under test.
+
+    This is the read-only half of the surface: the same document the native installer consumes is
+    fetched here first, so the version, ABI, download address and MD5 the browser will see are
+    recorded before the install and can be compared with the archive's own identity.
     """
-    pe.workspace()
-    media = pe.WORK / "media"
-    archive_name = package.name
-    target_archive = media / archive_name
-    if not target_archive.is_file() or target_archive.read_bytes() != package.read_bytes():
-        pe.write_owned_bytes(target_archive, package.read_bytes(), label="repository archive")
-    # The archive's published sidecar is served too, so the native install's own payload can be
-    # compared with the sidecar the archive shipped (the install itself consumes only the catalog).
-    sidecar = package_plugin.sidecar_manifest_path(package)
-    if sidecar.is_file():
-        pe.write_owned_bytes(media / sidecar.name, sidecar.read_bytes(), label="repository sidecar manifest")
-    catalog = [{
-        "category": "General",
-        "guid": PLUGIN_ID,
-        "name": "STRM Probe Optimizer",
-        "description": "Local acceptance repository for the released v0.1.0 archive.",
-        "owner": "local-acceptance",
-        "overview": "STRM probe optimization",
-        "versions": [{
-            "version": "0.1.0.0",
-            "targetAbi": "12.2.0.0",
-            "sourceUrl": "http://media:8080/" + archive_name,
-            "checksum": hashlib.md5(package.read_bytes(), usedforsecurity=False).hexdigest(),
-            "timestamp": "2026-10-24T00:00:00Z",
-            "changelog": "Released v0.1.0 archive under test.",
-        }],
-    }]
-    pe.write_owned_bytes(media / "manifest.json",
-                         (json.dumps(catalog, ensure_ascii=False, indent=2) + "\n").encode("utf-8"),
-                         label="repository index")
-    return {"repositoryUrl": "http://media:8080/manifest.json",
-            "archive": str(target_archive), "archiveSha256": compat_sha256(package.read_bytes()),
-            "archiveMd5": catalog[0]["versions"][0]["checksum"]}
+    with urllib.request.urlopen(PUBLIC_REPOSITORY_URL, timeout=30) as response:
+        require(response.status == 200, f"The public repository index answered {response.status}.")
+        raw = response.read()
+    catalog = json.loads(raw)
+    require(isinstance(catalog, list) and len(catalog) == 1,
+            "The public repository index must contain exactly one plugin entry.")
+    plugin = catalog[0]
+    require(_normalized_id(str(plugin.get("guid", ""))) == _normalized_id(PLUGIN_ID),
+            f"The public index lists another plugin guid: {plugin.get('guid')!r}")
+    versions = plugin.get("versions") or []
+    require(len(versions) == 1, f"The public index must list exactly one version, found {len(versions)}.")
+    version = versions[0]
+    archive_md5 = hashlib.md5(expected_archive.read_bytes(), usedforsecurity=False).hexdigest()
+    require(version.get("sourceUrl") == PUBLIC_RELEASE_URL,
+            f"The public index download address is {version.get('sourceUrl')!r}, not the released asset.")
+    require(version.get("checksum") == archive_md5,
+            "The public index checksum does not match the archive under test.")
+    return {"repositoryUrl": PUBLIC_REPOSITORY_URL, "indexSha256": compat_sha256(raw),
+            "indexBytes": len(raw),
+            "catalog": {"guid": plugin.get("guid"), "name": plugin.get("name"),
+                        "versions": [{"version": version.get("version"),
+                                      "targetAbi": version.get("targetAbi"),
+                                      "sourceUrl": version.get("sourceUrl"),
+                                      "checksum": version.get("checksum")}]},
+            "archiveSha256": compat_sha256(expected_archive.read_bytes()),
+            "archiveMd5": archive_md5}
 
 
 def stage_web_install(package: Path, evidence_dir: Path | None, summary: dict) -> dict:
+    # The public index is read before the instance exists, so a wrong or unavailable public surface
+    # fails before any install attempt instead of being confused with an install problem.
+    summary["publicRepository"] = fetch_public_catalog(package)
     pe.prepare_clean_instance()
-    summary["published"] = publish_local_repository(package)
     pe.compose("stop")
     pe.compose("up")
     pe.wait_healthy()
@@ -1078,7 +1085,7 @@ def stage_web_install(package: Path, evidence_dir: Path | None, summary: dict) -
         "pluginName": "STRM Probe Optimizer",
         "pageName": PAGE_NAME,
         "repositoryName": "STRM Probe Optimizer — Linux x64",
-        "repositoryUrl": summary["published"]["repositoryUrl"],
+        "repositoryUrl": summary["publicRepository"]["repositoryUrl"],
         # The native labels this scenario must click are the shipped English ones; the browser's UI
         # language is pinned for this scenario only (every other scenario keeps its accepted locale).
         "locale": "en-US",
@@ -1090,7 +1097,9 @@ def stage_web_install(package: Path, evidence_dir: Path | None, summary: dict) -
     require(driver["install"]["installConfirmed"] is True,
             f"The native installation was not confirmed: {driver['install']}")
     summary["nativeInstall"] = {"repository": driver["repository"], "install": driver["install"],
-                               "screenshots": driver.get("screenshots")}
+                               "screenshots": driver.get("screenshots"),
+                               "repositoryUrl": summary["publicRepository"]["repositoryUrl"],
+                               "catalogDownload": summary["publicRepository"]["catalog"]["versions"][0]}
     before_restart = installed_matches_archive(package)
     summary["payloadBeforeRestart"] = {"payloadFiles": before_restart["payloadFiles"],
                                        "folder": before_restart["folder"]}
@@ -1642,7 +1651,13 @@ def compat_batch():
 
 
 def stage_small_library_native_rounds() -> dict:
-    """Reuse the existing native stop, sharing and concurrency rounds on this instance."""
+    """Reuse the existing native stop and concurrency rounds on this instance.
+
+    The batch/playback sharing round is *not* taken from the API-level scenario: its "playback" is a
+    PlaybackInfo HTTP call, which cannot stand in for a real Web Play. The one required direction --
+    a native task that really started, then a real Web Play on the same source -- is measured by
+    ``stage_web_sharing`` instead, and the API-level fact is kept only as what it is.
+    """
     import run_isolated_batch_integration as batch
 
     instance = batch.PackageInstance(pe)
@@ -1654,12 +1669,144 @@ def stage_small_library_native_rounds() -> dict:
                       "http://media:8080/" + SMALL_LIBRARY_A, sha1, size)
     summary: dict[str, object] = {}
     summary["stop"] = batch.scenario_stop(pkg_api(), container(), pe.container_name("media"))
-    summary["sharing"] = batch.scenario_sharing(pkg_api(), container(), pe.container_name("media"))
+    api_sharing = batch.scenario_sharing(pkg_api(), container(), pe.container_name("media"))
+    # Recorded as an API-level sharing observation only; it is never evidence of a Web playback.
+    summary["apiSharing"] = {
+        "kind": "PlaybackInfo HTTP call, not a Web Play",
+        "batch_first": {key: (api_sharing.get("batch_first") or {}).get(key)
+                        for key in ("slow_probe_requests", "actual_probe_calls", "reliable_success")},
+        "playback_first": {key: (api_sharing.get("playback_first") or {}).get(key)
+                           for key in ("slow_probe_requests", "actual_probe_calls", "reliable_success")},
+    }
     summary["mixed"] = batch.scenario_mixed(pkg_api(), container(), pe.container_name("media"))
     summary["cleanupProblems"] = list(batch.CLEANUP_PROBLEMS)
     require(not batch.CLEANUP_PROBLEMS,
             f"The reused native rounds left cleanup problems: {batch.CLEANUP_PROBLEMS}")
     return summary
+
+
+def stage_web_sharing(evidence_dir: Path | None) -> dict:
+    """One direction only: the native task starts, then a real Web Play joins the same source.
+
+    The source is a controlled delayed route, so the batch's probe is genuinely still running when
+    the browser starts. Exactly one physical media request may be started for it, the changed
+    address must be committed once, and the Web Play must really decode and advance at least five
+    seconds. The independent changed source in the second round keeps the default concurrency of two
+    exercised (peak reaches two, never three).
+    """
+    import run_isolated_batch_integration as batch
+
+    instance = batch.PackageInstance(pe)
+    batch.configure_instance(instance)
+    media_container = pe.container_name("media")
+    libraries = library_ids()
+    small_library_configuration({"Enabled": True, "PlaybackAutoCheck": True, "MaxConcurrentProbes": 2,
+                                 "DetailedLog": True, "BatchAllLibraries": False,
+                                 "BatchLibraryIds": libraries["content"]})
+    api = pkg_api()
+    item = wait_for_compat_item(None, "Compat S2")
+    sha1, size = pe.media_sha1(SMALL_LIBRARY_A)
+    plain_url = small_library_url("S2")
+    before_row = fingerprint_row_by_item(item["Id"])
+    require(before_row is not None, "The sharing source needs a trusted baseline before the round.")
+    request_id = uuid.uuid4().hex
+    target_url = batch.delay_url(plain_url, 12, request_id)
+    changed = write_small_library_strm("S2", target_url, sha1, size)
+    summary: dict[str, object] = {"itemId": item["Id"], "address": changed["url"],
+                                  "before": before_row, "delayRequestId": request_id}
+    before = batch.slow_request_counts(media_container)
+    task_id = batch.task_id_for(api)
+    status, _ = api.request_response("/ScheduledTasks/Running/" + task_id, method="POST")
+    require(status == 204, "Jellyfin did not accept the sharing round's native task start.")
+    summary["taskStartStatus"] = status
+    # The batch's own delayed probe must really be running before the browser starts.
+    batch.wait_for_request_id_start(media_container, request_id, before.get(request_id, 0), timeout=90)
+    started_at = time.time()
+    summary["probeStartedBeforePlayback"] = True
+    credentials = json.loads(pe.credentials_path().read_text(encoding="utf-8"))
+    phase_dir = (evidence_dir or Path(tempfile.gettempdir())) / "web-sharing"
+    result = run_browser_driver(PLAYBACK_DRIVER, {
+        "baseUrl": credentials["base_url"], "username": credentials["username"],
+        "password": credentials["password"],
+        "strict": {"minimumSeconds": playback.MINIMUM_PROGRESS_SECONDS,
+                   "screenshotDir": str(phase_dir / "screenshots")},
+        "items": [{"name": "Compat S2", "id": item["Id"], "mediaType": "video"}],
+    }, phase_dir, timeout=420)
+    require("error" not in result, f"The same-source Web Play failed: {result.get('error')}")
+    entry = (result.get("results") or [{}])[0]
+    require(entry.get("advanced") is True, f"The same-source Web Play did not advance: {entry}")
+    require(isinstance(entry.get("advancedSeconds"), (int, float))
+            and entry["advancedSeconds"] >= playback.MINIMUM_PROGRESS_SECONDS,
+            f"The same-source Web Play advanced {entry.get('advancedSeconds')} s.")
+    final = batch.wait_for_idle(api, timeout=batch.MAX_WAIT_SECONDS)
+    require(batch.task_state_name(final) in {"idle", "0"}, "The sharing native round did not settle.")
+    after = batch.slow_request_counts(media_container)
+    slow_hits = after.get(request_id, 0) - before.get(request_id, 0)
+    summary["webPlay"] = {"advancedSeconds": entry.get("advancedSeconds"),
+                          "screenshots": [entry.get("startScreenshot"), entry.get("progressScreenshot")],
+                          "elapsedSeconds": round(time.time() - started_at, 1)}
+    # The physical probe count comes from the plugin's own start/join lines: the probe route is
+    # also read by the transcode job the Web Play starts, so a raw media-request counter would
+    # count playback reads as extra probes.
+    lines = playback.plugin_event_lines()
+    started_events = [batch.base.safe_event(line) for line in lines if "Native STRM probe started" in line]
+    joined_events = [batch.base.safe_event(line) for line in lines
+                     if "joined a running native probe" in line.lower()]
+    summary["physicalProbes"] = {"started": len(started_events), "joined": len(joined_events),
+                                 "slowRouteHits": slow_hits, "startedLines": started_events[-3:],
+                                 "joinedLines": joined_events[-3:]}
+    require(len(started_events) == 1,
+            f"The shared source must have exactly one physical probe start, observed {started_events}.")
+    require(joined_events,
+            "The real Web Play never joined the running probe; no same-source sharing happened.")
+    summary_line = batch.latest_batch_summary(container())["line"]
+    fields = batch.summary_fields(summary_line)
+    batch.assert_summary_equations(fields)
+    summary["summary"] = summary_line
+    require(fields.get("reliable_success") == 1,
+            f"The shared source must settle as one reliable success: {summary_line}")
+    # The Web Play revoked the token the batch used; re-authenticate before the read-only check.
+    auth = api_auth()
+    committed = fingerprint_row_by_item(item["Id"])
+    require(committed is not None and committed["url_hash"] == compat_sha256(target_url.encode()),
+            f"The shared probe did not commit the changed address: {committed}")
+    summary["committed"] = committed
+    summary["concurrency"] = stage_sharing_concurrency()
+    return summary
+
+
+def stage_sharing_concurrency() -> dict:
+    """An independent changed source alongside a still-running probe keeps the peak at two.
+
+    The two independently changed sources are started through the native task and their delayed
+    probes are observed through the plugin's own start lines, so the peak is the plugin's real
+    running-probe counter rather than an assumption.
+    """
+    import run_isolated_batch_integration as batch
+
+    media_container = pe.container_name("media")
+    api = pkg_api()
+    sha1, size = pe.media_sha1(SMALL_LIBRARY_A)
+    ids = {"S1": uuid.uuid4().hex, "S3": uuid.uuid4().hex}
+    urls = {name: batch.delay_url(small_library_url(name), 12 if name == "S1" else 8, ids[name])
+            for name in ids}
+    for name, url in urls.items():
+        write_small_library_strm(name, url, sha1, size)
+    before = batch.slow_request_counts(media_container)
+    started_epoch = time.time()
+    task = batch.run_task(api, timeout=batch.MAX_WAIT_SECONDS)
+    entries = batch.probe_start_entries_absolute(container(), started_epoch)
+    peak = max((entry["running"] for entry in entries), default=0)
+    after = batch.slow_request_counts(media_container)
+    started = {name: after.get(ids[name], 0) - before.get(ids[name], 0) for name in ids}
+    result = {"task": batch.task_summary(task), "peakRunningProbes": peak,
+              "configuredConcurrency": 2, "started": started,
+              "probeStartLines": entries[-6:]}
+    require(peak >= 1, f"No plugin probe start was observed for the concurrency round: {result}")
+    require(peak <= 2, f"The plugin exceeded its default concurrency of 2: peak {peak}")
+    require(all(count == 1 for count in started.values()),
+            f"Each independently changed source must be probed exactly once: {started}")
+    return result
 
 
 def stage_permissions(evidence_dir: Path | None) -> dict:
@@ -1884,8 +2031,10 @@ def stage_small_library(package: Path, evidence_dir: Path | None, summary: dict)
                                  "size": pe.media_sha1(SMALL_LIBRARY_B)[1]}}
     summary["mixed"] = stage_small_library_mixed()
     summary["nativeRounds"] = stage_small_library_native_rounds()
+    summary["webSharing"] = stage_web_sharing(evidence_dir)
     summary["permissions"] = stage_permissions(evidence_dir)
     summary["multiSource"] = stage_multi_source(evidence_dir)
+    summary["unifiedRestart"] = small_library_unified_restart(summary["multiSource"], evidence_dir)
     small_library_configuration({"Enabled": True, "PlaybackAutoCheck": True,
                                  "MaxConcurrentProbes": 2, "DetailedLog": False,
                                  "BatchAllLibraries": True, "BatchLibraryIds": ""})
@@ -1894,6 +2043,122 @@ def stage_small_library(package: Path, evidence_dir: Path | None, summary: dict)
             "The small-library stage did not restore the all-library default scope.")
     summary["fingerprintStore"] = fingerprint_store_report()
     return summary
+
+
+def small_library_unified_restart(multi_source: dict, evidence_dir: Path | None) -> dict:
+    """Freeze every accepted small-library item/source, restart once, read all, then play.
+
+    The multi-source stage already proves the selected version; this restart covers the whole stage:
+    all six prepared sources (including both sources of the merged project) and the configuration are
+    frozen, the server restarts once, and every address, complete primary stream set and five-field
+    fingerprint is compared read-only before any PlaybackInfo or playback. Only then does the
+    explicitly selected version play again, through the real Web client, without a new probe.
+    """
+    api = pkg_api()
+    prepared = {name: wait_for_compat_item(None, f"Compat {name}")
+                for name in ("S1", "S2", "S3", "S4", "O1")}
+    merged = {"Id": multi_source["mergedItemId"]}
+    selected = multi_source["selected"]
+    schedule = [("S1", prepared["S1"]), ("S2", prepared["S2"]), ("S3", prepared["S3"]),
+                ("S4", merged), ("O1", prepared["O1"])]
+
+    def snapshot() -> dict:
+        state: dict[str, object] = {}
+        auth = api_auth()
+        state["configuration"] = plugin_configuration()
+        items: dict[str, object] = {}
+        for name, item in schedule:
+            auth = api_auth()
+            items[name] = {
+                "itemId": item["Id"],
+                "sources": [{"id": playback.normalize_source_id(source.get("Id")),
+                             "pathHash": compat_sha256(str(source.get("Path") or "").encode()),
+                             "path": playback.safe_path(source.get("Path"))}
+                            for source in (read_sources(item["Id"]) or [])],
+                "streams": native_stream_snapshot(item["Id"]),
+            }
+        state["items"] = items
+        state["fingerprints"] = {name: fingerprint_rows(item["Id"]) for name, item in schedule}
+        return state
+
+    frozen = snapshot()
+    require(len((frozen["items"].get("S4") or {}).get("sources") or []) == 2,
+            "The merged project must expose both native sources when frozen.")
+    require(all(rows for rows in frozen["fingerprints"].values()),
+            f"Every accepted source needs a trusted fingerprint before the unified restart: "
+            f"{ {name: len(rows) for name, rows in frozen['fingerprints'].items()} }")
+    restart()
+    observed = snapshot()
+    problems: list[str] = []
+    if observed["configuration"] != frozen["configuration"]:
+        problems.append("the plugin configuration changed across the restart")
+    for name, _item in schedule:
+        before = frozen["items"][name]
+        after = observed["items"][name]
+        if after["itemId"] != before["itemId"]:
+            problems.append(f"{name}: the native item id changed across the restart")
+        if after["sources"] != before["sources"]:
+            problems.append(f"{name}: the saved native address changed across the restart")
+        if after["streams"] != before["streams"]:
+            problems.append(f"{name}: the saved native streams changed across the restart")
+        if observed["fingerprints"][name] != frozen["fingerprints"][name]:
+            problems.append(f"{name}: a trusted fingerprint changed across the restart")
+    require(not problems, "The small-library unified restart read-back failed: " + "; ".join(problems))
+    # The CONFIGURATION is read before any playback; only the explicitly selected version is played
+    # again, and it must not probe an already trusted source.
+    before_probes = playback.probe_count(multi_source["bPath"])
+    credentials = json.loads(pe.credentials_path().read_text(encoding="utf-8"))
+    after_dir = (evidence_dir or Path(tempfile.gettempdir())) / "multi-source-play-unified-restart"
+    result = run_browser_driver(PLAYBACK_DRIVER, {
+        "baseUrl": credentials["base_url"], "username": credentials["username"],
+        "password": credentials["password"],
+        "strict": {"minimumSeconds": playback.MINIMUM_PROGRESS_SECONDS,
+                   "screenshotDir": str(after_dir / "screenshots")},
+        "items": [{"name": "Compat S4", "id": merged["Id"], "mediaType": "video",
+                   "selectedSourceId": selected, "selectedSourceIdProgressMarker": "Compat S5"}],
+    }, after_dir, timeout=420)
+    require("error" not in result, f"The unified-restart multi-source playback failed: {result.get('error')}")
+    entry = (result.get("results") or [{}])[0]
+    require(entry.get("advanced") is True, "The unified-restart selected-version playback did not advance.")
+    time.sleep(2)
+    delta = playback.probe_count(multi_source["bPath"]) - before_probes
+    require(delta == 0, f"The unified-restart playback probed an already trusted source ({delta}).")
+    return {"frozen": {"items": frozen["items"], "fingerprints": frozen["fingerprints"],
+                       "configuration": frozen["configuration"]},
+            "readOnlyAfterRestart": {"items": observed["items"],
+                                     "fingerprints": observed["fingerprints"],
+                                     "configuration": observed["configuration"]},
+            "readOnlyBeforeAnyPlayback": True,
+            "playback": {"advancedSeconds": entry.get("advancedSeconds"),
+                         "sourceSelection": entry.get("sourceSelection"),
+                         "screenshots": [entry.get("startScreenshot"), entry.get("progressScreenshot")],
+                         "probeDelta": delta}}
+
+
+def read_sources(item_id: str) -> list[dict]:
+    status, payload = pe.request_json("GET", f"/Items/{item_id}?Fields=MediaSources,MediaStreams,Path",
+                                      headers={"Authorization": api_auth()})
+    require(status == 200, "The read-only native media-source query failed.")
+    return payload.get("MediaSources") or []
+
+
+def native_stream_snapshot(item_id: str) -> list[dict]:
+    """Every saved stream of every source, compared in full rather than by stream type set."""
+    snapshot = []
+    for source in read_sources(item_id):
+        snapshot.append({"id": playback.normalize_source_id(source.get("Id")),
+                         "streams": sorted(json.dumps(stream, sort_keys=True)
+                                           for stream in source.get("MediaStreams") or [])})
+    return sorted(snapshot, key=lambda entry: str(entry["id"]))
+
+
+def fingerprint_rows(item_id: str) -> list[dict]:
+    database = fingerprint_store_path()
+    if not database.is_file():
+        return []
+    wanted = uuid.UUID(item_id).hex
+    return sorted((row for row in read_fingerprint_rows_copy(database) if row["item_id"] == wanted),
+                  key=lambda row: row["source_key"])
 
 
 def scenario_compatibility(package: Path, upgrade_source: Path | None,
@@ -2025,21 +2290,98 @@ def run_compat_stage(name: str, summary: dict, evidence_dir: Path | None, operat
     """Run one compatibility stage and record what it really reached before re-raising.
 
     The stage functions are handed this same dictionary through ``summary[name]`` so a stage that
-    fails halfway still leaves every completed sub-stage in the recorded evidence.
+    fails halfway still leaves every completed sub-stage in the recorded evidence. Each stage
+    archives its own original server log and container states before the next stage's reset removes
+    the workspace areas those logs live in.
     """
     stage: dict[str, object] = {}
+    stage["startedAt"] = iso_now()
+    stage["startedMonotonic"] = started = time.monotonic()
     summary[name] = stage
     try:
         stage.update(operation(stage))
     except (RuntimeError, OSError, ValueError, KeyError, json.JSONDecodeError,
-            subprocess.SubprocessError, pe.PackageEnvironmentError) as error:
+            urllib.error.URLError, subprocess.SubprocessError, pe.PackageEnvironmentError) as error:
         stage["status"] = "FAIL"
         stage["error"] = f"{type(error).__name__}: {error}"
+        archive_stage_runtime(name, stage, evidence_dir)
         compat_record(evidence_dir, f"stage-{name}-failure.json", stage)
         raise
     stage["status"] = "PASS"
+    archive_stage_runtime(name, stage, evidence_dir)
     compat_record(evidence_dir, f"stage-{name}.json", stage)
     return stage
+
+
+def archive_stage_runtime(name: str, stage: dict, evidence_dir: Path | None) -> None:
+    """Copy this stage's own original server log and container states out of the workspace.
+
+    The compatibility stages clear the instance areas (``config`` carries Jellyfin's log) between
+    stages, so a single archive at the end of the run cannot preserve an earlier stage's original
+    log. Each stage therefore copies its own log before it returns, and a failed stage keeps the
+    log that explains the failure.
+    """
+    stage["finishedAt"] = iso_now()
+    if "startedMonotonic" in stage:
+        stage["elapsedSeconds"] = round(time.monotonic() - float(stage.pop("startedMonotonic")), 1)
+    if evidence_dir is None:
+        return
+    log_dir = pe.WORK / "config" / "log"
+    copied: list[dict] = []
+    lines: list[str] = []
+    if log_dir.is_dir():
+        for path in sorted(log_dir.glob("log_*.log")):
+            target = evidence_dir / f"server-logs-{name}" / path.name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(path, target)
+            copied.append({"file": path.name, "bytes": target.stat().st_size,
+                           "sha256": compat_sha256(target.read_bytes()), "path": str(target)})
+            lines.extend(line for line in path.read_text(encoding="utf-8", errors="replace").splitlines()
+                         if 'Starting "/usr/lib/jellyfin-ffmpeg/ffprobe"' in line)
+    probe_log = evidence_dir / f"server-ffprobe-lines-{name}.log"
+    probe_log.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    stage["runtimeArchive"] = {"serverLogs": copied, "serverLogFiles": len(copied),
+                               "ffprobeLineCount": len(lines), "ffprobeLog": str(probe_log)}
+    try:
+        stage["containerStates"] = pe.inspect_owned_container_states()
+    except (OSError, pe.PackageEnvironmentError, subprocess.SubprocessError) as error:
+        stage["containerStatesError"] = f"{type(error).__name__}: {error}"
+
+
+def iso_now() -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+def run_invocation(args) -> dict:
+    """The exact command this run was started with, kept next to its results."""
+    return {"argv": [str(part) for part in sys.argv],
+            "literalCommand": " ".join(_shell_quote(str(part)) for part in sys.argv),
+            "arguments": {key: str(value) for key, value in vars(args).items()},
+            "pythonVersion": sys.version.split()[0], "pythonExecutable": sys.executable,
+            "workingDirectory": str(Path.cwd()), "startedAt": iso_now()}
+
+
+def _shell_quote(value: str) -> str:
+    return value if re.fullmatch(r"[A-Za-z0-9_./:=,@+-]+", value) else "'" + value.replace("'", "'\\''") + "'"
+
+
+def tool_input_identity() -> dict:
+    """Content identity of the test tooling and the two version inputs actually used.
+
+    The inspected release ZIP embeds its own build inputs from before this Task; this record only
+    identifies the test tooling that produced the compatibility evidence, and it never stands in
+    for the archive's original build inputs.
+    """
+    scripts = ["run_isolated_package_integration.py", "run_isolated_playback_integration.py",
+               "run_isolated_batch_integration.py", "package_environment.py", "package_plugin.py",
+               "configuration_page_driver.mjs", "package_playback_driver.mjs",
+               "isolated_media_server.py"]
+    files = {name: compat_sha256((ROOT / "scripts" / name).read_bytes()) for name in scripts}
+    inputs = {name: {"path": path, "sha256": compat_sha256((ROOT / path).read_bytes())}
+              for name, path in (("serverSpec", pe.SERVER_VERSIONS[pe.SERVER_VERSION]["spec"]),
+                                 ("imageLock", pe.LOCK_RELATIVE),
+                                 ("mediaLock", "dev/images.lock.json"))}
+    return {"scripts": files, "versionInputs": inputs, "serverVersion": pe.SERVER_VERSION}
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -2066,6 +2408,7 @@ def main() -> int:
     before_state = None
     workspace = None
     started = time.time()
+    summary["invocation"] = run_invocation(args)
     try:
         # Validate the package before claiming a workspace, so a missing or invalid archive has no
         # filesystem side effect at all (and never touches an existing workspace).
@@ -2084,6 +2427,12 @@ def main() -> int:
                     "The compatibility scenario only runs the fixed 12.3 target; 12.2 keeps its own scenarios.")
             require(evidence_dir is not None,
                     "The compatibility scenario requires --evidence-dir for its staged evidence.")
+            # A missing prepared 12.2 source cannot be downgraded to SKIPPED: the non-empty upgrade
+            # preservation is a Required Outcome, so an incomplete run is refused before measuring.
+            require(args.upgrade_source_workspace is not None,
+                    "The compatibility scenario requires --upgrade-source-workspace: the non-empty 12.2 "
+                    "upgrade preservation is a required result and is never reported as skipped.")
+        summary["toolInputs"] = tool_input_identity()
         workspace = pe.select_workspace(args.workspace)
         summary["workspace"] = str(workspace)
         before_state = pe.capture_instance_state()
@@ -2115,6 +2464,8 @@ def main() -> int:
     finally:
         if args.scenario == "compatibility":
             summary["elapsedSeconds"] = round(time.time() - started, 1)
+            summary["startedAt"] = summary["invocation"]["startedAt"]
+            summary["finishedAt"] = iso_now()
             if evidence_dir is not None:
                 try:
                     summary["evidenceArchive"] = archive_compat_runtime_evidence(evidence_dir)

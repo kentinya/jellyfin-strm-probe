@@ -3155,6 +3155,81 @@ def scenario_matrix(package: Path, evidence_dir: Path, selected: list[str],
     failed = [row_id for row_id, result in results.items() if result.get("status") != "PASS"]
     if failed:
         raise BaselineError("Matrix rows failed: " + " | ".join(failed))
+    summary["unifiedRestart"] = unified_restart(rows, results, evidence_dir)
+
+
+def unified_restart(rows: list[dict], results: dict, evidence_dir: Path) -> dict:
+    """Freeze every accepted row's state, restart once, read it all back, then replay.
+
+    The per-row journeys restart for their own row. This is the contract's single unified restart:
+    every accepted row's address, complete primary stream set, five-field fingerprint and probe
+    count are frozen first, then the server restarts once, and every row is compared read-only
+    before any PlaybackInfo or playback is issued. Only then does each row play again (and the
+    multi-source row re-selects its version) and must not probe what is already trusted.
+    """
+    accepted = [row for row in rows if row["id"] in results and results[row["id"]].get("status") == "PASS"]
+    require(accepted, "No accepted row was available for the unified pre-restart freeze.")
+    auth = refresh_auth()
+    frozen: dict[str, dict] = {}
+    for row in accepted:
+        # Each row's own verified end state is the expected state; it is frozen through a fresh
+        # login because every real Web Play revokes the token the previous read used.
+        auth = refresh_auth()
+        frozen[row["id"]] = freeze_state(auth, row)
+    pkg.restart()
+    auth = refresh_auth()
+    # Read-only pass: no PlaybackInfo and no playback before every comparison is complete.
+    observed: dict[str, dict] = {}
+    problems: list[str] = []
+    for row in accepted:
+        auth = refresh_auth()
+        observed[row["id"]] = read_only_state(auth, row)
+        problems.extend(restart_readback_failures(frozen[row["id"]], observed[row["id"]]))
+    require(not problems, "The unified restart read-back failed: " + "; ".join(problems))
+    replays: dict[str, dict] = {}
+    for row in accepted:
+        auth = refresh_auth()
+        url_for_source = row["fp_url"] if row["expect_probes"] else None
+        # The native-delegation rows (whole plugin off, ordinary media, unversioned STRM) report
+        # whatever the native path really did; the plugin's own rows must skip an already trusted
+        # source with zero ffprobe calls.
+        record_only = row["journey"] in ("d02", "d04", "d05") or row.get("fp_kind") == "none"
+        before = frozen[row["id"]]["probe_count"]
+        after = play_once(auth, row, "unified-restart-play", evidence_dir,
+                          relax_console=(row["journey"] in ("d02", "d04", "d05")))
+        assert_playback(row, after, counter_validated=not record_only,
+                        expected_delta=None if record_only else 0, url_for_source=url_for_source,
+                        allow_missing_media_fetch=row["apply_kind"] == "d04")
+        if not record_only:
+            require(after["ffprobe"]["delta"] == 0,
+                    f"{row['id']}: the post-restart playback probed an already trusted source "
+                    f"({after['ffprobe']['delta']}).")
+        auth = refresh_auth()
+        require(fp_snapshot(auth, row) == observed[row["id"]]["fingerprint"],
+                f"{row['id']}: the post-restart playback changed the fingerprint.")
+        auth = refresh_auth()
+        require(fp_snapshot(auth, row) == observed[row["id"]]["fingerprint"],
+                f"{row['id']}: the post-restart playback changed the fingerprint.")
+        replays[row["id"]] = {"ffprobe": after["ffprobe"],
+                               "advancedSeconds": after["playback"].get("advancedSeconds"),
+                               "screenshots": [after["playback"].get("startScreenshot"),
+                                               after["playback"].get("progressScreenshot")],
+                               "probeBefore": before}
+    return {"frozenRows": sorted(frozen),
+            "frozen": {row_id: {"fingerprint": value["fingerprint"], "probeCount": value["probe_count"],
+                                 "sourceIds": [source["id"] for source in
+                                               (value["nativeSources"] or {}).get("sources") or []],
+                                 "streamTypes": sorted({stream["Type"] for source in
+                                                        (value["nativeSources"] or {}).get("sources") or []
+                                                        for stream in source["streams"]})}
+                       for row_id, value in frozen.items()},
+            "readOnlyAfterRestart": {row_id: {"fingerprint": value["fingerprint"],
+                                              "probeCount": value["probe_count"],
+                                              "sourceIds": [source["id"] for source in
+                                                            (value["nativeSources"] or {}).get("sources") or []]}
+                                     for row_id, value in observed.items()},
+            "replays": replays,
+            "readOnlyBeforeAnyPlayback": True}
 
 
 def render_matrix_index(summary: dict) -> str:

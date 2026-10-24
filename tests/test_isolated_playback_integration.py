@@ -1623,6 +1623,17 @@ class ExplicitSourceSelectionGuardTests(unittest.TestCase):
         self.assertIn("if (item.selectedSourceId) {", driver)
         self.assertIn("sourceSelection", driver)
 
+    def test_unified_restart_covers_every_accepted_row_before_any_playback(self):
+        source = (ROOT / "scripts" / "run_isolated_playback_integration.py").read_text(encoding="utf-8")
+        unified = source[source.index("def unified_restart("):source.index("def render_matrix_index(")]
+        # Every accepted row is frozen, the server restarts exactly once, every row is read back, and
+        # only afterwards may any row play again.
+        self.assertEqual(unified.count("pkg.restart()"), 1)
+        self.assertLess(unified.index("pkg.restart()"), unified.index("read_only_state("))
+        self.assertLess(unified.index("read_only_state("), unified.index("play_once("))
+        self.assertIn('require(not problems, "The unified restart read-back failed: "', unified)
+        self.assertIn('summary["unifiedRestart"] = unified_restart(', source)
+
 
 if __name__ == "__main__":
     unittest.main()
