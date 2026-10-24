@@ -9,10 +9,11 @@
 | 3 — Jellyfin 原生批量检查任务 | P2：完整配置页／媒体库范围、原生运行／停止／定时、候选 ID 集合与分批对象／固定消费者、仅撤销未开始工作／已开始探测收尾后再开放新轮、播放混合共享、进度统计及恢复（并发默认 2、1～8） | PASS / CLOSED | Slice 2 PASS / CLOSED；Base 为关闭提交 |
 | 4 — 大规模集成与单版本交付 | P3：至少 1000 项真实 STRM 媒体库／成本（复用现存全部 1004 项）、完整扫描与播放／批量重叠、固定 Jellyfin／Linux x64 安装包和恢复旅程；JellyfinProxy 按用户授权不验证 | PASS / CLOSED | Slice 3 PASS / CLOSED；Base 为关闭提交 |
 | 5 — 真实播放决策全场景验证与 CI 修复 | 自备 MP4／MKV 视频／STRM、固定 Jellyfin 和指定 ZIP 安装，八类决策的真实播放／ffprobe／持久化／重启对账、主流误判回归，以及干净检出的 GitHub Actions 三处失败修复；音频 STRM 按用户授权撤出 | PASS / CLOSED | Slice 1～4 已关闭；[接受范围与证据](progress.md#slice-5-closed) |
+| 6 — Jellyfin 12.3 最小兼容性实机验证 | 复用 v0.1.0 原 ZIP，固定 12.3／Linux x64，六组最小安装升级、决策实播、ColorRange、失败恢复、重启选源及批量／权限验证；不重跑全部子矩阵或千项容量验收 | ACTIVE | Slice 1～5 已关闭；Base 为 `1379ff0e6f3e572d1d843c835a2d8af250c49ec7`；[交接 B](../SLICE.md#handoff-b) |
 
 ## 当前边界
 
-当前已授权的五个Slice均已交付，接受范围与历史决定见[关闭账本](progress.md)。真实播放全场景、产品误拒绝有界修正及CI修复的最终证据见[Slice 5](progress.md#slice-5-closed)，[执行设计](slice-5-playback-test-plan.md)保留其输入与观测要求。没有待选择或待激活的大版本Slice；下一步见[当前合同](../SLICE.md#closure-reconciliation)，等待新增需求，不为收尾增加Task。代理撤出项保持历史NOT RUN、不计PASS、不宣称兼容。
+Slice 1～5 已交付，历史决定和证据见[关闭账本](progress.md)。用户于 2026-10-24 要求开启 Slice 6，验证 12.3 的最小测试；A 已激活[当前合同](../SLICE.md)，等待 B 规划 Task。原包与业务规则不变，12.3 尚未实机验证，不把旧全量 PASS 当新版本结果。MP4／MKV 是测试样本，不是插件格式白名单；本轮不增加其他格式支持声明。代理与音频 STRM 仍按用户范围不执行、不计 PASS。
 
 从 V3.0 的三个 Slice 改为四个 Slice 是实质规划调整；旧规划见重规划前检查点 `4b1d0468c1e43e6e9034ef98e99b6cc44ea59485`。旧生成器 P1 始终排除，当前 P1 专指 V4.2 核心插件。
 

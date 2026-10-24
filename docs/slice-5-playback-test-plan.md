@@ -8,7 +8,7 @@
 
 ## 复用现有工具
 
-复用 package_environment.py、run_isolated_package_integration.py 和 package_playback_driver.mjs，使用现有隔离部署、ZIP 安装、浏览器登录及点击播放流程。媒体生成采用少量固定 FFmpeg 命令，按下表串行切换输入；重复操作最多补一个直接复用现有函数的简单顺序脚本，截图／视频进度只在现有驱动做必要小改。结果直接保存为场景表、日志及截图，不新增通用测试框架、调度器、场景 DSL、管理界面或独立证据管理系统。此限制与 [Slice 的实施及实播约束](../SLICE.md#实施方式与实际播放约束) 一同验收。
+复用 package_environment.py、run_isolated_package_integration.py 和 package_playback_driver.mjs，使用现有隔离部署、ZIP 安装、浏览器登录及点击播放流程。媒体生成采用少量固定 FFmpeg 命令，按下表串行切换输入；重复操作最多补一个直接复用现有函数的简单顺序脚本，截图／视频进度只在现有驱动做必要小改。结果直接保存为场景表、日志及截图，不新增通用测试框架、调度器、场景 DSL、管理界面或独立证据管理系统。此限制与 [Slice 5 关闭合同的实施及实播约束](progress.md#slice-5-closed) 一同验收。
 
 ## 环境与夹具自行准备
 

@@ -153,8 +153,12 @@ SQLite 运行时异常停止优化并尽可能原生委托，批量报告不可�
 
 插件保留原生 PlaybackInfo／MediaSourceId→URL 和已保存媒体流的正确性，MP4／MKV／原生 Web 是实际验证的代表组合。JellyfinProxy 是当前交付范围外、未验证的外部组件，按用户授权不作为必要验收 Surface，不宣称兼容；受控后端不改变插件只读及无 OpenList 元数据 API 的边界。
 
+## TARGET — Jellyfin 12.3 最小兼容验证
+
+当前已接受运行组合仍为 12.2。用户新增的 [Slice 6](../SLICE.md) 只复用原 ZIP，在 12.3.0／Linux x64 验证六组最小用户旅程，允许对既有隔离工具增加成套版本／不可变锁选择，保留 12.2 默认守卫；不改原生接入、决策、SQLite、Coordinator、依赖或 ABI。新增环境工具输入与历史包输入分别记录；尚未实机验证，不把此 TARGET 写成 CURRENT 支持。
+
 ## TARGET — 范围外与未验证边界
 
-跨Jellyfin／平台／CPU架构、并发热调整、自动状态库修复、扫描后自动触发和通用性能证明均未交付；其他格式／客户端、OpenList专有行为及物理原生数据库保存故障实机注入保持未验证边界。这些边界不构成待规划的 Slice 或已授权的后续工作。
+跨 Jellyfin 通用兼容、其他平台／CPU 架构、并发热调整、自动状态库修复、扫描后自动触发和通用性能证明均未交付；其他格式／客户端、OpenList专有行为及物理原生数据库保存故障实机注入保持未验证边界。这些边界不构成待规划的 Slice 或已授权的后续工作。
 
 逐分支MP4／MKV真实播放、ColorRange适配及CI修复已有[分层接受证据](progress.md#slice-5-closed)，[执行设计](slice-5-playback-test-plan.md)不再代表待启动实施。2026-10-21用户明确排除音频STRM专属开发与验收，不承诺该能力；历史未验证／FAIL／BLOCKED保留，通用主流逻辑及视频音轨不因此删除。

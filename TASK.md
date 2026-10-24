@@ -1,6 +1,8 @@
 # NO ACTIVE IMPLEMENTATION TASK
 
-当前授权开发范围已完成，无待规划 Slice 或活动实施 Task。最终范围与下一步见 [SLICE.md](SLICE.md#closure-reconciliation)，各 Slice 接受记录见[关闭账本](docs/progress.md)。
+Slice 6「Jellyfin 12.3 最小兼容性实机验证」已由 A 激活，Base 为 `1379ff0e6f3e572d1d843c835a2d8af250c49ec7`，当前等待 B 从[已提交合同](SLICE.md#handoff-b)规划 Task。A 尚未建立实施 Task、运行 12.3 或签发兼容 PASS；Slice 1～5 的接受记录见[关闭账本](docs/progress.md)。
+
+B 先运行 `python3 scripts/check_governance.py` 并读取 `HEAD:SLICE.md`，固定真实 Contract Checkpoint／Task Base、12.3 镜像 digest、既有入口的小改、八类代表及六组交叉覆盖、完整回归／独立验收／Final 与证据复用。只复用已发布同一 ZIP；提交 B 计划后再交 Developer 实施，不按六组机械拆成六个 Task。
 
 ## 已完成 Task 的读取入口
 
@@ -20,4 +22,4 @@ git show c2ce9bd0ac0baf8d95bbc8c89c746907462ebf1b:TASK.md
 
 Slice 1～4 的 Task 快照统一从[关闭账本](docs/progress.md)读取。历史授权、计划与未验证项不自动启动新实施；本入口整理不移动 Base、不改变既有审查决定或验收结论。现存全部 1004 项准备库、验收副本及原始证据继续保留。
 
-Next Action: NONE (CURRENT DEVELOPMENT SCOPE COMPLETE)
+Next Action: B PLANS SLICE 6 TASK FROM THE COMMITTED CONTRACT
