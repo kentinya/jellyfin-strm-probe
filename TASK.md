@@ -3,7 +3,7 @@
 ```text
 Task ID: 6.1
 Parent Slice: 6
-Status: READY FOR B REVIEW
+Status: FIX REQUIRED
 Task Base: fa74d6db1d788e21284aa9ad50190e81d4d4f12b
 Contract Checkpoint: fa74d6db1d788e21284aa9ad50190e81d4d4f12b
 Difficulty: High
@@ -52,7 +52,7 @@ Planner / Reviewer: B
 | batch runner main 会 deploy_plugin 且路径绑定 dev-env，不能直接验原 ZIP。 | compatibility 复用 `run_isolated_batch_integration.py` 已有原生运行／停止／进度／日志统计及受控延迟时序，必要路径／API 参数化限于实际使用的函数。在 pe 新归属 ZIP 实例编排；不执行旧 batch main、不接管开发实例、不新增环境管理器。 |
 | scan 工具已有 merge_versions／明确 MediaSourceId 及身份断言；播放驱动尚无明确选源流程。 | 借用既有合并／选源核验，为 `package_playback_driver.mjs` 补最小原生选源操作，在同次选源实播中核对 SourceId／URL／内容。不能先取 PlaybackInfo 消费变化，也不能用 200 代替实播。 |
 
-允许修改上表脚本、直接受影响的 `tests/test_isolated_package_integration.py`／`test_isolated_playback_integration.py`／`test_isolated_batch_integration.py`／`test_development_environment.py`、新增两个版本输入与必要环境／验收说明。`development_environment.py` 如需调整，仅限复用锁选择，SDK 与开发部署默认不变。不修改 scan／large 的既有验收逻辑；可调用其中已有纯辅助函数。新测试聚焦错版／错锁、归属、证据与行为风险，不按字段造同构测试。
+允许修改上表脚本、直接受影响的 `tests/test_isolated_package_integration.py`／`test_isolated_playback_integration.py`／`test_isolated_batch_integration.py`／`test_development_environment.py`、新增两个版本输入与必要环境／验收说明。B 本次复核补入直接消费配置驱动的 `tests/test_isolated_configuration_integration.py`，用于修正本轮真实 locale 回归，不改变 Goal／验收。`development_environment.py` 如需调整，仅限复用锁选择，SDK 与开发部署默认不变。不修改 scan／large 的既有验收逻辑；可调用其中已有纯辅助函数。新测试聚焦错版／错锁、归属、证据与行为风险，不按字段造同构测试。
 
 本计划要求新增 package／playback runner 的 `--server-version {12.2,12.3}`（默认 12.2），package runner 的 `--scenario compatibility`、可选 `--upgrade-source-workspace`。这些在 Task Base **尚不存在**，下文是实施后的接口合同，不能在实现前宣称可运行。compatibility 必须显式选 12.3；来源参数只读复制准备库，不授权复用原实例；确无合格来源才省略并准备上述最小非空基线。旧场景语义和默认守卫保留。
 
@@ -181,10 +181,44 @@ python3 scripts/run_isolated_playback_integration.py --server-version 12.3 --sce
 ## B Review Result
 
 ```text
-Reviewed: NOT SET (Developer delivery awaits B review)
-Decision: PENDING
-Slice Required Outcomes all satisfied: NO — B RE-EVALUATION REQUIRED
-Next: B REVIEWS TASK 6.1 (fa74d6db1d788e21284aa9ad50190e81d4d4f12b..Head)
+Reviewed: fa74d6db1d788e21284aa9ad50190e81d4d4f12b..ceb2ad3200e08a942dc7720ff2aad6f55ef9d5e8
+Implementation Head reviewed: 0e171869272c27c9de3faeb2d6499fcab713011c
+Decision: FIX REQUIRED
+Slice Required Outcomes all satisfied: NO
+Next: DEVELOPER CORRECTS THE SAME TASK 6.1; BASE / CONTRACT / ORIGINAL ZIP UNCHANGED
 ```
 
-交付后审查完整 `fa74d6db1d788e21284aa9ad50190e81d4d4f12b..Head`，只返回 PASS 或 FIX REQUIRED。通过后重评全部 Slice 义务、单独 Final 后交 A。历史 Task／关闭身份从[关闭账本](docs/progress.md)和真实 Git 快照读取。
+### B 2026-10-24 独立复核与当前阻塞
+
+初始工作区干净，main 领先 origin/main 4 个提交。B 审查上述完整范围的 16 个文件，包含计划／指针、全部工具及测试；实现至交付 Head 仅 TASK.md 不同。插件源码、C# 测试／依赖、版本／ABI／schema、原 Release ZIP 未改动；没有发现需要扩大到插件修正的实机故障。本次不移动 Slice／Task Base，不新增 Task 或框架，不推送。
+
+| ID | 当前 Task 阻塞与实际依据 | 同一 Task 的必要修正 |
+|---|---|---|
+| B61-1（P1，AC-7） | 完整 Python 3.11.10 discovery **458 项，457 PASS／1 FAIL／0 SKIP，exit 1**。`test_isolated_configuration_integration.ConfigurationScriptGuardTests.test_driver_declares_the_five_editable_fields_and_no_second_run_entry` 第 121 行仍要求 `locale: 'zh-CN'`，驱动第 733 行已改为 `cfg.locale || 'zh-CN'`。Developer 的聚焦集合漏了直接受影响的配置工具回归。 | 保持默认 zh-CN 与安装场景 en-US 的行为，更新对应守卫以验证这两项语义；不删除 locale 保护、不加无效注释凑字符串。Developer 只跑改动直接影响的 configuration／package／playback 等反馈；B 在最终候选再跑完整 3.11。 |
+| B61-2（P1，RO-5／AC-5） | `scenario_matrix` 第 3154～3157 行在逐行结果汇总后结束；交付 `matrix14/matrix-result.json` 只有各行 frozen/readOnlyAfterRestart，没有 14 行接受状态统一冻结后的重启先读。小库 `stage_multi_source` 只冻结一个可见项目的一条所选源指纹，也未覆盖该阶段全部接受状态／两源全部指纹。 | 以现有 freeze/read_only、原生重启和严格 Web Play 顺序补齐统一观察：任何取源前先读全部冻结项目／源的地址、完整主流、五字段，之后实播／选源。优先在保留准备库的新归属副本补证，不因缺汇总再准备全库或机械重跑全部变化旅程；不建立重启框架。 |
+| B61-3（P1，RO-6／AC-6） | package 第 1657 行复用 `batch.scenario_sharing`；其中第 1213 行是 `base.call_playback`，原文 sharing.playback 是 HTTP PlaybackInfo 数据，无浏览器播放进度／解码帧／截图。之后单独 Web Play 不能补成同源重叠的真实 Web 旅程。 | 仅补计划中的一个方向：原生任务实际开始后，在同源真实 Web 点击播放，观察共享日志／一个物理探测、当前源与保存／提交、至少 5 秒解码播放；同时按既有时序核对独立变化源与默认并发 2。保留已有 API 共享事实，不把它外推为 Web 实播；不再展开另一方向或 suite。 |
+| B61-4（P1，RO-1／Required Surface） | `publish_local_repository`／`stage_web_install` 和交付 published.repositoryUrl 均使用 `http://media:8080/manifest.json`。合同与计划要求原生仓库页添加固定公开索引；本地同包安装不能替代该 Surface。 | 沿用已做好的原生页面操作，从 `https://raw.githubusercontent.com/kentinya/jellyfin-strm-probe/main/manifest.json` 选定同一版本并确认安装，核对同 ZIP／负载／重启 Active。无需改公开索引、发布包或另建安装基础设施；原本地安装结果保留其真实归属。 |
+| B61-5（P1，AC-7／输入与收尾） | 报告写的实现 SHA `0e17186d31d1f47cbfebee9f85c2ba5cfabcb4e0` 不可达；真实实现是上方 `0e171869…`。交付 package-compat-final 结果缺 elapsedSeconds／evidenceArchive，索引为 Elapsed None，目录无其声明的 server-logs／server-ffprobe-lines.log；最终源码 main 已会写这些字段，现有运行无法直接认作最终工具候选。各阶段索引也缺精确命令／被测工具内容、每次退出／OOM及时间比例的可核验记录。全阶段共用目录且 reset 清掉前阶段 config，末尾一次归档也无法保住安装／升级原始日志。 | 更正真实检查点，补一份简洁索引及实际输入／命令／时间／原始日志／生命周期归属；在各阶段 reset 前留存必要原文，最终正常停止并保留副本。能从现存原文恢复并验证者复用；无法绑定最终候选或缺原始观察者只补受影响阶段，不默认重跑旧全量。不得重造已丢失日志或为此开发证据管理系统。 |
+
+`--upgrade-source-workspace` 当前省略时会将升级记为 SKIPPED，但顶层仍可 PASS（第 1911～1914 行及 main）。这与既定无合格来源时准备最小非空基线的接口合同不符；在 B61-4／5 的既有 compatibility 路径内明确拒绝不完整验收或完成该基线，不能把 SKIPPED 当整组通过；无需探测其他假造入口。
+
+### 全部 Slice 结果重评
+
+| 结果组 | 本次核对事实与剩余义务 |
+|---|---|
+| RO-1 | 同 ZIP 的本地原生安装／Active／配置与 12.2→12.3 前后状态原文已存在；公开索引尚缺，输入／日志闭包按 B61-4／5 修正。升级前两条视频可信指纹仍在，新旧状态相等；不把历史 Audio 项纳入本次验收。 |
+| RO-2 | 14 行结果均标 PASS，B 逐行核对窗口／再播／重启的计数记录，八类预期相符，D02 原生计数另列。尚未完成全部逐图／最终输入认证，不签发本组独立 PASS；修正后的复用按实际输入判断。 |
+| RO-3 | B 从三个 C 行的实际窗口原文解析 33 字段：encoder==saved；limited=tv、full=pc 重读只 ColorRange 变 null，未指定三阶段均 null，各窗口实际 ffprobe 增量 1。实际打开 limited／full 推进图，分别显示 MP4 LIM 5.867s／MKV C06FUL 5.933s，无错误。保留这些观察，完整接受仍需候选身份及其余图片核验。 |
+| RO-4 | F01 原文保留首败／再试及同一 missing-f01-mp4.mp4 目标修复、提交和再播 0。B 实际打开原生播放错误图及恢复后的 MP4 P4B 图；独立全旅程尚未新跑，不把抽查当完整 B PASS。 |
+| RO-5 | 多源两次原始 PlaybackInfo 确实返回选中 S5 的源 ID、MKV 地址及 Video／Audio，进度均超过 5 秒；markerMatched=false 是名称提示不匹配，未据此认定选源错误。统一全状态／全部指纹先读仍缺，见 B61-2。 |
+| RO-6 | 混合轮五个所选源：4 跳过／1 探测并可靠成功，再跑 0；停止／结算、API 共享、默认并发与 false／禁用原文存在。真实 Web 同源共享缺口按 B61-3 补齐，生命周期与输入另核验。 |
+| AC-7 | 完整 Python FAIL；C# 匹配复用审计、B 独立换地址＋显式 ColorRange＋重启关键复现、单独 Slice Final 及全量逐图均未完成。已有确定阻塞，按开发流程先退回，其余保持 NOT RUN／未完成，不签发 Closure Packet。 |
+
+### 本次执行、复用与后续检查
+
+- 正式完整 Python 使用 `/opt/py311/python/bin/python3.11 -m unittest discover -s tests -v`，31.224 秒，失败如上。初次命令误用了主机默认 Python 3.13.5，27.672 秒、同一失败；该输出保留为辅助运行，不替代合同 3.11。下一轮先核对解释器，避免重复这一无效配置。
+- compileall、两个 Node 语法、治理、git diff --check 通过。未执行 C#／原生安装／播放／任务／独立关键复现／Final；明确阻塞后不再启动昂贵门槛。只读 Docker inventory 确认没有本轮测试实例在运行，未改变生产或原有实例生命周期。
+- B 原始完整 diff、两版 Python stdout/stderr／精确命令、检查元数据、逐行／三阶段／失败抽查与四张实际打开图片记录在 `.git/validation-evidence/0e171869272c27c9de3faeb2d6499fcab713011c/b-review-20261024T105140Z/INDEX.md`，只在本机，不上传。最终计时在同目录 timing-ledger.json；两次完整套件和质量检查均计入，严格低于本轮 50%。
+- 同一 Task 修正范围仅上述五项及直接受影响的必要反馈。保留 Base／Goal／RO／AC／原 ZIP／准备数据和首败；Developer 不承担 B 的完整回归／Final，也不要求另跑 116 行、1004 项、其他格式、代理或音频 STRM。全部满足后 B 再完整重评并决定 PASS／FIX REQUIRED；不把本次拒绝变成新 Slice／Task。
+
+历史 Task／关闭身份从[关闭账本](docs/progress.md)和真实 Git 快照读取。

@@ -137,6 +137,6 @@ A 尚未审查实现，不提前填写 PASS 或关闭。
 
 ## Closure Reconciliation
 
-待最终审查接受后协调 CURRENT、支持范围及真实下一步；当前保留 ACTIVE，所有 12.3 实机结果均未运行，不移动 Base。
+待最终审查接受后协调 CURRENT、支持范围及真实下一步；当前保留 ACTIVE。Developer 已交付 12.3 开发观察，独立复核结果与未完成义务统一见 [Task 6.1](TASK.md#b-review-result)，尚未取得兼容接受，不移动 Base。
 
-Next Action: DEVELOPER IMPLEMENTS TASK 6.1 FROM THE COMMITTED B PLAN
+Next Action: DEVELOPER CORRECTS TASK 6.1 AFTER B FIX REQUIRED
