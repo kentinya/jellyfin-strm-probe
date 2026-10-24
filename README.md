@@ -6,7 +6,7 @@
 
 开发与维护状态从[当前开发指针](docs/progress.md#当前开发指针)进入；当前能力合同、任务入口和不可变历史分别由 [SLICE.md](SLICE.md)、[TASK.md](TASK.md) 与关闭账本维护。本 README 提供项目入口和可执行命令，不复制 Task 状态或审查计数。
 
-八类播放决策、ColorRange结果匹配及干净检出CI修复的已接受范围见[最终审查](docs/progress.md#slice-5-closed)，输入与观测设计见[播放测试计划](docs/slice-5-playback-test-plan.md)。同一 v0.1.0 包在 Jellyfin 12.3.0／Linux x64 的针对性兼容实证见[Slice 6 最终审查](SLICE.md#a-final-review)；原 12.2 全量验收与 12.3 最小回归分别报告。当前授权范围的交付与下一步统一由合同和关闭账本维护。
+八类播放决策、ColorRange结果匹配及干净检出CI修复的已接受范围见[最终审查](docs/progress.md#slice-5-closed)，输入与观测设计见[播放测试计划](docs/slice-5-playback-test-plan.md)。同一 v0.1.0 包在 Jellyfin 12.3.0／Linux x64 的针对性兼容实证见[Slice 6 最终审查](docs/progress.md#slice-6-closed)；原 12.2 全量验收与 12.3 最小回归分别报告。当前授权范围的交付与下一步统一由合同和关闭账本维护。
 
 ## 开发基准与范围
 

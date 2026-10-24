@@ -1,6 +1,6 @@
 # 参考来源
 
-最新补充日期：2026-10-20；原流程参考读取日期为 2026-10-13。引用外部流程并针对本项目重新编写；没有复制 mediaflow 的媒体整理实现、Storage／Recognition 架构或“禁止 FFprobe”产品规则。
+最近整理日期：2026-10-24；外部来源的实际读取日期见各节，原流程参考读取日期为 2026-10-13。引用外部流程并针对本项目重新编写；没有复制 mediaflow 的媒体整理实现、Storage／Recognition 架构或“禁止 FFprobe”产品规则。
 
 下方外部流程、源码定位与环境调研保留对应日期的读取事实；其中“待核实”“未实测”与 NOT RUN 只描述当时状态，不是当前待办。后来已经实证的接入、原生任务、扫描与大库结果见 [兼容性](compatibility.md) 和 [关闭账本](progress.md)；未测边界以 [测试矩阵](test-matrix.md) 为准。本次文档治理未重新读取外部来源或运行产品验收。
 
@@ -24,7 +24,7 @@ V3.0 已从工作区移除，其原文 SHA-256 为 `d236cab6b3992636b524f30bbe49
 | [AGENTS.md](https://github.com/kentinya/mediaflow/blob/ba6b4f92f278950a5e0346d7dfa1387fafac2fca/AGENTS.md) | `572d2be874e2fa724027e45f32d7835ed39e2fb2` | 按职责阅读经验，稳定需求规范与原始参考分工 |
 | [A 经验](https://github.com/kentinya/mediaflow/blob/ba6b4f92f278950a5e0346d7dfa1387fafac2fca/docs/agent-experience/slice-owner-architect-final-reviewer.md) | `6dc344e9e62548194542d6fedccdd59a6e6b72bc` | 适用方法明确标为外部参考 |
 | [B 经验](https://github.com/kentinya/mediaflow/blob/ba6b4f92f278950a5e0346d7dfa1387fafac2fca/docs/agent-experience/task-planner-reviewer.md) | `cb760a3a34155d39a270c3121f6d9a6d83e21faa` | 适用方法明确标为外部参考 |
-| [Developer 经验](https://github.com/kentinya/mediaflow/blob/ba6b4f92f278950a5e0346d7dfa1387fafac2fca/docs/agent-experience/developer-implementation-role.md) | `83da6992a97120650affcebeb08d09c5c989d485` | 仅借鉴维护格式；本项目尚无插件实施经验，清单暂空 |
+| [Developer 经验](https://github.com/kentinya/mediaflow/blob/ba6b4f92f278950a5e0346d7dfa1387fafac2fca/docs/agent-experience/developer-implementation-role.md) | `83da6992a97120650affcebeb08d09c5c989d485` | 当时仅借鉴维护格式，插件实施经验清单暂空；后续本项目经验见 [Developer 实施经验](agent-experience/developer-implementation-role.md) |
 | [quality.yml](https://github.com/kentinya/mediaflow/blob/ba6b4f92f278950a5e0346d7dfa1387fafac2fca/.github/workflows/quality.yml) | `da541a1848576b9885e46daeaf03eb950159e0dc` | 更新 checkout／setup-python 版本，补治理回归；不复制 Python／Web 产品门槛 |
 
 还读取了 AGENTS、CLAUDE、SLICE、TASK 和 Roadmap，了解文档职责与当前合同格式。本项目没有继承这些文件中的产品规则和历史验收结果，没有配置该仓库为本项目远程。
