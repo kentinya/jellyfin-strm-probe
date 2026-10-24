@@ -139,4 +139,4 @@ A 尚未审查实现，不提前填写 PASS 或关闭。
 
 待最终审查接受后协调 CURRENT、支持范围及真实下一步；当前保留 ACTIVE，所有 12.3 实机结果均未运行，不移动 Base。
 
-Next Action: B PLANS SLICE 6 TASK FROM THE COMMITTED CONTRACT
+Next Action: DEVELOPER IMPLEMENTS TASK 6.1 FROM THE COMMITTED B PLAN

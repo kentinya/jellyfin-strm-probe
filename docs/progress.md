@@ -72,4 +72,4 @@ Slice 5交付固定Jellyfin 12.2.0／Linux x64下MP4／MKV的八类原生Web播�
 
 开发依据为[稳定需求](requirements.md)、维护中的架构及已提交合同，用户范围与原方案退出治理的边界见[范围说明](scope.md)。上方维护各Slice的已完成A最终审查账本。
 
-用户于 2026-10-24 要求开启 Slice 6「Jellyfin 12.3 最小兼容性实机验证」。A 已按[当前合同](../SLICE.md)激活，真实 Base 为 `1379ff0e6f3e572d1d843c835a2d8af250c49ec7`，尚无实施 Head 或 12.3 实机结果；当前[交 B 规划 Task](../SLICE.md#handoff-b)，根 TASK 暂无活动实施任务。Slice 1～5 的关闭身份／证据不变；旧[播放设计](slice-5-playback-test-plan.md)仅供复用既有场景，不自动展开全量。小版本 bug 不自动转入 A 的大版本规划，现存全部 1004 项准备库及旧资料继续保留。
+用户于 2026-10-24 要求开启 Slice 6「Jellyfin 12.3 最小兼容性实机验证」。A 已按[当前合同](../SLICE.md)激活，真实 Base 为 `1379ff0e6f3e572d1d843c835a2d8af250c49ec7`，尚无实施 Head 或 12.3 实机结果；当前实施单元、测试分工与交接统一见[当前 Task](../TASK.md)。Slice 1～5 的关闭身份／证据不变；旧[播放设计](slice-5-playback-test-plan.md)仅供复用既有场景，不自动展开全量。小版本 bug 不自动转入 A 的大版本规划，现存全部 1004 项准备库及旧资料继续保留。
