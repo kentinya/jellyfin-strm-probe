@@ -78,7 +78,7 @@ A 环境准备及 Task 1.1 原型后续：SDK、固定源码、镜像 digest、�
 
 ## 已接受的播放与共享验证边界
 
-Slice 2 已验证 SQLite 指纹的真实重启／失败恢复、多源身份、实际开始后的共享及代表性全局并发计数；正常收尾、结束重查及行动前重判有确定性回归。公共 PlaybackInfo 仍传 None，不增加人为执行取消入口；必要证据已由 A 接受，逐分支实机和其他明确延期保持测试矩阵中的 NOT RUN。
+Slice 2 关闭时已验证 SQLite 指纹的真实重启／失败恢复、多源身份、实际开始后的共享及代表性全局并发计数；正常收尾、结束重查及行动前重判有确定性回归。公共 PlaybackInfo 仍传 None，不增加人为执行取消入口；该次未运行的逐分支实机保留历史 NOT RUN，后续视频矩阵证据见本页[当前结论](#当前结论)和测试矩阵，不倒写旧结果。
 
 ## 单版本安装包（Slice 4 RO-1）
 
@@ -88,13 +88,13 @@ Slice 2 已验证 SQLite 指纹的真实重启／失败恢复、多源身份、�
 
 本项只证明固定 Jellyfin `12.2.0`／Linux x64 的安装包路径，不是跨版本、跨平台或全格式兼容声明；其他 Slice 4 门槛不由该包验证。
 
-## 当前大库／扫描与证据边界
+## Slice 4 大库／扫描与证据边界
 
 大库工具支持 --reuse-workspace，在明确归属的新副本复用现存全部 1004 项原生索引／主流；至少 1000 是下限，不截取数量、不重新建库／准备全库。all 覆盖首次信任、未变、增量、查询中停止、探测停止收尾／恢复与重启选源；focused 为 PARTIAL，不冒充完整验收。命令及前提见 [测试矩阵](test-matrix.md#slice-4-大库验收本地运行)。
 
-Task 4.2／RO-3 与 Task 4.3／RO-2 已获 B PASS，准确实现／审查快照统一见 [合同当前交接](progress.md#slice-4-closed)。4.3 最终完整报告、早期 PARTIAL／失败、工具修正和 B 原始证据索引保留于 `57c5072db0cebf4bcf5fa64c3cde635e9a23dcb3:TASK.md`；既有 plugin／batch 完整门禁包含已披露的私有异步夹具准备适配，不声称未经适配命令通过。准备库、基线与失败副本继续保留。
+Task 4.2／RO-3 与 Task 4.3／RO-2 已获 B PASS，准确实现／审查快照统一见 [Slice 4 关闭记录](progress.md#slice-4-closed)。4.3 最终完整报告、早期 PARTIAL／失败、工具修正和 B 原始证据索引保留于 `57c5072db0cebf4bcf5fa64c3cde635e9a23dcb3:TASK.md`；既有 plugin／batch 完整门禁包含已披露的私有异步夹具准备适配，不声称未经适配命令通过。准备库、基线与失败副本继续保留。
 
-最后候选的完整门禁复用、新增三阶段重启补证及全部限制见 [Closure Packet](progress.md#slice-4-closed)，A 的接受范围与独立核验见 [A Final Review](progress.md#slice-4-closed)。本地单版本 ZIP、真实大库与完整扫描的分层证据已纳入接受范围；不扩展为其他 Jellyfin／平台、通用性能 SLA 或全格式兼容。完整阶段比对覆盖五字段、当前项目／源身份、原生地址和必要主流，先于重启后 PlaybackInfo 取源，避免以播放修复替代持久化证明。
+Slice 4 当时最终候选的完整门禁复用、新增三阶段重启补证及全部限制见 [Closure Packet](progress.md#slice-4-closed)，A 的接受范围与独立核验见 [A Final Review](progress.md#slice-4-closed)；后续候选的匹配回归见 [Slice 5 关闭记录](progress.md#slice-5-closed)。本地单版本 ZIP、真实大库与完整扫描的分层证据不扩展为其他 Jellyfin／平台、通用性能 SLA 或全格式兼容。完整阶段比对覆盖五字段、当前项目／源身份、原生地址和必要主流，先于重启后 PlaybackInfo 取源，避免以播放修复替代持久化证明。
 
 ## JellyfinProxy 与 OpenList 未验证
 

@@ -1,6 +1,6 @@
 # Slice 5 播放测试及 CI 计划
 
-能力、状态、Base、授权及放行条件以 [Slice 合同](../SLICE.md) 为准。本页细化 RO-1～RO-4 的输入与观测设计，不是活动 Task，也不记录产品 PASS。实际候选、已测／失败／未运行及 CI 结果见 [Task](../TASK.md) 与 [测试矩阵](test-matrix.md)，本页不复制验收状态。
+本页保留 Slice 5 的输入与观测设计，不是活动 Task，也不记录产品 PASS。完整合同、授权及最终决定从[关闭账本](progress.md#slice-5-closed)定位；实际候选、已测／失败／未运行及 CI 结果见该关闭提交的 `TASK.md` 与[测试矩阵](test-matrix.md)。根 [TASK.md](../TASK.md) 只维护当前入口。
 
 以下按规划／执行设计保留，不作为新的实施授权；实际交付与最终接受边界见[关闭账本](progress.md#slice-5-closed)。
 

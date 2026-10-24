@@ -4,7 +4,7 @@
 
 项目：`Jellyfin.Plugin.StrmProbeOptimizer`，C# 插件。SQLite 仅保存最小历史指纹，媒体流继续保存在 Jellyfin 原生库，不维护独立探测状态机。
 
-当前工作从 [当前开发指针](docs/progress.md#当前开发指针) 进入；合同、验收状态和不可变证据由 [SLICE.md](SLICE.md)、[TASK.md](TASK.md) 与关闭账本维护。本 README 提供项目入口和可执行命令，不复制 Task 状态或审查计数。
+开发与维护状态从[当前开发指针](docs/progress.md#当前开发指针)进入；最后一个关闭合同、当前任务入口和不可变历史分别由 [SLICE.md](SLICE.md)、[TASK.md](TASK.md) 与关闭账本维护。本 README 提供项目入口和可执行命令，不复制 Task 状态或审查计数。
 
 八类播放决策、ColorRange结果匹配及干净检出CI修复的已接受范围见[最终审查](docs/progress.md#slice-5-closed)，输入与观测设计见[播放测试计划](docs/slice-5-playback-test-plan.md)。当前授权范围的交付与下一步统一由合同和关闭账本维护。
 
@@ -19,7 +19,7 @@
 ## 文档入口
 
 1. 规则与职责：[AGENTS.md](AGENTS.md)、[开发流程](docs/development-workflow.md)。
-2. 当前工作：[SLICE.md](SLICE.md)、[TASK.md](TASK.md)、[路线图](docs/roadmap.md)、[进度账本](docs/progress.md)。
+2. 状态与历史：[关闭合同](SLICE.md)、[当前任务入口](TASK.md)、[路线图](docs/roadmap.md)、[进度账本](docs/progress.md)。
 3. 产品说明：[需求](docs/requirements.md)、[用户旅程](docs/product-experience.md)、[架构](docs/architecture.md)、[范围](docs/scope.md)。
 4. 操作与验证：[开发环境](docs/development-environment.md)、[配置](docs/core-configuration.md)、[安装包](docs/package-installation.md)、[测试矩阵](docs/test-matrix.md)、[兼容性](docs/compatibility.md)。
 
@@ -55,6 +55,6 @@ python3 -m unittest discover -s tests -v
 git diff --check
 ```
 
-治理与 Python 回归只验证文档身份、已提交合同及状态约束，不代表插件构建、探测、播放或独立审查通过。Developer 只运行改动文件直接影响的测试；完整全量回归由 B 承担，规则见 [开发流程](docs/development-workflow.md#5-测试等级)。
+治理检查验证文档身份、已提交合同和状态约束；Python 回归验证现有工具与隔离保护。它们不代表 C# 插件构建、真实探测／播放或独立产品审查通过。Developer 只运行改动文件直接影响的测试；完整全量回归由 B 承担，规则见[开发流程](docs/development-workflow.md#5-测试等级)。
 
 V3.0 一次性初始化脚本 `scripts/bootstrap_repository.py` 与 `scripts/bootstrap-manifest.json` 已从当前工作区移除，历史内容可从 `aa01231:scripts/bootstrap_repository.py` 和 `aa01231:scripts/bootstrap-manifest.json` 读取。克隆仓库后不再执行旧初始化；当前治理校验现行文档和已提交 Slice／Task，不读取本地 V4.3 原方案。`check_governance.py --bootstrap` 仅保留未初始化规划的只读检查，不负责创建 Git 或激活合同。

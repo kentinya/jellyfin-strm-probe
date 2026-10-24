@@ -1,6 +1,6 @@
 # 核心配置与故障恢复操作说明
 
-本页记录已经 A 最终审查接受的配置操作、原子保存保护、完整配置页及原生任务恢复旅程；配置与任务证据见 [Slice 3 关闭记录](progress.md#slice-3-closed)，最终安装候选的接受范围见 [A Final Review](progress.md#slice-4-closed)。配置通过 Jellyfin 现有插件配置通道读写；运行／停止／定时使用原生任务界面，已交付的本地单版本包安装步骤见 [安装与恢复说明](package-installation.md)。
+本页记录已经 A 最终审查接受的配置操作、原子保存保护、完整配置页及原生任务恢复旅程；配置与任务证据见 [Slice 3 关闭记录](progress.md#slice-3-closed)，当前已接受安装候选的回归与边界见 [Slice 5 最终审查](progress.md#slice-5-closed)。配置通过 Jellyfin 现有插件配置通道读写；运行／停止／定时使用原生任务界面，已交付的本地单版本包安装步骤见[安装与恢复说明](package-installation.md)。
 
 ## 配置页面
 

@@ -60,7 +60,7 @@ Slice 4 交付固定 Jellyfin 12.2.0／Linux x64 的本地 ZIP、完整安装／
 
 Slice 5交付固定Jellyfin 12.2.0／Linux x64下MP4／MKV的八类原生Web播放决策验证、ColorRange结果匹配有界修正与干净检出CI修复。A独立审查完整Base..Implementation Head及Closure Packet后裁定PASS / CLOSED，P0/P1 Blockers为NONE FOUND，保持原Base与全部正确性不变量。
 
-- A审查checkout `cae260cf8bbeea3be97d66f912bb013f72d77eec`为B交A快照；本次关闭提交的根SLICE保留完整合同、Closure Packet、A Final Review及Closure Reconciliation，TASK保留Task 5.3完整报告与B PASS。后续合同切换须保留本次Git关闭快照，不把文档提交冒充实施。
+- A 关闭检查点为 `c2ce9bd0ac0baf8d95bbc8c89c746907462ebf1b`，审查 checkout `cae260cf8bbeea3be97d66f912bb013f72d77eec` 为 B 交 A 快照。关闭提交的 `SLICE.md` 保留完整合同、Closure Packet、A Final Review 及 Closure Reconciliation，`TASK.md` 保留 Task 5.3 完整报告与 B PASS；通过 `git show c2ce9bd0ac0baf8d95bbc8c89c746907462ebf1b:SLICE.md` 及同 SHA 的 `TASK.md` 读取，后续根文档整理不覆盖该历史。
 - Task 5.1／5.2的完整计划、报告与B PASS分别在`4c75761982bc16dd1c6bae09bee1c3561da2c178:TASK.md`、`f17fb1fc90dda242eeff9fac7b4f21576b5e6f94:TASK.md`；Task 5.3 Base为后者，B PASS在`fc71beacdfe7d0d1ca890326f801c7fb6b72a0fe:TASK.md`，无活动任务入口修正及单独Final见B交A快照。历史FIX REQUIRED／FAIL／BLOCKED／NOT RUN保留。
 - 正式视频116行义务、独立关键40行及12个ColorRange场景按输入与执行阶段核验后接受；没有宣称当前驱动单次跑完116行或将旧整体FAIL改为PASS。编码器到成功保存33字段精确匹配，固定版本重读仅ColorRange丢失时有界接受，其他身份、实际成功保存、地址／Manifest及条件提交保护保持。原生Web点击播放、已有静态流权限入口和原生计划任务的真实证据不外推为猜造入口可达。
 - A独立重核逐行原始观测、PlaybackInfo、完整五字段／原生保存及重启先读，接受B完整逐图审阅，另实际打开8张代表原图；核对最终ZIP、构建／工具输入、原始全量门禁与当前独立行／单独Final，明确复用实机结果，没有再次启动原生验收。A另新跑locked restore／Release build／format与205项C#、Python3.11的429项，均通过；本机两项归档输入存在，B干净检出的2项SKIP保留、不倒写。正常退出／每次重启无OOM证据与失败原文分别保留。

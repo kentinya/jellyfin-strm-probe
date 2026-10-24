@@ -216,7 +216,7 @@ B 独立证据索引：`.git/validation-evidence/198f4ff2accd5bc9fcd87518a9684b9
 | RO-1 单版本安装与恢复 | 最终证据见 Closure Packet，接受决定见 A Final Review | [安装包说明](package-installation.md)、[A Final Review](progress.md#slice-4-closed) |
 | RO-2 至少 1000 项真实原生库（现存全部 1004 项） | 完整复用场景及成本已纳入本次 Final；聚焦 PARTIAL 单列 | [A Final Review](progress.md#slice-4-closed)、[大库验收入口](#slice-4-大库验收本地运行) |
 | RO-3 完整扫描重叠 | 完整扫描与三源三阶段重启补证分别核验后纳入 Final | [Closure Packet](progress.md#slice-4-closed)、[A Final Review](progress.md#slice-4-closed) |
-| 原 RO-4 实际代理播放链 | 按 2026-10-20 用户授权撤出当前验收；历史 NOT RUN，不计 PASS／无兼容声明 | [范围覆盖](scope.md#2026-10-20-用户授权撤出-jellyfinproxy-验收)、[当前交接](../TASK.md) |
+| 原 RO-4 实际代理播放链 | 按 2026-10-20 用户授权撤出当前验收；历史 NOT RUN，不计 PASS／无兼容声明 | [范围覆盖](scope.md#2026-10-20-用户授权撤出-jellyfinproxy-验收)、[撤出及旧计划快照](progress.md#slice-4-closed) |
 
 ### Slice 4 大库验收本地运行
 

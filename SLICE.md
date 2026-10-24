@@ -9,6 +9,8 @@ Base SHA: 323a3f310100c38c373ce078767d50f4135e8cf1
 Implementation Head: cab2eb50dbb3d29a58b09d9c63128cbc87545636
 ~~~
 
+本页保留最后一个已关闭 Slice 的合同与最终审查；完整关闭快照为 `c2ce9bd0ac0baf8d95bbc8c89c746907462ebf1b:SLICE.md`，同提交的 `TASK.md` 保留全部 Task 报告。当前入口见 [TASK.md](TASK.md)，历史激活／交接文字不构成再次执行的指令。
+
 ## 用户目标与激活边界
 
 本节及下方合同变更保留激活／修订时的决定；实际完成范围、证据复用与最终裁定见 Closure Packet 和 A Final Review。
@@ -172,7 +174,7 @@ Python 完整回归另在 Python 3.11 干净检出执行。现有 `scripts/run_i
 
 **B交接时的文档协调：** B保留A最终审查和关闭职责；本次A决定与已完成协调见下方，不改写B交接时尚未关闭的事实。
 
-**SLICE READY FOR A REVIEW。**
+B 当时的交接结论：**SLICE READY FOR A REVIEW**。后续 A 最终决定见下节。
 
 ## A Final Review
 
