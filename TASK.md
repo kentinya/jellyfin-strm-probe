@@ -1,9 +1,13 @@
+# NO ACTIVE IMPLEMENTATION TASK
+
+Task 6.1 经下方 B Review Result 判定 PASS；全部 RO 已满足，B 继续合同规定的单独 Slice Final，再交 A。保留完整 Task 计划、开发报告和首轮拒绝以便审查；不启动新实施。
+
 # Task 6.1 — 原发布包在 Jellyfin 12.3 的最小兼容闭环
 
 ```text
 Task ID: 6.1
 Parent Slice: 6
-Status: READY FOR B REVIEW
+Status: PASS
 Task Base: fa74d6db1d788e21284aa9ad50190e81d4d4f12b
 Contract Checkpoint: fa74d6db1d788e21284aa9ad50190e81d4d4f12b
 Difficulty: High
@@ -252,7 +256,7 @@ python3 scripts/run_isolated_playback_integration.py --server-version 12.3 --sce
 - 结论：B61-1～5 均已有对应修正、聚焦测试与实机／原文证据；“升级来源缺失即拒绝”为新增硬性拒绝，公开安装为本轮真实新证据。其余（License 一致、失败保留、收尾）如实列出。
 - Head SHA：`966800e`（五个阻塞项）、`947f703`（计数窗口修正）；本报告为紧随其后的文档提交。
 
-## B Review Result
+## B 首轮 Review Result（历史 FIX REQUIRED）
 
 ```text
 Reviewed: fa74d6db1d788e21284aa9ad50190e81d4d4f12b..ceb2ad3200e08a942dc7720ff2aad6f55ef9d5e8
@@ -296,3 +300,33 @@ Next: DEVELOPER CORRECTS THE SAME TASK 6.1; BASE / CONTRACT / ORIGINAL ZIP UNCHA
 - 同一 Task 修正范围仅上述五项及直接受影响的必要反馈。保留 Base／Goal／RO／AC／原 ZIP／准备数据和首败；Developer 不承担 B 的完整回归／Final，也不要求另跑 116 行、1004 项、其他格式、代理或音频 STRM。全部满足后 B 再完整重评并决定 PASS／FIX REQUIRED；不把本次拒绝变成新 Slice／Task。
 
 历史 Task／关闭身份从[关闭账本](docs/progress.md)和真实 Git 快照读取。
+
+<a id="b-review-result"></a>
+## B Review Result
+
+```text
+Reviewed Range: fa74d6db1d788e21284aa9ad50190e81d4d4f12b..35e6eb459c5c1477eb7a69bb9f4bdb48b755bc9d
+Implementation Head: 947f70319ef290300814d1019875a65f42f39a74
+Decision: PASS
+P0/P1 Blockers: NONE FOUND
+```
+
+B 于 2026-10-24 独立审阅完整累计 17 文件差异及原始资料。五个首轮阻塞均关闭：locale 守卫和完整回归已恢复；矩阵 14 行及小库全部六源（合并项目两条指纹）统一冻结、重启先读后实播；原生任务先开始、真实 Web 加入同源，实际 start=1／join=1／可靠成功=1，独立源峰值为 2；公开索引安装与同包负载、Active 已核验；真实 SHA、阶段归档、缺升级来源即拒绝及正常退出均有原文。未改插件源码、C# 输入、依赖、ABI、schema 或发布附件。
+
+| 完整结果 | B 判定依据 |
+|---|---|
+| RO-1／AC-1 | 接受最终工具 run2/gaps 的公开原生仓库安装：确认 POST 204、同 ZIP／八项负载与 meta 身份、重启 12.3.0 Active、首次信任 0 与配置保存恢复。中间工具升级摘要未直接作为最终候选证明；B 仅补跑最终工具升级 42.3 秒：非空 12.2 副本两条视频可信指纹、完整源／配置，升级后任何播放前先读一致，来源前后摘要相同。 |
+| RO-2／AC-2 | 原 14 行八类决策与首次信任的旅程／计数／解码与源身份逐项核对；现有函数与最终工具输入按阶段比较，新增统一重启另取新证据。MP4／MKV 均有跳过和探测。71 份原始 observation 的成功窗口检查未见问题，失败窗口另按预期核对。 |
+| RO-3／AC-3 | 三类窗口 33 字段 encoder==saved；limited=tv、full=pc 仅返回 ColorRange 为 null，未指定三阶段均 null。换 URL 与同 URL Size 改变都有实际探测。B 自己的 limited 换 URL 窗口也核验同次三阶段，探测 1、提交成功、实播推进 5.416 秒。 |
+| RO-4／AC-4 | F01 首败／再试各探测一次且保留旧五字段；同一 missing-f01 目标原地恢复为 P4B，成功保存／提交后再播 0。原始错误图与恢复内容均实际查看，未把失败改成通过。 |
+| RO-5／AC-5 | 独立比较 14 行冻结指纹／源与先前各行正确结束状态；新统一重启全部先读且重播均 0。小库五个可见项目、六条源及合并项目两条指纹／配置完整相等，明确选择 S5 返回 MKV 正确地址并解码。 |
+| RO-6／AC-6 | 混合轮 4 跳过／1 探测成功、下一轮 0；选库、进度、停止后已开始工作收尾、旧轮空闲再恢复原文成立。最终工具真实 Web 共享推进 5.412 秒，独立双源峰值 2；真实静态流 false 窗口不探测／不提交，后续允许 Web 处理；禁用原生委托单列。 |
+
+- 完整 Python 3.11.10：`/opt/py311/python/bin/python3.11 -m unittest discover -s tests -v`，466 passed，0 failed／skipped，墙钟 32.464 秒。compileall、两个 Node 语法检查通过。
+- C# 复用：与 `cab2eb50dbb3d29a58b09d9c63128cbc87545636` 的 39 个源码／C# 测试／项目／锁／SDK／构建脚本输入逐字节一致；独立读取原始 restore／Release build／test／format 日志，SDK 10.0.401，全部命令 0、205 passed、无跳过。新增环境规格不充当原包构建摘要。
+- B 实际打开 43 张带路径标注的静态四图审阅页，覆盖 170 张交付 PNG；图片原字节和映射／摘要留档，未只核对文件存在。F01 原生错误按失败场景保留；其余未见异常可见错误。部分画面标记被原截图裁切，同时以原始 source ID／URL、解码与进度核验。B 独立起播／推进图另实际打开：A→MP4 LIM，重启后仍为 LIM。
+- 独立运行的首次命令在统一重启末段收到 SIGTERM（143），无完成报告，不计整次 PASS；已完成窗口 0／1／0／0 的原文保留。续跑遇到容器 DNS 别名丢失（media→127.0.1.1，FFmpeg 连接拒绝），本轮短脚本还遗漏 sourceKey，记 FAIL。修正短脚本的行身份并仅重建本轮容器／网络、保留准备数据后，新统一重启先读／Web 播放 0／指纹不变 PASS，最终两容器 exit 0、OOM false。没有修改候选工具或产品来绕过失败。
+- 本机 B 原文：`.git/validation-evidence/947f70319ef290300814d1019875a65f42f39a74/b-review-20261024T124707Z/INDEX.md`；包含完整 diff、输入审计、C# 复用日志指针、全量回归、逐图映射、独立续跑／升级新跑和首败。原始资料仅本机，不随 Git 上传。
+- Developer 历史耗时偏差保持：自报实际开工口径 42.4%，证据标记口径 53.1%，超过其报告的 30% 要求；账本顶层总秒数使用标记口径，与 start 字段不同。B 不替其改写历史或以重跑补成合规。B 本轮另记实际墙钟并计入失败、检查、准备和收尾，最终数值见 Closure Packet／本机 timing-ledger.json。
+
+全部 RO 重新评估已满足，不新增 Task；单独 Final 尚待本次新执行完成，Task PASS 不代替 A 的 Slice 最终接受或对外 12.3 支持声明。
