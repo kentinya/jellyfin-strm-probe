@@ -1,6 +1,6 @@
 # 参考来源
 
-最近整理日期：2026-10-24；外部来源的实际读取日期见各节，原流程参考读取日期为 2026-10-13。引用外部流程并针对本项目重新编写；没有复制 mediaflow 的媒体整理实现、Storage／Recognition 架构或“禁止 FFprobe”产品规则。
+最近整理日期：2026-10-25；外部来源的实际读取日期见各节，原流程参考读取日期为 2026-10-13。引用外部流程并针对本项目重新编写；没有复制 mediaflow 的媒体整理实现、Storage／Recognition 架构或“禁止 FFprobe”产品规则。
 
 下方外部流程、源码定位与环境调研保留对应日期的读取事实；其中“待核实”“未实测”与 NOT RUN 只描述当时状态，不是当前待办。后来已经实证的接入、原生任务、扫描与大库结果见 [兼容性](compatibility.md) 和 [关闭账本](progress.md)；未测边界以 [测试矩阵](test-matrix.md) 为准。本次文档治理未重新读取外部来源或运行产品验收。
 
@@ -11,6 +11,25 @@
 V4.2 原文及历史 SHA-256 `4dc8e6aa4ebd16fa4ca32b35a6f58ac9e48932e334ac772f5c0f431a39ae32e2` 保留于 `fdcd3fc5576a1eba7835c9e9ff261ac6844a2e96`；这只是来源记录，不是当前治理校验项。
 
 V3.0 已从工作区移除，其原文 SHA-256 为 `d236cab6b3992636b524f30bbe49a91adb9ef5d6b7010ed5695cae7d65f228ae`，原文件、旧合同与旧 Task 可从 `4b1d0468c1e43e6e9034ef98e99b6cc44ea59485` 读取。历史 bootstrap 清单不重生成；当前校验不再要求已被用户删除的旧文件。版本取舍与生成器排除见 [scope.md](scope.md)。
+
+<a id="retired-plans"></a>
+## 已退役文档的 Git 索引
+
+以下文件已退出当前工作树和治理必需文件清单。它们只解释历史规划，不授权新 Task，不替代现行需求、关闭合同或验收结论；完整内容保留在可达 Git 历史中，无须恢复到工作区。
+
+| 文档 | 固定读取快照 | 当前入口 |
+|---|---|---|
+| 首次初始化 Task 草案 | `4b1d0468c1e43e6e9034ef98e99b6cc44ea59485:Task/FIRST_TASK.md` | [Task 模板](../Task/TEMPLATE.md)与[根 Task](../TASK.md) |
+| Slice 4 交付方案／Task 规划指导 | `e09fef919ff82048f84ff9f1d5b486d7660f8217:docs/slice-4-delivery-plan.md` | [Slice 4 关闭合同与决定](progress.md#slice-4-closed) |
+| Slice 5 播放／ColorRange／CI 执行设计 | `e09fef919ff82048f84ff9f1d5b486d7660f8217:docs/slice-5-playback-test-plan.md` | [测试矩阵](test-matrix.md)与[Slice 5 接受边界](progress.md#slice-5-closed) |
+
+读取示例：
+
+```bash
+git show e09fef919ff82048f84ff9f1d5b486d7660f8217:docs/slice-5-playback-test-plan.md
+```
+
+旧初始化脚本与清单另保留于 `aa01231:scripts/bootstrap_repository.py`、`aa01231:scripts/bootstrap-manifest.json`，不重跑或重生成。历史 FAIL／BLOCKED／NOT RUN、原 Base、Task／Slice 审查决定及本机原始证据均保持；本次仅移除重复的历史计划页，不清理准备库、忽略产物或本地 V4.3 参考文件。
 
 ## mediaflow 开发流程
 
@@ -29,13 +48,9 @@ V3.0 已从工作区移除，其原文 SHA-256 为 `d236cab6b3992636b524f30bbe49
 
 还读取了 AGENTS、CLAUDE、SLICE、TASK 和 Roadmap，了解文档职责与当前合同格式。本项目没有继承这些文件中的产品规则和历史验收结果，没有配置该仓库为本项目远程。
 
-首次基线参考版本 `df4391bd2ff351cbcfc34d24f193aff5abb59dbc` 保留在 Git 历史。此前 mediaflow 流程同步没有移动本项目 Slice／Task Base 或改变业务验收；本轮 V4.2 重规划另行记录实质合同变更，不开始插件实现。
+首次基线参考版本 `df4391bd2ff351cbcfc34d24f193aff5abb59dbc` 保留在 Git 历史。此前 mediaflow 流程同步没有移动本项目 Slice／Task Base 或改变业务验收；当时的 V4.2 重规划属于实质合同变更，后续实现与审查见[关闭账本](progress.md)。
 
-### 本地参考检出
-
-终端 clone 因 GitHub DNS 解析失败，改用 GitHub 连接读取固定提交及递归 tree，核验 blob／tree／commit 对象后构建浅层稀疏 Git 检出：`/tmp/jf-strm-probe-mediaflow-latest`。包含流程、角色经验、模板、检查脚本、CI、当前合同及导航等 16 个文件，HEAD 为上述 main 提交；其 origin 仅属于独立参考目录。
-
-这是本次会话的流程参考检出，未下载全部源码 blob 或历史；目录位于 `/tmp`，不是持久证据。可核验的来源由以上固定提交链接保存。本项目保留适用于 C# Jellyfin 插件的独立治理实现，不能拿参考仓库测试结果作为本项目验收。
+历史调研曾通过 GitHub 连接构建临时稀疏参考检出；其 `/tmp` 目录不作为当前依赖或持久证据。复查使用上述固定提交与 blob 身份，不要求恢复旧临时目录。
 
 ## Jellyfin 源码定位
 

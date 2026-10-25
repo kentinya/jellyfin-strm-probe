@@ -12,7 +12,7 @@
 
 2026-10-21 用户明确撤出音频 STRM 专属验收，当前视频执行范围见 [范围说明](scope.md#2026-10-21-用户明确排除音频-strm)。历史音频 FAIL／BLOCKED／NOT RUN 与通用单元用例保留，不转为 PASS；视频 P01～P08、ColorRange、失败恢复及完整门禁保持。
 
-P01～P08、ColorRange返回主流匹配、失败恢复／重启及CI-F1～CI-F3的完整输入和观测设计见[执行设计](slice-5-playback-test-plan.md)，实际正式行、独立复现、完整门禁、Final与A接受边界见[Slice 5关闭记录](progress.md#slice-5-closed)。逐行证据按输入和执行阶段接受，未宣称当前驱动单次重跑全矩阵，历史整体FAIL与干净检出归档缺失SKIP保持。
+P01～P08、ColorRange返回主流匹配、失败恢复／重启及CI-F1～CI-F3的完整输入和观测设计见[历史执行设计快照](references.md#retired-plans)，实际正式行、独立复现、完整门禁、Final与A接受边界见[Slice 5关闭记录](progress.md#slice-5-closed)。逐行证据按输入和执行阶段接受，未宣称当前驱动单次重跑全矩阵，历史整体FAIL与干净检出归档缺失SKIP保持。
 
 | 范围 | 本次证据层与边界 |
 |---|---|

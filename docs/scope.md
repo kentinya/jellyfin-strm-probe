@@ -24,7 +24,7 @@
 
 ### 2026-10-20 用户授权撤出 JellyfinProxy 验收
 
-用户明确授权 A 不验证 JellyfinProxy、调整相关文档。此为 Material Contract Change，覆盖原始方案及旧合同的代理验收要求；该次变更未修改原方案。当前 Slice 4 撤出 RO-4／AC-7、代理专属 Surface、代理构建／缓存／302／客户端内容验收，历史 NOT RUN，按用户授权不执行，不计 PASS、不承诺代理兼容。不改代理代码／缓存策略、不调用 OpenList 元数据 API 的约束仍保留。
+用户明确授权 A 不验证 JellyfinProxy、调整相关文档。此为 Material Contract Change，覆盖原始方案及旧合同的代理验收要求；该次变更未修改原方案。Slice 4 当时撤出 RO-4／AC-7、代理专属 Surface、代理构建／缓存／302／客户端内容验收，历史 NOT RUN，按用户授权不执行，不计 PASS、不承诺代理兼容。不改代理代码／缓存策略、不调用 OpenList 元数据 API 的约束仍保留。
 
 非代理的原生播放／MediaSourceId→URL／必要主流、换地址后首次与重启、多版本选源、失败修复、MP4／MKV 原生 Web 实际播放，以及最终同 ZIP 安装恢复／扫描／全部 1004 项大库／完整回归义务不变。旧 4.4 计划与 Base 保留 Git；B 已在新合同后重判并停止旧计划，完成独立 Final，A 随后完成最终审查。实际执行、证据复用和关闭决定统一见 [Closure Packet](progress.md#slice-4-closed) 与 [A Final Review](progress.md#slice-4-closed)，合同修订本身不计作产品验收。
 
@@ -74,4 +74,4 @@ MP4／MKV 是已选测试样本，算法不设置这两种封装的白名单；�
 
 当前 Slice、Task、门槛和证据只在 [SLICE.md](../SLICE.md)、[TASK.md](../TASK.md) 与 [进度账本](progress.md) 维护；本页不复制状态快照。
 
-2026-10-20用户新增八类真实播放测试与GitHub Actions失败修复要求。测试自备本地媒体／STRM、隔离部署固定Jellyfin、从ZIP安装插件，不构成产品生成器或生产操作授权；详细设计见[播放测试计划](slice-5-playback-test-plan.md)。用户随后授权处理已复现的返回主流误拒绝，A提交同次字段取证、基于证据的产品修正及必要最小脱敏诊断合同，B重判同一Task后实施并独立验收；业务不变量与完整门槛未降低。最终接受范围见[关闭记录](progress.md#slice-5-closed)，历史合同不自动启动新实施。
+2026-10-20用户新增八类真实播放测试与GitHub Actions失败修复要求。测试自备本地媒体／STRM、隔离部署固定Jellyfin、从ZIP安装插件，不构成产品生成器或生产操作授权；历史设计见[固定 Git 快照](references.md#retired-plans)。用户随后授权处理已复现的返回主流误拒绝，A提交同次字段取证、基于证据的产品修正及必要最小脱敏诊断合同，B重判同一Task后实施并独立验收；业务不变量与完整门槛未降低。最终接受范围见[关闭记录](progress.md#slice-5-closed)，历史合同不自动启动新实施。

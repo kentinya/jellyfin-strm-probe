@@ -18,10 +18,10 @@ WORKFLOW_FILES = (
     "docs/agent-experience/task-planner-reviewer.md",
     "docs/agent-experience/developer-implementation-role.md",
 )
-# Only current governance files are required; retired V3.0 initialization lives in Git history.
+# Only maintained governance files are required; retired plans live in Git history.
 REQUIRED_FILES = (
     "AGENTS.md", "CLAUDE.md", "README.md", "SLICE.md", "TASK.md",
-    "Task/TEMPLATE.md", "Task/FIRST_TASK.md", "docs/scope.md",
+    "Task/TEMPLATE.md", "docs/scope.md",
     "docs/development-workflow.md", "docs/requirements.md", "docs/architecture.md",
     "docs/product-experience.md", "docs/roadmap.md", "docs/progress.md",
     "docs/compatibility.md", "docs/test-matrix.md", "docs/references.md",

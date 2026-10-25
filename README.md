@@ -6,7 +6,7 @@
 
 开发与维护状态从[当前开发指针](docs/progress.md#当前开发指针)进入；当前能力合同、任务入口和不可变历史分别由 [SLICE.md](SLICE.md)、[TASK.md](TASK.md) 与关闭账本维护。本 README 提供项目入口和可执行命令，不复制 Task 状态或审查计数。
 
-八类播放决策、ColorRange结果匹配及干净检出CI修复的已接受范围见[最终审查](docs/progress.md#slice-5-closed)，输入与观测设计见[播放测试计划](docs/slice-5-playback-test-plan.md)。同一 v0.1.0 包在 Jellyfin 12.3.0／Linux x64 的针对性兼容实证见[Slice 6 最终审查](docs/progress.md#slice-6-closed)；原 12.2 全量验收与 12.3 最小回归分别报告。当前授权范围的交付与下一步统一由合同和关闭账本维护。
+八类播放决策、ColorRange结果匹配及干净检出CI修复的已接受范围见[最终审查](docs/progress.md#slice-5-closed)，输入与观测设计见[历史播放设计快照](docs/references.md#retired-plans)。同一 v0.1.0 包在 Jellyfin 12.3.0／Linux x64 的针对性兼容实证见[Slice 6 最终审查](docs/progress.md#slice-6-closed)；原 12.2 全量验收与 12.3 最小回归分别报告。当前授权范围的交付与下一步统一由合同和关闭账本维护。
 
 ## 开发基准与范围
 
@@ -67,4 +67,4 @@ git diff --check
 
 治理检查验证文档身份、已提交合同和状态约束；Python 回归验证现有工具与隔离保护。它们不代表 C# 插件构建、真实探测／播放或独立产品审查通过。Developer 只运行改动文件直接影响的测试；完整全量回归由 B 承担，规则见[开发流程](docs/development-workflow.md#5-测试等级)。
 
-V3.0 一次性初始化脚本 `scripts/bootstrap_repository.py` 与 `scripts/bootstrap-manifest.json` 已从当前工作区移除，历史内容可从 `aa01231:scripts/bootstrap_repository.py` 和 `aa01231:scripts/bootstrap-manifest.json` 读取。克隆仓库后不再执行旧初始化；当前治理校验现行文档和已提交 Slice／Task，不读取本地 V4.3 原方案。`check_governance.py --bootstrap` 仅保留未初始化规划的只读检查，不负责创建 Git 或激活合同。
+克隆仓库后直接使用现行治理检查，无须再次初始化。已退役的初始化草案及 Slice 计划见[历史文档索引](docs/references.md#retired-plans)；`check_governance.py --bootstrap` 仅用于尚未初始化 Git 的只读规划检查，不创建 Git 或激活合同。

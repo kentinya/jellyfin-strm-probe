@@ -84,4 +84,4 @@ Slice 6 复用同一 v0.1.0 Release ZIP，在固定 Jellyfin 12.3.0／Linux x64 
 
 开发依据为[稳定需求](requirements.md)、维护中的架构及已提交合同，用户范围与原方案退出治理的边界见[范围说明](scope.md)。上方维护各Slice的已完成A最终审查账本。
 
-当前授权开发范围的 Slice 1～6 均已完成 A 最终审查；最新接受范围见[Slice 6 关闭记录](#slice-6-closed)及[完整关闭合同](../SLICE.md)。[根 Task](../TASK.md)无活动实施，当前没有待规划的大 Slice，等待新增需求。旧[播放设计](slice-5-playback-test-plan.md)仅供复用既有场景，不自动展开全量；小版本 bug 无需 A 介入。现存全部 1004 项准备库及旧资料继续保留。
+当前授权开发范围的 Slice 1～6 均已完成 A 最终审查；最新接受范围见[Slice 6 关闭记录](#slice-6-closed)及[完整关闭合同](../SLICE.md)。[根 Task](../TASK.md)无活动实施，当前没有待规划的大 Slice，等待新增需求。历史[播放设计快照](references.md#retired-plans)仅供参考既有场景，不自动展开全量；小版本 bug 无需 A 介入。现存全部 1004 项准备库及旧资料继续保留。

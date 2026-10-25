@@ -2,15 +2,6 @@
 
 本文件只描述可迁移开发环境、固定输入和运行前提。当前合同、Task 状态和产品验收统一见 [Slice](../SLICE.md)、[Task](../TASK.md) 与 [进度账本](progress.md)；旧服务器记录只作为 Git 历史，不是新主机开工前提。
 
-## 环境检查历史（2026-10-18～19）
-
-以下仅记录对应日期的环境观察，不代表当前容器健康、端口或资源仍相同。后续获授权运行前重新检查并记录实际环境；文档治理不启动或接管实例。
-
-- `python3 scripts/development_environment.py sdk`：PASS，已存在并校验本地 SDK `10.0.401`；全局 `dotnet` 不在 PATH，统一使用 `bash scripts/dotnet-local`。
-- `python3 scripts/development_environment.py doctor`：PASS，Docker Engine `29.7.1`、Compose `v5.3.1`、本地端口、DNS、NuGet HTTPS 和不可变镜像锁均通过。
-- `python3 scripts/development_environment.py status`：若现有隔离 Jellyfin 健康检查失败，真实集成保持 `BLOCKED／NOT RUN`；不要接管或清理非本轮容器。
-- 2026-10-19 续审只读检查：当时仓库隔离 Jellyfin 为 healthy，媒体服务在运行；该次未停止、重启或接管运行中容器，生产实例未操作。更早的 unhealthy 记录不作为当前阻塞；健康状态也不等于产品验收 PASS，最终验收以 [Closure Packet](progress.md#slice-4-closed) 为准。
-
 ## 当前交接与固定输入
 
 继续工作前读取当前 [Slice](../SLICE.md) 与 [Task](../TASK.md)；换机不重设 Base、不重新打开已通过的历史 Task，也不继承旧服务器资源结论。
@@ -30,7 +21,7 @@
 
 ## 克隆与准备
 
-开发准备依赖仓库中的代码、固定输入和维护中的治理文档。按 2026-10-20 用户要求，V4.3 原方案仅为可选本地参考，不再跟踪或上传 GitHub；新主机无须补入方案，治理与 CI 均不依赖原文。已提交开发历史、固定 Base、已关闭合同和 B 决定保留；后续发布边界见 [Git 检查点](development-workflow.md#6-git-检查点)。下列命令从新检出的仓库根目录执行，实际结果须在该次准备中记录，不继承上方历史 PASS。
+开发准备依赖仓库中的代码、固定输入和维护中的治理文档。按 2026-10-20 用户要求，V4.3 原方案仅为可选本地参考，不再跟踪或上传 GitHub；新主机无须补入方案，治理与 CI 均不依赖原文。已提交开发历史、固定 Base、已关闭合同和 B 决定保留；后续发布边界见 [Git 检查点](development-workflow.md#6-git-检查点)。下列命令从新检出的仓库根目录执行，实际结果须在该次准备中记录，不继承历史环境 PASS。
 
 ```bash
 git clone https://github.com/kentinya/jellyfin-strm-probe.git
@@ -106,7 +97,7 @@ python3 -m unittest discover -s tests -v
 
 ## 证据迁移与继续工作
 
-GitHub 的后续发布范围为代码、治理文档、依赖锁和公开环境身份，不重新加入本地 V4.3 原方案；此前已发布的方案历史仍存在，停止跟踪不会删除历史副本。`.git/validation-evidence/`、`artifacts/`、浏览器缓存、配置、凭据、SQLite 和原始运行日志不随 clone／push 传输。本次不推送、不把这些本机资料上传到 GitHub，也不删除旧服务器资料。
+GitHub 的后续发布范围为代码、治理文档、依赖锁和公开环境身份，不重新加入本地 V4.3 原方案；此前已发布的方案历史仍存在，停止跟踪不会删除历史副本。`.git/validation-evidence/`、`artifacts/`、浏览器缓存、配置、凭据、SQLite 和原始运行日志不随 clone／push 传输。不把这些本机资料上传到 GitHub；迁移不自动删除旧服务器资料或授权推送。
 
 旧索引仍是历史出处：没有旧目录不妨碍规划或实施，不撤销已提交审查决定；需要复用原始运行时，可单独安全迁移并核对摘要，无法核验则重跑对应门槛。新候选和单独 Slice Final 始终取得要求的新证据，不能把历史 PASS 当新主机实测 PASS。详见 [迁移流程](development-workflow.md#开发服务器迁移)。
 
@@ -114,7 +105,7 @@ GitHub 的后续发布范围为代码、治理文档、依赖锁和公开环境�
 
 ## 已运行环境证据
 
-此节保留历史链接入口。旧主机的环境实测与镜像溯源限制从 `b92bea58a2552997bd750f059fc7d6c6cca23b93:docs/development-environment.md` 读取，历史产品结果见 [关闭账本](progress.md) 和对应已提交审查快照；公开镜像身份见 [镜像锁](../dev/images.lock.json)。这些是历史结果，新主机环境与运行证据须重新记录。
+此节保留历史链接入口。2026-10-18～19 的环境检查记录见 `e09fef919ff82048f84ff9f1d5b486d7660f8217:docs/development-environment.md`，只描述当时观察，不证明当前健康或资源状态。旧主机的环境实测与镜像溯源限制从 `b92bea58a2552997bd750f059fc7d6c6cca23b93:docs/development-environment.md` 读取，历史产品结果见 [关闭账本](progress.md) 和对应已提交审查快照；公开镜像身份见 [镜像锁](../dev/images.lock.json)。这些是历史结果，新主机环境与运行证据须重新记录。
 
 2026-10-19 各轮增量、查询停止与四批次聚焦补证的完整报告、实际端口／副本、成本、失败和 B 决定保留于 `57c5072db0cebf4bcf5fa64c3cde635e9a23dcb3:TASK.md`；该环境交接时的详细摘要保留于 `c2ce9bd0ac0baf8d95bbc8c89c746907462ebf1b:docs/development-environment.md`。根 TASK 只维护当前入口，本页不重复验收流水账。
 

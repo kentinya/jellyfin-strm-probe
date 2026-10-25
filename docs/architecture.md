@@ -161,4 +161,4 @@ SQLite 运行时异常停止优化并尽可能原生委托，批量报告不可�
 
 跨 Jellyfin 通用兼容、其他平台／CPU 架构、并发热调整、自动状态库修复、扫描后自动触发和通用性能证明均未交付；其他格式／客户端、OpenList专有行为及物理原生数据库保存故障实机注入保持未验证边界。这些边界不构成待规划的 Slice 或已授权的后续工作。
 
-逐分支MP4／MKV真实播放、ColorRange适配及CI修复已有[分层接受证据](progress.md#slice-5-closed)，[执行设计](slice-5-playback-test-plan.md)不再代表待启动实施。2026-10-21用户明确排除音频STRM专属开发与验收，不承诺该能力；历史未验证／FAIL／BLOCKED保留，通用主流逻辑及视频音轨不因此删除。
+逐分支MP4／MKV真实播放、ColorRange适配及CI修复已有[分层接受证据](progress.md#slice-5-closed)，历史[执行设计快照](references.md#retired-plans)只供追溯。2026-10-21用户明确排除音频STRM专属开发与验收，不承诺该能力；历史未验证／FAIL／BLOCKED保留，通用主流逻辑及视频音轨不因此删除。
