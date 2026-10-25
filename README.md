@@ -1,70 +1,126 @@
 # Jellyfin STRM Probe Optimizer
 
-按版本化 STRM 的 URL、内容 SHA-1 和字节 Size 判断是否需要 Jellyfin 原生探测。插件采用播放自动检查、Jellyfin 原生批量计划任务和共享并发控制；URL 改变一律要求探测。
+**一个为版本化视频 STRM 减少重复媒体探测的 Jellyfin 插件。**
 
-项目：`Jellyfin.Plugin.StrmProbeOptimizer`，C# 插件。SQLite 仅保存最小历史指纹，媒体流继续保存在 Jellyfin 原生库，不维护独立探测状态机。
+播放时自动检查 STRM 的 URL、内容 SHA-1 和文件大小：未变化时复用已有媒体信息，需要更新时调用 Jellyfin 原生探测，保存新的播放地址和媒体流。
 
-开发与维护状态从[当前开发指针](docs/progress.md#当前开发指针)进入；当前能力合同、任务入口和不可变历史分别由 [SLICE.md](SLICE.md)、[TASK.md](TASK.md) 与关闭账本维护。本 README 提供项目入口和可执行命令，不复制 Task 状态或审查计数。
+[下载安装](https://github.com/kentinya/jellyfin-strm-probe/releases/tag/v0.1.0) · [安装与恢复](docs/package-installation.md) · [配置说明](docs/core-configuration.md) · [兼容性](docs/compatibility.md)
 
-八类播放决策、ColorRange结果匹配及干净检出CI修复的已接受范围见[最终审查](docs/progress.md#slice-5-closed)，输入与观测设计见[历史播放设计快照](docs/references.md#retired-plans)。同一 v0.1.0 包在 Jellyfin 12.3.0／Linux x64 的针对性兼容实证见[Slice 6 最终审查](docs/progress.md#slice-6-closed)；原 12.2 全量验收与 12.3 最小回归分别报告。当前授权范围的交付与下一步统一由合同和关闭账本维护。
+> [!NOTE]
+> 当前发布包面向 **Linux x64**。Jellyfin **12.2.0** 已完成完整验收；同一 v0.1.0 包在 **12.3.0** 完成针对性兼容回归，未进行该版本的千项容量和完整扫描验收。实播样本为 MP4／MKV（H.264／AAC）及原生 Web 客户端，其他组合见[兼容性说明](docs/compatibility.md)。
 
-## 开发基准与范围
+## ✨ 特性
 
-当前开发依据为 [仓库约束](AGENTS.md)、[稳定需求](docs/requirements.md)、[架构](docs/architecture.md) 和已提交 Slice／Task 合同。按 2026-10-20 用户要求，V4.3 原方案退出治理，仅作可选本地参考，不再跟踪或上传 GitHub；克隆与 CI 无须该文件。历史版本与已提交审查记录保留，发布边界见 [Git 检查点](docs/development-workflow.md#6-git-检查点)。
+- **播放自动检查**：在原生播放流程中按需判断，未变化且已有必要主媒体流时跳过重复探测。
+- **地址变化更新**：URL 改变一律通过原生探测更新地址和媒体流，包括签名参数变化；成功后当次播放及重启后均使用新地址。
+- **首次信任接管**：已有主媒体流时默认建立历史指纹，避免安装插件后全库重新探测。首次信任不等于重新验证远程内容。
+- **原生批量任务**：在 Jellyfin 计划任务中手动检查、停止或设置定时，支持选择媒体库，默认不自动运行。
+- **共享探测与并发控制**：播放和批量检查复用同一媒体源正在执行的探测，插件主动探测默认并发 2，可设置为 1～8。
+- **失败后可重试**：探测失败或 STRM 在探测期间再次变化时保留旧指纹，修复后重新检查。
+- **只读处理 STRM**：不写入、移动或删除 STRM；普通媒体、旧 STRM 和禁用插件时沿用原生处理。
 
-按 2026-10-20 用户授权，当前交付不验证 JellyfinProxy，不宣称代理兼容；原生播放、安装恢复、大库与扫描验收保留，具体覆盖见 [范围说明](docs/scope.md)。范围以用户授权及当前合同为准。
+## 🚀 安装
 
-**不开发 STRM 生成程序。** 插件只读现有 STRM，不调用 OpenList 元数据 API、不下载媒体计算哈希、不改写 JellyfinProxy。首版不开发独立调度器、独立任务按钮、仅更新路径服务或扫描后自动触发，见 [范围说明](docs/scope.md)。
+### 网页安装（推荐）
 
-## 文档入口
+1. 打开 Jellyfin **控制台 → 插件 → 管理仓库**，添加仓库，名称可填 `STRM Probe Optimizer — Linux x64`。
+2. 仓库地址填写：
 
-1. 规则与职责：[AGENTS.md](AGENTS.md)、[开发流程](docs/development-workflow.md)。
-2. 状态与历史：[当前合同](SLICE.md)、[当前任务入口](TASK.md)、[路线图](docs/roadmap.md)、[进度账本](docs/progress.md)。
-3. 产品说明：[需求](docs/requirements.md)、[用户旅程](docs/product-experience.md)、[架构](docs/architecture.md)、[范围](docs/scope.md)。
-4. 操作与验证：[开发环境](docs/development-environment.md)、[配置](docs/core-configuration.md)、[安装包](docs/package-installation.md)、[测试矩阵](docs/test-matrix.md)、[兼容性](docs/compatibility.md)。
+   ```text
+   https://raw.githubusercontent.com/kentinya/jellyfin-strm-probe/main/manifest.json
+   ```
 
-新主机按 [开发环境](docs/development-environment.md) 准备 SDK、镜像锁和隔离实例；换机不改变合同或历史证据。原始本机证据不随 Git clone 传输，复用规则见 [迁移流程](docs/development-workflow.md#开发服务器迁移)。
+3. 保存并保持仓库启用，返回插件页，在“全部／可用”（旧版为“目录”）找到 **STRM Probe Optimizer**。
+4. 选择 `0.1.0.0` 安装，在 Jellyfin 的安装确认框中确认，然后重启 Jellyfin。
+5. 在已安装插件中确认状态为 **Active**，打开插件设置。
 
-## 产品目标
+服务器需要能够访问 GitHub 的仓库索引和 Release 下载地址。这里提供的是自托管插件仓库。
 
-- 未变化且有主媒体流时复用；URL 不变且 SHA-1 相同忽略 Size，SHA-1 不可比时比较有效 Size；Modified 不参与。
-- URL 改变始终探测，成功后使用并保存新地址；allowMediaProbe=false 不被提高权限。
-- 首次默认信任已有主流；变化指纹只在本次原生探测成功、结果已保存且 STRM 未再变后提交。失败保留旧指纹，下次重新比较。
-- 「控制台 → 计划任务 → STRM 媒体信息检查」支持原生运行／停止／定时，默认无自动触发；固定所选库候选 ID 后分批读取当前对象，只处理需要探测的项目。停止只撤销未开始工作，已开始探测继续完成并按条件提交，收尾报告实际结果，结束后才允许下一轮批量实际运行。候选 ID 内存随数量增长，完整媒体对象和活动工作按批次限制。
-- 播放与批量共用 ProbeCoordinator，只共享已实际开始且仍在执行的探测，排队不共享；插件主动探测并发默认 2、允许 1～8，不限制其他原生任务或插件。
+### 手动安装
 
-稳定业务规则见 [需求](docs/requirements.md)；当前是否已验收、延期或阻塞以 [进度账本](docs/progress.md) 和当前合同为准。接口来源与版本定位见 [参考来源](docs/references.md)。
+从 [v0.1.0 Release](https://github.com/kentinya/jellyfin-strm-probe/releases/tag/v0.1.0) 下载 `Jellyfin.Plugin.StrmProbeOptimizer_linux-x64.zip`，使用随附校验文件核对下载内容。停止 Jellyfin，将 ZIP 内的整个插件目录解压到插件目录（容器中通常为 `/config/plugins/`），再启动并确认 Active。
 
-## 下载与安装包
+网页和手动安装使用同一 ZIP。详细的校验、升级、备份、移除与重装步骤见[安装与恢复说明](docs/package-installation.md)。
 
-首版 v0.1.0／Linux x64 包已在 Jellyfin `12.2.0` 完成原完整验收，并以同一 ZIP 在 `12.3.0` 完成六组针对性兼容回归。包身份、12.2 原生播放／大库／扫描及 12.3 最小实证的区别见[兼容性](docs/compatibility.md)，具体安装步骤见[安装包说明](docs/package-installation.md)。发布下载见 [GitHub Releases](https://github.com/kentinya/jellyfin-strm-probe/releases)，首版为 [v0.1.0](https://github.com/kentinya/jellyfin-strm-probe/releases/tag/v0.1.0)。插件 ZIP、来源清单和 SHA-256 校验文件由[发布工作流](docs/release-process.md)构建核验；提供自托管插件仓库，安装步骤如下。
+## ⚙️ 使用与配置
 
-网页安装：打开「控制台 → 插件 → 管理仓库」，新增仓库（名称可填 `STRM Probe Optimizer — Linux x64`），地址为：
+安装后，继续从 Jellyfin 原生界面播放影片即可。插件默认启用，播放自动检查默认开启。
+
+打开 **控制台 → 插件 → STRM Probe Optimizer → 设置**：
+
+| 配置 | 默认值 | 生效时机 |
+|---|---|---|
+| 启用插件 | 开 | 保存后的下一次检查 |
+| 播放自动检查 | 开 | 保存后的下一次播放检查 |
+| 主动探测并发 | 2，允许 1～8 | 下次 Jellyfin 启动 |
+| 批量媒体库范围 | 全部媒体库 | 下一轮批量任务 |
+| 详细日志 | 关 | 下一次检查 |
+
+批量检查入口为 **控制台 → 计划任务 → STRM 媒体信息检查**。手动运行、停止、进度和定时均由 Jellyfin 管理；安装后默认没有自动触发时间，需要定时检查时在原生任务页设置。
+
+停止批量任务会撤销未开始的工作，已经开始的探测继续完成并按成功条件保存。任务收尾结束后才能运行下一轮。
+
+关闭“播放自动检查”只影响播放入口；关闭“启用插件”则停止插件优化。配置保存反馈和故障恢复见[配置说明](docs/core-configuration.md)。
+
+## 📝 STRM 格式与判断规则
+
+优化仅作用于带有受支持协议标记的 STRM。版本 1 格式示例：
 
 ```text
-https://raw.githubusercontent.com/kentinya/jellyfin-strm-probe/main/manifest.json
+# strm-probe-version:1
+# strm-probe-sha1:aabbccddeeff0011223344556677889900112233
+# strm-probe-size:10737418240
+https://media.example.invalid/video/movie.mkv
 ```
 
-保存后返回插件页，在“全部／可用”（旧版界面为“目录”）找到 `STRM Probe Optimizer`，安装 `0.1.0.0`，在原生安装确认框确认后重启 Jellyfin；在已安装插件中确认 Active。网页安装与手动安装使用同一 Release ZIP，详细范围及恢复见[安装说明](docs/package-installation.md)。
+上面的地址和哈希仅为示例。实际 SHA-1 应为媒体内容的 40 位十六进制哈希，Size 为媒体文件的字节数；两项均可缺失。插件不生成 STRM，也不下载媒体计算哈希，不调用 OpenList 元数据 API。
 
-开发者本地打包与隔离验收：
+已有历史指纹和必要主媒体流时：
+
+| 条件 | 处理 |
+|---|---|
+| URL 改变 | 要求探测，无论 SHA-1／Size 是否相同 |
+| URL 不变，有效 SHA-1 相同 | 跳过探测，忽略 Size 差异 |
+| URL 不变，有效 SHA-1 不同 | 要求探测 |
+| URL 不变，SHA-1 不可比较 | 仅在新旧有效 Size 不同时要求探测 |
+| 仅修改时间或 Modified 注释改变 | 不因此触发探测 |
+
+缺少必要主媒体流时要求探测；原调用不允许探测时，插件不会提高权限。除首次信任接管外，只有本次原生探测成功、结果已保存且 STRM 未再次变化，才接受新指纹。
+
+无可比 SHA-1 且 URL／Size 相同的远程内容替换可能无法识别。独立的媒体库扫描和检查计划不保证先后完成，当前没有扫描后自动触发功能。音频 STRM、JellyfinProxy 和 OpenList 专有行为不在已验证支持范围内。
+
+## 🛠️ 本地开发
+
+插件使用 **C#／.NET 10**，固定 SDK **10.0.401**。媒体信息保存在 Jellyfin 原生库，插件 SQLite 只保存最小历史指纹。
 
 ```bash
-python3 scripts/package_plugin.py --configuration Release --runtime linux-x64 --output-dir artifacts/releases
-python3 scripts/run_isolated_package_integration.py --package artifacts/releases/Jellyfin.Plugin.StrmProbeOptimizer_linux-x64.zip --baseline-revision 7c64eb5dcad6e5f20fb7eb41819be2521f65484d --scenario all
+git clone https://github.com/kentinya/jellyfin-strm-probe.git
+cd jellyfin-strm-probe
+python3 scripts/development_environment.py sdk
+bash scripts/dotnet-local restore Jellyfin.Plugin.StrmProbeOptimizer.sln --locked-mode
+bash scripts/dotnet-local build Jellyfin.Plugin.StrmProbeOptimizer.sln --configuration Release --no-restore
 ```
 
-第一条从固定 Release 输出与锁文件生成 ZIP、清单与摘要，拒绝损坏／缺失 native／非法路径归档；第二条在专用隔离实例上仅用归档完成干净安装、升级替换、禁用／移除／重装与负向包验证。完整说明、支持范围与备份／恢复见 [安装包说明](docs/package-installation.md)。
+完整的镜像锁、浏览器工具、隔离实例、测试和证据要求见[开发环境](docs/development-environment.md)与[开发流程](docs/development-workflow.md)；本地打包见[安装包说明](docs/package-installation.md)。
 
-## 仓库检查
+## 📁 项目结构
 
-```bash
-git status --short --branch
-python3 scripts/check_governance.py
-python3 -m unittest discover -s tests -v
-git diff --check
+```text
+├── src/Jellyfin.Plugin.StrmProbeOptimizer/  # 插件、原生接入、决策、指纹与批量任务
+├── tests/                                 # C# 与 Python 测试
+├── scripts/                               # 环境准备、构建打包及隔离验收工具
+├── dev/                                   # 固定环境规格与不可变镜像锁
+├── docs/                                  # 产品、操作、开发及验收文档
+├── manifest.json                          # Jellyfin 插件仓库索引
+└── .github/workflows/                     # 质量检查与 Release 工作流
 ```
 
-治理检查验证文档身份、已提交合同和状态约束；Python 回归验证现有工具与隔离保护。它们不代表 C# 插件构建、真实探测／播放或独立产品审查通过。Developer 只运行改动文件直接影响的测试；完整全量回归由 B 承担，规则见[开发流程](docs/development-workflow.md#5-测试等级)。
+## 📚 更多文档
 
-克隆仓库后直接使用现行治理检查，无须再次初始化。已退役的初始化草案及 Slice 计划见[历史文档索引](docs/references.md#retired-plans)；`check_governance.py --bootstrap` 仅用于尚未初始化 Git 的只读规划检查，不创建 Git 或激活合同。
+| 内容 | 文档 |
+|---|---|
+| 产品行为与范围 | [需求](docs/requirements.md) · [用户旅程](docs/product-experience.md) · [范围](docs/scope.md) |
+| 实现与验证 | [架构](docs/architecture.md) · [测试矩阵](docs/test-matrix.md) · [兼容性](docs/compatibility.md) |
+| 交付与发布 | [安装与恢复](docs/package-installation.md) · [发布流程](docs/release-process.md) |
+| 开发规则与状态 | [仓库约束](AGENTS.md) · [开发流程](docs/development-workflow.md) · [当前合同](SLICE.md) · [任务入口](TASK.md) · [路线图](docs/roadmap.md) |
+| 历史与来源 | [关闭账本](docs/progress.md) · [参考来源](docs/references.md) |
