@@ -8,7 +8,7 @@
 
 | 维度 | 首版实测范围 |
 |---|---|
-| Jellyfin | `12.2.0` 原完整验收；同一 v0.1.0 ZIP 在 `12.3.0` 完成六组针对性兼容回归（版本／digest 见 [环境交接](development-environment.md)） |
+| Jellyfin | `12.2.0` 完整验收。同一 v0.1.0 ZIP 在 `12.3.0` 完成六组针对性回归，在 `12.4.0` 通过干净实例的手动安装冒烟。[各版本验证范围](compatibility.md) |
 | 操作系统／架构 | Linux x64 |
 | 目标框架 | `net10.0`；SDK `10.0.401` |
 | 插件 ABI | `targetAbi` `12.2.0.0`；GUID `b061643e-d17d-4c6e-8ba2-6b57e286bd20` |
@@ -28,13 +28,13 @@ https://raw.githubusercontent.com/kentinya/jellyfin-strm-probe/main/manifest.jso
 
 保存并保持仓库启用，返回插件页，在“全部／可用”（旧版界面为“目录”）找到 `STRM Probe Optimizer`，打开详情，选择 `0.1.0.0` 并安装，在原生安装确认框中确认。完成后重启 Jellyfin，在已安装插件中确认 Active，再打开插件设置。服务器须能访问 `raw.githubusercontent.com` 以及 GitHub Release 的下载／重定向地址。
 
-索引只提供同一 Linux x64 包，12.2 原完整验收与 12.3 针对性实证按上表分别报告。`targetAbi` 是原生目录筛选的最低版本，较旧 Jellyfin 不会显示该版本；它不代表所有更新版本已通过实机兼容验证。
+仓库索引提供 Linux x64 的 v0.1.0 ZIP。`targetAbi` 是 Jellyfin 原生目录筛选的最低版本。12.4.0 的实测安装入口是手动 ZIP 安装。[手动安装步骤](#安装)
 
 根 `manifest.json` 是给 Jellyfin 读取的仓库索引，内含版本、ABI、Release 下载地址与原生安装器需要的 MD5。Release 附件中的 `.manifest.json` 是来源／逐文件 SHA-256 清单，不能填作仓库 URL。网页安装复用同一已验收 ZIP，既有四个 Release 附件与标签保持；仓库 CI 另核对包身份、MD5、原验收 SHA-256 和归档完整性。
 
 ## 取得安装包
 
-首版从 [GitHub Release v0.1.0](https://github.com/kentinya/jellyfin-strm-probe/releases/tag/v0.1.0) 下载插件 ZIP、来源清单、`.zip.sha256` 和 `SHA256SUMS.txt`。附件与已验收包保持一致；下载全部附件后在同一目录执行 `sha256sum -c SHA256SUMS.txt`。12.3 针对性验证复用该原 ZIP，没有重建或替换 Release 附件。
+下载插件 ZIP、来源清单、`.zip.sha256` 和 `SHA256SUMS.txt` 后，在同一目录执行 `sha256sum -c SHA256SUMS.txt`。12.3 针对性回归和 12.4 干净安装冒烟均使用这份原 ZIP。[GitHub Release v0.1.0](https://github.com/kentinya/jellyfin-strm-probe/releases/tag/v0.1.0)
 
 开发者也可本地打包；从其他提交或普通构建路径生成的包不自动等同于 Release 附件，来源及路径复现规则见[发布流程](release-process.md)。打包入口从固定 Release 输出与已锁依赖生成归档：
 

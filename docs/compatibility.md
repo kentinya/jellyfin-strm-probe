@@ -8,7 +8,11 @@ MP4／MKV视频在原生Web入口的八类决策、缺Video、ColorRange三阶�
 
 同一 v0.1.0 ZIP 已在 12.3.0／Linux x64 完成 [Slice 6 针对性兼容回归](progress.md#slice-6-closed)并经 A 最终接受；官方源码为 `06de749d435e2d0be0c5119a41f2300fdd7143e5`，不可变镜像见[独立锁](../dev/images-12.3.lock.json)。范围覆盖原生公开仓库安装、非空 12.2 升级保持、八类代表实播、三类 ColorRange、同目标失败恢复、统一重启／多源选源及小库批量／权限。插件依赖及 `targetAbi=12.2.0.0` 保持；原 12.2 全量与本次 12.3 最小实证分列，不宣称 12.3 千项容量、完整扫描或全格式／全客户端。MP4／MKV 是验证样本，决策代码不按这两种封装设置白名单。
 
-下表是早期源码定位候选；当前固定组合的加载／运行事实以上文及关闭证据为准。
+### Jellyfin 12.4
+
+同一 v0.1.0 ZIP 在 12.4.0／Linux x64 通过干净实例的手动安装冒烟。实测覆盖插件启用、配置保存与重启读回、原生计划任务手动运行、MP4／MKV 原生 Web 实播，以及 MP4 仅换 URL 后的一次探测和重启后先读回新地址、主流及指纹。12.4 的验收边界是本地 ZIP 安装和上述代表场景。[B 独立审查](../Task/jellyfin-12.4-compatibility.md#b-独立审查)
+
+## 早期源码候选
 
 | 候选源码 | 已记录标签提交 | 定位用途 |
 |---|---|---|
@@ -19,7 +23,7 @@ MP4／MKV视频在原生Web入口的八类决策、缺Video、ColorRange三阶�
 
 ## Task 1.1 源码定位（2026-10-13）
 
-官方发布页将 v12.2 标为最新稳定版本；发布提交为 `ca0f16eb7c195f720a1493ed469a27c4657db0c6`。本轮网页核对到：
+Task 1.1 当时查阅的 v12.2 发布提交为 `ca0f16eb7c195f720a1493ed469a27c4657db0c6`，源码定位如下。
 
 - [`MediaSourceManager.GetPlaybackMediaSources`](https://github.com/jellyfin/jellyfin/blob/ca0f16eb7c195f720a1493ed469a27c4657db0c6/Emby.Server.Implementations/Library/MediaSourceManager.cs#L177-L198) 在 `allowMediaProbe` 为 true 且项目为 `.strm` 时会调用 `RefreshMetadata`，设置 `EnableRemoteContentProbe=true` 和 `FullRefresh`，再重新读取静态媒体源；缺主视频／音频流也会进入该刷新分支。源码定位确认原生播放接入候选，但不能证明包装 DI、单例所有权、实际探测计数或失败语义。
 - [`ProbeProvider.FetchVideoInfo`](https://github.com/jellyfin/jellyfin/blob/ca0f16eb7c195f720a1493ed469a27c4657db0c6/MediaBrowser.Providers/MediaInfo/ProbeProvider.cs#L234-L332) 对可探测视频 STRM 调用 `ProbeVideo`，并由原生 Provider 从 STRM 读取远程地址。该源码路径仍不能替代本次结果、持久化主流和地址的实机关联验证。

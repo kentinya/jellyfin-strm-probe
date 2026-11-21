@@ -7,7 +7,7 @@
 [下载安装](https://github.com/kentinya/jellyfin-strm-probe/releases/tag/v0.1.0) · [安装与恢复](docs/package-installation.md) · [配置说明](docs/core-configuration.md) · [兼容性](docs/compatibility.md)
 
 > [!NOTE]
-> 当前发布包面向 **Linux x64**。Jellyfin **12.2.0** 已完成完整验收；同一 v0.1.0 包在 **12.3.0** 完成针对性兼容回归，未进行该版本的千项容量和完整扫描验收。实播样本为 MP4／MKV（H.264／AAC）及原生 Web 客户端，其他组合见[兼容性说明](docs/compatibility.md)。
+> 同一 **Linux x64** v0.1.0 包在 Jellyfin **12.2.0** 完成完整验收，在 **12.3.0** 完成针对性兼容回归，在 **12.4.0** 通过干净实例的手动安装冒烟。实播样本为 MP4／MKV（H.264／AAC）及原生 Web 客户端。[各版本验证范围](docs/compatibility.md)
 
 ## ✨ 特性
 

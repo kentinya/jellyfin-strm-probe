@@ -19,6 +19,10 @@
 
 [Slice 6 的针对性实证](progress.md#slice-6-closed)复用原 v0.1.0 ZIP，独立使用 [12.3 规格](../dev/environment-spec-12.3.json)和[不可变镜像锁](../dev/images-12.3.lock.json)。package／playback 两个现有入口新增 `--server-version 12.3`；默认仍为 12.2，上表及原镜像锁不覆盖，错版／错锁仍拒绝。新机按锁中 digest 拉取 Linux amd64 镜像后使用；package 的 `--scenario compatibility` 同时要求证据目录及合格的 `--upgrade-source-workspace`，来源缺失时拒绝完整验收。准确命令、来源核验及最小观察集见[已完成 Task 快照](../TASK.md)，不因命令存在自动启动新运行。新规格只服务隔离测试，不改变原 ZIP、Controller／Model、SDK 或 targetAbi；不接管生产／现存实例，不重建原 1004 项库。
 
+## 12.4 干净安装冒烟环境
+
+通过 `run_isolated_package_integration.py --server-version 12.4 --scenario clean` 验证原 v0.1.0 ZIP。按镜像锁中的 digest 拉取 Linux amd64 镜像，使用新的隔离工作区和空闲回环端口。完整命令与收尾步骤见 Task。[12.4 环境规格](../dev/environment-spec-12.4.json) · [镜像锁](../dev/images-12.4.lock.json) · [执行命令](../Task/jellyfin-12.4-compatibility.md#验证计划)
+
 ## 克隆与准备
 
 开发准备依赖仓库中的代码、固定输入和维护中的治理文档。按 2026-10-20 用户要求，V4.3 原方案仅为可选本地参考，不再跟踪或上传 GitHub；新主机无须补入方案，治理与 CI 均不依赖原文。已提交开发历史、固定 Base、已关闭合同和 B 决定保留；后续发布边界见 [Git 检查点](development-workflow.md#6-git-检查点)。下列命令从新检出的仓库根目录执行，实际结果须在该次准备中记录，不继承历史环境 PASS。
