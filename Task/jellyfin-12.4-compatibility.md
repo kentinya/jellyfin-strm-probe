@@ -3,7 +3,7 @@
 ```text
 Task ID: FIX-JF-12.4
 Parent Slice: NONE
-Status: READY FOR B REVIEW
+Status: PASS
 Task Base: 2d1b33eec8f06e98c50649fcfa35d81d19946402
 Difficulty: Medium
 Test Level: T3
@@ -22,11 +22,17 @@ Jellyfin 的发布标签为 `v12.4`，源码为 `83d0d0e7f76e23e2e085c8ff67d28b7
 3. MP4 内容 SHA-1 和 Size 相同、仅改变 URL，触发一次原生探测。PlaybackInfo 返回新地址及主流，指纹记录更新。重启后先用只读查询确认新地址和主流，核对指纹，再请求 PlaybackInfo，确认无需重探测。
 4. 停止本次归属的实例，保留本机证据。非本 Task 验收项包括原生仓库安装、跨版本迁移、完整播放矩阵、千项容量、音频 STRM 与代理联调。
 
+## Developer 开发指导
+
+1. 在 `package_environment.py` 的版本表登记 12.4，固定官方 Linux amd64 镜像。沿用 `--scenario clean`、发布 ZIP 检查、浏览器驱动和原生任务入口。为 12.4 实测分配新工作区、独立 Compose 项目和空闲回环端口。[独立镜像锁](../dev/images-12.4.lock.json)
+2. 在隔离库中先让 Jellyfin 保存合成 MP4／MKV 的主流，再启用插件验证首次信任。通过原生 Web 播放两份样本。将 MP4 的 STRM 改为指向字节相同的另一个地址，用已有 PlaybackInfo 请求验证一次探测与指纹提交。
+3. 用本轮 Compose 项目重启后，先通过原生 `GET /Items` 读取新地址及 Video／Audio 流，再只读查 SQLite 的五字段指纹，最后请求 PlaybackInfo 并核对日志中的零探测。收尾时记录该项目两项服务的退出状态。
+
 ## 验证计划
 
 - Developer 执行治理检查、`git diff --check`、包与播放相关的 Python 测试，以及 `python3 scripts/check_plugin_repository.py --package "$package"` 确认包身份。
 - 核心实机命令为 `JF_PROBE_PACKAGE_PORT=18247 timeout 15m python3 scripts/run_isolated_package_integration.py --server-version 12.4 --scenario clean --package "$package" --evidence-dir "$evidence" --keep-workspace`。运行后使用本轮 Compose 文件与项目身份停止实例并记录退出状态。测试预算为 15 分钟，专用容器运行两份合成媒体，使用本机 Playwright 1.55.0。
-- 独立审查按开发流程核对本次范围、固定输入、实机结果和已有回归。如需正式 B PASS，执行完整 C#／Python 回归、独立复现同一实机入口并核验本机原始证据。实机结果与独立审查分别记录。
+- B 核对完整 Base..Head 和原始证据，独立运行同一 12.4 实机入口及默认 12.2 的干净安装场景。按[开发环境命令](../docs/development-environment.md#构建与隔离实例)运行完整 C#／Python 回归。默认 12.2 实例停止后再运行 Python 全量，包与扫描的清理测试会读取该 Compose 项目的容器状态。
 - 证据保存于 `.git/validation-evidence/`，包含精确候选、工具摘要、包、镜像、命令、退出码和原始观测。保留首次失败，与重跑分开记录。
 
 ## 实施报告
@@ -43,4 +49,11 @@ Jellyfin 的发布标签为 `v12.4`，源码为 `83d0d0e7f76e23e2e085c8ff67d28b7
 
 ## B 独立审查
 
-PENDING。
+审查范围为 `2d1b33eec8f06e98c50649fcfa35d81d19946402..87b071ef0a27153443082f93177bcd30e71b0d18`。**PASS，无阻塞项。** 核对了全部七个文件、Developer 原始结果、发布包摘要、官方标签和镜像索引中的 amd64 子镜像。实现差异集中在隔离工具、规格／锁和测试。
+
+- 管理员在 Jellyfin 12.4.0／Linux x64 上安装原 v0.1.0 ZIP 后，插件为 Active，八个部署文件的摘要相符。配置页保存的值在重启后读回，原生计划任务唯一、默认无触发器，手动运行完成。用户从原生 Web 播放 MP4 和 MKV，浏览器均显示 160×90 视频并推进，实测读数为 0.537 秒和 0.554 秒。
+- 同一部 MP4 首次信任和原样复查均为零次插件探测。内容、SHA-1 和大小相同，仅换地址后记录一次匹配的编码器调用、地址保存和指纹提交。重启后先读到新地址、Video／Audio 主流及换址后提交的五字段指纹，再请求 PlaybackInfo，日志明确记录零次插件探测。
+- 12.4 冒烟及默认 12.2 干净安装均通过，两轮 Jellyfin 与媒体容器全部正常退出，无 OOM。固定 .NET SDK 10.0.401 的锁定还原、Release 构建、205 项 C# 测试和格式检查通过。Python 3.11.10 全量单独重跑为 467 项通过、零跳过。首轮并行执行时，三项清理用例读取了仍在运行的 12.2 容器，停止该轮容器后，同一候选复跑通过。
+- 本轮复核超过 7 分钟。测试按实际经过时间合计约 3 分 28 秒，并行命令的重叠时间只计一次，占比低于 50%。
+
+本次接受 Jellyfin 12.4.0／Linux x64 的原 ZIP 干净安装冒烟。独立 Task 到此结束，当前没有后续实施。B 的实机结果、容器日志、回归及首轮记录见本机 `.git/validation-evidence/87b071ef0a27153443082f93177bcd30e71b0d18/b-review-20261121T093541Z/INDEX.md`。
