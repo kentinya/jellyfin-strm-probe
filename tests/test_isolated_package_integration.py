@@ -553,9 +553,17 @@ class ServerVersionSelectionTests(unittest.TestCase):
         self.assertEqual(images["media"],
                          "python@sha256:0a310eeecf4e1f5a0743f9a6520c90c88d089c903ca5fd283f501e3a805f5f89")
 
+    def test_selecting_12_4_uses_its_own_fixed_inputs(self):
+        identity = package_environment.select_server_version("12.4")
+        self.assertEqual(identity["publicVersion"], "12.4.0")
+        self.assertEqual(identity["sourceSha"], "83d0d0e7f76e23e2e085c8ff67d28b772d35967d")
+        self.assertEqual(identity["lockFile"], "dev/images-12.4.lock.json")
+        self.assertEqual(package_environment.load_image_lock()["server"],
+                         "jellyfin/jellyfin@sha256:7da5184caa38c553f219f6772476540081f392a68049e2b68c923f6daf877f8e")
+
     def test_unknown_version_is_refused_without_changing_the_selection(self):
         with self.assertRaisesRegex(package_environment.PackageEnvironmentError, "Unknown server version"):
-            package_environment.select_server_version("12.4")
+            package_environment.select_server_version("12.5")
         self.assertEqual(package_environment.SERVER_VERSION, "12.2")
         self.assertEqual(package_environment.LOCK_RELATIVE, "artifacts/dev-env/images.lock.json")
 

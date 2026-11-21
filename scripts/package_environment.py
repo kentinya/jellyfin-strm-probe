@@ -32,11 +32,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 ENVIRONMENT = ROOT / "scripts" / "development_environment.py"
 # Only the explicitly selected server version is ever used. 12.2 keeps its existing default spec and
-# host-provisioned lock; 12.3 has its own committed spec plus an immutable digest lock, so a version
-# selection can never silently fall back to the other server.
+# host-provisioned lock. Each newer version has its own committed spec and immutable digest lock.
 SERVER_VERSIONS = {
     "12.2": {"spec": "dev/environment-spec.json", "lock": "artifacts/dev-env/images.lock.json"},
     "12.3": {"spec": "dev/environment-spec-12.3.json", "lock": "dev/images-12.3.lock.json"},
+    "12.4": {"spec": "dev/environment-spec-12.4.json", "lock": "dev/images-12.4.lock.json"},
 }
 SERVER_VERSION = "12.2"
 SPEC = json.loads((ROOT / SERVER_VERSIONS[SERVER_VERSION]["spec"]).read_text())

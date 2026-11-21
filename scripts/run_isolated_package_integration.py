@@ -403,7 +403,9 @@ def scenario_clean(package: Path, evidence_dir: Path | None) -> dict:
     summary["deployment"] = pe.deploy_archive(package)
     restart()
     auth = api_auth()
-    require(pe.public_info().get("Version") == "12.2.0", "The package instance is not Jellyfin 12.2.0.")
+    summary["public_version"] = pe.public_info().get("Version")
+    require(summary["public_version"] == pe.server_public_version(),
+            f"The package instance is not Jellyfin {pe.server_public_version()}.")
     summary["plugin_status"] = plugin_status(auth)
     require(str(summary["plugin_status"]).lower() in {"active", "0"}, "The plugin is not Active after archive-only install.")
     summary["payload_matches_archive"] = deployed_matches_archive(package)
@@ -474,20 +476,29 @@ def scenario_clean(package: Path, evidence_dir: Path | None) -> dict:
     before = plugin_events()
     status, changed = playback_info(auth, mp4_item["Id"])
     changed_events = [safe_event(line) for line in event_delta(before, plugin_events())]
-    require(status == 200 and source_for_url(changed, alt_url), "The changed URL was not returned after the probe.")
+    changed_source = source_for_url(changed, alt_url)
+    require(status == 200 and changed_source and changed_source["has_video"] and changed_source["has_audio"],
+            "The changed URL and primary streams were not returned after the probe.")
     require(any(probe_calls(event) == 1 for event in changed_events), f"The same-SHA URL change did not probe: {changed_events}")
     require(any("fingerprint committed" in event for event in changed_events), f"The changed URL was not committed: {changed_events}")
     changed_row = fingerprint_row(mp4_item["Id"], mp4_item["Id"])
-    require(changed_row is not None and changed_row["url_hash"] == expected_url_hash(alt_url),
+    require(changed_row == {**row, "url_hash": expected_url_hash(alt_url), "sha1": mp4_sha, "file_size": mp4_size},
             "The changed URL was not persisted in the fingerprint.")
     restart()
     auth = api_auth()
     before = plugin_events()
+    require(plugin_status(auth).lower() in {"active", "0"}, "The plugin is not Active after restart.")
+    read_only = source_for_url(item_by_name(auth, "Package MP4"), alt_url)
+    require(read_only == changed_source, "The read-only restart query did not return the saved URL and streams.")
+    require(fingerprint_row(mp4_item["Id"], mp4_item["Id"]) == changed_row,
+            "The fingerprint was not restored before any restart PlaybackInfo request.")
     status, persisted = playback_info(auth, mp4_item["Id"])
-    require(status == 200 and source_for_url(persisted, alt_url), "The changed URL was not restored after restart.")
+    require(status == 200 and source_for_url(persisted, alt_url) == changed_source,
+            "The changed URL and primary streams were not restored after restart.")
     require(all(probe_calls(safe_event(line)) in (0, None) for line in event_delta(before, plugin_events())),
             "A persisted changed URL was re-probed after restart.")
     summary["same_sha_url_change"] = {"events": changed_events, "fingerprint": changed_row,
+                                      "restart_read_only_source": read_only,
                                       "after_restart_reused": True}
     return summary
 
@@ -2439,6 +2450,10 @@ def main() -> int:
             summary["toolInputs"] = tool_input_identity()
         workspace = pe.select_workspace(args.workspace)
         summary["workspace"] = str(workspace)
+        if args.server_version == "12.4":
+            # Keep each new-version run separate from retained projects and their networks.
+            pe.PROJECT += "-12-4-" + compat_sha256(str(workspace).encode())[:12]
+            summary["compose_project"] = pe.PROJECT
         before_state = pe.capture_instance_state()
         if args.scenario == "compatibility":
             summary.update(scenario_compatibility(
