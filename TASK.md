@@ -4,6 +4,8 @@
 
 当前完整合同、Closure Packet、A Final Review 与真实下一步见 [SLICE.md](SLICE.md)；各 Slice 的固定身份与接受边界见[关闭账本](docs/progress.md)。
 
+Jellyfin 12.4 的独立验证见 [FIX-JF-12.4](Task/jellyfin-12.4-compatibility.md)。
+
 A 完整关闭合同固定在 `e09fef919ff82048f84ff9f1d5b486d7660f8217:SLICE.md`；后续根合同切换也可从此快照读取。
 
 Task 6.1 的完整计划、Developer 初交／修正报告、首轮 FIX REQUIRED 与最终 B PASS 保存在真实 Git 快照：
